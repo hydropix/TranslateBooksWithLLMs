@@ -15,6 +15,7 @@ Providers:
 - **OpenRouter**
 - **OpenAI** (compatible like LM Studio)
 - **Mistral**
+- **DeepSeek**
 - **Gemini**
 
 > **[Translation Quality Benchmarks](https://github.com/hydropix/TranslateBooksWithLLMs/wiki)** — Find the best model for your target language.

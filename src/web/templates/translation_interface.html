@@ -211,6 +211,7 @@
                             <div class="neu-inset-light">
                                 <select class="form-control" id="llmProvider">
                                     <option value="ollama">Ollama (Local)</option>
+                                    <option value="deepseek">DeepSeek (Cloud API)</option>
                                     <option value="mistral">Mistral (Cloud API)</option>
                                     <option value="gemini">Gemini (Cloud)</option>
                                     <option value="openai">OpenAI-Compatible</option>
@@ -256,6 +257,14 @@
                             <label>API Key <span id="mistralKeyStatus" class="key-status"></span></label>
                             <div class="neu-inset-light">
                                 <input type="password" class="form-control" id="mistralApiKey" placeholder="Enter Mistral API key" autocomplete="new-password">
+                            </div>
+                        </div>
+
+                        <!-- DeepSeek API Key -->
+                        <div class="form-group" id="deepseekSettings" style="display: none; margin-bottom: 0;">
+                            <label>API Key <span id="deepseekKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light">
+                                <input type="password" class="form-control" id="deepseekApiKey" placeholder="Enter DeepSeek API key" autocomplete="new-password">
                             </div>
                         </div>
 

@@ -34,6 +34,7 @@ async def translate_file(
     openai_api_key: Optional[str] = None,
     openrouter_api_key: Optional[str] = None,
     mistral_api_key: Optional[str] = None,
+    deepseek_api_key: Optional[str] = None,
     context_window: Optional[int] = None,
     auto_adjust_context: bool = True,
     min_chunk_size: int = 5,
@@ -67,6 +68,7 @@ async def translate_file(
         openai_api_key: OpenAI API key (required for openai provider)
         openrouter_api_key: OpenRouter API key (required for openrouter provider)
         mistral_api_key: Mistral API key (required for mistral provider)
+        deepseek_api_key: DeepSeek API key (required for deepseek provider)
         context_window: Maximum context window size in tokens
         auto_adjust_context: Whether to automatically adjust context size
         min_chunk_size: Minimum chunk size for text splitting
@@ -125,6 +127,7 @@ async def translate_file(
             openai_api_key=openai_api_key,
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
+            deepseek_api_key=deepseek_api_key,
             context_window=context_window or 2048,
             auto_adjust_context=auto_adjust_context,
             min_chunk_size=min_chunk_size,
@@ -152,7 +155,8 @@ async def translate_file(
             gemini_api_key=gemini_api_key,
             openai_api_key=openai_api_key,
             openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key
+            mistral_api_key=mistral_api_key,
+            deepseek_api_key=deepseek_api_key
         )
 
         result = await translate_docx_file(
@@ -218,6 +222,7 @@ async def translate_file(
         'openai_api_key': openai_api_key,
         'openrouter_api_key': openrouter_api_key,
         'mistral_api_key': mistral_api_key,
+        'deepseek_api_key': deepseek_api_key,
         'prompt_options': prompt_options,
     }
 

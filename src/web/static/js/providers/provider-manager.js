@@ -26,6 +26,14 @@ const OPENAI_MODELS = [
 ];
 
 /**
+ * Fallback DeepSeek models list (used when API fetch fails)
+ */
+const DEEPSEEK_FALLBACK_MODELS = [
+    { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
+    { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (Thinking)' }
+];
+
+/**
  * Fallback OpenRouter models list (used when API fetch fails)
  * Sorted by cost: cheap first
  */
@@ -141,6 +149,20 @@ function populateModelSelect(models, defaultModel = null, provider = 'ollama') {
             }
             modelSelect.appendChild(option);
         });
+    } else if (provider === 'deepseek') {
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.value;
+            option.textContent = model.label;
+            if (model.context_length) {
+                option.title = `Context: ${model.context_length} tokens`;
+            }
+            if (model.value === defaultModel) {
+                option.selected = true;
+                defaultModelFound = true;
+            }
+            modelSelect.appendChild(option);
+        });
     } else {
         // Ollama - models are strings
         models.forEach(modelName => {
@@ -210,8 +232,9 @@ export const ProviderManager = {
         const openaiEndpointRow = DomHelpers.getElement('openaiEndpointRow');
         const openrouterSettings = DomHelpers.getElement('openrouterSettings');
 
-        // Get mistral settings element once
+        // Get mistral and deepseek settings elements once
         const mistralSettings = DomHelpers.getElement('mistralSettings');
+        const deepseekSettings = DomHelpers.getElement('deepseekSettings');
 
         // Show/hide provider-specific settings (use inline style for elements with inline display:none)
         if (provider === 'ollama') {
@@ -221,6 +244,7 @@ export const ProviderManager = {
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (loadModels) this.loadOllamaModels();
         } else if (provider === 'gemini') {
             DomHelpers.hide('ollamaSettings');
@@ -229,6 +253,7 @@ export const ProviderManager = {
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (loadModels) this.loadGeminiModels();
         } else if (provider === 'openai') {
             DomHelpers.hide('ollamaSettings');
@@ -237,6 +262,7 @@ export const ProviderManager = {
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'block';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (loadModels) this.loadOpenAIModels();
         } else if (provider === 'openrouter') {
             DomHelpers.hide('ollamaSettings');
@@ -245,6 +271,7 @@ export const ProviderManager = {
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'block';
             if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (loadModels) this.loadOpenRouterModels();
         } else if (provider === 'mistral') {
             DomHelpers.hide('ollamaSettings');
@@ -253,7 +280,17 @@ export const ProviderManager = {
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'block';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (loadModels) this.loadMistralModels();
+        } else if (provider === 'deepseek') {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'block';
+            if (loadModels) this.loadDeepSeekModels();
         }
     },
 
@@ -273,6 +310,8 @@ export const ProviderManager = {
             this.loadOpenRouterModels();
         } else if (provider === 'mistral') {
             this.loadMistralModels();
+        } else if (provider === 'deepseek') {
+            this.loadDeepSeekModels();
         }
     },
 
@@ -631,6 +670,67 @@ export const ProviderManager = {
             MessageLogger.showMessage(`❌ Error: ${error.message}`, 'error');
             modelSelect.innerHTML = '<option value="">Error loading models</option>';
             StatusManager.setError(error.message);
+        }
+    },
+
+    /**
+     * Load DeepSeek models dynamically from API
+     */
+    async loadDeepSeekModels() {
+        const modelSelect = DomHelpers.getElement('model');
+        if (!modelSelect) return;
+
+        modelSelect.innerHTML = '<option value="">Loading DeepSeek models...</option>';
+        StatusManager.setChecking();
+
+        try {
+            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
+            const apiKey = ApiKeyUtils.getValue('deepseekApiKey');
+            if (!apiKey) {
+                MessageLogger.showMessage('DeepSeek API key required', 'warning');
+                modelSelect.innerHTML = '<option value="">Enter API key first</option>';
+                StatusManager.setError('No API key');
+                return;
+            }
+
+            const data = await ApiClient.getModels('deepseek', { apiKey });
+
+            if (data.models && data.models.length > 0) {
+                MessageLogger.showMessage('', '');
+
+                // Format models for the dropdown
+                const formattedModels = data.models.map(m => ({
+                    value: m.id,
+                    label: m.name || m.id,
+                    context_length: m.context_length
+                }));
+
+                populateModelSelect(formattedModels, data.default, 'deepseek');
+                MessageLogger.addLog(`${data.count} DeepSeek model(s) loaded`);
+
+                SettingsManager.applyPendingModelSelection();
+                ModelDetector.checkAndShowRecommendation();
+
+                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
+                StatusManager.setConnected('deepseek', data.count);
+            } else {
+                // Use fallback list
+                const errorMessage = data.error || 'Could not load models from DeepSeek API';
+                MessageLogger.showMessage(`${errorMessage}. Using fallback list.`, 'warning');
+                populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-chat', 'deepseek');
+                MessageLogger.addLog(`Using fallback DeepSeek models list`);
+
+                StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
+                StatusManager.setConnected('deepseek', DEEPSEEK_FALLBACK_MODELS.length);
+            }
+        } catch (error) {
+            // Use fallback list on error
+            MessageLogger.showMessage(`Error: ${error.message}. Using fallback list.`, 'warning');
+            MessageLogger.addLog(`DeepSeek API error: ${error.message}. Using fallback list.`);
+            populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-chat', 'deepseek');
+
+            StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
+            StatusManager.setConnected('deepseek', DEEPSEEK_FALLBACK_MODELS.length);
         }
     },
 

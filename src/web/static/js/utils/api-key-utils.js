@@ -14,7 +14,8 @@ const STATUS_ID_MAP = {
     'geminiApiKey': 'geminiKeyStatus',
     'openaiApiKey': 'openaiKeyStatus',
     'openrouterApiKey': 'openrouterKeyStatus',
-    'mistralApiKey': 'mistralKeyStatus'
+    'mistralApiKey': 'mistralKeyStatus',
+    'deepseekApiKey': 'deepseekKeyStatus'
 };
 
 /**
@@ -24,7 +25,8 @@ const PROVIDER_FIELD_MAP = {
     'gemini': 'geminiApiKey',
     'openai': 'openaiApiKey',
     'openrouter': 'openrouterApiKey',
-    'mistral': 'mistralApiKey'
+    'mistral': 'mistralApiKey',
+    'deepseek': 'deepseekApiKey'
 };
 
 export const ApiKeyUtils = {
@@ -182,6 +184,10 @@ export const ApiKeyUtils = {
 
         if (provider === 'mistral' && !isAvailable) {
             return { valid: false, message: 'Mistral API key is required when using Mistral provider.' };
+        }
+
+        if (provider === 'deepseek' && !isAvailable) {
+            return { valid: false, message: 'DeepSeek API key is required when using DeepSeek provider.' };
         }
 
         return { valid: true, message: '' };

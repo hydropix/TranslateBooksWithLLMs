@@ -328,6 +328,8 @@ export const FormManager = {
             ApiKeyUtils.setupField('geminiApiKey', config.gemini_api_key_configured, config.gemini_api_key);
             ApiKeyUtils.setupField('openaiApiKey', config.openai_api_key_configured, config.openai_api_key);
             ApiKeyUtils.setupField('openrouterApiKey', config.openrouter_api_key_configured, config.openrouter_api_key);
+            ApiKeyUtils.setupField('mistralApiKey', config.mistral_api_key_configured, config.mistral_api_key);
+            ApiKeyUtils.setupField('deepseekApiKey', config.deepseek_api_key_configured, config.deepseek_api_key);
 
             // Store in state
             StateManager.setState('ui.defaultConfig', config);

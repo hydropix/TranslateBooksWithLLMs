@@ -11,7 +11,8 @@ from typing import Optional
 from src.config import (
     API_ENDPOINT, DEFAULT_MODEL, OLLAMA_NUM_CTX,
     OPENROUTER_API_KEY, OPENROUTER_MODEL,
-    MISTRAL_API_KEY, MISTRAL_MODEL
+    MISTRAL_API_KEY, MISTRAL_MODEL,
+    DEEPSEEK_API_KEY, DEEPSEEK_MODEL
 )
 from .base import LLMProvider
 from .providers.ollama import OllamaProvider
@@ -19,6 +20,7 @@ from .providers.openai import OpenAICompatibleProvider
 from .providers.gemini import GeminiProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.mistral import MistralProvider
+from .providers.deepseek import DeepSeekProvider
 
 
 def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
@@ -29,7 +31,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -109,6 +111,18 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return MistralProvider(
             api_key=api_key,
             model=kwargs.get("model", MISTRAL_MODEL),
+            api_endpoint=kwargs.get("api_endpoint")
+        )
+    elif provider_type.lower() == "deepseek":
+        api_key = kwargs.get("api_key")
+        if not api_key:
+            # Try to get from environment
+            api_key = os.getenv("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
+            if not api_key:
+                raise ValueError("DeepSeek provider requires an API key. Set DEEPSEEK_API_KEY environment variable or pass api_key parameter.")
+        return DeepSeekProvider(
+            api_key=api_key,
+            model=kwargs.get("model", DEEPSEEK_MODEL),
             api_endpoint=kwargs.get("api_endpoint")
         )
     else:

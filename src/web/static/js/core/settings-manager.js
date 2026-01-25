@@ -73,7 +73,8 @@ const ENV_SETTINGS_MAP = {
     'geminiApiKey': 'GEMINI_API_KEY',
     'openaiApiKey': 'OPENAI_API_KEY',
     'openrouterApiKey': 'OPENROUTER_API_KEY',
-    'mistralApiKey': 'MISTRAL_API_KEY'
+    'mistralApiKey': 'MISTRAL_API_KEY',
+    'deepseekApiKey': 'DEEPSEEK_API_KEY'
 };
 
 export const SettingsManager = {
@@ -145,6 +146,7 @@ export const SettingsManager = {
             { id: 'openaiApiKey', event: 'change' },
             { id: 'openrouterApiKey', event: 'change' },
             { id: 'mistralApiKey', event: 'change' },
+            { id: 'deepseekApiKey', event: 'change' },
             // Languages
             { id: 'sourceLang', event: 'change' },
             { id: 'targetLang', event: 'change' },
@@ -417,7 +419,8 @@ export const SettingsManager = {
             'gemini': 'GEMINI_API_KEY',
             'openai': 'OPENAI_API_KEY',
             'openrouter': 'OPENROUTER_API_KEY',
-            'mistral': 'MISTRAL_API_KEY'
+            'mistral': 'MISTRAL_API_KEY',
+            'deepseek': 'DEEPSEEK_API_KEY'
         };
 
         const envKey = keyMap[provider];
@@ -464,6 +467,9 @@ export const SettingsManager = {
             } else if (provider === 'mistral') {
                 const key = DomHelpers.getValue('mistralApiKey');
                 if (key) envSettings['MISTRAL_API_KEY'] = key;
+            } else if (provider === 'deepseek') {
+                const key = DomHelpers.getValue('deepseekApiKey');
+                if (key) envSettings['DEEPSEEK_API_KEY'] = key;
             }
 
             // Also save provider and model as defaults
@@ -477,6 +483,8 @@ export const SettingsManager = {
                     envSettings['GEMINI_MODEL'] = model;
                 } else if (provider === 'mistral') {
                     envSettings['MISTRAL_MODEL'] = model;
+                } else if (provider === 'deepseek') {
+                    envSettings['DEEPSEEK_MODEL'] = model;
                 } else {
                     // Ollama and OpenAI use DEFAULT_MODEL
                     envSettings['DEFAULT_MODEL'] = model;

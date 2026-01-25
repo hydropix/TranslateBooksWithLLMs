@@ -40,6 +40,8 @@ from src.config import (
     OPENROUTER_MODEL,
     MISTRAL_API_KEY,
     MISTRAL_MODEL,
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_MODEL,
     MAX_TOKENS_PER_CHUNK
 )
 
@@ -108,6 +110,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_openrouter_models(api_key)
         elif provider == 'mistral':
             return _get_mistral_models(api_key)
+        elif provider == 'deepseek':
+            return _get_deepseek_models(api_key)
         elif provider == 'openai':
             # Get endpoint from request for LM Studio support
             if request.method == 'POST':
@@ -141,10 +145,12 @@ def create_config_blueprint(server_session_id=None):
             "openai_api_key": mask_api_key(OPENAI_API_KEY),
             "openrouter_api_key": mask_api_key(OPENROUTER_API_KEY),
             "mistral_api_key": mask_api_key(MISTRAL_API_KEY),
+            "deepseek_api_key": mask_api_key(DEEPSEEK_API_KEY),
             "gemini_api_key_configured": bool(GEMINI_API_KEY),
             "openai_api_key_configured": bool(OPENAI_API_KEY),
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
-            "mistral_api_key_configured": bool(MISTRAL_API_KEY)
+            "mistral_api_key_configured": bool(MISTRAL_API_KEY),
+            "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY)
         }
 
         return jsonify(config_response)
@@ -280,6 +286,61 @@ def create_config_blueprint(server_session_id=None):
                 "status": "mistral_error",
                 "count": 0,
                 "error": f"Error connecting to Mistral API: {str(e)}"
+            })
+
+    def _get_deepseek_models(provided_api_key=None):
+        """Get available models from DeepSeek API"""
+        api_key = _resolve_api_key(provided_api_key, 'DEEPSEEK_API_KEY', DEEPSEEK_API_KEY)
+
+        # Use DEEPSEEK_MODEL from .env, fallback to deepseek-chat
+        default_model = DEEPSEEK_MODEL if DEEPSEEK_MODEL else "deepseek-chat"
+
+        if not api_key:
+            return jsonify({
+                "models": [],
+                "model_names": [],
+                "default": default_model,
+                "status": "api_key_missing",
+                "count": 0,
+                "error": "DeepSeek API key is required. Set DEEPSEEK_API_KEY environment variable or pass api_key parameter."
+            })
+
+        try:
+            from src.core.llm import DeepSeekProvider
+
+            deepseek_provider = DeepSeekProvider(api_key=api_key)
+            models = asyncio.run(deepseek_provider.get_available_models())
+
+            if models:
+                model_names = [m['id'] for m in models]
+                # Check if default model exists in available models
+                if default_model not in model_names and model_names:
+                    default_model = model_names[0]
+                return jsonify({
+                    "models": models,
+                    "model_names": model_names,
+                    "default": default_model,
+                    "status": "deepseek_connected",
+                    "count": len(models)
+                })
+            else:
+                return jsonify({
+                    "models": [],
+                    "model_names": [],
+                    "default": default_model,
+                    "status": "deepseek_error",
+                    "count": 0,
+                    "error": "Failed to retrieve DeepSeek models"
+                })
+
+        except Exception as e:
+            return jsonify({
+                "models": [],
+                "model_names": [],
+                "default": default_model,
+                "status": "deepseek_error",
+                "count": 0,
+                "error": f"Error connecting to DeepSeek API: {str(e)}"
             })
 
     def _get_openai_models(provided_api_key=None, api_endpoint=None):
@@ -583,6 +644,8 @@ def create_config_blueprint(server_session_id=None):
             'OPENROUTER_MODEL',
             'MISTRAL_API_KEY',
             'MISTRAL_MODEL',
+            'DEEPSEEK_API_KEY',
+            'DEEPSEEK_MODEL',
             'DEFAULT_MODEL',
             'LLM_PROVIDER',
             'API_ENDPOINT'
@@ -631,6 +694,7 @@ def create_config_blueprint(server_session_id=None):
             "openai_api_key_configured": bool(OPENAI_API_KEY),
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
             "mistral_api_key_configured": bool(MISTRAL_API_KEY),
+            "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
             "default_model": DEFAULT_MODEL or "",
             "llm_provider": os.getenv('LLM_PROVIDER', 'ollama'),
             "api_endpoint": DEFAULT_OLLAMA_API_ENDPOINT or ""

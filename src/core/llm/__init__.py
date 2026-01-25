@@ -38,6 +38,7 @@ from .providers.openai import OpenAICompatibleProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.gemini import GeminiProvider
 from .providers.mistral import MistralProvider
+from .providers.deepseek import DeepSeekProvider
 
 # Factory
 from .factory import create_llm_provider
@@ -69,6 +70,7 @@ __all__ = [
     'OpenRouterProvider',
     'GeminiProvider',
     'MistralProvider',
+    'DeepSeekProvider',
 
     # Factory
     'create_llm_provider',

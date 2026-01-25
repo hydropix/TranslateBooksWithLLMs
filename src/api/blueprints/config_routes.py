@@ -38,6 +38,8 @@ from src.config import (
     OPENAI_API_KEY,
     OPENROUTER_API_KEY,
     OPENROUTER_MODEL,
+    MISTRAL_API_KEY,
+    MISTRAL_MODEL,
     MAX_TOKENS_PER_CHUNK
 )
 
@@ -104,6 +106,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_gemini_models(api_key)
         elif provider == 'openrouter':
             return _get_openrouter_models(api_key)
+        elif provider == 'mistral':
+            return _get_mistral_models(api_key)
         elif provider == 'openai':
             # Get endpoint from request for LM Studio support
             if request.method == 'POST':
@@ -136,9 +140,11 @@ def create_config_blueprint(server_session_id=None):
             "gemini_api_key": mask_api_key(GEMINI_API_KEY),
             "openai_api_key": mask_api_key(OPENAI_API_KEY),
             "openrouter_api_key": mask_api_key(OPENROUTER_API_KEY),
+            "mistral_api_key": mask_api_key(MISTRAL_API_KEY),
             "gemini_api_key_configured": bool(GEMINI_API_KEY),
             "openai_api_key_configured": bool(OPENAI_API_KEY),
-            "openrouter_api_key_configured": bool(OPENROUTER_API_KEY)
+            "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
+            "mistral_api_key_configured": bool(MISTRAL_API_KEY)
         }
 
         return jsonify(config_response)
@@ -219,6 +225,61 @@ def create_config_blueprint(server_session_id=None):
                 "status": "openrouter_error",
                 "count": 0,
                 "error": f"Error connecting to OpenRouter API: {str(e)}"
+            })
+
+    def _get_mistral_models(provided_api_key=None):
+        """Get available models from Mistral API"""
+        api_key = _resolve_api_key(provided_api_key, 'MISTRAL_API_KEY', MISTRAL_API_KEY)
+
+        # Use MISTRAL_MODEL from .env, fallback to mistral-large-latest
+        default_model = MISTRAL_MODEL if MISTRAL_MODEL else "mistral-large-latest"
+
+        if not api_key:
+            return jsonify({
+                "models": [],
+                "model_names": [],
+                "default": default_model,
+                "status": "api_key_missing",
+                "count": 0,
+                "error": "Mistral API key is required. Set MISTRAL_API_KEY environment variable or pass api_key parameter."
+            })
+
+        try:
+            from src.core.llm import MistralProvider
+
+            mistral_provider = MistralProvider(api_key=api_key)
+            models = asyncio.run(mistral_provider.get_available_models())
+
+            if models:
+                model_names = [m['id'] for m in models]
+                # Check if default model exists in available models
+                if default_model not in model_names and model_names:
+                    default_model = model_names[0]
+                return jsonify({
+                    "models": models,
+                    "model_names": model_names,
+                    "default": default_model,
+                    "status": "mistral_connected",
+                    "count": len(models)
+                })
+            else:
+                return jsonify({
+                    "models": [],
+                    "model_names": [],
+                    "default": default_model,
+                    "status": "mistral_error",
+                    "count": 0,
+                    "error": "Failed to retrieve Mistral models"
+                })
+
+        except Exception as e:
+            return jsonify({
+                "models": [],
+                "model_names": [],
+                "default": default_model,
+                "status": "mistral_error",
+                "count": 0,
+                "error": f"Error connecting to Mistral API: {str(e)}"
             })
 
     def _get_openai_models(provided_api_key=None, api_endpoint=None):
@@ -520,6 +581,8 @@ def create_config_blueprint(server_session_id=None):
             'OPENAI_API_KEY',
             'OPENROUTER_API_KEY',
             'OPENROUTER_MODEL',
+            'MISTRAL_API_KEY',
+            'MISTRAL_MODEL',
             'DEFAULT_MODEL',
             'LLM_PROVIDER',
             'API_ENDPOINT'
@@ -567,6 +630,7 @@ def create_config_blueprint(server_session_id=None):
             "gemini_api_key_configured": bool(GEMINI_API_KEY),
             "openai_api_key_configured": bool(OPENAI_API_KEY),
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
+            "mistral_api_key_configured": bool(MISTRAL_API_KEY),
             "default_model": DEFAULT_MODEL or "",
             "llm_provider": os.getenv('LLM_PROVIDER', 'ollama'),
             "api_endpoint": DEFAULT_OLLAMA_API_ENDPOINT or ""

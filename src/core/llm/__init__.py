@@ -37,6 +37,7 @@ from .providers.ollama import OllamaProvider
 from .providers.openai import OpenAICompatibleProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.gemini import GeminiProvider
+from .providers.mistral import MistralProvider
 
 # Factory
 from .factory import create_llm_provider
@@ -67,6 +68,7 @@ __all__ = [
     'OpenAICompatibleProvider',
     'OpenRouterProvider',
     'GeminiProvider',
+    'MistralProvider',
 
     # Factory
     'create_llm_provider',

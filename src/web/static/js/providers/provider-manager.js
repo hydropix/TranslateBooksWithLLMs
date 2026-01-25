@@ -127,6 +127,20 @@ function populateModelSelect(models, defaultModel = null, provider = 'ollama') {
             }
             modelSelect.appendChild(option);
         });
+    } else if (provider === 'mistral') {
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.value;
+            option.textContent = model.label;
+            if (model.context_length) {
+                option.title = `Context: ${model.context_length} tokens`;
+            }
+            if (model.value === defaultModel) {
+                option.selected = true;
+                defaultModelFound = true;
+            }
+            modelSelect.appendChild(option);
+        });
     } else {
         // Ollama - models are strings
         models.forEach(modelName => {
@@ -196,6 +210,9 @@ export const ProviderManager = {
         const openaiEndpointRow = DomHelpers.getElement('openaiEndpointRow');
         const openrouterSettings = DomHelpers.getElement('openrouterSettings');
 
+        // Get mistral settings element once
+        const mistralSettings = DomHelpers.getElement('mistralSettings');
+
         // Show/hide provider-specific settings (use inline style for elements with inline display:none)
         if (provider === 'ollama') {
             DomHelpers.show('ollamaSettings');
@@ -203,6 +220,7 @@ export const ProviderManager = {
             if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
             if (loadModels) this.loadOllamaModels();
         } else if (provider === 'gemini') {
             DomHelpers.hide('ollamaSettings');
@@ -210,6 +228,7 @@ export const ProviderManager = {
             if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
             if (loadModels) this.loadGeminiModels();
         } else if (provider === 'openai') {
             DomHelpers.hide('ollamaSettings');
@@ -217,6 +236,7 @@ export const ProviderManager = {
             if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'block';
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'block';
             if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
             if (loadModels) this.loadOpenAIModels();
         } else if (provider === 'openrouter') {
             DomHelpers.hide('ollamaSettings');
@@ -224,7 +244,16 @@ export const ProviderManager = {
             if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
             if (openrouterSettings) openrouterSettings.style.display = 'block';
+            if (mistralSettings) mistralSettings.style.display = 'none';
             if (loadModels) this.loadOpenRouterModels();
+        } else if (provider === 'mistral') {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'block';
+            if (loadModels) this.loadMistralModels();
         }
     },
 
@@ -242,6 +271,8 @@ export const ProviderManager = {
             this.loadOpenAIModels();
         } else if (provider === 'openrouter') {
             this.loadOpenRouterModels();
+        } else if (provider === 'mistral') {
+            this.loadMistralModels();
         }
     },
 
@@ -547,6 +578,59 @@ export const ProviderManager = {
 
             // Still mark as connected since we have fallback models
             StatusManager.setConnected('openrouter', OPENROUTER_FALLBACK_MODELS.length);
+        }
+    },
+
+    /**
+     * Load Mistral models dynamically from API
+     */
+    async loadMistralModels() {
+        const modelSelect = DomHelpers.getElement('model');
+        if (!modelSelect) return;
+
+        modelSelect.innerHTML = '<option value="">Loading Mistral models...</option>';
+        StatusManager.setChecking();
+
+        try {
+            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
+            const apiKey = ApiKeyUtils.getValue('mistralApiKey');
+            if (!apiKey) {
+                MessageLogger.showMessage('⚠️ Mistral API key required', 'warning');
+                modelSelect.innerHTML = '<option value="">Enter API key first</option>';
+                StatusManager.setError('No API key');
+                return;
+            }
+
+            const data = await ApiClient.getModels('mistral', { apiKey });
+
+            if (data.models && data.models.length > 0) {
+                MessageLogger.showMessage('', '');
+
+                // Format models for the dropdown
+                const formattedModels = data.models.map(m => ({
+                    value: m.id,
+                    label: m.name || m.id,
+                    context_length: m.context_length
+                }));
+
+                populateModelSelect(formattedModels, data.default, 'mistral');
+                MessageLogger.addLog(`✅ ${data.count} Mistral model(s) loaded`);
+
+                SettingsManager.applyPendingModelSelection();
+                ModelDetector.checkAndShowRecommendation();
+
+                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
+                StatusManager.setConnected('mistral', data.count);
+            } else {
+                const errorMessage = data.error || 'No Mistral models available';
+                MessageLogger.showMessage(`⚠️ ${errorMessage}`, 'error');
+                modelSelect.innerHTML = '<option value="">No models available</option>';
+                StatusManager.setError('No models');
+            }
+        } catch (error) {
+            MessageLogger.showMessage(`❌ Error: ${error.message}`, 'error');
+            modelSelect.innerHTML = '<option value="">Error loading models</option>';
+            StatusManager.setError(error.message);
         }
     },
 

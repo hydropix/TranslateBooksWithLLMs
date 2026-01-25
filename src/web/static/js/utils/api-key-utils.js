@@ -13,7 +13,8 @@ import { DomHelpers } from '../ui/dom-helpers.js';
 const STATUS_ID_MAP = {
     'geminiApiKey': 'geminiKeyStatus',
     'openaiApiKey': 'openaiKeyStatus',
-    'openrouterApiKey': 'openrouterKeyStatus'
+    'openrouterApiKey': 'openrouterKeyStatus',
+    'mistralApiKey': 'mistralKeyStatus'
 };
 
 /**
@@ -22,7 +23,8 @@ const STATUS_ID_MAP = {
 const PROVIDER_FIELD_MAP = {
     'gemini': 'geminiApiKey',
     'openai': 'openaiApiKey',
-    'openrouter': 'openrouterApiKey'
+    'openrouter': 'openrouterApiKey',
+    'mistral': 'mistralApiKey'
 };
 
 export const ApiKeyUtils = {
@@ -176,6 +178,10 @@ export const ApiKeyUtils = {
 
         if (provider === 'openrouter' && !isAvailable) {
             return { valid: false, message: 'OpenRouter API key is required when using OpenRouter provider.' };
+        }
+
+        if (provider === 'mistral' && !isAvailable) {
+            return { valid: false, message: 'Mistral API key is required when using Mistral provider.' };
         }
 
         return { valid: true, message: '' };

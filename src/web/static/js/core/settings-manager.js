@@ -72,7 +72,8 @@ const LOCAL_SETTINGS = [
 const ENV_SETTINGS_MAP = {
     'geminiApiKey': 'GEMINI_API_KEY',
     'openaiApiKey': 'OPENAI_API_KEY',
-    'openrouterApiKey': 'OPENROUTER_API_KEY'
+    'openrouterApiKey': 'OPENROUTER_API_KEY',
+    'mistralApiKey': 'MISTRAL_API_KEY'
 };
 
 export const SettingsManager = {
@@ -143,6 +144,7 @@ export const SettingsManager = {
             { id: 'geminiApiKey', event: 'change' },
             { id: 'openaiApiKey', event: 'change' },
             { id: 'openrouterApiKey', event: 'change' },
+            { id: 'mistralApiKey', event: 'change' },
             // Languages
             { id: 'sourceLang', event: 'change' },
             { id: 'targetLang', event: 'change' },
@@ -414,7 +416,8 @@ export const SettingsManager = {
         const keyMap = {
             'gemini': 'GEMINI_API_KEY',
             'openai': 'OPENAI_API_KEY',
-            'openrouter': 'OPENROUTER_API_KEY'
+            'openrouter': 'OPENROUTER_API_KEY',
+            'mistral': 'MISTRAL_API_KEY'
         };
 
         const envKey = keyMap[provider];
@@ -458,6 +461,9 @@ export const SettingsManager = {
             } else if (provider === 'openrouter') {
                 const key = DomHelpers.getValue('openrouterApiKey');
                 if (key) envSettings['OPENROUTER_API_KEY'] = key;
+            } else if (provider === 'mistral') {
+                const key = DomHelpers.getValue('mistralApiKey');
+                if (key) envSettings['MISTRAL_API_KEY'] = key;
             }
 
             // Also save provider and model as defaults
@@ -469,6 +475,8 @@ export const SettingsManager = {
                     envSettings['OPENROUTER_MODEL'] = model;
                 } else if (provider === 'gemini') {
                     envSettings['GEMINI_MODEL'] = model;
+                } else if (provider === 'mistral') {
+                    envSettings['MISTRAL_MODEL'] = model;
                 } else {
                     // Ollama and OpenAI use DEFAULT_MODEL
                     envSettings['DEFAULT_MODEL'] = model;

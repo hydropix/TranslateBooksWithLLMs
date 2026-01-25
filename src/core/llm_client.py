@@ -167,18 +167,20 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                       api_endpoint: str, model_name: str,
                       openai_api_key: Optional[str] = None,
                       openrouter_api_key: Optional[str] = None,
+                      mistral_api_key: Optional[str] = None,
                       context_window: Optional[int] = None,
                       log_callback: Optional[callable] = None) -> Optional[LLMClient]:
     """
     Factory function to create LLM client based on provider or custom endpoint
 
     Args:
-        llm_provider: Provider type ('ollama', 'gemini', 'openai', or 'openrouter')
+        llm_provider: Provider type ('ollama', 'gemini', 'openai', 'openrouter', or 'mistral')
         gemini_api_key: API key for Gemini provider
         api_endpoint: API endpoint for custom Ollama instance or OpenAI-compatible API
         model_name: Model name to use
         openai_api_key: API key for OpenAI provider
         openrouter_api_key: API key for OpenRouter provider
+        mistral_api_key: API key for Mistral provider
         context_window: Context window size for the model
         log_callback: Callback function for logging
 
@@ -192,6 +194,8 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                          api_key=openai_api_key, context_window=context_window, log_callback=log_callback)
     if llm_provider == "openrouter":
         return LLMClient(provider_type="openrouter", model=model_name, api_key=openrouter_api_key)
+    if llm_provider == "mistral":
+        return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key)
     if llm_provider == "ollama":
         # Always create a new client for Ollama to ensure proper configuration
         return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,

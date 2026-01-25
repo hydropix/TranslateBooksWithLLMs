@@ -43,6 +43,7 @@ async def translate_epub_file(
     gemini_api_key: Optional[str] = None,
     openai_api_key: Optional[str] = None,
     openrouter_api_key: Optional[str] = None,
+    mistral_api_key: Optional[str] = None,
     context_window: int = 2048,
     auto_adjust_context: bool = True,
     min_chunk_size: int = 5,
@@ -78,10 +79,11 @@ async def translate_epub_file(
         log_callback: Logging callback
         stats_callback: Statistics callback
         check_interruption_callback: Interruption check callback
-        llm_provider: LLM provider (ollama/gemini/openai/openrouter)
+        llm_provider: LLM provider (ollama/gemini/openai/openrouter/mistral)
         gemini_api_key: Gemini API key
         openai_api_key: OpenAI API key
         openrouter_api_key: OpenRouter API key
+        mistral_api_key: Mistral API key
         context_window: Context window size for LLM
         auto_adjust_context: Auto-adjust context based on model
         min_chunk_size: Minimum chunk size
@@ -127,6 +129,7 @@ async def translate_epub_file(
         gemini_api_key=gemini_api_key,
         openai_api_key=openai_api_key,
         openrouter_api_key=openrouter_api_key,
+        mistral_api_key=mistral_api_key,
         cli_api_endpoint=cli_api_endpoint,
         initial_context=initial_context,
         log_callback=log_callback
@@ -301,6 +304,7 @@ def _create_llm_client(
     gemini_api_key: Optional[str],
     openai_api_key: Optional[str],
     openrouter_api_key: Optional[str],
+    mistral_api_key: Optional[str],
     cli_api_endpoint: str,
     initial_context: int,
     log_callback: Optional[Callable] = None
@@ -310,7 +314,7 @@ def _create_llm_client(
 
     llm_client = create_llm_client(
         llm_provider, gemini_api_key, cli_api_endpoint, model_name,
-        openai_api_key, openrouter_api_key,
+        openai_api_key, openrouter_api_key, mistral_api_key,
         context_window=initial_context,
         log_callback=log_callback
     )

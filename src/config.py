@@ -184,6 +184,11 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
 OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4')
 OPENROUTER_API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 
+# Mistral AI configuration
+MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY', '')
+MISTRAL_MODEL = os.getenv('MISTRAL_MODEL', 'mistral-large-latest')
+MISTRAL_API_ENDPOINT = os.getenv('MISTRAL_API_ENDPOINT', 'https://api.mistral.ai/v1/chat/completions')
+
 # SRT-specific configuration
 SRT_LINES_PER_BLOCK = int(os.getenv('SRT_LINES_PER_BLOCK', '5'))
 SRT_MAX_CHARS_PER_BLOCK = int(os.getenv('SRT_MAX_CHARS_PER_BLOCK', '500'))
@@ -240,6 +245,8 @@ if DEBUG_MODE or _debug_mode:
     _config_logger.debug(f"   OPENAI_API_KEY: {'***' + OPENAI_API_KEY[-4:] if OPENAI_API_KEY else '(not set)'}")
     _config_logger.debug(f"   OPENROUTER_API_KEY: {'***' + OPENROUTER_API_KEY[-4:] if OPENROUTER_API_KEY else '(not set)'}")
     _config_logger.debug(f"   OPENROUTER_MODEL: {OPENROUTER_MODEL}")
+    _config_logger.debug(f"   MISTRAL_API_KEY: {'***' + MISTRAL_API_KEY[-4:] if MISTRAL_API_KEY else '(not set)'}")
+    _config_logger.debug(f"   MISTRAL_MODEL: {MISTRAL_MODEL}")
     _config_logger.debug("="*60)
 
 # Translation tags - Improved for LLM clarity and reliability
@@ -390,7 +397,7 @@ MODEL_FAMILY_CONTEXT_DEFAULTS = {
     "gpt": 8192,
     "claude": 100000,
     "deepseek": 16384,
-    "mistral": 8192,
+    "mistral": 32000,  # Mistral small has 32K, large/medium have 128K
     "gemma": 8192,
     "qwen": 8192,
     "llama": 4096,
@@ -414,6 +421,7 @@ class TranslationConfig:
     gemini_api_key: str = GEMINI_API_KEY
     openai_api_key: str = OPENAI_API_KEY
     openrouter_api_key: str = OPENROUTER_API_KEY
+    mistral_api_key: str = MISTRAL_API_KEY
 
     # LLM parameters
     timeout: int = REQUEST_TIMEOUT
@@ -449,6 +457,7 @@ class TranslationConfig:
             gemini_api_key=getattr(args, 'gemini_api_key', GEMINI_API_KEY),
             openai_api_key=getattr(args, 'openai_api_key', OPENAI_API_KEY),
             openrouter_api_key=getattr(args, 'openrouter_api_key', OPENROUTER_API_KEY),
+            mistral_api_key=getattr(args, 'mistral_api_key', MISTRAL_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO)
         )
@@ -474,6 +483,7 @@ class TranslationConfig:
             gemini_api_key=request_data.get('gemini_api_key', GEMINI_API_KEY),
             openai_api_key=request_data.get('openai_api_key', OPENAI_API_KEY),
             openrouter_api_key=request_data.get('openrouter_api_key', OPENROUTER_API_KEY),
+            mistral_api_key=request_data.get('mistral_api_key', MISTRAL_API_KEY),
             max_tokens_per_chunk=request_data.get('max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO)
         )
@@ -493,6 +503,7 @@ class TranslationConfig:
             'gemini_api_key': self.gemini_api_key,
             'openai_api_key': self.openai_api_key,
             'openrouter_api_key': self.openrouter_api_key,
+            'mistral_api_key': self.mistral_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'soft_limit_ratio': self.soft_limit_ratio
         }

@@ -211,6 +211,7 @@
                             <div class="neu-inset-light">
                                 <select class="form-control" id="llmProvider">
                                     <option value="ollama">Ollama (Local)</option>
+                                    <option value="mistral">Mistral (Cloud API)</option>
                                     <option value="gemini">Gemini (Cloud)</option>
                                     <option value="openai">OpenAI-Compatible</option>
                                     <option value="openrouter">OpenRouter (200+ models)</option>
@@ -247,6 +248,14 @@
                             <label>API Key <span id="openrouterKeyStatus" class="key-status"></span></label>
                             <div class="neu-inset-light">
                                 <input type="password" class="form-control" id="openrouterApiKey" placeholder="sk-or-v1-..." autocomplete="new-password">
+                            </div>
+                        </div>
+
+                        <!-- Mistral API Key -->
+                        <div class="form-group" id="mistralSettings" style="display: none; margin-bottom: 0;">
+                            <label>API Key <span id="mistralKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light">
+                                <input type="password" class="form-control" id="mistralApiKey" placeholder="Enter Mistral API key" autocomplete="new-password">
                             </div>
                         </div>
 

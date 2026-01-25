@@ -5,9 +5,8 @@ This module provides the DeepSeekProvider class for interacting with
 DeepSeek's API, which offers cost-effective models with strong capabilities.
 
 Features:
-    - DeepSeek V3 models (chat and reasoner)
+    - DeepSeek V3 models (chat)
     - OpenAI-compatible API format
-    - Thinking mode support (deepseek-reasoner)
     - Cost-effective pricing (~5-10x cheaper than OpenAI)
     - 64K context window
 """
@@ -27,8 +26,7 @@ class DeepSeekProvider(LLMProvider):
     Provider for DeepSeek API.
 
     DeepSeek provides powerful language models with excellent price/performance:
-        - deepseek-chat: Non-thinking mode (fast, economical)
-        - deepseek-reasoner: Thinking mode with <think> tags
+        - deepseek-chat: Fast and economical model for translation
 
     Configuration:
         endpoint: https://api.deepseek.com/chat/completions
@@ -54,7 +52,6 @@ class DeepSeekProvider(LLMProvider):
 
     FALLBACK_MODELS = [
         "deepseek-chat",
-        "deepseek-reasoner",
     ]
 
     THINKING_MODELS = ["deepseek-reasoner", "deepseek-r1"]
@@ -123,6 +120,9 @@ class DeepSeekProvider(LLMProvider):
 
             for model in models_data:
                 model_id = model.get("id", "")
+                # Skip thinking/reasoner models (inefficient for translation)
+                if "reasoner" in model_id.lower():
+                    continue
                 if "deepseek" in model_id.lower():
                     context_length = model.get("max_context_length")
                     if not context_length:

@@ -10,7 +10,12 @@ Translate **books**, **subtitles**, and **documents** using AI - locally or in t
 
 Formats: **EPUB**, **SRT**, **DOCX**, **TXT**
 
-Providers: **Ollama** (local), **OpenRouter**, **OpenAI** (compatible like LM Studio), **Gemini**
+Providers: 
+- **Ollama** (local)
+- **OpenRouter**
+- **OpenAI** (compatible like LM Studio)
+- **Mistral**
+- **Gemini**
 
 > **[Translation Quality Benchmarks](https://github.com/hydropix/TranslateBooksWithLLMs/wiki)** — Find the best model for your target language.
 

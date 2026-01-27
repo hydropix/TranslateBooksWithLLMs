@@ -12,7 +12,8 @@ from src.config import (
     API_ENDPOINT, DEFAULT_MODEL, OLLAMA_NUM_CTX,
     OPENROUTER_API_KEY, OPENROUTER_MODEL,
     MISTRAL_API_KEY, MISTRAL_MODEL,
-    DEEPSEEK_API_KEY, DEEPSEEK_MODEL
+    DEEPSEEK_API_KEY, DEEPSEEK_MODEL,
+    POE_API_KEY, POE_MODEL
 )
 from .base import LLMProvider
 from .providers.ollama import OllamaProvider
@@ -21,6 +22,7 @@ from .providers.gemini import GeminiProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
+from .providers.poe import PoeProvider
 
 
 def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
@@ -31,7 +33,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -123,6 +125,18 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return DeepSeekProvider(
             api_key=api_key,
             model=kwargs.get("model", DEEPSEEK_MODEL),
+            api_endpoint=kwargs.get("api_endpoint")
+        )
+    elif provider_type.lower() == "poe":
+        api_key = kwargs.get("api_key")
+        if not api_key:
+            # Try to get from environment
+            api_key = os.getenv("POE_API_KEY", POE_API_KEY)
+            if not api_key:
+                raise ValueError("Poe provider requires an API key. Get your key at https://poe.com/api_key")
+        return PoeProvider(
+            api_key=api_key,
+            model=kwargs.get("model", POE_MODEL),
             api_endpoint=kwargs.get("api_endpoint")
         )
     else:

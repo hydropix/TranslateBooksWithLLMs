@@ -74,7 +74,8 @@ const ENV_SETTINGS_MAP = {
     'openaiApiKey': 'OPENAI_API_KEY',
     'openrouterApiKey': 'OPENROUTER_API_KEY',
     'mistralApiKey': 'MISTRAL_API_KEY',
-    'deepseekApiKey': 'DEEPSEEK_API_KEY'
+    'deepseekApiKey': 'DEEPSEEK_API_KEY',
+    'poeApiKey': 'POE_API_KEY'
 };
 
 export const SettingsManager = {
@@ -147,6 +148,7 @@ export const SettingsManager = {
             { id: 'openrouterApiKey', event: 'change' },
             { id: 'mistralApiKey', event: 'change' },
             { id: 'deepseekApiKey', event: 'change' },
+            { id: 'poeApiKey', event: 'change' },
             // Languages
             { id: 'sourceLang', event: 'change' },
             { id: 'targetLang', event: 'change' },
@@ -420,7 +422,8 @@ export const SettingsManager = {
             'openai': 'OPENAI_API_KEY',
             'openrouter': 'OPENROUTER_API_KEY',
             'mistral': 'MISTRAL_API_KEY',
-            'deepseek': 'DEEPSEEK_API_KEY'
+            'deepseek': 'DEEPSEEK_API_KEY',
+            'poe': 'POE_API_KEY'
         };
 
         const envKey = keyMap[provider];
@@ -470,6 +473,9 @@ export const SettingsManager = {
             } else if (provider === 'deepseek') {
                 const key = DomHelpers.getValue('deepseekApiKey');
                 if (key) envSettings['DEEPSEEK_API_KEY'] = key;
+            } else if (provider === 'poe') {
+                const key = DomHelpers.getValue('poeApiKey');
+                if (key) envSettings['POE_API_KEY'] = key;
             }
 
             // Also save provider and model as defaults
@@ -485,6 +491,8 @@ export const SettingsManager = {
                     envSettings['MISTRAL_MODEL'] = model;
                 } else if (provider === 'deepseek') {
                     envSettings['DEEPSEEK_MODEL'] = model;
+                } else if (provider === 'poe') {
+                    envSettings['POE_MODEL'] = model;
                 } else {
                     // Ollama and OpenAI use DEFAULT_MODEL
                     envSettings['DEFAULT_MODEL'] = model;

@@ -15,7 +15,8 @@ const STATUS_ID_MAP = {
     'openaiApiKey': 'openaiKeyStatus',
     'openrouterApiKey': 'openrouterKeyStatus',
     'mistralApiKey': 'mistralKeyStatus',
-    'deepseekApiKey': 'deepseekKeyStatus'
+    'deepseekApiKey': 'deepseekKeyStatus',
+    'poeApiKey': 'poeKeyStatus'
 };
 
 /**
@@ -26,7 +27,8 @@ const PROVIDER_FIELD_MAP = {
     'openai': 'openaiApiKey',
     'openrouter': 'openrouterApiKey',
     'mistral': 'mistralApiKey',
-    'deepseek': 'deepseekApiKey'
+    'deepseek': 'deepseekApiKey',
+    'poe': 'poeApiKey'
 };
 
 export const ApiKeyUtils = {
@@ -188,6 +190,10 @@ export const ApiKeyUtils = {
 
         if (provider === 'deepseek' && !isAvailable) {
             return { valid: false, message: 'DeepSeek API key is required when using DeepSeek provider.' };
+        }
+
+        if (provider === 'poe' && !isAvailable) {
+            return { valid: false, message: 'Poe API key is required. Get your key at poe.com/api_key' };
         }
 
         return { valid: true, message: '' };

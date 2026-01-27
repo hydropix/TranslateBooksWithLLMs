@@ -174,7 +174,7 @@ MIN_CHUNK_SIZE_TOKENS = 50
 """Taille minimale d'un chunk pour éviter la sur-fragmentation"""
 
 # LLM Provider configuration
-LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'ollama')  # 'ollama', 'gemini', 'openai', or 'openrouter'
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'ollama')  # 'ollama', 'gemini', 'openai', 'openrouter', 'mistral', 'deepseek', or 'poe'
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
@@ -193,6 +193,11 @@ MISTRAL_API_ENDPOINT = os.getenv('MISTRAL_API_ENDPOINT', 'https://api.mistral.ai
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
 DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
 DEEPSEEK_API_ENDPOINT = os.getenv('DEEPSEEK_API_ENDPOINT', 'https://api.deepseek.com/chat/completions')
+
+# Poe configuration (access to Claude, GPT, Gemini, Llama, Grok via single API)
+POE_API_KEY = os.getenv('POE_API_KEY', '')
+POE_MODEL = os.getenv('POE_MODEL', 'Claude-Sonnet-4')
+POE_API_ENDPOINT = os.getenv('POE_API_ENDPOINT', 'https://api.poe.com/v1/chat/completions')
 
 # SRT-specific configuration
 SRT_LINES_PER_BLOCK = int(os.getenv('SRT_LINES_PER_BLOCK', '5'))
@@ -254,6 +259,8 @@ if DEBUG_MODE or _debug_mode:
     _config_logger.debug(f"   MISTRAL_MODEL: {MISTRAL_MODEL}")
     _config_logger.debug(f"   DEEPSEEK_API_KEY: {'***' + DEEPSEEK_API_KEY[-4:] if DEEPSEEK_API_KEY else '(not set)'}")
     _config_logger.debug(f"   DEEPSEEK_MODEL: {DEEPSEEK_MODEL}")
+    _config_logger.debug(f"   POE_API_KEY: {'***' + POE_API_KEY[-4:] if POE_API_KEY else '(not set)'}")
+    _config_logger.debug(f"   POE_MODEL: {POE_MODEL}")
     _config_logger.debug("="*60)
 
 # Translation tags - Improved for LLM clarity and reliability
@@ -430,6 +437,7 @@ class TranslationConfig:
     openrouter_api_key: str = OPENROUTER_API_KEY
     mistral_api_key: str = MISTRAL_API_KEY
     deepseek_api_key: str = DEEPSEEK_API_KEY
+    poe_api_key: str = POE_API_KEY
 
     # LLM parameters
     timeout: int = REQUEST_TIMEOUT
@@ -467,6 +475,7 @@ class TranslationConfig:
             openrouter_api_key=getattr(args, 'openrouter_api_key', OPENROUTER_API_KEY),
             mistral_api_key=getattr(args, 'mistral_api_key', MISTRAL_API_KEY),
             deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
+            poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO)
         )
@@ -494,6 +503,7 @@ class TranslationConfig:
             openrouter_api_key=request_data.get('openrouter_api_key', OPENROUTER_API_KEY),
             mistral_api_key=request_data.get('mistral_api_key', MISTRAL_API_KEY),
             deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
+            poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
             max_tokens_per_chunk=request_data.get('max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO)
         )
@@ -515,6 +525,7 @@ class TranslationConfig:
             'openrouter_api_key': self.openrouter_api_key,
             'mistral_api_key': self.mistral_api_key,
             'deepseek_api_key': self.deepseek_api_key,
+            'poe_api_key': self.poe_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'soft_limit_ratio': self.soft_limit_ratio
         }

@@ -330,6 +330,7 @@ export const FormManager = {
             ApiKeyUtils.setupField('openrouterApiKey', config.openrouter_api_key_configured, config.openrouter_api_key);
             ApiKeyUtils.setupField('mistralApiKey', config.mistral_api_key_configured, config.mistral_api_key);
             ApiKeyUtils.setupField('deepseekApiKey', config.deepseek_api_key_configured, config.deepseek_api_key);
+            ApiKeyUtils.setupField('poeApiKey', config.poe_api_key_configured, config.poe_api_key);
 
             // Store in state
             StateManager.setState('ui.defaultConfig', config);

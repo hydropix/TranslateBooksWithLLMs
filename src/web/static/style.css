@@ -1563,3 +1563,334 @@ html.dark .file-info {
         padding: 2rem;
     }
 }
+
+/* ========================================
+   Searchable Select Component
+   ======================================== */
+
+.searchable-select {
+    position: relative;
+    width: 100%;
+}
+
+/* Display area - shows selected value */
+.searchable-select-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    min-height: 44px;
+    transition: background 0.2s;
+}
+
+.searchable-select-display:hover {
+    background: rgba(54, 118, 216, 0.05);
+}
+
+.searchable-select.open .searchable-select-display {
+    background: rgba(54, 118, 216, 0.08);
+}
+
+.searchable-select-value {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.searchable-select-value.placeholder {
+    color: var(--text-muted-light);
+}
+
+.searchable-select-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    background: rgba(54, 118, 216, 0.12);
+    color: var(--primary-light);
+    border-radius: 9999px;
+    white-space: nowrap;
+}
+
+.searchable-select-arrow {
+    font-size: 1.25rem;
+    color: var(--text-muted-light);
+    transition: transform 0.2s, color 0.2s;
+}
+
+.searchable-select.open .searchable-select-arrow {
+    color: var(--primary-light);
+}
+
+/* Dropdown */
+.searchable-select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: -1px;
+    right: -1px;
+    z-index: 1000;
+    background: var(--background-light);
+    border: 2px solid var(--primary-light);
+    border-radius: 1rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: max-height 0.25s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.searchable-select.open .searchable-select-dropdown {
+    max-height: 400px;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Search header */
+.searchable-select-search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+    background: rgba(54, 118, 216, 0.03);
+}
+
+.searchable-select-search-icon {
+    font-size: 1.25rem;
+    color: var(--text-muted-light);
+}
+
+.searchable-select-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    outline: none;
+    padding: 0.25rem 0;
+}
+
+.searchable-select-input::placeholder {
+    color: var(--text-muted-light);
+}
+
+.searchable-select-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    cursor: pointer;
+    color: var(--text-muted-light);
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.searchable-select-clear:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.searchable-select-clear .material-symbols-outlined {
+    font-size: 1rem;
+}
+
+/* Options list */
+.searchable-select-options {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.searchable-select-option {
+    padding: 0.625rem 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.15s;
+}
+
+.searchable-select-option:hover,
+.searchable-select-option.highlighted {
+    background: rgba(54, 118, 216, 0.08);
+}
+
+.searchable-select-option.selected {
+    background: rgba(54, 118, 216, 0.12);
+}
+
+.searchable-select-option .option-check {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: 1rem;
+    color: var(--primary-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.searchable-select-option .option-label {
+    flex: 1;
+    font-size: 0.875rem;
+    color: var(--text-dark);
+}
+
+.searchable-select-option.selected .option-label {
+    color: var(--primary-light);
+    font-weight: 600;
+}
+
+.searchable-select-option .option-description {
+    font-size: 0.75rem;
+    color: var(--text-muted-light);
+}
+
+/* Group headers */
+.searchable-select-group {
+    padding: 0.625rem 1rem 0.375rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--primary-light);
+    background: rgba(54, 118, 216, 0.05);
+    border-top: 1px solid var(--border-light);
+    margin-top: 0.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.searchable-select-group:first-child {
+    border-top: none;
+    margin-top: 0;
+}
+
+/* No results */
+.searchable-select-no-results {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    color: var(--text-muted-light);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.searchable-select-no-results .material-symbols-outlined {
+    font-size: 1.25rem;
+}
+
+.searchable-select-no-results .custom-value {
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+/* Scrollbar styling */
+.searchable-select-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.searchable-select-options::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.searchable-select-options::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+    border-radius: 4px;
+}
+
+.searchable-select-options::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted-light);
+}
+
+/* Dark mode adjustments */
+html.dark .searchable-select-display:hover {
+    background: rgba(90, 142, 232, 0.08);
+}
+
+html.dark .searchable-select.open .searchable-select-display {
+    background: rgba(90, 142, 232, 0.12);
+}
+
+html.dark .searchable-select-badge {
+    background: rgba(90, 142, 232, 0.2);
+}
+
+html.dark .searchable-select-dropdown {
+    background: #2a2a2a;
+    border-color: var(--primary-light);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+html.dark .searchable-select-search {
+    background: rgba(90, 142, 232, 0.05);
+    border-color: #444444;
+}
+
+html.dark .searchable-select-option:hover,
+html.dark .searchable-select-option.highlighted {
+    background: rgba(90, 142, 232, 0.12);
+}
+
+html.dark .searchable-select-option.selected {
+    background: rgba(90, 142, 232, 0.18);
+}
+
+html.dark .searchable-select-group {
+    background: rgba(90, 142, 232, 0.08);
+    border-color: #444444;
+}
+
+/* ========================================
+   Provider Select with Logos
+   ======================================== */
+
+.provider-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.provider-logo {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    object-fit: contain;
+}
+
+.provider-name {
+    flex: 1;
+}
+
+.provider-description {
+    font-size: 0.75rem;
+    color: var(--text-muted-light);
+    margin-left: auto;
+}
+
+/* Provider logo in display area */
+.searchable-select-display .provider-logo {
+    width: 18px;
+    height: 18px;
+}
+
+/* Larger logo in dropdown */
+.searchable-select-option .provider-logo {
+    width: 22px;
+    height: 22px;
+}

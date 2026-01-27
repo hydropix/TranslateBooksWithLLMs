@@ -205,12 +205,13 @@
 
                 <div id="settingsOptionsSection" class="hidden">
                     <!-- Provider + API Settings Row -->
-                    <div id="providerRow" style="display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 15px; margin-bottom: 15px; align-items: end;">
+                    <div id="providerRow" style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px; margin-bottom: 15px; align-items: end;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label>AI Provider</label>
                             <div class="neu-inset-light">
                                 <select class="form-control" id="llmProvider">
                                     <option value="ollama">Ollama (Local)</option>
+                                    <option value="poe">Poe (Multi-Provider)</option>
                                     <option value="deepseek">DeepSeek (Cloud API)</option>
                                     <option value="mistral">Mistral (Cloud API)</option>
                                     <option value="gemini">Gemini (Cloud)</option>
@@ -268,7 +269,17 @@
                             </div>
                         </div>
 
-                        <!-- Model Selection -->
+                        <!-- Poe API Key -->
+                        <div class="form-group" id="poeSettings" style="display: none; margin-bottom: 0;">
+                            <label>API Key <span id="poeKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light">
+                                <input type="password" class="form-control" id="poeApiKey" placeholder="Get key at poe.com/api_key" autocomplete="new-password">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Model Selection Row (Full Width) -->
+                    <div style="display: grid; grid-template-columns: 1fr auto; gap: 15px; margin-bottom: 15px; align-items: end;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label>Model Selection</label>
                             <div class="neu-inset-light">
@@ -281,14 +292,9 @@
                                 <p id="thinkingModelWarningText" style="margin: 0; font-size: 13px; color: #991b1b; white-space: pre-line;"></p>
                             </div>
                         </div>
-
-                        <!-- Refresh Button -->
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label>&nbsp;</label>
-                            <button class="btn btn-secondary" onclick="refreshModels()" title="Refresh model list" style="width: 100%; height: 56px; padding: 0;">
-                                <span class="material-symbols-outlined">refresh</span>
-                            </button>
-                        </div>
+                        <button class="btn btn-secondary" onclick="refreshModels()" title="Refresh model list" style="height: 56px; padding: 0 1rem;">
+                            <span class="material-symbols-outlined">refresh</span>
+                        </button>
                     </div>
 
                     <!-- OpenAI Endpoint Row (shown only for OpenAI provider) -->

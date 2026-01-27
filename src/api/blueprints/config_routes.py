@@ -42,6 +42,8 @@ from src.config import (
     MISTRAL_MODEL,
     DEEPSEEK_API_KEY,
     DEEPSEEK_MODEL,
+    POE_API_KEY,
+    POE_MODEL,
     MAX_TOKENS_PER_CHUNK
 )
 
@@ -112,6 +114,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_mistral_models(api_key)
         elif provider == 'deepseek':
             return _get_deepseek_models(api_key)
+        elif provider == 'poe':
+            return _get_poe_models(api_key)
         elif provider == 'openai':
             # Get endpoint from request for LM Studio support
             if request.method == 'POST':
@@ -146,11 +150,13 @@ def create_config_blueprint(server_session_id=None):
             "openrouter_api_key": mask_api_key(OPENROUTER_API_KEY),
             "mistral_api_key": mask_api_key(MISTRAL_API_KEY),
             "deepseek_api_key": mask_api_key(DEEPSEEK_API_KEY),
+            "poe_api_key": mask_api_key(POE_API_KEY),
             "gemini_api_key_configured": bool(GEMINI_API_KEY),
             "openai_api_key_configured": bool(OPENAI_API_KEY),
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
             "mistral_api_key_configured": bool(MISTRAL_API_KEY),
-            "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY)
+            "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
+            "poe_api_key_configured": bool(POE_API_KEY)
         }
 
         return jsonify(config_response)
@@ -341,6 +347,61 @@ def create_config_blueprint(server_session_id=None):
                 "status": "deepseek_error",
                 "count": 0,
                 "error": f"Error connecting to DeepSeek API: {str(e)}"
+            })
+
+    def _get_poe_models(provided_api_key=None):
+        """Get available models from Poe API"""
+        api_key = _resolve_api_key(provided_api_key, 'POE_API_KEY', POE_API_KEY)
+
+        # Use POE_MODEL from .env, fallback to Claude-Sonnet-4
+        default_model = POE_MODEL if POE_MODEL else "Claude-Sonnet-4"
+
+        if not api_key:
+            return jsonify({
+                "models": [],
+                "model_names": [],
+                "default": default_model,
+                "status": "api_key_missing",
+                "count": 0,
+                "error": "Poe API key is required. Get your key at https://poe.com/api_key"
+            })
+
+        try:
+            from src.core.llm.providers.poe import PoeProvider
+
+            poe_provider = PoeProvider(api_key=api_key)
+            models = asyncio.run(poe_provider.get_available_models())
+
+            if models:
+                model_names = [m['id'] for m in models]
+                # Check if default model exists in available models
+                if default_model not in model_names and model_names:
+                    default_model = model_names[0]
+                return jsonify({
+                    "models": models,
+                    "model_names": model_names,
+                    "default": default_model,
+                    "status": "poe_connected",
+                    "count": len(models)
+                })
+            else:
+                return jsonify({
+                    "models": [],
+                    "model_names": [],
+                    "default": default_model,
+                    "status": "poe_error",
+                    "count": 0,
+                    "error": "Failed to retrieve Poe models"
+                })
+
+        except Exception as e:
+            return jsonify({
+                "models": [],
+                "model_names": [],
+                "default": default_model,
+                "status": "poe_error",
+                "count": 0,
+                "error": f"Error connecting to Poe API: {str(e)}"
             })
 
     def _get_openai_models(provided_api_key=None, api_endpoint=None):
@@ -646,6 +707,8 @@ def create_config_blueprint(server_session_id=None):
             'MISTRAL_MODEL',
             'DEEPSEEK_API_KEY',
             'DEEPSEEK_MODEL',
+            'POE_API_KEY',
+            'POE_MODEL',
             'DEFAULT_MODEL',
             'LLM_PROVIDER',
             'API_ENDPOINT'
@@ -695,6 +758,7 @@ def create_config_blueprint(server_session_id=None):
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
             "mistral_api_key_configured": bool(MISTRAL_API_KEY),
             "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
+            "poe_api_key_configured": bool(POE_API_KEY),
             "default_model": DEFAULT_MODEL or "",
             "llm_provider": os.getenv('LLM_PROVIDER', 'ollama'),
             "api_endpoint": DEFAULT_OLLAMA_API_ENDPOINT or ""

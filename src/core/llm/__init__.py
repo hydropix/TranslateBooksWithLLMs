@@ -39,6 +39,7 @@ from .providers.openrouter import OpenRouterProvider
 from .providers.gemini import GeminiProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
+from .providers.poe import PoeProvider
 
 # Factory
 from .factory import create_llm_provider
@@ -71,6 +72,7 @@ __all__ = [
     'GeminiProvider',
     'MistralProvider',
     'DeepSeekProvider',
+    'PoeProvider',
 
     # Factory
     'create_llm_provider',

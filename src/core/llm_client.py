@@ -169,13 +169,14 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                       openrouter_api_key: Optional[str] = None,
                       mistral_api_key: Optional[str] = None,
                       deepseek_api_key: Optional[str] = None,
+                      poe_api_key: Optional[str] = None,
                       context_window: Optional[int] = None,
                       log_callback: Optional[callable] = None) -> Optional[LLMClient]:
     """
     Factory function to create LLM client based on provider or custom endpoint
 
     Args:
-        llm_provider: Provider type ('ollama', 'gemini', 'openai', 'openrouter', 'mistral', or 'deepseek')
+        llm_provider: Provider type ('ollama', 'gemini', 'openai', 'openrouter', 'mistral', 'deepseek', or 'poe')
         gemini_api_key: API key for Gemini provider
         api_endpoint: API endpoint for custom Ollama instance or OpenAI-compatible API
         model_name: Model name to use
@@ -183,6 +184,7 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
         openrouter_api_key: API key for OpenRouter provider
         mistral_api_key: API key for Mistral provider
         deepseek_api_key: API key for DeepSeek provider
+        poe_api_key: API key for Poe provider
         context_window: Context window size for the model
         log_callback: Callback function for logging
 
@@ -200,6 +202,8 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
         return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key)
     if llm_provider == "deepseek":
         return LLMClient(provider_type="deepseek", model=model_name, api_key=deepseek_api_key)
+    if llm_provider == "poe":
+        return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key)
     if llm_provider == "ollama":
         # Always create a new client for Ollama to ensure proper configuration
         return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,

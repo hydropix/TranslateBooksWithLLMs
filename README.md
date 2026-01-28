@@ -22,13 +22,13 @@ Providers:
 <img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32">
 </p>
 
-- **Ollama** (local)
-- **Poe** ⭐ Recommended - Easy setup, multiple AI models
-- **OpenRouter**
-- **OpenAI** (compatible like LM Studio)
-- **Mistral**
-- **Deepseek**
-- **Gemini**
+- [**Ollama**](https://ollama.com/download) (local)
+- [**Poe**](https://poe.com/api_key) ⭐ Recommended - Easy setup, multiple AI models
+- [**OpenRouter**](https://openrouter.ai/keys) (200+ models)
+- [**OpenAI**](https://platform.openai.com/api-keys) (compatible like LM Studio)
+- [**Mistral**](https://console.mistral.ai/api-keys)
+- [**DeepSeek**](https://platform.deepseek.com/api_keys)
+- [**Gemini**](https://aistudio.google.com/apikey)
 
 > **[Translation Quality Benchmarks](https://github.com/hydropix/TranslateBooksWithLLMs/wiki)** — Find the best model for your target language.
 

@@ -72,10 +72,9 @@ jobs:
         ## Quick Start
 
         1. Extract TranslateBook to a folder of your choice
-        2. Install Ollama from https://ollama.ai (required for local LLM)
-        3. Download a translation model: ollama pull qwen3:14b
-        4. Open Terminal and run: ./TranslateBook
-        5. Open your browser to http://localhost:5000
+        2. Open Terminal and run: ./TranslateBook
+        3. Open your browser to http://localhost:5000
+        4. Choose your LLM provider (see below)
 
         ## First Launch - Security Authorization
 
@@ -88,14 +87,28 @@ jobs:
 
         This only needs to be done once.
 
+        ## LLM Providers
+
+        You need at least one LLM provider to translate:
+
+        - Poe (Recommended) - Easy setup, multiple AI models: https://poe.com/api_key
+        - Ollama (Local) - Free, runs on your machine: https://ollama.com
+        - OpenRouter - 200+ cloud models: https://openrouter.ai/keys
+        - OpenAI - GPT models: https://platform.openai.com/api-keys
+        - Mistral - French AI lab: https://console.mistral.ai/api-keys
+        - DeepSeek - Chinese AI lab: https://platform.deepseek.com/api_keys
+        - Gemini - Google AI: https://aistudio.google.com/apikey
+
+        For local translation with Ollama:
+        1. Install Ollama from https://ollama.com
+        2. Download a model: ollama pull qwen3:14b
+
         ## Choosing the Best Model for Your Language
 
         Different models perform better for different target languages!
 
-        See our comprehensive benchmarks to find the best model for your target language:
+        See our comprehensive benchmarks to find the best model:
         https://github.com/hydropix/TranslateBooksWithLLMs/wiki
-
-        Benchmarks include 11 models tested across 19 languages with accuracy, fluency, and style scores.
 
         ## First Run
 
@@ -107,15 +120,14 @@ jobs:
         ## Configuration
 
         Edit TranslateBook_Data/.env to customize:
-        - LLM provider (Ollama, OpenAI, Gemini, OpenRouter)
-        - Model selection
+        - LLM provider and model selection
         - API keys for cloud providers
         - Server port and host
 
         ## Usage
 
         - Web UI: http://localhost:5000
-        - Supported formats: .txt, .epub, .srt
+        - Supported formats: .txt, .epub, .srt, .docx, .odt
         - Output files: TranslateBook_Data/translated_files/
 
         ## Links
@@ -123,7 +135,7 @@ jobs:
         - Full Documentation: https://github.com/hydropix/TranslateBooksWithLLMs
         - Model Benchmarks: https://github.com/hydropix/TranslateBooksWithLLMs/wiki
         - Report Issues: https://github.com/hydropix/TranslateBooksWithLLMs/issues
-        - OpenRouter Models: https://openrouter.ai/models (200+ cloud models)
+        - OpenRouter Models: https://openrouter.ai/models
         EOF
 
         # Create zip archive

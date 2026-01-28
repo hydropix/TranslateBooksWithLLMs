@@ -10,8 +10,20 @@ Translate **books**, **subtitles**, and **documents** using AI - locally or in t
 
 Formats: **EPUB**, **SRT**, **DOCX**, **TXT**
 
-Providers: 
+Providers:
+
+<p align="left">
+<img src="src/web/static/img/providers/ollama.png" alt="Ollama" height="32">&nbsp;&nbsp;
+<img src="src/web/static/img/providers/poe.png" alt="Poe" height="32">&nbsp;&nbsp;
+<img src="src/web/static/img/providers/openrouter.png" alt="OpenRouter" height="32">&nbsp;&nbsp;
+<img src="src/web/static/img/providers/openai.png" alt="OpenAI" height="32">&nbsp;&nbsp;
+<img src="src/web/static/img/providers/mistral.png" alt="Mistral" height="32">&nbsp;&nbsp;
+<img src="src/web/static/img/providers/deepseek.png" alt="DeepSeek" height="32">&nbsp;&nbsp;
+<img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32">
+</p>
+
 - **Ollama** (local)
+- **Poe** ⭐ Recommended - Easy setup, multiple AI models
 - **OpenRouter**
 - **OpenAI** (compatible like LM Studio)
 - **Mistral**
@@ -64,9 +76,12 @@ The web interface opens at **http://localhost:5000**
 | Provider | Type | Setup |
 |----------|------|-------|
 | **Ollama** | Local | [ollama.com](https://ollama.com/) |
+| **Poe** ⭐ | Cloud (Recommended) | [poe.com/api_key](https://poe.com/api_key) |
 | **OpenAI-Compatible** | Local | llama.cpp, LM Studio, vLLM, LocalAI... |
 | **OpenRouter** | Cloud (200+ models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | **OpenAI** | Cloud | [platform.openai.com](https://platform.openai.com/api-keys) |
+| **Mistral** | Cloud | [console.mistral.ai](https://console.mistral.ai/api-keys) |
+| **DeepSeek** | Cloud | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
 | **Gemini** | Cloud | [Google AI Studio](https://makersuite.google.com/app/apikey) |
 
 > **OpenAI-Compatible servers:** Use `--provider openai` with your server's endpoint (e.g., llama.cpp: `http://localhost:8080/v1/chat/completions`, LM Studio: `http://localhost:1234/v1/chat/completions`)

@@ -252,12 +252,18 @@ class PoeProvider(LLMProvider):
                     if request_price > 0.10:
                         continue
 
+                    # Skip free models (no pricing = free tier, often lower quality/rate limited)
+                    if prompt_price == 0 and completion_price == 0 and request_price == 0:
+                        continue
+
                     # Build display name with context info
                     description = m.get("description", "")
+                    # Use display name from API if available, otherwise use model_id
+                    display_name = m.get("name") or model_id
 
                     model_info = {
                         "id": model_id,
-                        "name": model_id,
+                        "name": display_name,
                         "description": description[:100] if description else "",
                         "owned_by": m.get("owned_by", ""),
                         "context_length": self._get_context_limit_for_model(model_id),

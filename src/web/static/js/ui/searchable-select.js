@@ -300,8 +300,10 @@ export class SearchableSelect {
                     : '<span class="option-check"></span>';
                 li.innerHTML = `
                     ${checkmark}
-                    <span class="option-label">${DomHelpers.escapeHtml(opt.label)}</span>
-                    ${opt.description ? `<span class="option-description">${DomHelpers.escapeHtml(opt.description)}</span>` : ''}
+                    <span class="option-content">
+                        <span class="option-label">${DomHelpers.escapeHtml(opt.label)}</span>
+                        ${opt.description ? `<span class="option-description">${DomHelpers.escapeHtml(opt.description)}</span>` : ''}
+                    </span>
                 `;
             }
 

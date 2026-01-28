@@ -219,29 +219,65 @@ function populateModelSelect(models, defaultModel = null, provider = 'ollama') {
             }
             modelSelect.appendChild(option);
         });
-    } else if (provider === 'openrouter') {
+    } else if (provider === 'openrouter' || provider === 'poe') {
+        // OpenRouter and Poe share the same pricing display format
+        // Poe additionally supports grouping by owned_by and request-based pricing
+        let currentGroup = null;
+        let optgroup = null;
+
         models.forEach(model => {
+            // For Poe: group by owned_by or fallback group
+            if (provider === 'poe') {
+                const groupKey = model.group || model.owned_by;
+                if (groupKey && groupKey !== currentGroup) {
+                    currentGroup = groupKey;
+                    optgroup = document.createElement('optgroup');
+                    optgroup.label = currentGroup;
+                    modelSelect.appendChild(optgroup);
+                }
+            }
+
             const option = document.createElement('option');
-            // Handle both API response format (id) and fallback format (value)
             const modelId = model.id || model.value;
             option.value = modelId;
 
             // Format label with pricing info if available
-            if (model.pricing && model.pricing.prompt_per_million !== undefined) {
-                const inputPrice = formatPrice(model.pricing.prompt_per_million);
-                const outputPrice = formatPrice(model.pricing.completion_per_million);
-                option.textContent = `${model.name || modelId} (In: ${inputPrice}/M, Out: ${outputPrice}/M)`;
-                option.title = `Context: ${model.context_length || 'N/A'} tokens`;
+            if (model.pricing && (model.pricing.prompt_per_million !== undefined || model.pricing.request)) {
+                if (model.pricing.request && model.pricing.request > 0) {
+                    // Request-based pricing (Poe specific)
+                    option.textContent = `${model.name || modelId} ($${model.pricing.request.toFixed(4)}/req)`;
+                } else {
+                    // Token-based pricing (shared format)
+                    const inputPrice = formatPrice(model.pricing.prompt_per_million);
+                    const outputPrice = formatPrice(model.pricing.completion_per_million);
+                    option.textContent = `${model.name || modelId} (In: ${inputPrice}/M, Out: ${outputPrice}/M)`;
+                }
             } else {
-                // Fallback format
+                // Fallback format (no pricing)
                 option.textContent = model.label || model.name || modelId;
             }
+
+            // Build tooltip
+            let tooltip = [];
+            if (model.context_length) {
+                tooltip.push(`Context: ${model.context_length} tokens`);
+            }
+            if (model.description) {
+                tooltip.push(model.description);
+            }
+            option.title = tooltip.length > 0 ? tooltip.join(' | ') : '';
 
             if (modelId === defaultModel) {
                 option.selected = true;
                 defaultModelFound = true;
             }
-            modelSelect.appendChild(option);
+
+            // Add to optgroup if exists (Poe), otherwise to select
+            if (optgroup) {
+                optgroup.appendChild(option);
+            } else {
+                modelSelect.appendChild(option);
+            }
         });
     } else if (provider === 'mistral') {
         models.forEach(model => {
@@ -270,73 +306,6 @@ function populateModelSelect(models, defaultModel = null, provider = 'ollama') {
                 defaultModelFound = true;
             }
             modelSelect.appendChild(option);
-        });
-    } else if (provider === 'poe') {
-        // Poe models - support groups for fallback, pricing for API response
-        let currentGroup = null;
-        let optgroup = null;
-
-        models.forEach(model => {
-            // Create optgroup if group changed (for fallback models with groups)
-            if (model.group && model.group !== currentGroup) {
-                currentGroup = model.group;
-                optgroup = document.createElement('optgroup');
-                optgroup.label = currentGroup;
-                modelSelect.appendChild(optgroup);
-            }
-
-            // For API response models, group by owned_by
-            if (!model.group && model.owned_by && model.owned_by !== currentGroup) {
-                currentGroup = model.owned_by;
-                optgroup = document.createElement('optgroup');
-                optgroup.label = currentGroup;
-                modelSelect.appendChild(optgroup);
-            }
-
-            const option = document.createElement('option');
-            const modelId = model.value || model.id;
-            option.value = modelId;
-
-            // Format label with pricing info if available (from API)
-            if (model.pricing && (model.pricing.prompt_per_million !== undefined || model.pricing.request)) {
-                if (model.pricing.request) {
-                    // Request-based pricing
-                    const requestPrice = model.pricing.request;
-                    option.textContent = `${model.label || model.name || modelId} ($${requestPrice.toFixed(4)}/req)`;
-                } else {
-                    // Token-based pricing
-                    const inputPrice = formatPrice(model.pricing.prompt_per_million);
-                    const outputPrice = formatPrice(model.pricing.completion_per_million);
-                    option.textContent = `${model.label || model.name || modelId} (In: ${inputPrice}/M, Out: ${outputPrice}/M)`;
-                }
-            } else {
-                // Fallback format (no pricing)
-                option.textContent = model.label || model.name || modelId;
-            }
-
-            // Build tooltip with context and description
-            let tooltip = [];
-            if (model.context_length) {
-                tooltip.push(`Context: ${model.context_length} tokens`);
-            }
-            if (model.description) {
-                tooltip.push(model.description);
-            }
-            if (tooltip.length > 0) {
-                option.title = tooltip.join(' | ');
-            }
-
-            if (modelId === defaultModel) {
-                option.selected = true;
-                defaultModelFound = true;
-            }
-
-            // Add to optgroup if exists, otherwise to select
-            if (optgroup) {
-                optgroup.appendChild(option);
-            } else {
-                modelSelect.appendChild(option);
-            }
         });
     } else {
         // Ollama - models are strings
@@ -1035,20 +1004,14 @@ export const ProviderManager = {
             if (data.models && data.models.length > 0) {
                 MessageLogger.showMessage('', '');
 
-                // Format models for the dropdown
-                const formattedModels = data.models.map(m => ({
-                    value: m.id,
-                    label: m.name || m.id,
-                    context_length: m.context_length
-                }));
-
-                populateModelSelect(formattedModels, data.default, 'poe');
-                MessageLogger.addLog(`${data.count} Poe model(s) loaded`);
+                // Pass models directly (same format as OpenRouter)
+                populateModelSelect(data.models, data.default, 'poe');
+                MessageLogger.addLog(`${data.count} Poe model(s) loaded (sorted by provider)`);
 
                 SettingsManager.applyPendingModelSelection();
                 ModelDetector.checkAndShowRecommendation();
 
-                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
+                StateManager.setState('models.availableModels', data.models.map(m => m.id));
                 StatusManager.setConnected('poe', data.count);
             } else {
                 // Use fallback list

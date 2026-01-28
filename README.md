@@ -12,23 +12,19 @@ Formats: **EPUB**, **SRT**, **DOCX**, **TXT**
 
 Providers:
 
-<p align="left">
-<img src="src/web/static/img/providers/ollama.png" alt="Ollama" height="32">&nbsp;&nbsp;
-<img src="src/web/static/img/providers/poe.png" alt="Poe" height="32">&nbsp;&nbsp;
-<img src="src/web/static/img/providers/openrouter.png" alt="OpenRouter" height="32">&nbsp;&nbsp;
-<img src="src/web/static/img/providers/openai.png" alt="OpenAI" height="32">&nbsp;&nbsp;
-<img src="src/web/static/img/providers/mistral.png" alt="Mistral" height="32">&nbsp;&nbsp;
-<img src="src/web/static/img/providers/deepseek.png" alt="DeepSeek" height="32">&nbsp;&nbsp;
-<img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32">
-</p>
+<img src="src/web/static/img/providers/ollama.png" alt="Ollama" height="18"> [**Ollama**](https://ollama.com/download) — Local, free, private
 
-- [**Ollama**](https://ollama.com/download) (local)
-- [**Poe**](https://poe.com/api_key) ⭐ Recommended - Easy setup, multiple AI models
-- [**OpenRouter**](https://openrouter.ai/keys) (200+ models)
-- [**OpenAI**](https://platform.openai.com/api-keys) (compatible like LM Studio)
-- [**Mistral**](https://console.mistral.ai/api-keys)
-- [**DeepSeek**](https://platform.deepseek.com/api_keys)
-- [**Gemini**](https://aistudio.google.com/apikey)
+<img src="src/web/static/img/providers/poe.png" alt="Poe" height="18"> [**Poe**](https://poe.com/api_key) — ⭐ Recommended, easy setup, multiple AI models
+
+<img src="src/web/static/img/providers/openrouter.png" alt="OpenRouter" height="18"> [**OpenRouter**](https://openrouter.ai/keys) — 200+ models
+
+<img src="src/web/static/img/providers/openai.png" alt="OpenAI" height="18"> [**OpenAI**](https://platform.openai.com/api-keys) — GPT-4o, compatible with LM Studio
+
+<img src="src/web/static/img/providers/mistral.png" alt="Mistral" height="18"> [**Mistral**](https://console.mistral.ai/api-keys) — European AI
+
+<img src="src/web/static/img/providers/deepseek.png" alt="DeepSeek" height="18"> [**DeepSeek**](https://platform.deepseek.com/api_keys) — Cost-effective
+
+<img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="18"> [**Gemini**](https://aistudio.google.com/apikey) — Google AI
 
 > **[Translation Quality Benchmarks](https://github.com/hydropix/TranslateBooksWithLLMs/wiki)** — Find the best model for your target language.
 

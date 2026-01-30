@@ -2,7 +2,12 @@
 Unified file translation function using the adapter pattern.
 
 This module provides a single entry point for translating files of any supported
-format (TXT, SRT, EPUB) using format-specific adapters.
+format (TXT, SRT, EPUB, DOCX) using format-specific adapters.
+
+File type detection supports:
+1. Known extensions (.txt, .epub, .srt, .docx)
+2. Content-based detection for unknown extensions (e.g., .log, .md, .text -> txt)
+3. Automatic routing to appropriate processors
 """
 
 import os
@@ -14,6 +19,7 @@ from .txt_adapter import TxtAdapter
 from .srt_adapter import SrtAdapter
 from .epub_adapter import EpubAdapter
 from .exceptions import UnsupportedFormatError
+from src.utils.file_detector import detect_file_type, detect_file_type_by_content
 
 
 async def translate_file(
@@ -105,14 +111,32 @@ async def translate_file(
     if prompt_options is None:
         prompt_options = {}
 
-    # Detect file format from extension
+    # Detect file format - first by extension, then by content for unknown extensions
     _, ext = os.path.splitext(input_filepath.lower())
+
+    # Use content-based detection for file type determination
+    # This handles files with non-standard extensions (e.g., .log, .text, .md)
+    try:
+        detected_type = detect_file_type(input_filepath)
+    except ValueError:
+        # If detection fails, try content-based detection as fallback
+        detected_type = detect_file_type_by_content(input_filepath)
+        if detected_type is None:
+            raise UnsupportedFormatError(
+                f"Cannot determine file type for: {ext}. "
+                f"The file does not appear to be a supported format."
+            )
+
+    # Log detected type if different from extension
+    if log_callback and detected_type != ext.lstrip('.'):
+        log_callback("file_type_detected",
+            f"📄 File with extension '{ext}' detected as '{detected_type.upper()}' format")
 
     # TEMPORARY WORKAROUND: For EPUB files, use the legacy translate_epub_file() directly
     # The generic adapter pattern doesn't work well with EPUB's complex XHTML processing
     # that requires HTML chunking, tag preservation, technical content protection, etc.
     # TODO: Refactor EPUB translation to properly work with the adapter pattern
-    if ext == '.epub':
+    if detected_type == 'epub':
         from src.core.epub.translator import translate_epub_file
         await translate_epub_file(
             input_filepath=input_filepath,
@@ -146,7 +170,7 @@ async def translate_file(
     # DOCX translation using EPUB pipeline (Phase 1 implementation)
     # Similar to EPUB, DOCX requires HTML chunking, tag preservation, etc.
     # This reuses the EPUB pipeline for rapid deployment
-    if ext == '.docx':
+    if detected_type == 'docx':
         from src.core.docx.translator import translate_docx_file
         from src.core.llm import create_llm_provider
 
@@ -182,18 +206,19 @@ async def translate_file(
         )
         return result.get('success', False)
 
-    # Map file extensions to adapters
+    # Map detected file types to adapters
     adapter_map = {
-        '.txt': TxtAdapter,
-        '.srt': SrtAdapter,
-        # Note: .epub uses legacy path above
+        'txt': TxtAdapter,
+        'srt': SrtAdapter,
+        # Note: 'epub' uses legacy path above
+        # Note: 'docx' uses legacy path above
     }
 
-    adapter_class = adapter_map.get(ext)
+    adapter_class = adapter_map.get(detected_type)
     if not adapter_class:
-        supported = ', '.join(['.txt', '.srt', '.epub', '.docx'])  # Include .epub and .docx in supported formats
+        supported = ', '.join(['txt', 'srt', 'epub', 'docx'])
         raise UnsupportedFormatError(
-            f"Unsupported file format: {ext}. Supported formats: {supported}"
+            f"Unsupported file format: {detected_type}. Supported formats: {supported}"
         )
 
     # Prepare adapter configuration (format-specific settings)

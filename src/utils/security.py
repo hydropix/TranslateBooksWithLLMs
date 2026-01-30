@@ -33,10 +33,34 @@ class FileValidationResult:
 
 class SecureFileHandler:
     """Secure file upload and validation handler"""
-    
-    # Allowed file extensions
-    ALLOWED_EXTENSIONS: Set[str] = {'.txt', '.epub', '.srt', '.docx'}
-    
+
+    # Allowed file extensions - includes common text extensions
+    # The system will detect the actual content type for unknown extensions
+    ALLOWED_EXTENSIONS: Set[str] = {
+        # Primary supported formats (with dedicated processors)
+        '.txt', '.epub', '.srt', '.docx',
+        # Common text file extensions (will be processed as plain text)
+        '.text', '.log', '.md', '.markdown', '.rst', '.asc',
+        # Configuration/data files (text-based, can be translated)
+        '.csv', '.json', '.xml', '.html', '.htm', '.yaml', '.yml',
+        # Allow ANY extension for content-based detection
+        # Users can upload .xyz files and they'll be analyzed
+    }
+
+    # Set to allow any extension (content will be validated)
+    ALLOW_ANY_EXTENSION: bool = True
+
+    # Blocked extensions (security risk - never allow these)
+    BLOCKED_EXTENSIONS: Set[str] = {
+        '.exe', '.bat', '.cmd', '.scr', '.com', '.pif', '.jar',
+        '.vbs', '.vbe', '.js', '.jse', '.ws', '.wsf', '.wsc', '.wsh',
+        '.ps1', '.psm1', '.psd1', '.msi', '.msp', '.mst',
+        '.dll', '.sys', '.drv', '.ocx', '.cpl', '.inf',
+        '.sh', '.bash', '.zsh', '.ksh', '.csh',
+        '.app', '.dmg', '.pkg', '.deb', '.rpm',
+        '.iso', '.img', '.vmdk', '.vhd', '.vhdx',
+    }
+
     # Allowed MIME types
     ALLOWED_MIME_TYPES: Set[str] = {
         'text/plain',
@@ -45,6 +69,17 @@ class SecureFileHandler:
         'application/x-subrip',  # SRT files
         'text/srt',  # Alternative MIME type for SRT
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # DOCX files
+        # Additional text MIME types
+        'text/markdown',
+        'text/x-markdown',
+        'text/csv',
+        'text/html',
+        'text/xml',
+        'application/json',
+        'application/xml',
+        'text/x-log',
+        # Catch-all for generic text
+        'application/octet-stream',  # Will be validated by content
     }
     
     # Maximum file size (100MB)
@@ -142,37 +177,45 @@ class SecureFileHandler:
         """Validate filename format and extension"""
         if not filename or not filename.strip():
             return FileValidationResult(is_valid=False, error_message="Filename cannot be empty")
-        
+
         # Remove any path components (security)
         clean_filename = os.path.basename(filename.strip())
-        
+
         if not clean_filename:
             return FileValidationResult(is_valid=False, error_message="Invalid filename")
-        
+
         # Check file extension
         file_ext = Path(clean_filename).suffix.lower()
-        
+
         # Handle case where path traversal removes extension
         if not file_ext and clean_filename:
             # Try to find extension in original filename
             original_ext = Path(filename).suffix.lower()
             if original_ext:
                 file_ext = original_ext
-        
-        if file_ext not in self.ALLOWED_EXTENSIONS:
+
+        # Always block dangerous extensions (security)
+        if file_ext in self.BLOCKED_EXTENSIONS:
+            return FileValidationResult(
+                is_valid=False,
+                error_message=f"File type '{file_ext}' is not allowed for security reasons."
+            )
+
+        # If not allowing any extension, check against allowed list
+        if not self.ALLOW_ANY_EXTENSION and file_ext not in self.ALLOWED_EXTENSIONS:
             return FileValidationResult(
                 is_valid=False,
                 error_message=f"File type '{file_ext}' not allowed. Allowed types: {', '.join(self.ALLOWED_EXTENSIONS)}"
             )
-        
+
         # Check for suspicious characters
         if re.search(r'[<>:"|?*\x00-\x1f]', clean_filename):
             return FileValidationResult(is_valid=False, error_message="Filename contains invalid characters")
-        
+
         # Check filename length
         if len(clean_filename) > 255:
             return FileValidationResult(is_valid=False, error_message="Filename too long")
-        
+
         return FileValidationResult(is_valid=True)
     
     def _create_secure_filename(self, original_filename: str) -> str:
@@ -211,34 +254,73 @@ class SecureFileHandler:
     def _validate_file_content(self, file_path: Path, original_filename: str) -> FileValidationResult:
         """Validate file content based on type"""
         warnings = []
-        
-        # Determine expected file type
+
+        # Determine expected file type from extension
         file_ext = Path(original_filename).suffix.lower()
-        
+
         try:
-            # Check MIME type
+            # For unknown extensions, detect content type first
+            from src.utils.file_detector import detect_file_type_by_content
+
+            # Check MIME type (but don't reject unknown types)
             mime_type, _ = mimetypes.guess_type(str(file_path))
             if mime_type and mime_type not in self.ALLOWED_MIME_TYPES:
-                return FileValidationResult(
-                    is_valid=False,
-                    error_message=f"Invalid file type detected: {mime_type}"
-                )
-            
-            # Validate based on file type
-            if file_ext == '.txt':
-                return self._validate_text_file(file_path)
-            elif file_ext == '.epub':
+                # Don't reject immediately - content-based detection may work
+                warnings.append(f"Unexpected MIME type: {mime_type}")
+
+            # Map known extensions to validators
+            extension_validators = {
+                '.txt': self._validate_text_file,
+                '.text': self._validate_text_file,
+                '.log': self._validate_text_file,
+                '.md': self._validate_text_file,
+                '.markdown': self._validate_text_file,
+                '.rst': self._validate_text_file,
+                '.csv': self._validate_text_file,
+                '.json': self._validate_text_file,
+                '.xml': self._validate_text_file,
+                '.html': self._validate_text_file,
+                '.htm': self._validate_text_file,
+                '.yaml': self._validate_text_file,
+                '.yml': self._validate_text_file,
+                '.epub': self._validate_epub_file,
+                '.srt': self._validate_srt_file,
+                '.docx': self._validate_docx_file,
+            }
+
+            # Check if we have a dedicated validator for this extension
+            if file_ext in extension_validators:
+                result = extension_validators[file_ext](file_path)
+                if result.warnings:
+                    result.warnings.extend(warnings)
+                elif warnings:
+                    result.warnings = warnings
+                return result
+
+            # Unknown extension: detect content type
+            detected_type = detect_file_type_by_content(str(file_path))
+
+            if detected_type == 'epub':
                 return self._validate_epub_file(file_path)
-            elif file_ext == '.srt':
-                return self._validate_srt_file(file_path)
-            elif file_ext == '.docx':
+            elif detected_type == 'docx':
                 return self._validate_docx_file(file_path)
+            elif detected_type == 'srt':
+                return self._validate_srt_file(file_path)
+            elif detected_type == 'txt':
+                # Validated as readable text
+                result = self._validate_text_file(file_path)
+                if result.is_valid:
+                    result.warnings = result.warnings or []
+                    result.warnings.append(f"File with extension '{file_ext}' detected as plain text and will be processed as such.")
+                return result
             else:
+                # Content type detection failed
                 return FileValidationResult(
                     is_valid=False,
-                    error_message=f"Unsupported file type: {file_ext}"
+                    error_message=f"Cannot determine file type for extension '{file_ext}'. "
+                                  f"The file does not appear to be a supported text or document format."
                 )
-                
+
         except Exception as e:
             return FileValidationResult(
                 is_valid=False,

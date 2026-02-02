@@ -99,14 +99,23 @@ export const FormManager = {
         // Prompt options checkboxes - keep section open if any is checked
         const textCleanup = DomHelpers.getElement('textCleanup');
         const refineTranslation = DomHelpers.getElement('refineTranslation');
+        const bilingualMode = DomHelpers.getElement('bilingualMode');
+        const customInstructionSelect = DomHelpers.getElement('customInstructionSelect');
 
-        [textCleanup, refineTranslation].forEach(checkbox => {
+        [textCleanup, refineTranslation, bilingualMode].forEach(checkbox => {
             if (checkbox) {
                 checkbox.addEventListener('change', () => {
                     this.handlePromptOptionChange();
                 });
             }
         });
+
+        // Custom instruction select - keep section open if a file is selected
+        if (customInstructionSelect) {
+            customInstructionSelect.addEventListener('change', () => {
+                this.handlePromptOptionChange();
+            });
+        }
 
         // Reset button
         const resetBtn = DomHelpers.getElement('resetBtn');
@@ -201,15 +210,22 @@ export const FormManager = {
     },
 
     /**
-     * Handle prompt option checkbox change - keep section open if any option is checked
+     * Handle prompt option checkbox change - keep section open if any option is active
      */
     handlePromptOptionChange() {
         const textCleanup = DomHelpers.getElement('textCleanup');
         const refineTranslation = DomHelpers.getElement('refineTranslation');
+        const bilingualMode = DomHelpers.getElement('bilingualMode');
+        const customInstructionSelect = DomHelpers.getElement('customInstructionSelect');
 
-        const anyChecked = (textCleanup?.checked || refineTranslation?.checked);
+        const anyActive = (
+            textCleanup?.checked ||
+            refineTranslation?.checked ||
+            bilingualMode?.checked ||
+            (customInstructionSelect?.value && customInstructionSelect.value !== '')
+        );
 
-        if (anyChecked) {
+        if (anyActive) {
             const section = DomHelpers.getElement('promptOptionsSection');
             const icon = DomHelpers.getElement('promptOptionsIcon');
 
@@ -362,6 +378,9 @@ export const FormManager = {
                 return;
             }
 
+            // Save current value before resetting dropdown
+            const currentValue = select.value;
+
             // Reset dropdown to default
             select.innerHTML = '<option value="">None</option>';
 
@@ -378,9 +397,32 @@ export const FormManager = {
             } else {
                 console.warn('[CustomInstructions] No files found in response');
             }
+
+            // Restore previously selected value if it still exists in the list
+            if (currentValue) {
+                // Check if the value exists in options
+                let found = false;
+                for (let option of select.options) {
+                    if (option.value === currentValue) {
+                        select.value = currentValue;
+                        found = true;
+                        console.log('[CustomInstructions] Restored selection:', currentValue);
+                        break;
+                    }
+                }
+                if (!found) {
+                    console.warn('[CustomInstructions] Previously selected file not found:', currentValue);
+                }
+            }
+
+            // Dispatch event to notify that custom instructions are loaded
+            // This allows SettingsManager to restore the saved value
+            window.dispatchEvent(new CustomEvent('customInstructionsLoaded'));
         } catch (error) {
             console.error('[CustomInstructions] Error loading custom instructions:', error);
             // Graceful degradation - dropdown will only show "None" option
+            // Still dispatch event even on error
+            window.dispatchEvent(new CustomEvent('customInstructionsLoaded'));
         }
     },
 

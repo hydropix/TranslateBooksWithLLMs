@@ -63,7 +63,9 @@ const LOCAL_SETTINGS = [
     'lastOpenaiEndpoint',
     'ttsEnabled',
     'textCleanup',
-    'refineTranslation'
+    'refineTranslation',
+    'bilingualMode',
+    'customInstructionFile'
 ];
 
 /**
@@ -87,6 +89,12 @@ export const SettingsManager = {
         this.cleanupOldStorageVersions();
 
         this.loadLocalPreferences();
+
+        // Listen for custom instructions loaded event
+        window.addEventListener('customInstructionsLoaded', () => {
+            this.applyPendingCustomInstructionSelection();
+        });
+
         // Setup auto-save listeners after a short delay to avoid triggering during initial load
         setTimeout(() => {
             this._setupAutoSaveListeners();
@@ -157,7 +165,9 @@ export const SettingsManager = {
             // Checkboxes
             { id: 'ttsEnabled', event: 'change' },
             { id: 'textCleanup', event: 'change' },
-            { id: 'refineTranslation', event: 'change' }
+            { id: 'refineTranslation', event: 'change' },
+            { id: 'bilingualMode', event: 'change' },
+            { id: 'customInstructionSelect', event: 'change' }
         ];
 
         autoSaveElements.forEach(({ id, event }) => {
@@ -326,9 +336,20 @@ export const SettingsManager = {
                 refineCheckbox.checked = prefs.refineTranslation;
             }
         }
+        if (prefs.bilingualMode !== undefined) {
+            const bilingualCheckbox = DomHelpers.getElement('bilingualMode');
+            if (bilingualCheckbox) {
+                bilingualCheckbox.checked = prefs.bilingualMode;
+            }
+        }
 
-        // Keep Prompt Options section open if any option is checked
-        const hasAnyPromptOption = prefs.textCleanup || prefs.refineTranslation;
+        // Store custom instruction file for later application (after loadCustomInstructions completes)
+        if (prefs.customInstructionFile) {
+            window.__pendingCustomInstructionSelection = prefs.customInstructionFile;
+        }
+
+        // Keep Prompt Options section open if any option is active
+        const hasAnyPromptOption = prefs.textCleanup || prefs.refineTranslation || prefs.bilingualMode || prefs.customInstructionFile;
         if (hasAnyPromptOption) {
             const promptOptionsSection = DomHelpers.getElement('promptOptionsSection');
             const promptOptionsIcon = DomHelpers.getElement('promptOptionsIcon');
@@ -382,6 +403,7 @@ export const SettingsManager = {
         const ttsEnabledCheckbox = DomHelpers.getElement('ttsEnabled');
         const textCleanupCheckbox = DomHelpers.getElement('textCleanup');
         const refineTranslationCheckbox = DomHelpers.getElement('refineTranslation');
+        const bilingualModeCheckbox = DomHelpers.getElement('bilingualMode');
 
         const prefs = {
             lastProvider: DomHelpers.getValue('llmProvider'),
@@ -392,7 +414,9 @@ export const SettingsManager = {
             lastOpenaiEndpoint: DomHelpers.getValue('openaiEndpoint'),
             ttsEnabled: ttsEnabledCheckbox ? ttsEnabledCheckbox.checked : false,
             textCleanup: textCleanupCheckbox ? textCleanupCheckbox.checked : false,
-            refineTranslation: refineTranslationCheckbox ? refineTranslationCheckbox.checked : false
+            refineTranslation: refineTranslationCheckbox ? refineTranslationCheckbox.checked : false,
+            bilingualMode: bilingualModeCheckbox ? bilingualModeCheckbox.checked : false,
+            customInstructionFile: DomHelpers.getValue('customInstructionSelect') || ''
         };
 
         this.saveLocalPreferences(prefs);
@@ -544,6 +568,32 @@ export const SettingsManager = {
                 if (found) {
                     delete window.__pendingModelSelection;
                 }
+            }
+        }
+    },
+
+    /**
+     * Apply pending custom instruction selection after custom instructions are loaded
+     * Called when 'customInstructionsLoaded' event is fired
+     */
+    applyPendingCustomInstructionSelection() {
+        if (window.__pendingCustomInstructionSelection) {
+            const select = DomHelpers.getElement('customInstructionSelect');
+            if (select && select.options.length > 0) {
+                // Check if the value exists in options
+                let found = false;
+                for (let option of select.options) {
+                    if (option.value === window.__pendingCustomInstructionSelection) {
+                        select.value = window.__pendingCustomInstructionSelection;
+                        found = true;
+                        console.log('[SettingsManager] Restored custom instruction:', window.__pendingCustomInstructionSelection);
+                        break;
+                    }
+                }
+                if (!found) {
+                    console.warn('[SettingsManager] Custom instruction not found:', window.__pendingCustomInstructionSelection);
+                }
+                delete window.__pendingCustomInstructionSelection;
             }
         }
     },

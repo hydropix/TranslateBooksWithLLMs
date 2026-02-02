@@ -120,42 +120,81 @@ class TokenProgressTracker:
 
     def get_progress_percent(self) -> float:
         """
-        Calculate progress as percentage of total tokens completed.
+        Calculate progress as percentage of total work completed.
 
-        For two-phase workflows:
-        - Phase 1 (translation): returns 0-50%
-        - Phase 2 (refinement): returns 50-100%
+        For two-phase workflows (enable_refinement=True):
+        - Total work = total_tokens * 2 (translation + refinement)
+        - Phase 1 (translation): returns 0-50% based on tokens translated
+        - Phase 2 (refinement): returns 50-100% based on tokens refined
+
+        For single-phase workflows:
+        - Returns 0-100% based on tokens translated
         """
         if self._total_tokens == 0:
             return 0.0
 
-        # Calculate raw progress (0-100%)
-        raw_progress = (self._completed_tokens / self._total_tokens) * 100
-
         if not self._enable_refinement:
-            return raw_progress
+            # Single-phase: direct calculation
+            return (self._completed_tokens / self._total_tokens) * 100
 
-        # Apply phase weighting for two-phase workflows
+        # Two-phase workflow: total work is double (translate + refine)
+        total_work_tokens = self._total_tokens * 2
+
         if self._current_phase == 1:
             # Translation phase: 0-50%
-            return raw_progress * 0.5
+            # completed_tokens out of total_work_tokens (which is double)
+            return (self._completed_tokens / total_work_tokens) * 100
         else:
             # Refinement phase: 50-100%
-            return 50.0 + (raw_progress * 0.5)
+            # First phase already contributed 50%, now add refinement progress
+            phase1_contribution = 50.0
+            phase2_progress = (self._completed_tokens / self._total_tokens) * 50.0
+            return phase1_contribution + phase2_progress
 
     def get_estimated_remaining_seconds(self) -> float:
-        """Estimate remaining time based on token count and real performance."""
+        """
+        Estimate remaining time based on token count and real performance.
+
+        For two-phase workflows, accounts for remaining work in both phases.
+        """
         if self._completed_chunks == 0:
             # Initial estimate before any real data
-            return (self.FIXED_PROMPT_OVERHEAD * self._total_chunks) + \
-                   (self._total_tokens * self._token_rate)
+            total_work_chunks = self._total_chunks * 2 if self._enable_refinement else self._total_chunks
+            total_work_tokens = self._total_tokens * 2 if self._enable_refinement else self._total_tokens
+            return (self.FIXED_PROMPT_OVERHEAD * total_work_chunks) + \
+                   (total_work_tokens * self._token_rate)
 
         # Use calibrated rate
-        remaining_tokens = self._total_tokens - self._completed_tokens
-        remaining_chunks = self._total_chunks - self._completed_chunks
+        if not self._enable_refinement:
+            # Single-phase: simple calculation
+            remaining_tokens = self._total_tokens - self._completed_tokens
+            remaining_chunks = self._total_chunks - self._completed_chunks
+            return (self.FIXED_PROMPT_OVERHEAD * remaining_chunks) + \
+                   (remaining_tokens * self._token_rate)
 
-        return (self.FIXED_PROMPT_OVERHEAD * remaining_chunks) + \
-               (remaining_tokens * self._token_rate)
+        # Two-phase workflow
+        if self._current_phase == 1:
+            # Still in translation phase - need to account for:
+            # 1. Remaining translation work
+            # 2. All refinement work (entire second phase)
+            remaining_translation_tokens = self._total_tokens - self._completed_tokens
+            remaining_translation_chunks = self._total_chunks - self._completed_chunks
+
+            phase1_remaining = (self.FIXED_PROMPT_OVERHEAD * remaining_translation_chunks) + \
+                              (remaining_translation_tokens * self._token_rate)
+
+            # Phase 2 will process all chunks again
+            phase2_total = (self.FIXED_PROMPT_OVERHEAD * self._total_chunks) + \
+                          (self._total_tokens * self._token_rate)
+
+            return phase1_remaining + phase2_total
+        else:
+            # In refinement phase - only refinement work remains
+            remaining_refinement_tokens = self._total_tokens - self._completed_tokens
+            remaining_refinement_chunks = self._total_chunks - self._completed_chunks
+
+            return (self.FIXED_PROMPT_OVERHEAD * remaining_refinement_chunks) + \
+                   (remaining_refinement_tokens * self._token_rate)
 
     def get_stats(self) -> ProgressStats:
         """Get immutable snapshot of current progress statistics."""

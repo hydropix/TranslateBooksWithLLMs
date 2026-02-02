@@ -475,6 +475,7 @@ async def translate_chunk_with_fallback(
                     log_callback("retry_success", f"✓ Translation succeeded after {attempt + 1} attempt(s)")
 
             result = placeholder_mgr.restore_to_global(translated, global_indices)
+            stats.record_processed()  # Mark chunk as fully processed
             return result
         else:
             # Track placeholder error
@@ -545,6 +546,7 @@ async def translate_chunk_with_fallback(
 
                 # 6. Restore global indices and return
                 result = placeholder_mgr.restore_to_global(result_with_placeholders, global_indices)
+                stats.record_processed()  # Mark chunk as fully processed
                 return result
             else:
                 _log_error(log_callback, "phase2_validation_failed", "✗ Phase 2 validation failed")
@@ -565,6 +567,7 @@ async def translate_chunk_with_fallback(
 
     # Return the original chunk_text with global indices restored
     result_final = placeholder_mgr.restore_to_global(chunk_text, global_indices)
+    stats.record_processed()  # Mark chunk as fully processed (even on failure)
     return result_final
 
 
@@ -1102,7 +1105,9 @@ async def _refine_epub_chunks(
     context_manager: Optional[AdaptiveContextManager],
     placeholder_format: Tuple[str, str],
     log_callback: Optional[Callable],
-    prompt_options: Optional[Dict]
+    prompt_options: Optional[Dict],
+    stats_callback: Optional[Callable] = None,
+    stats: Optional['TranslationMetrics'] = None
 ) -> List[str]:
     """
     Refine translated EPUB chunks using a second LLM pass.
@@ -1119,7 +1124,10 @@ async def _refine_epub_chunks(
         llm_client: LLM client instance
         context_manager: Optional context manager
         placeholder_format: Placeholder format tuple (prefix, suffix)
-        log_callback: Optional logging callback        prompt_options: Prompt options dict
+        log_callback: Optional logging callback
+        prompt_options: Prompt options dict
+        stats_callback: Optional callback for progress updates during refinement
+        stats: Optional TranslationMetrics to update during refinement
 
     Returns:
         List of refined chunk texts
@@ -1265,7 +1273,11 @@ async def _refine_epub_chunks(
             refined_chunks.append(translated_text)
             _log_error(log_callback, "epub_refinement_error", f"Chunk {idx + 1}/{total_chunks}: error during refinement: {e}")
 
-        # Update progress
+        # Update progress after each refinement chunk
+        # Since refinement is Phase 2 of a two-phase workflow, increment refinement counter
+        if stats_callback and stats:
+            stats.refinement_chunks_completed = len(refined_chunks)
+            stats_callback(stats.to_dict())
     if log_callback:
         successful_refinements = sum(1 for orig, ref in zip(translated_chunks, refined_chunks) if orig != ref)
         log_callback("epub_refinement_complete",
@@ -1434,6 +1446,10 @@ async def translate_xhtml_simplified(
     # Check if refinement is enabled
     enable_refinement = prompt_options and prompt_options.get('refine')
 
+    # Configure stats for refinement tracking
+    stats.enable_refinement = enable_refinement
+    stats.refinement_phase = False  # Start in translation phase
+
     if log_callback:
         log_callback("epub_refinement_config",
                      f"Refinement enabled: {enable_refinement} (prompt_options={prompt_options})")
@@ -1477,6 +1493,10 @@ async def translate_xhtml_simplified(
 
     # 4.5. Refinement (optional - only if not interrupted)
     if enable_refinement and translated_chunks:
+        # Switch stats to refinement phase
+        stats.refinement_phase = True
+        stats.refinement_chunks_completed = 0
+
         if log_callback:
             log_callback("epub_refinement_start",
                         f"✨ Starting EPUB refinement pass to polish translation quality... ({len(translated_chunks)} chunks)")
@@ -1490,7 +1510,9 @@ async def translate_xhtml_simplified(
             context_manager=context_manager,
             placeholder_format=placeholder_format,
             log_callback=log_callback,  # Pass through to parent's token tracker
-            prompt_options=prompt_options
+            prompt_options=prompt_options,
+            stats_callback=stats_callback,  # Pass stats callback for progress updates
+            stats=stats  # Pass stats object to update during refinement
         )
 
         if refined_result:

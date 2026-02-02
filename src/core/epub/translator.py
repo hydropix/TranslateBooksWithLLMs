@@ -673,6 +673,10 @@ async def _process_all_content_files(
         content_files, opf_dir, max_tokens_per_chunk, log_callback
     )
 
+    # Check if refinement is enabled - this doubles the total work
+    enable_refinement = prompt_options and prompt_options.get('refine', False)
+    effective_total_chunks = total_chunks * 2 if enable_refinement else total_chunks
+
     # Start with restored documents
     parsed_xhtml_docs: Dict[str, etree._Element] = restored_docs.copy() if restored_docs else {}
     total_files = len(content_files)
@@ -691,7 +695,7 @@ async def _process_all_content_files(
     # Send initial stats if resuming (to update UI immediately)
     if stats_callback and resume_from_index > 0:
         stats_callback({
-            'total_chunks': total_chunks,
+            'total_chunks': effective_total_chunks,
             'completed_chunks': completed_chunks_global,
             'failed_chunks': 0,
             'total_tokens': 0
@@ -730,9 +734,14 @@ async def _process_all_content_files(
             current_file_completed = file_stats_dict.get('completed_chunks', 0)
             global_completed = completed_chunks_global + current_file_completed
 
+            # Handle refinement mode: when refinement is enabled, the total work doubles
+            # (translation phase + refinement phase), so we need to use the doubled total
+            enable_refinement = file_stats_dict.get('enable_refinement', False)
+            effective_total = total_chunks * 2 if enable_refinement else total_chunks
+
             # Report combined stats (accumulated + current file)
             stats_callback({
-                'total_chunks': total_chunks,
+                'total_chunks': effective_total,
                 'completed_chunks': global_completed,
                 'failed_chunks': accumulated_stats.failed_chunks + file_stats_dict.get('failed_chunks', 0),
                 'total_tokens': accumulated_stats.total_tokens_processed + accumulated_stats.total_tokens_generated + file_stats_dict.get('total_tokens_processed', 0) + file_stats_dict.get('total_tokens_generated', 0)
@@ -768,9 +777,21 @@ async def _process_all_content_files(
 
         # Report stats if callback provided
         if stats_callback and file_stats:
+            # Calculate effective completed chunks
+            # When refinement is enabled, we need to account for both phases
+            if enable_refinement:
+                # Calculate base completed chunks (without refinement doubling)
+                base_completed = accumulated_stats.successful_first_try + accumulated_stats.successful_after_retry
+                # Add refinement progress if any files have completed refinement
+                # Note: accumulated_stats.refinement_chunks_completed only tracks current file's refinement
+                # We need to add completed_chunks_global (which counts base chunks) + any refinement progress
+                effective_completed = completed_chunks_global + accumulated_stats.refinement_chunks_completed
+            else:
+                effective_completed = completed_chunks_global
+            
             stats_callback({
-                'total_chunks': total_chunks,
-                'completed_chunks': completed_chunks_global,
+                'total_chunks': effective_total_chunks,
+                'completed_chunks': effective_completed,
                 'failed_chunks': accumulated_stats.failed_chunks,
                 'total_tokens': accumulated_stats.total_tokens_processed + accumulated_stats.total_tokens_generated
             })
@@ -804,7 +825,7 @@ async def _process_all_content_files(
         'parsed_docs': parsed_xhtml_docs,
         'completed_files': completed_files,
         'failed_files': failed_files,
-        'total_chunks': total_chunks,
+        'total_chunks': effective_total_chunks,
         'completed_chunks': completed_chunks_global,
         'failed_chunks': accumulated_stats.failed_chunks,
         'translation_stats': accumulated_stats

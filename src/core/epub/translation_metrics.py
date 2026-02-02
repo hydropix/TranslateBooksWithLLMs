@@ -20,6 +20,11 @@ class TranslationMetrics:
     1. Phase 1: Normal translation (with retry attempts)
     2. Phase 2: Token alignment fallback (translate without placeholders, reinsert proportionally)
     3. Phase 3: Untranslated fallback (if all retries fail, returns original text)
+
+    Refinement support:
+    - When refinement is enabled, total_chunks represents the ORIGINAL chunk count
+    - enable_refinement flag tracks if this is a two-phase workflow
+    - In refinement phase, use refinement_chunks_completed to track progress
     """
     # === Counts ===
     total_chunks: int = 0
@@ -27,6 +32,15 @@ class TranslationMetrics:
     successful_after_retry: int = 0
     fallback_used: int = 0  # Phase 3: Chunks returned untranslated after all phases failed
     failed_chunks: int = 0
+    
+    # === Progress tracking ===
+    processed_chunks: int = 0  # Chunks fully processed (regardless of success/failure)
+    # This is used for progress calculation to avoid fluctuations during retries
+
+    # === Refinement tracking ===
+    enable_refinement: bool = False  # If True, this is a two-phase workflow
+    refinement_phase: bool = False  # If True, currently in refinement phase
+    refinement_chunks_completed: int = 0  # Chunks completed in refinement phase
 
     # === Retry & Error Tracking ===
     retry_attempts: int = 0  # Total number of retry attempts made
@@ -97,6 +111,13 @@ class TranslationMetrics:
         # Note: total_chunks is initialized in _translate_all_chunks, not incremented here
         self.failed_chunks += 1
         self._update_chunk_stats(chunk_size)
+    
+    def record_processed(self) -> None:
+        """Record that a chunk has been fully processed (success or failure).
+        
+        This is used for progress tracking to ensure the progress bar only moves forward.
+        """
+        self.processed_chunks += 1
 
     def _update_chunk_stats(self, chunk_size: int) -> None:
         """Update chunk size statistics."""
@@ -139,10 +160,37 @@ class TranslationMetrics:
         return self.successful_first_try / self.total_chunks
 
     def to_dict(self) -> Dict:
-        """Convert metrics to dictionary for serialization."""
+        """Convert metrics to dictionary for serialization.
+
+        For two-phase workflows (translation + refinement):
+        - total_chunks is doubled to reflect both phases
+        - completed_chunks accounts for both translation and refinement progress
+        - Phase 1 (translation): 0-50% of total work (0 to N chunks)
+        - Phase 2 (refinement): 50-100% of total work (N to 2N chunks)
+        
+        Note: We use processed_chunks for translation progress to avoid fluctuations
+        during retries. A chunk is only counted when fully processed (success or failure).
+        """
+        # Calculate total chunks and completed chunks based on refinement status
+        if self.enable_refinement:
+            # Two-phase workflow: double the total chunks
+            effective_total_chunks = self.total_chunks * 2
+
+            if self.refinement_phase:
+                # In refinement phase: translation complete (N) + refinement progress
+                effective_completed = self.total_chunks + self.refinement_chunks_completed
+            else:
+                # In translation phase: use processed_chunks to avoid retry fluctuations
+                effective_completed = self.processed_chunks
+        else:
+            # Single-phase workflow: no adjustment needed
+            effective_total_chunks = self.total_chunks
+            # Use processed_chunks for consistent progress tracking
+            effective_completed = self.processed_chunks
+
         return {
-            "total_chunks": self.total_chunks,
-            "completed_chunks": self.successful_first_try + self.successful_after_retry,
+            "total_chunks": effective_total_chunks,
+            "completed_chunks": effective_completed,
             "successful_first_try": self.successful_first_try,
             "successful_after_retry": self.successful_after_retry,
             "fallback_used": self.fallback_used,
@@ -165,7 +213,13 @@ class TranslationMetrics:
             "max_chunk_size": self.max_chunk_size,
             "success_rate": self.success_rate,
             "first_try_rate": self.first_try_rate,
-            "retry_distribution": self.retry_distribution
+            "retry_distribution": self.retry_distribution,
+            # Add refinement info for debugging
+            "enable_refinement": self.enable_refinement,
+            "refinement_phase": self.refinement_phase,
+            "refinement_chunks_completed": self.refinement_chunks_completed,
+            # Progress tracking
+            "processed_chunks": self.processed_chunks
         }
 
     @classmethod
@@ -365,6 +419,12 @@ class TranslationMetrics:
         self.total_tokens_processed += other.total_tokens_processed
         self.total_tokens_generated += other.total_tokens_generated
         self.total_chunk_size += other.total_chunk_size
+        
+        # Merge refinement tracking (needed for accurate progress across multiple files)
+        self.refinement_chunks_completed += other.refinement_chunks_completed
+        
+        # Merge progress tracking
+        self.processed_chunks += other.processed_chunks
 
         # Merge min/max
         if other.min_chunk_size != float('inf'):

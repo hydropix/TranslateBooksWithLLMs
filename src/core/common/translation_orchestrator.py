@@ -300,7 +300,8 @@ class GenericTranslationOrchestrator(Generic[SourceT, ResultT]):
             placeholder_format=placeholder_format,
             log_callback=log_callback,
             stats_callback=stats_callback,
-            check_interruption_callback=check_interruption_callback
+            check_interruption_callback=check_interruption_callback,
+            prompt_options=prompt_options
         )
 
         # 5. Refinement (optional)

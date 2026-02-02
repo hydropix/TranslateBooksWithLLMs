@@ -366,6 +366,20 @@
                             </div>
                         </label>
                     </div>
+
+                    <!-- Custom Instructions -->
+                    <div class="form-group" style="margin-bottom: 0; margin-top: 15px;">
+                        <label style="font-weight: 600; color: var(--text-dark); margin-bottom: 5px; display: block;">
+                            Custom Instructions
+                        </label>
+                        <select id="customInstructionSelect" class="form-control" style="margin-bottom: 5px;">
+                            <option value="">None</option>
+                            <!-- Options populated dynamically via JavaScript -->
+                        </select>
+                        <p style="margin: 5px 0 0 0; font-size: 0.8125rem; color: var(--text-muted-light);">
+                            Select custom instructions from the Custom_Instructions/ folder. These instructions will be injected into translation and refinement prompts to guide the LLM's behavior (e.g., formal tone, literal translation, etc.).
+                        </p>
+                    </div>
                 </div>
 
                 <!-- File Info Section (Batch Files) -->
@@ -597,6 +611,6 @@
 
     <!-- Scripts -->
     <script src="/static/js/vendor/socket.io.min.js"></script>
-    <script type="module" src="/static/js/index.js?v=20251113-001"></script>
+    <script type="module" src="/static/js/index.js?v=20260202-002"></script>
 </body>
 </html>

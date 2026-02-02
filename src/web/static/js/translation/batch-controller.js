@@ -43,7 +43,8 @@ function getTranslationConfig(file) {
     const promptOptions = {
         preserve_technical_content: true,
         text_cleanup: DomHelpers.getElement('textCleanup')?.checked || false,
-        refine: DomHelpers.getElement('refineTranslation')?.checked || false
+        refine: DomHelpers.getElement('refineTranslation')?.checked || false,
+        custom_instruction_file: DomHelpers.getValue('customInstructionSelect') || ''
     };
 
     // Get TTS configuration

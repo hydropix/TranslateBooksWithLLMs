@@ -2,6 +2,7 @@
 Translation job handlers and processing logic
 """
 import os
+import re
 import time
 import asyncio
 import tempfile
@@ -212,6 +213,46 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         if not input_path_for_translate_module:
             _log_message_callback("error_no_path", f"❌ {config['file_type'].upper()} translation requires a file path from upload.")
             raise Exception(f"{config['file_type'].upper()} translation requires a file_path.")
+
+        # Read custom instruction file if specified
+        custom_instructions_content = ""
+        custom_instruction_file = config.get('prompt_options', {}).get('custom_instruction_file', '')
+
+        if custom_instruction_file:
+            try:
+                project_root = Path(os.getcwd())
+                custom_instructions_dir = project_root / 'Custom_Instructions'
+
+                # Security: validate filename pattern (prevent directory traversal)
+                safe_filename_pattern = r'^[a-zA-Z0-9_\-\.]+\.txt$'
+                if re.match(safe_filename_pattern, custom_instruction_file):
+                    file_path = custom_instructions_dir / custom_instruction_file
+
+                    # Security: ensure file is within Custom_Instructions folder
+                    try:
+                        file_path.resolve().relative_to(custom_instructions_dir.resolve())
+
+                        if file_path.exists() and file_path.is_file():
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                custom_instructions_content = f.read().strip()
+
+                            if custom_instructions_content:
+                                _log_message_callback("custom_instructions", f"📝 Loaded custom instructions: {custom_instruction_file}")
+                    except ValueError:
+                        pass  # Silently ignore invalid paths (security requirement)
+            except Exception as e:
+                pass  # Silently ignore errors (requirement from plan)
+
+        # Inject custom instructions into prompt_options
+        if custom_instructions_content:
+            # Ensure prompt_options exists
+            if 'prompt_options' not in config:
+                config['prompt_options'] = {}
+
+            # For refinement prompts (existing mechanism - already fully supported)
+            config['prompt_options']['refinement_instructions'] = custom_instructions_content
+            # For translation prompts (new)
+            config['prompt_options']['custom_instructions'] = custom_instructions_content
 
         # Use unified adapter-based translation
         await translate_file(

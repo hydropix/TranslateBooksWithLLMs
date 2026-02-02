@@ -393,7 +393,8 @@ async def translate_chunk_with_fallback(
     log_callback: Optional[Callable] = None,
     max_retries: int = 1,
     context_manager: Optional[AdaptiveContextManager] = None,
-    placeholder_format: Optional[Tuple[str, str]] = None
+    placeholder_format: Optional[Tuple[str, str]] = None,
+    prompt_options: Optional[Dict] = None
 ) -> str:
     """
     Translate a chunk with retry mechanism.
@@ -415,6 +416,7 @@ async def translate_chunk_with_fallback(
         log_callback: Optional logging callback
         max_retries: Maximum translation retry attempts (default from config)
         context_manager: Optional AdaptiveContextManager for handling context overflow
+        prompt_options: Optional prompt customization options (custom instructions, etc.)
 
     Returns:
         Translated text with global placeholders restored
@@ -451,7 +453,8 @@ async def translate_chunk_with_fallback(
             log_callback=log_callback,
             has_placeholders=has_placeholders,
             context_manager=context_manager,
-            placeholder_format=placeholder_format
+            placeholder_format=placeholder_format,
+            prompt_options=prompt_options
         )
 
         if translated is None:
@@ -512,7 +515,8 @@ async def translate_chunk_with_fallback(
                 log_callback=log_callback,
                 has_placeholders=False,  # CRITICAL: no placeholder instructions
                 context_manager=context_manager,
-                placeholder_format=None  # No placeholders in prompt
+                placeholder_format=None,  # No placeholders in prompt
+                prompt_options=prompt_options
             )
 
             if translated_clean is None:
@@ -813,7 +817,8 @@ async def _translate_all_chunks_with_checkpoint(
             log_callback=log_callback,
             max_retries=max_retries,
             context_manager=context_manager,
-            placeholder_format=placeholder_format
+            placeholder_format=placeholder_format,
+            prompt_options=prompt_options
         )
         translated_chunks.append(translated)
 
@@ -889,7 +894,8 @@ async def _translate_all_chunks(
     placeholder_format: Tuple[str, str],
     log_callback: Optional[Callable] = None,
     stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None
+    check_interruption_callback: Optional[Callable] = None,
+    prompt_options: Optional[Dict] = None
 ) -> Tuple[List[str], TranslationMetrics]:
     """Translate all chunks with fallback.
 
@@ -905,6 +911,7 @@ async def _translate_all_chunks(
         log_callback: Optional callback for progress
         stats_callback: Optional callback for stats updates
         check_interruption_callback: Optional callback to check for interruption
+        prompt_options: Optional prompt customization options (custom instructions, etc.)
 
     Returns:
         Tuple of (translated_chunks, statistics)
@@ -941,7 +948,8 @@ async def _translate_all_chunks(
             log_callback=log_callback,
             max_retries=max_retries,
             context_manager=context_manager,
-            placeholder_format=placeholder_format
+            placeholder_format=placeholder_format,
+            prompt_options=prompt_options
         )
         translated_chunks.append(translated)
 
@@ -1138,12 +1146,32 @@ async def _refine_epub_chunks(
         # Extract refinement instructions from prompt_options
         refinement_instructions = prompt_options.get('refinement_instructions', '') if prompt_options else ''
 
-        # Get local tag map for placeholder validation
+        # Get local tag map and global indices from chunk
         local_tag_map = chunk_dict.get('local_tag_map', {})
+        global_indices = chunk_dict.get('global_indices', [])
 
-        # Generate refinement prompt
+        # CRITICAL FIX: Convert global indices back to local for refinement
+        # The prompt expects placeholders to start at 0, but translated_text has global indices
+        # We need to:
+        # 1. Convert global → local before sending to LLM
+        # 2. Convert local → global after receiving refined result
+
+        # Create a mapping from global to local indices
+        text_for_refinement = translated_text
+        for local_idx, global_idx in enumerate(global_indices):
+            global_ph = f"{placeholder_format[0]}{global_idx}{placeholder_format[1]}"
+            local_ph = f"{placeholder_format[0]}{local_idx}{placeholder_format[1]}"
+            # Replace global placeholders with local ones using temporary markers
+            text_for_refinement = text_for_refinement.replace(global_ph, f"__TEMP_PH_{local_idx}__")
+
+        # Replace temporary markers with actual local placeholders
+        for local_idx in range(len(global_indices)):
+            text_for_refinement = text_for_refinement.replace(f"__TEMP_PH_{local_idx}__",
+                                                              f"{placeholder_format[0]}{local_idx}{placeholder_format[1]}")
+
+        # Generate refinement prompt using text with LOCAL indices
         prompt_pair = generate_post_processing_prompt(
-            translated_text=translated_text,
+            translated_text=text_for_refinement,  # Use localized version
             target_language=target_language,
             context_before=context_before,
             context_after=context_after,
@@ -1198,13 +1226,28 @@ async def _refine_epub_chunks(
 
                 if refined_text:
                     # CRITICAL: Validate placeholders before accepting refinement
-                    # If placeholders are corrupted, fall back to original translation
+                    # refined_text should have LOCAL indices (0, 1, 2...) matching local_tag_map
                     if local_tag_map and not validate_placeholders(refined_text, local_tag_map):
                         _log_error(log_callback, "epub_refinement_placeholder_corruption",
                                     f"Chunk {idx + 1}/{total_chunks}: refinement corrupted placeholders, using original translation")
                         refined_chunks.append(translated_text)
                     else:
-                        refined_chunks.append(refined_text)
+                        # Validation passed! Now convert LOCAL indices back to GLOBAL indices
+                        refined_with_global_indices = refined_text
+                        for local_idx, global_idx in enumerate(global_indices):
+                            local_ph = f"{placeholder_format[0]}{local_idx}{placeholder_format[1]}"
+                            global_ph = f"{placeholder_format[0]}{global_idx}{placeholder_format[1]}"
+                            # Replace local with temp markers first to avoid conflicts
+                            refined_with_global_indices = refined_with_global_indices.replace(local_ph, f"__TEMP_RESTORE_{local_idx}__")
+
+                        # Replace temp markers with global placeholders
+                        for local_idx, global_idx in enumerate(global_indices):
+                            refined_with_global_indices = refined_with_global_indices.replace(
+                                f"__TEMP_RESTORE_{local_idx}__",
+                                f"{placeholder_format[0]}{global_idx}{placeholder_format[1]}"
+                            )
+
+                        refined_chunks.append(refined_with_global_indices)
                         if log_callback:
                             log_callback("epub_chunk_refined", f"Chunk {idx + 1}/{total_chunks} refined successfully")
                 else:

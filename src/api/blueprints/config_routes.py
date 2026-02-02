@@ -619,6 +619,36 @@ def create_config_blueprint(server_session_id=None):
         except Exception as e:
             return jsonify({"warning": None, "behavior": None, "error": str(e)})
 
+    @bp.route('/api/custom-instructions', methods=['GET'])
+    def get_custom_instructions():
+        """List available custom instruction files from Custom_Instructions/ folder"""
+        try:
+            project_root = Path(get_config_path())
+            custom_instructions_dir = project_root / 'Custom_Instructions'
+
+            if not custom_instructions_dir.exists():
+                return jsonify({"files": [], "count": 0, "status": "folder_not_found"})
+
+            txt_files = []
+            for file_path in custom_instructions_dir.glob('*.txt'):
+                # Security: validate file is within CustomInstructions folder
+                try:
+                    file_path.resolve().relative_to(custom_instructions_dir.resolve())
+                    txt_files.append({
+                        'filename': file_path.name,
+                        'display_name': file_path.stem
+                    })
+                except ValueError:
+                    # Silently skip files outside the directory (security)
+                    continue
+
+            txt_files.sort(key=lambda x: x['display_name'].lower())
+            return jsonify({"files": txt_files, "count": len(txt_files), "status": "ok"})
+
+        except Exception as e:
+            logger.error(f"Error listing custom instructions: {e}")
+            return jsonify({"files": [], "count": 0, "status": "error", "error": str(e)})
+
     def _get_env_file_path():
         """Get the path to the .env file"""
         config_path = get_config_path()

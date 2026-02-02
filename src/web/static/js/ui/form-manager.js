@@ -65,6 +65,7 @@ export const FormManager = {
     initialize() {
         this.setupEventListeners();
         this.loadDefaultConfig();
+        this.loadCustomInstructions();
     },
 
     /**
@@ -347,6 +348,43 @@ export const FormManager = {
     },
 
     /**
+     * Load available custom instruction files
+     */
+    async loadCustomInstructions() {
+        try {
+            console.log('[CustomInstructions] Loading custom instructions...');
+            const data = await ApiClient.getCustomInstructions();
+            console.log('[CustomInstructions] Data received:', data);
+
+            const select = DomHelpers.getElement('customInstructionSelect');
+            if (!select) {
+                console.warn('[CustomInstructions] Select element not found!');
+                return;
+            }
+
+            // Reset dropdown to default
+            select.innerHTML = '<option value="">None</option>';
+
+            // Populate dropdown with available files
+            if (data.files && data.files.length > 0) {
+                console.log('[CustomInstructions] Adding', data.files.length, 'files to dropdown');
+                data.files.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.filename;
+                    option.textContent = file.display_name;
+                    select.appendChild(option);
+                    console.log('[CustomInstructions] Added option:', file.display_name);
+                });
+            } else {
+                console.warn('[CustomInstructions] No files found in response');
+            }
+        } catch (error) {
+            console.error('[CustomInstructions] Error loading custom instructions:', error);
+            // Graceful degradation - dropdown will only show "None" option
+        }
+    },
+
+    /**
      * Reset form to default state
      */
     async resetForm() {
@@ -489,7 +527,8 @@ export const FormManager = {
             prompt_options: {
                 preserve_technical_content: true,
                 text_cleanup: DomHelpers.getElement('textCleanup')?.checked || false,
-                refine: DomHelpers.getElement('refineTranslation')?.checked || false
+                refine: DomHelpers.getElement('refineTranslation')?.checked || false,
+                custom_instruction_file: DomHelpers.getValue('customInstructionSelect') || ''
             },
             // Bilingual output (original + translation interleaved)
             bilingual_output: DomHelpers.getElement('bilingualMode')?.checked || false,

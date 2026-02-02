@@ -356,6 +356,14 @@ export const ApiClient = {
         });
     },
 
+    /**
+     * Get available custom instruction files
+     * @returns {Promise<Object>} Custom instructions list with files array
+     */
+    async getCustomInstructions() {
+        return await apiRequest('/api/custom-instructions');
+    },
+
     // ========================================
     // TTS (Text-to-Speech) Operations
     // ========================================

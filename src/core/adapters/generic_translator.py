@@ -189,6 +189,9 @@ class GenericTranslator:
 
                 # Translate unit
                 try:
+                    # Extract prompt_options from llm_kwargs if available
+                    prompt_options = llm_kwargs.get('prompt_options', {})
+
                     translated_content = await generate_translation_request(
                         main_content=unit.content,
                         context_before=unit.context_before,
@@ -198,7 +201,8 @@ class GenericTranslator:
                         target_language=target_language,
                         model=model_name,
                         llm_client=llm_client,
-                        log_callback=log_callback
+                        log_callback=log_callback,
+                        prompt_options=prompt_options
                     )
 
                     if translated_content:

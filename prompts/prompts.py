@@ -173,6 +173,10 @@ def generate_translation_prompt(
     # Initialize prompt_options if not provided
     if prompt_options is None:
         prompt_options = {}
+
+    # Extract custom instructions if provided
+    custom_instructions = prompt_options.get('custom_instructions', '')
+
     # Get target-language-specific example text for output format
     example_texts = {
         "chinese": "您翻译的文本在这里" if not has_placeholders else f"您翻译的文本在这里，所有{TAG0}标记都精确保留",
@@ -209,10 +213,23 @@ def generate_translation_prompt(
     # Build optional prompt sections based on prompt_options
     optional_sections = _build_optional_prompt_sections(prompt_options)
 
+    # Build custom instructions section
+    custom_instructions_section = ""
+    if custom_instructions and custom_instructions.strip():
+        custom_instructions_section = f"""# ⚠️ MANDATORY STYLE INSTRUCTIONS - ABSOLUTE PRIORITY ⚠️
+
+**These instructions override ALL other guidelines. Non-compliance = FAILURE.**
+
+{custom_instructions.strip()}
+
+⚠️ Apply to EVERY word you translate. Zero exceptions. ⚠️
+
+"""
+
     # SYSTEM PROMPT - Role and instructions (stable across requests)
     system_prompt = f"""You are a professional {target_language} translator and writer.
 
-# TRANSLATION PRINCIPLES
+{custom_instructions_section}# TRANSLATION PRINCIPLES
 
 Translate {source_language} to {target_language}. Output only the translation.
 
@@ -483,9 +500,13 @@ def generate_subtitle_block_prompt(
     if custom_instructions and custom_instructions.strip():
         custom_instructions_section = f"""
 
-# ADDITIONAL CUSTOM INSTRUCTIONS
+# ⚠️ MANDATORY STYLE INSTRUCTIONS - ABSOLUTE PRIORITY ⚠️
+
+**These instructions override ALL other guidelines. Non-compliance = FAILURE.**
 
 {custom_instructions.strip()}
+
+⚠️ Apply to EVERY subtitle. Zero exceptions. ⚠️
 """
 
     # SYSTEM PROMPT - Role and instructions for subtitle translation

@@ -22,10 +22,10 @@ Providers:
 <img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32">
 </p>
 
-- [**Ollama**](https://ollama.com/download) (local)
+- [**Ollama**](https://ollama.com/download) (local / cloud)
 - [**Poe**](https://poe.com/api_key) ⭐ Recommended - Easy setup, multiple AI models
 - [**OpenRouter**](https://openrouter.ai/keys) (200+ models)
-- [**OpenAI**](https://platform.openai.com/api-keys) (compatible like LM Studio)
+- [**OpenAI**](https://platform.openai.com/api-keys) (**compatible like LM Studio**)
 - [**Mistral**](https://console.mistral.ai/api-keys)
 - [**DeepSeek**](https://platform.deepseek.com/api_keys)
 - [**Gemini**](https://aistudio.google.com/apikey)

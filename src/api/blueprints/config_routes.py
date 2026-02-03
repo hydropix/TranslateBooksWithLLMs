@@ -649,6 +649,36 @@ def create_config_blueprint(server_session_id=None):
             logger.error(f"Error listing custom instructions: {e}")
             return jsonify({"files": [], "count": 0, "status": "error", "error": str(e)})
 
+    @bp.route('/api/custom-instructions/open-folder', methods=['POST'])
+    def open_custom_instructions_folder():
+        """Open the Custom_Instructions folder in the system file explorer"""
+        import subprocess
+        import platform
+
+        try:
+            project_root = Path(get_config_path())
+            custom_instructions_dir = project_root / 'Custom_Instructions'
+
+            # Create folder if it doesn't exist
+            if not custom_instructions_dir.exists():
+                custom_instructions_dir.mkdir(parents=True, exist_ok=True)
+
+            abs_path = str(custom_instructions_dir.resolve())
+            system = platform.system()
+
+            if system == 'Windows':
+                os.startfile(abs_path)
+            elif system == 'Darwin':  # macOS
+                subprocess.run(['open', abs_path], check=True)
+            else:  # Linux and others
+                subprocess.run(['xdg-open', abs_path], check=True)
+
+            return jsonify({"success": True, "path": abs_path})
+
+        except Exception as e:
+            logger.error(f"Error opening custom instructions folder: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
     def _get_env_file_path():
         """Get the path to the .env file"""
         config_path = get_config_path()

@@ -364,6 +364,16 @@ export const ApiClient = {
         return await apiRequest('/api/custom-instructions');
     },
 
+    /**
+     * Open the Custom_Instructions folder in the system file explorer
+     * @returns {Promise<Object>} Result with success status
+     */
+    async openCustomInstructionsFolder() {
+        return await apiRequest('/api/custom-instructions/open-folder', {
+            method: 'POST'
+        });
+    },
+
     // ========================================
     // TTS (Text-to-Speech) Operations
     // ========================================

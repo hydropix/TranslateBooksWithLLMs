@@ -117,6 +117,22 @@ export const FormManager = {
             });
         }
 
+        // Custom instructions refresh button
+        const refreshCustomInstructionsBtn = DomHelpers.getElement('refreshCustomInstructionsBtn');
+        if (refreshCustomInstructionsBtn) {
+            refreshCustomInstructionsBtn.addEventListener('click', () => {
+                this.loadCustomInstructions();
+            });
+        }
+
+        // Custom instructions open folder button
+        const openCustomInstructionsFolderBtn = DomHelpers.getElement('openCustomInstructionsFolderBtn');
+        if (openCustomInstructionsFolderBtn) {
+            openCustomInstructionsFolderBtn.addEventListener('click', () => {
+                this.openCustomInstructionsFolder();
+            });
+        }
+
         // Reset button
         const resetBtn = DomHelpers.getElement('resetBtn');
         if (resetBtn) {
@@ -423,6 +439,22 @@ export const FormManager = {
             // Graceful degradation - dropdown will only show "None" option
             // Still dispatch event even on error
             window.dispatchEvent(new CustomEvent('customInstructionsLoaded'));
+        }
+    },
+
+    /**
+     * Open the Custom_Instructions folder in the system file explorer
+     */
+    async openCustomInstructionsFolder() {
+        try {
+            const response = await ApiClient.openCustomInstructionsFolder();
+            if (!response.success) {
+                console.error('[CustomInstructions] Failed to open folder:', response.error);
+                MessageLogger.addLog('Failed to open Custom_Instructions folder');
+            }
+        } catch (error) {
+            console.error('[CustomInstructions] Error opening folder:', error);
+            MessageLogger.addLog('Failed to open Custom_Instructions folder');
         }
     },
 

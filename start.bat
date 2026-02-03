@@ -4,19 +4,24 @@ REM TranslateBookWithLLM - Start Application
 REM Quick Launch Script
 REM ============================================
 
+setlocal enabledelayedexpansion
+chcp 65001 >nul 2>&1
+cls
+
+REM ========================================
+REM BANNER
+REM ========================================
 echo.
-echo ============================================
-echo TranslateBookWithLLM - Launcher
-echo ============================================
+echo TranslateBook with LLMs
+echo ────────────────────────
 echo.
 
 REM ========================================
 REM Check if setup was run
 REM ========================================
 if not exist "venv" (
-    echo [ERROR] Virtual environment not found!
-    echo.
-    echo Please run setup.bat first to install the application.
+    echo [X] Virtual environment not found!
+    echo     Please run setup-and-update.bat first to install.
     echo.
     pause
     exit /b 1
@@ -25,11 +30,11 @@ if not exist "venv" (
 REM ========================================
 REM Activate Virtual Environment
 REM ========================================
-echo [INFO] Activating virtual environment...
+echo Initializing environment...
 call venv\Scripts\activate.bat
 if errorlevel 1 (
-    echo [ERROR] Failed to activate virtual environment
-    echo [ERROR] Try running setup.bat to fix the installation
+    echo [X] Failed to activate virtual environment
+    echo     Try running setup-and-update.bat to fix the installation
     pause
     exit /b 1
 )
@@ -39,18 +44,10 @@ echo.
 REM ========================================
 REM LAUNCH APPLICATION
 REM ========================================
-echo ============================================
-echo Starting Application...
-echo ============================================
+echo Launching server...
 echo.
-echo Web interface will be available at:
-echo http://localhost:5000
-echo.
-echo The browser will open automatically in a few seconds.
-echo Please wait...
-echo.
+echo Web interface:  http://localhost:5000
 echo Press Ctrl+C to stop the server
-echo ============================================
 echo.
 
 REM Start the Flask application (browser auto-opens from Python code)
@@ -58,7 +55,7 @@ python translation_api.py
 
 REM If server stops
 echo.
-echo ============================================
-echo Server stopped
-echo ============================================
+echo ────────────────────────
+echo Server stopped.
+echo.
 pause

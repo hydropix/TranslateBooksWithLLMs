@@ -176,7 +176,6 @@ def open_browser(host, port):
         import time
         time.sleep(1.5)
         url = f"http://{'localhost' if host == '0.0.0.0' else host}:{port}"
-        logger.info(f"🌐 Opening browser at {url}")
         webbrowser.open(url)
 
     # Run in background thread to not block server startup
@@ -195,7 +194,11 @@ def test_ollama_connection():
         if response.status_code == 200:
             data = response.json()
             models = [m.get('name') for m in data.get('models', [])]
-            logger.info(f"✅ Ollama connected! Found {len(models)} model(s): {models}")
+            logger.info(f"✅ Ollama connected! Found {len(models)} model(s)")
+            if models:
+                logger.info(f"   Available models:")
+                for model in sorted(models):
+                    logger.info(f"     - {model}")
             return True
         else:
             logger.warning(f"⚠️ Ollama returned status {response.status_code}")
@@ -215,28 +218,30 @@ def start_server():
         # Validate configuration before starting
         validate_configuration()
 
-        logger.info("="*60)
-        logger.info(f"🚀 LLM TRANSLATION SERVER (Version {datetime.now().strftime('%Y%m%d-%H%M')})")
-        logger.info("="*60)
-        logger.info(f"   - Default Ollama Endpoint: {DEFAULT_OLLAMA_API_ENDPOINT}")
-        logger.info(f"   - Interface: http://{HOST}:{PORT}")
-        logger.info(f"   - API: http://{HOST}:{PORT}/api/")
-        logger.info(f"   - Health Check: http://{HOST}:{PORT}/api/health")
-        logger.info(f"   - Supported formats: .txt, .epub, and .srt")
+        logger.info("")
+        logger.info("=" * 50)
+        logger.info("  TranslateBook with LLMs - Server")
+        logger.info("=" * 50)
+        logger.info("")
+        logger.info(f"  Ollama Endpoint: {DEFAULT_OLLAMA_API_ENDPOINT}")
+        logger.info(f"  Supported formats: .txt, .epub, .srt")
         logger.info("")
 
         # Test Ollama connection at startup
         test_ollama_connection()
 
         logger.info("")
-        logger.info("💡 Press Ctrl+C to stop the server")
+        logger.info("=" * 50)
+        logger.info(f"  🌐 Web Interface: http://127.0.0.1:{PORT}")
+        logger.info("=" * 50)
+        logger.info("")
+        logger.info("  Press Ctrl+C to stop the server")
         logger.info("")
 
-        # Production deployment note
-        if HOST == '0.0.0.0':
+        # Production deployment note (silent for normal use)
+        if HOST == '0.0.0.0' and os.environ.get('SHOW_PRODUCTION_WARNING'):
             logger.warning("⚠️  Server is binding to 0.0.0.0 (all network interfaces)")
-            logger.warning("   For production, use a proper WSGI server like gunicorn:")
-            logger.warning("   gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 translation_api:app")
+            logger.warning("   For production, use a proper WSGI server like gunicorn")
             logger.info("")
 
         # Auto-open browser (especially useful for portable executable)

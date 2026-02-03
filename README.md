@@ -1,4 +1,8 @@
-# <img src="https://github.com/hydropix/TranslateBooksWithLLMs/blob/main/src/web/static/TBL-Logo-alpha.png?raw=true" alt="Logo" height="40"> Translate Books with LLMs
+<div align="center">
+  <img src="https://github.com/hydropix/TranslateBooksWithLLMs/blob/main/src/web/static/TBL-Logo-alpha.png?raw=true" height="40">
+  <h1>Translate Books with LLMs</h1>
+</div>
+
 
 Translate **books**, **subtitles**, and **documents** using AI - locally or in the cloud.
 

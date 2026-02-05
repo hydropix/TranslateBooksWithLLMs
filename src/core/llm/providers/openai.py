@@ -27,12 +27,45 @@ class OpenAICompatibleProvider(LLMProvider):
     def __init__(self, api_endpoint: str, model: str, api_key: Optional[str] = None,
                  context_window: int = OLLAMA_NUM_CTX, log_callback: Optional[Callable] = None):
         super().__init__(model)
-        self.api_endpoint = api_endpoint
+        self.api_endpoint = self._normalize_endpoint(api_endpoint)
         self.api_key = api_key
         self.context_window = context_window
         self.log_callback = log_callback
         self._detected_context_size: Optional[int] = None
         self._context_detector = ContextDetector()
+
+    @staticmethod
+    def _normalize_endpoint(endpoint: str) -> str:
+        """
+        Normalize API endpoint URL for OpenAI-compatible APIs.
+        
+        Automatically adds '/chat/completions' if the URL ends with '/v1' or '/v1/'
+        but not with the full path. This handles common user mistakes like:
+        - http://localhost:11434/v1 -> http://localhost:11434/v1/chat/completions
+        - https://api.example.com/v1/ -> https://api.example.com/v1/chat/completions
+        
+        Args:
+            endpoint: Raw endpoint URL provided by user
+            
+        Returns:
+            Normalized endpoint URL with complete path
+        """
+        if not endpoint:
+            return endpoint
+        
+        # Remove trailing slash for consistent processing
+        endpoint = endpoint.rstrip('/')
+        
+        # If already ends with /v1/chat/completions, keep as-is
+        if endpoint.endswith('/v1/chat/completions'):
+            return endpoint
+        
+        # If ends with /v1, append /chat/completions
+        if endpoint.endswith('/v1'):
+            return endpoint + '/chat/completions'
+        
+        # Otherwise return as-is (user provided custom path)
+        return endpoint
 
     async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
                       system_prompt: Optional[str] = None) -> Optional[LLMResponse]:

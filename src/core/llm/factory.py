@@ -68,21 +68,21 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
 
     if provider_type.lower() == "ollama":
         return OllamaProvider(
-            api_endpoint=kwargs.get("api_endpoint", API_ENDPOINT),
+            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint") or API_ENDPOINT,
             model=kwargs.get("model", DEFAULT_MODEL),
             context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
             log_callback=kwargs.get("log_callback")
         )
     elif provider_type.lower() == "openai":
         return OpenAICompatibleProvider(
-            api_endpoint=kwargs.get("api_endpoint"),
+            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint"),
             model=kwargs.get("model", DEFAULT_MODEL),
-            api_key=kwargs.get("api_key"),
+            api_key=kwargs.get("api_key") or kwargs.get("openai_api_key"),
             context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
             log_callback=kwargs.get("log_callback")
         )
     elif provider_type.lower() == "gemini":
-        api_key = kwargs.get("api_key")
+        api_key = kwargs.get("api_key") or kwargs.get("gemini_api_key")
         if not api_key:
             # Try to get from environment
             api_key = os.getenv("GEMINI_API_KEY")
@@ -93,7 +93,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             model=kwargs.get("model", "gemini-2.0-flash")
         )
     elif provider_type.lower() == "openrouter":
-        api_key = kwargs.get("api_key")
+        api_key = kwargs.get("api_key") or kwargs.get("openrouter_api_key")
         if not api_key:
             # Try to get from environment
             api_key = os.getenv("OPENROUTER_API_KEY", OPENROUTER_API_KEY)
@@ -104,7 +104,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             model=kwargs.get("model", OPENROUTER_MODEL)
         )
     elif provider_type.lower() == "mistral":
-        api_key = kwargs.get("api_key")
+        api_key = kwargs.get("api_key") or kwargs.get("mistral_api_key")
         if not api_key:
             # Try to get from environment
             api_key = os.getenv("MISTRAL_API_KEY", MISTRAL_API_KEY)
@@ -113,10 +113,10 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return MistralProvider(
             api_key=api_key,
             model=kwargs.get("model", MISTRAL_MODEL),
-            api_endpoint=kwargs.get("api_endpoint")
+            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint")
         )
     elif provider_type.lower() == "deepseek":
-        api_key = kwargs.get("api_key")
+        api_key = kwargs.get("api_key") or kwargs.get("deepseek_api_key")
         if not api_key:
             # Try to get from environment
             api_key = os.getenv("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
@@ -125,10 +125,10 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return DeepSeekProvider(
             api_key=api_key,
             model=kwargs.get("model", DEEPSEEK_MODEL),
-            api_endpoint=kwargs.get("api_endpoint")
+            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint")
         )
     elif provider_type.lower() == "poe":
-        api_key = kwargs.get("api_key")
+        api_key = kwargs.get("api_key") or kwargs.get("poe_api_key")
         if not api_key:
             # Try to get from environment
             api_key = os.getenv("POE_API_KEY", POE_API_KEY)
@@ -137,7 +137,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return PoeProvider(
             api_key=api_key,
             model=kwargs.get("model", POE_MODEL),
-            api_endpoint=kwargs.get("api_endpoint")
+            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint")
         )
     else:
         raise ValueError(f"Unknown provider type: {provider_type}")

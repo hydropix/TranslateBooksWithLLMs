@@ -191,6 +191,11 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
     Returns:
         LLMClient instance or None if using default client
     """
+    # If the endpoint matches the global default Ollama endpoint,
+    # we consider it "unspecified" for other providers.
+    is_default_endpoint = (api_endpoint == API_ENDPOINT)
+    effective_endpoint = None if is_default_endpoint else api_endpoint
+
     if llm_provider == "gemini" and gemini_api_key:
         return LLMClient(provider_type="gemini", api_key=gemini_api_key, model=model_name)
     if llm_provider == "openai":
@@ -199,11 +204,11 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
     if llm_provider == "openrouter":
         return LLMClient(provider_type="openrouter", model=model_name, api_key=openrouter_api_key)
     if llm_provider == "mistral":
-        return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key)
+        return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key, api_endpoint=effective_endpoint)
     if llm_provider == "deepseek":
-        return LLMClient(provider_type="deepseek", model=model_name, api_key=deepseek_api_key)
+        return LLMClient(provider_type="deepseek", model=model_name, api_key=deepseek_api_key, api_endpoint=effective_endpoint)
     if llm_provider == "poe":
-        return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key)
+        return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key, api_endpoint=effective_endpoint)
     if llm_provider == "ollama":
         # Always create a new client for Ollama to ensure proper configuration
         return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,

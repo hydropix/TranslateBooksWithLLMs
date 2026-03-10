@@ -9,11 +9,11 @@ import os
 from typing import Optional
 
 from src.config import (
-    API_ENDPOINT, DEFAULT_MODEL, OLLAMA_NUM_CTX,
+    API_ENDPOINT, OPENAI_API_ENDPOINT, DEFAULT_MODEL, OLLAMA_NUM_CTX,
     OPENROUTER_API_KEY, OPENROUTER_MODEL,
-    MISTRAL_API_KEY, MISTRAL_MODEL,
-    DEEPSEEK_API_KEY, DEEPSEEK_MODEL,
-    POE_API_KEY, POE_MODEL
+    MISTRAL_API_KEY, MISTRAL_MODEL, MISTRAL_API_ENDPOINT,
+    DEEPSEEK_API_KEY, DEEPSEEK_MODEL, DEEPSEEK_API_ENDPOINT,
+    POE_API_KEY, POE_MODEL, POE_API_ENDPOINT
 )
 from .base import LLMProvider
 from .providers.ollama import OllamaProvider
@@ -66,16 +66,27 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         # Auto-switch to Gemini provider when Gemini model is detected
         provider_type = "gemini"
 
+    # Common endpoint resolution
+    provided_endpoint = kwargs.get("api_endpoint") or kwargs.get("endpoint")
+
+    # If the provided endpoint is exactly the global default for Ollama or OpenAI,
+    # and the provider is a cloud-based one (DeepSeek, Mistral, Poe), we ignore it
+    # to avoid "infection" from CLI/Web UI default parameters.
+    # This allows these providers to use their own cloud endpoints.
+    is_cloud_provider = provider_type.lower() in ["deepseek", "mistral", "poe"]
+    if is_cloud_provider and provided_endpoint in [API_ENDPOINT, OPENAI_API_ENDPOINT]:
+        provided_endpoint = None
+
     if provider_type.lower() == "ollama":
         return OllamaProvider(
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint") or API_ENDPOINT,
+            api_endpoint=provided_endpoint or API_ENDPOINT,
             model=kwargs.get("model", DEFAULT_MODEL),
             context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
             log_callback=kwargs.get("log_callback")
         )
     elif provider_type.lower() == "openai":
         return OpenAICompatibleProvider(
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint"),
+            api_endpoint=provided_endpoint or OPENAI_API_ENDPOINT,
             model=kwargs.get("model", DEFAULT_MODEL),
             api_key=kwargs.get("api_key") or kwargs.get("openai_api_key"),
             context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
@@ -113,7 +124,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return MistralProvider(
             api_key=api_key,
             model=kwargs.get("model", MISTRAL_MODEL),
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint")
+            api_endpoint=provided_endpoint or MISTRAL_API_ENDPOINT
         )
     elif provider_type.lower() == "deepseek":
         api_key = kwargs.get("api_key") or kwargs.get("deepseek_api_key")
@@ -125,7 +136,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return DeepSeekProvider(
             api_key=api_key,
             model=kwargs.get("model", DEEPSEEK_MODEL),
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint")
+            api_endpoint=provided_endpoint or DEEPSEEK_API_ENDPOINT
         )
     elif provider_type.lower() == "poe":
         api_key = kwargs.get("api_key") or kwargs.get("poe_api_key")
@@ -137,7 +148,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         return PoeProvider(
             api_key=api_key,
             model=kwargs.get("model", POE_MODEL),
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint")
+            api_endpoint=provided_endpoint or POE_API_ENDPOINT
         )
     else:
         raise ValueError(f"Unknown provider type: {provider_type}")

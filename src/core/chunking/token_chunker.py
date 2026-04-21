@@ -21,11 +21,14 @@ class TokenChunker:
 
     def __init__(self, max_tokens: int = 800, soft_limit_ratio: float = 0.8):
         """
-        Initialize the TokenChunker.
-
-        Args:
-            max_tokens: Maximum tokens per chunk (hard limit)
-            soft_limit_ratio: Ratio at which to start looking for boundaries (default 0.8 = 80%)
+        Create a TokenChunker configured to produce chunks up to a token limit.
+        
+        Parameters:
+            max_tokens (int): Maximum tokens allowed per chunk (hard limit).
+            soft_limit_ratio (float): Fraction of `max_tokens` used to compute the soft boundary threshold; `soft_limit` is set to `int(max_tokens * soft_limit_ratio)`.
+        
+        Notes:
+            Attempts to load the `tiktoken` "cl100k_base" encoding for accurate token counts. If that load fails, `self.encoder` will be `None` and a heuristic token-counting fallback will be used.
         """
         self.max_tokens = max_tokens
         self.soft_limit = int(max_tokens * soft_limit_ratio)
@@ -40,13 +43,12 @@ class TokenChunker:
 
     def count_tokens(self, text: str) -> int:
         """
-        Count the number of tokens in a text string.
-
-        Args:
-            text: Input text
-
+        Count tokens in a text string using the configured encoder when available, otherwise use a heuristic estimate.
+        
+        If `text` is empty or falsy, returns 0. When an encoder is present, returns the encoder's token count. When the encoder is unavailable, returns an approximate (slightly overestimated) token count based on token-like parts; for non-empty text this is at least 1.
+        
         Returns:
-            Number of tokens
+            int: Number of tokens (exact when encoder is used; approximate and slightly overestimated when encoder is unavailable).
         """
         if not text:
             return 0
@@ -61,20 +63,30 @@ class TokenChunker:
         return max(1, approx_tokens)
 
     def _separator_tokens(self, separator: str) -> int:
-        """Get cached token count for separators used repeatedly during chunking."""
+        """
+        Retrieve the token count for a separator string, using a cache to avoid repeated computations.
+        
+        Parameters:
+            separator (str): The separator text whose token count is requested.
+        
+        Returns:
+            int: The number of tokens in `separator`.
+        """
         if separator not in self._separator_token_cache:
             self._separator_token_cache[separator] = self.count_tokens(separator)
         return self._separator_token_cache[separator]
 
     def split_into_paragraphs(self, text: str) -> List[str]:
         """
-        Split text into paragraphs using double newlines.
-
-        Args:
-            text: Input text
-
+        Split text into paragraphs at blank-line boundaries.
+        
+        Splits on two or more consecutive newlines (allowing intervening whitespace), preserves single newlines within paragraphs, and omits paragraphs that are empty or contain only whitespace.
+        
+        Parameters:
+            text (str): Input text to split.
+        
         Returns:
-            List of paragraphs (preserving single newlines within)
+            List[str]: Non-empty paragraph strings.
         """
         # Split on double newlines (or more)
         paragraphs = re.split(r'\n\s*\n', text)
@@ -121,14 +133,16 @@ class TokenChunker:
 
     def _chunk_units(self, units: List[str], separator: str = "\n\n") -> List[str]:
         """
-        Chunk a list of text units (paragraphs or sentences) into appropriately sized chunks.
-
-        Args:
-            units: List of text units to chunk
-            separator: Separator to use when joining units
-
+        Split a sequence of text units into token-sized chunks that respect token limits and natural boundaries.
+        
+        Groups the provided units into chunks whose token counts stay within self.max_tokens when possible, prefers to start a new chunk once the current chunk is at or above self.soft_limit, and merges very small units (about 25% of max_tokens) with adjacent content. If a single unit exceeds self.max_tokens, the function attempts to split it into sentences and recursively chunk those sentences; if splitting is not possible the oversized unit is emitted as its own chunk.
+        
+        Parameters:
+            units (List[str]): Text units to be grouped (e.g., paragraphs or sentences).
+            separator (str): String used to join units within a chunk (defaults to "\n\n").
+        
         Returns:
-            List of chunk strings
+            List[str]: Chunk strings formed by joining grouped units with the provided separator.
         """
         # Minimum chunk size threshold - chunks smaller than this will be merged
         # with adjacent content rather than saved separately

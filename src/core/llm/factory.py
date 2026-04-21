@@ -30,38 +30,24 @@ from .providers.poe import PoeProvider
 
 def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     """
-    Create an LLM provider instance.
-
-    Auto-detection: If provider_type is "ollama" and model name starts with "gemini",
-    automatically switches to Gemini provider.
-
-    Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "fireworks")
-        **kwargs: Provider-specific parameters:
-            - api_endpoint: API endpoint URL (Ollama, OpenAI)
-            - model: Model name/identifier
-            - api_key: API key (Gemini, OpenAI, OpenRouter)
-            - context_window: Context window size (Ollama, OpenAI)
-            - log_callback: Logging callback function (Ollama, OpenAI)
-
+    Create and return an LLM provider instance for the requested provider type.
+    
+    Auto-detects Gemini when `provider_type` is "ollama" and the `model` name starts with "gemini".
+    
+    Parameters:
+        provider_type (str): Provider identifier (e.g., "ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "fireworks").
+        **kwargs: Provider-specific overrides:
+            - api_endpoint (str): API endpoint URL (used by Ollama, OpenAI-compatible providers).
+            - model (str): Model name or identifier.
+            - api_key (str): API key for providers that require authentication.
+            - context_window (int): Context window size (Ollama, OpenAI-compatible).
+            - log_callback (callable): Optional logging callback (Ollama, OpenAI-compatible).
+    
     Returns:
-        Instantiated LLMProvider subclass
-
+        LLMProvider: An instantiated provider subclass configured according to `provider_type` and provided overrides.
+    
     Raises:
-        ValueError: If provider_type is unknown or required parameters are missing
-
-    Examples:
-        >>> # Ollama provider
-        >>> provider = create_llm_provider("ollama", model="llama3")
-
-        >>> # OpenAI-compatible provider
-        >>> provider = create_llm_provider("openai", api_key="sk-...", model="gpt-4")
-
-        >>> # Gemini provider (auto-detected from model name)
-        >>> provider = create_llm_provider("ollama", model="gemini-2.0-flash")
-
-        >>> # OpenRouter provider
-        >>> provider = create_llm_provider("openrouter", api_key="sk-or-...", model="anthropic/claude-sonnet-4")
+        ValueError: If `provider_type` is unknown or a required API key is missing for providers that mandate one.
     """
     # Auto-detect provider from model name if not explicitly set
     model = kwargs.get("model", DEFAULT_MODEL)

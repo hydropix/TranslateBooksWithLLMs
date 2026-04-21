@@ -63,10 +63,23 @@ if DEBUG_MODE:
 
 
 def create_config_blueprint(server_session_id=None):
-    """Create and configure the config blueprint
-
-    Args:
-        server_session_id: Server session ID from state manager (optional, generates new if not provided)
+    """
+    Create and configure the "config" Flask blueprint used by the web translation interface.
+    
+    The returned blueprint exposes endpoints for UI serving and runtime configuration, including:
+    - GET / (serve translation interface)
+    - GET /api/health
+    - GET|POST /api/models
+    - GET /api/config and GET /api/config/max-tokens
+    - GET /api/model/warning
+    - GET /api/custom-instructions and POST /api/custom-instructions/open-folder
+    - GET|POST /api/settings
+    
+    Parameters:
+        server_session_id (optional): If provided, coerced to an int and used as the startup session identifier; otherwise a new integer timestamp is generated to represent startup time.
+    
+    Returns:
+        Blueprint: A Flask Blueprint named "config" preconfigured with the routes and helper functions described above.
     """
     bp = Blueprint('config', __name__)
 
@@ -139,7 +152,16 @@ def create_config_blueprint(server_session_id=None):
 
     @bp.route('/api/config', methods=['GET'])
     def get_default_config():
-        """Get default configuration values"""
+        """
+        Return the server's default UI and API configuration values used by the web interface.
+        
+        The response includes endpoint defaults, model defaults, timeout and retry settings, supported formats,
+        output filename pattern, masked API key indicators (empty string when not configured, `***` + last 4 chars when configured),
+        and boolean flags indicating whether each provider API key is configured.
+        
+        Returns:
+            flask.Response: JSON object with configuration keys for the frontend.
+        """
         # For API keys, send a masked indicator if configured, empty string if not
         # This prevents browser autocomplete from filling in random values
         def mask_api_key(key):
@@ -884,10 +906,15 @@ def create_config_blueprint(server_session_id=None):
     @bp.route('/api/settings', methods=['POST'])
     def save_settings():
         """
-        Save user settings to .env file.
-
-        Accepts JSON with settings to save. Only specific keys are allowed
-        for security reasons.
+        Persist allowed configuration keys from the incoming JSON payload into the application's .env file.
+        
+        Only keys from a predefined allowlist are saved. Values are sanitized by removing newline and carriage return characters before being written. If the request contains no JSON or no allowed keys, the function responds with HTTP 400. On success, it returns a JSON object listing saved keys and a success message. On unexpected errors it returns HTTP 500 with an error message.
+        
+        Returns:
+            A Flask response (JSON) with one of:
+            - HTTP 200: {"success": True, "message": "Saved N setting(s)", "saved_keys": [...]} on successful save.
+            - HTTP 400: {"error": "No data provided"} if the request body is empty or {"error": "No valid settings to save"} if no allowed keys were present.
+            - HTTP 500: {"error": "Failed to save settings: <error>"} on internal failure.
         """
         allowed_keys = {
             'GEMINI_API_KEY',
@@ -948,9 +975,19 @@ def create_config_blueprint(server_session_id=None):
     @bp.route('/api/settings', methods=['GET'])
     def get_settings():
         """
-        Get current settings that can be modified via the UI.
-        Returns only the keys that are user-configurable.
-        API keys are masked for security - only indicates if configured.
+        Return current UI-configurable settings and flags indicating which provider API keys are configured.
+        
+        Provides boolean `*_api_key_configured` flags for each supported provider (true when an API key is present, API keys themselves are not returned), along with `default_model`, `llm_provider`, and configured endpoint/model strings.
+        
+        Returns:
+            A JSON object containing:
+                - `gemini_api_key_configured`, `openai_api_key_configured`, `openrouter_api_key_configured`,
+                  `fireworks_api_key_configured`, `mistral_api_key_configured`, `deepseek_api_key_configured`,
+                  `poe_api_key_configured`, `nim_api_key_configured` (booleans)
+                - `default_model` (string)
+                - `llm_provider` (string)
+                - `api_endpoint`, `ollama_api_endpoint`, `openai_api_endpoint`, `fireworks_api_endpoint` (strings)
+                - `fireworks_model` (string)
         """
         return jsonify({
             "gemini_api_key_configured": bool(GEMINI_API_KEY),

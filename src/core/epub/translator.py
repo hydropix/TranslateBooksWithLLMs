@@ -64,51 +64,42 @@ async def translate_epub_file(
     bilingual: bool = False,
 ) -> None:
     """
-    Translate an EPUB file using LLM with generic orchestrator.
-
-    This implementation uses the unified translation pipeline:
-    1. Extract EPUB to temp directory
-    2. Parse manifest and get content files
-    3. For each XHTML file:
-       - Create EpubTranslationAdapter
-       - Create GenericTranslationOrchestrator
-       - Translate using unified pipeline
-    4. Save translated files
-    5. Update metadata
-    6. Repackage EPUB
-
-    Args:
-        input_filepath: Path to input EPUB
-        output_filepath: Path to output EPUB
-        source_language: Source language
-        target_language: Target language
-        model_name: LLM model name
-        cli_api_endpoint: API endpoint
-        log_callback: Logging callback
-        stats_callback: Statistics callback
-        check_interruption_callback: Interruption check callback
-        llm_provider: LLM provider (ollama/gemini/openai/openrouter/mistral/deepseek/poe)
-        gemini_api_key: Gemini API key
-        openai_api_key: OpenAI API key
-        openrouter_api_key: OpenRouter API key
-        mistral_api_key: Mistral API key
-        deepseek_api_key: DeepSeek API key
-        poe_api_key: Poe API key
-        fireworks_api_key: Fireworks API key
-        nim_api_key: NVIDIA NIM API key
-        min_request_interval: Minimum delay between LLM requests in seconds
-        adaptive_request_backoff: Automatically increase delay when requests fail
-        max_request_interval: Maximum adaptive delay in seconds
-        context_window: Context window size for LLM
-        auto_adjust_context: Auto-adjust context based on model
-        min_chunk_size: Minimum chunk size
-        checkpoint_manager: Checkpoint manager for resume functionality
-        translation_id: ID of the translation job
-        resume_from_index: Index to resume from (file index)
-        prompt_options: Optional dict with prompt customization options
-        max_tokens_per_chunk: Maximum tokens per chunk
-        max_attempts: Maximum translation attempts per chunk
-        bilingual: Enable bilingual translation mode
+    Orchestrates end-to-end translation of an EPUB file using a generic LLM-based translation pipeline.
+    
+    Performs extraction, manifest parsing, optional checkpoint restore, per-file translation via the GenericTranslationOrchestrator, metadata update (including language and attribution), RTL/LTR layout adjustments, and repackaging into the output EPUB. Progress, statistics, and errors are reported via optional callbacks.
+    
+    Parameters:
+        input_filepath (str): Path to the input EPUB file.
+        output_filepath (str): Path where the translated EPUB will be written.
+        source_language (str): Source language name (used for translation and layout decisions).
+        target_language (str): Target language name (used for translation and metadata).
+        model_name (str): LLM model identifier to use.
+        cli_api_endpoint (str): Endpoint for CLI-based LLM providers.
+        log_callback (Optional[Callable]): Optional logging callback receiving (key, message).
+        stats_callback (Optional[Callable]): Optional callback for incremental translation statistics.
+        check_interruption_callback (Optional[Callable]): Optional callable to check for user interruption.
+        llm_provider (str): LLM provider identifier (e.g., "ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "fireworks").
+        gemini_api_key (Optional[str]): API key for Gemini provider.
+        openai_api_key (Optional[str]): API key for OpenAI provider.
+        openrouter_api_key (Optional[str]): API key for OpenRouter provider.
+        mistral_api_key (Optional[str]): API key for Mistral provider.
+        deepseek_api_key (Optional[str]): API key for DeepSeek provider.
+        poe_api_key (Optional[str]): API key for Poe provider.
+        fireworks_api_key (Optional[str]): API key for Fireworks provider.
+        nim_api_key (Optional[str]): API key for NVIDIA NIM provider.
+        min_request_interval (float): Minimum delay (seconds) to enforce between LLM requests for pacing.
+        adaptive_request_backoff (bool): Whether to increase request delay automatically on failures.
+        max_request_interval (float): Maximum adaptive delay (seconds) between LLM requests.
+        context_window (int): Default context window size used when auto-adjustment is disabled.
+        auto_adjust_context (bool): Whether to select an adaptive initial context size for certain models.
+        min_chunk_size (int): Minimum tokens per chunk when chunking content for translation.
+        checkpoint_manager: Optional checkpoint manager used to save/restore per-file progress and artifacts.
+        translation_id (Optional[str]): Identifier used by the checkpoint manager for this translation run.
+        resume_from_index (int): Zero-based content file index to resume translation from.
+        prompt_options (Optional[Dict]): Optional prompt customization (e.g., {'refine': True, 'bilingual': True}).
+        max_tokens_per_chunk (int): Upper bound of tokens for a single translation chunk.
+        max_attempts (int): Maximum retry attempts per chunk; if None, a default constant is used.
+        bilingual (bool): When true, include both source and translated text in output (bilingual mode).
     """
     # Validate input file
     if not os.path.exists(input_filepath):
@@ -372,7 +363,31 @@ def _create_llm_client(
     initial_context: int,
     log_callback: Optional[Callable] = None
 ) -> Any:
-    """Create LLM client with specified configuration."""
+    """
+    Instantiate and configure a language-model client for the specified provider.
+    
+    Parameters:
+        llm_provider (str): Provider identifier (e.g., "openai", "gemini", "fireworks").
+        model_name (str): Model identifier to use with the provider.
+        gemini_api_key (Optional[str]): API key for Gemini, if applicable.
+        openai_api_key (Optional[str]): API key for OpenAI, if applicable.
+        openrouter_api_key (Optional[str]): API key for OpenRouter, if applicable.
+        mistral_api_key (Optional[str]): API key for Mistral, if applicable.
+        deepseek_api_key (Optional[str]): API key for Deepseek, if applicable.
+        poe_api_key (Optional[str]): API key for Poe, if applicable.
+        fireworks_api_key (Optional[str]): API key for Fireworks, if applicable.
+        nim_api_key (Optional[str]): API key for Nim, if applicable.
+        min_request_interval (float): Minimum delay in seconds between requests to enforce pacing.
+        adaptive_request_backoff (bool): If true, enable adaptive backoff when rate-limited.
+        max_request_interval (float): Maximum delay in seconds for adaptive backoff.
+        cli_api_endpoint (str): CLI or proxy endpoint to route LLM requests through, if used.
+        initial_context (int): Initial context window (token count) to supply to the client.
+        log_callback (Optional[Callable]): Optional logging callback used to report client creation errors.
+    
+    Returns:
+        Any: The created LLM client instance, or `None` if creation failed. If `None` is returned and
+        `log_callback` is provided, a "llm_client_error" message will be emitted via the callback.
+    """
     from ..llm_client import create_llm_client
 
     llm_client = create_llm_client(

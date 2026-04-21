@@ -29,7 +29,14 @@ class TokenChunker:
         """
         self.max_tokens = max_tokens
         self.soft_limit = int(max_tokens * soft_limit_ratio)
-        self.encoder = tiktoken.get_encoding("cl100k_base")
+        self._separator_token_cache: Dict[str, int] = {}
+        try:
+            self.encoder = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            # Offline/container fallback: avoid hard failure when tiktoken cannot
+            # download encoding files (common in restricted CI/proxy environments).
+            # We keep chunking available with a fast heuristic estimate.
+            self.encoder = None
 
     def count_tokens(self, text: str) -> int:
         """
@@ -43,7 +50,21 @@ class TokenChunker:
         """
         if not text:
             return 0
-        return len(self.encoder.encode(text))
+        if self.encoder is not None:
+            return len(self.encoder.encode(text))
+
+        # Heuristic fallback (encoder unavailable):
+        # count words and punctuation-like symbols, then add a small safety margin.
+        # This intentionally overestimates slightly to avoid oversized chunks.
+        token_like_parts = re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE)
+        approx_tokens = int(len(token_like_parts) * 1.15)
+        return max(1, approx_tokens)
+
+    def _separator_tokens(self, separator: str) -> int:
+        """Get cached token count for separators used repeatedly during chunking."""
+        if separator not in self._separator_token_cache:
+            self._separator_token_cache[separator] = self.count_tokens(separator)
+        return self._separator_token_cache[separator]
 
     def split_into_paragraphs(self, text: str) -> List[str]:
         """
@@ -170,7 +191,7 @@ class TokenChunker:
             potential_tokens = current_tokens + unit_tokens
             if current_units:
                 # Account for separator
-                potential_tokens += self.count_tokens(separator)
+                potential_tokens += self._separator_tokens(separator)
 
             # If we're past soft limit, check if we should start a new chunk
             if current_tokens >= self.soft_limit and potential_tokens > self.max_tokens:

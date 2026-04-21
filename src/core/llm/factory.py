@@ -10,11 +10,13 @@ from typing import Optional
 
 from src.config import (
     API_ENDPOINT, DEFAULT_MODEL, OLLAMA_NUM_CTX,
+    OPENAI_API_KEY, OPENAI_API_ENDPOINT,
     OPENROUTER_API_KEY, OPENROUTER_MODEL,
     MISTRAL_API_KEY, MISTRAL_MODEL, MISTRAL_API_ENDPOINT,
     DEEPSEEK_API_KEY, DEEPSEEK_MODEL, DEEPSEEK_API_ENDPOINT,
     POE_API_KEY, POE_MODEL, POE_API_ENDPOINT,
-    NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT
+    NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT,
+    FIREWORKS_API_KEY, FIREWORKS_MODEL, FIREWORKS_API_ENDPOINT
 )
 from .base import LLMProvider
 from .providers.ollama import OllamaProvider
@@ -34,7 +36,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "fireworks")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -75,10 +77,11 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             log_callback=kwargs.get("log_callback")
         )
     elif provider_type.lower() == "openai":
+        api_key = kwargs.get("api_key") or kwargs.get("openai_api_key") or os.getenv("OPENAI_API_KEY", OPENAI_API_KEY)
         return OpenAICompatibleProvider(
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint"),
+            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint") or OPENAI_API_ENDPOINT,
             model=kwargs.get("model", DEFAULT_MODEL),
-            api_key=kwargs.get("api_key") or kwargs.get("openai_api_key"),
+            api_key=api_key,
             context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
             log_callback=kwargs.get("log_callback")
         )
@@ -150,6 +153,17 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             api_key=api_key,
             model=kwargs.get("model", NIM_MODEL),
             api_endpoint=kwargs.get("api_endpoint", NIM_API_ENDPOINT)
+        )
+    elif provider_type.lower() == "fireworks":
+        api_key = kwargs.get("api_key") or kwargs.get("fireworks_api_key")
+        if not api_key:
+            api_key = os.getenv("FIREWORKS_API_KEY", FIREWORKS_API_KEY)
+            if not api_key:
+                raise ValueError("Fireworks provider requires an API key. Get your key at https://fireworks.ai/")
+        return OpenAICompatibleProvider(
+            api_key=api_key,
+            model=kwargs.get("model", FIREWORKS_MODEL),
+            api_endpoint=kwargs.get("api_endpoint", FIREWORKS_API_ENDPOINT)
         )
 
     else:

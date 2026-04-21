@@ -18,6 +18,46 @@ from src.core.adapters import translate_file
 from src.tts.tts_config import TTSConfig
 from .websocket import emit_update
 
+_PROVIDER_LIMITERS = {}
+_PROVIDER_LIMITERS_LOCK = threading.Lock()
+
+
+def _get_provider_parallel_limit(provider: str, config: dict) -> int:
+    """Get concurrency limit for a provider (env override + sane defaults)."""
+    provider = (provider or "ollama").lower()
+    env_specific = os.getenv(f"PROVIDER_PARALLELISM_{provider.upper()}")
+    env_global = os.getenv("PROVIDER_PARALLELISM")
+    cfg_override = config.get("provider_parallelism")
+
+    for raw_value in (cfg_override, env_specific, env_global):
+        if raw_value is None or raw_value == "":
+            continue
+        try:
+            value = int(raw_value)
+            if value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+
+    # Conservative defaults for cloud/free providers that often reject parallel requests
+    if provider in {"openai", "openrouter", "mistral", "deepseek", "poe", "nim", "gemini", "fireworks"}:
+        return 1
+    return 2  # local providers can usually handle more
+
+
+def _get_provider_limiter(provider: str, config: dict) -> threading.Semaphore:
+    """Get/create provider semaphore shared across jobs in this process."""
+    provider_key = (provider or "ollama").lower()
+    limit = _get_provider_parallel_limit(provider_key, config)
+    limiter_key = f"{provider_key}:{limit}"
+
+    with _PROVIDER_LIMITERS_LOCK:
+        limiter = _PROVIDER_LIMITERS.get(limiter_key)
+        if limiter is None:
+            limiter = threading.Semaphore(limit)
+            _PROVIDER_LIMITERS[limiter_key] = limiter
+        return limiter
+
 
 def run_translation_async_wrapper(translation_id, config, state_manager, output_dir, socketio):
     """
@@ -276,10 +316,14 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             mistral_api_key=config.get('mistral_api_key', ''),
             deepseek_api_key=config.get('deepseek_api_key', ''),
             poe_api_key=config.get('poe_api_key', ''),
+            fireworks_api_key=config.get('fireworks_api_key', ''),
             nim_api_key=config.get('nim_api_key', ''),
             context_window=config.get('context_window', 2048),
             auto_adjust_context=config.get('auto_adjust_context', True),
             min_chunk_size=config.get('min_chunk_size', 5),
+            min_request_interval=config.get('min_request_interval', 0),
+            adaptive_request_backoff=config.get('adaptive_request_backoff', True),
+            max_request_interval=config.get('max_request_interval', 5.0),
             prompt_options=config.get('prompt_options', {}),
             bilingual_output=config.get('bilingual_output', False)
         )
@@ -612,9 +656,22 @@ def start_translation_job(translation_id, config, state_manager, output_dir, soc
         output_dir (str): Output directory path
         socketio: SocketIO instance
     """
+    provider = config.get('llm_provider', 'ollama')
+    limiter = _get_provider_limiter(provider, config)
+
+    def _run_with_provider_gate():
+        if state_manager.exists(translation_id):
+            state_manager.set_translation_field(translation_id, 'status', 'queued')
+            emit_update(socketio, translation_id, {
+                'status': 'queued',
+                'log': f"Queued for provider '{provider}' execution slot..."
+            }, state_manager)
+
+        with limiter:
+            run_translation_async_wrapper(translation_id, config, state_manager, output_dir, socketio)
+
     thread = threading.Thread(
-        target=run_translation_async_wrapper,
-        args=(translation_id, config, state_manager, output_dir, socketio)
+        target=_run_with_provider_gate
     )
     thread.daemon = True
     thread.start()

@@ -27,7 +27,8 @@ const PROVIDER_LOGOS = {
     gemini: '/static/img/providers/gemini.png',
     openai: '/static/img/providers/openai.png',
     openrouter: '/static/img/providers/openrouter.png',
-    nim: '/static/img/providers/nvidia.png'
+    nim: '/static/img/providers/nvidia.png',
+    fireworks: '/static/img/providers/openai.png'
 };
 
 /**
@@ -41,7 +42,8 @@ const PROVIDER_META = {
     gemini: { name: 'Gemini', description: 'Cloud' },
     openai: { name: 'OpenAI', description: 'Compatible' },
     openrouter: { name: 'OpenRouter', description: '200+ models' },
-    nim: { name: 'NVIDIA NIM', description: 'Cloud API' }
+    nim: { name: 'NVIDIA NIM', description: 'Cloud API' },
+    fireworks: { name: 'Fireworks', description: 'Cloud API' }
 };
 
 /**
@@ -504,6 +506,7 @@ export const ProviderManager = {
         const deepseekSettings = DomHelpers.getElement('deepseekSettings');
         const poeSettings = DomHelpers.getElement('poeSettings');
         const nimSettings = DomHelpers.getElement('nimSettings');
+        const fireworksSettings = DomHelpers.getElement('fireworksSettings');
 
         // Show/hide provider-specific settings (use inline style for elements with inline display:none)
         if (provider === 'ollama') {
@@ -516,6 +519,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadOllamaModels();
         } else if (provider === 'poe') {
             DomHelpers.hide('ollamaSettings');
@@ -527,6 +531,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'block';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadPoeModels();
         } else if (provider === 'gemini') {
             DomHelpers.hide('ollamaSettings');
@@ -538,6 +543,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadGeminiModels();
         } else if (provider === 'openai') {
             DomHelpers.hide('ollamaSettings');
@@ -549,6 +555,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadOpenAIModels();
         } else if (provider === 'openrouter') {
             DomHelpers.hide('ollamaSettings');
@@ -560,6 +567,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadOpenRouterModels();
         } else if (provider === 'mistral') {
             DomHelpers.hide('ollamaSettings');
@@ -571,6 +579,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadMistralModels();
         } else if (provider === 'deepseek') {
             DomHelpers.hide('ollamaSettings');
@@ -582,6 +591,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'block';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadDeepSeekModels();
         } else if (provider === 'nim') {
             DomHelpers.hide('ollamaSettings');
@@ -593,7 +603,20 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'block';
+            if (fireworksSettings) fireworksSettings.style.display = 'none';
             if (loadModels) this.loadNimModels();
+        } else if (provider === 'fireworks') {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (poeSettings) poeSettings.style.display = 'none';
+            if (nimSettings) nimSettings.style.display = 'none';
+            if (fireworksSettings) fireworksSettings.style.display = 'block';
+            if (loadModels) this.loadOpenAIModels('fireworks');
         }
     },
 
@@ -619,6 +642,8 @@ export const ProviderManager = {
             this.loadDeepSeekModels();
         } else if (provider === 'nim') {
             this.loadNimModels();
+        } else if (provider === 'fireworks') {
+            this.loadOpenAIModels('fireworks');
         }
     },
 
@@ -807,17 +832,21 @@ export const ProviderManager = {
      * Always tries to fetch models dynamically from any OpenAI-compatible endpoint.
      * Falls back to static list if dynamic fetch fails.
      */
-    async loadOpenAIModels() {
+    async loadOpenAIModels(providerType = 'openai') {
         const modelSelect = DomHelpers.getElement('model');
         if (!modelSelect) return;
-
-        const apiEndpoint = DomHelpers.getValue('openaiEndpoint') || 'https://api.openai.com/v1/chat/completions';
+        const isFireworks = providerType === 'fireworks';
+        const apiEndpoint = isFireworks
+            ? 'https://api.fireworks.ai/inference/v1/chat/completions'
+            : (DomHelpers.getValue('openaiEndpoint') || 'https://api.openai.com/v1/chat/completions');
 
         modelSelect.innerHTML = '<option value="">Loading models...</option>';
         StatusManager.setChecking();
 
         try {
-            const apiKey = ApiKeyUtils.getValue('openaiApiKey');
+            const apiKey = isFireworks
+                ? ApiKeyUtils.getValue('fireworksApiKey')
+                : ApiKeyUtils.getValue('openaiApiKey');
             const data = await ApiClient.getModels('openai', { apiKey, apiEndpoint });
 
             if (data.models && data.models.length > 0) {
@@ -840,7 +869,7 @@ export const ProviderManager = {
                 ModelDetector.checkAndShowRecommendation();
 
                 StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
-                StatusManager.setConnected('openai', data.count);
+                StatusManager.setConnected(providerType, data.count);
                 return;
             } else {
                 // No models returned from endpoint
@@ -861,7 +890,7 @@ export const ProviderManager = {
         ModelDetector.checkAndShowRecommendation();
 
         StateManager.setState('models.availableModels', OPENAI_MODELS.map(m => m.value));
-        StatusManager.setConnected('openai', OPENAI_MODELS.length);
+        StatusManager.setConnected(providerType, OPENAI_MODELS.length);
     },
 
     /**

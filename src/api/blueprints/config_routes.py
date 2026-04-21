@@ -38,6 +38,9 @@ from src.config import (
     GEMINI_API_KEY,
     GEMINI_MODEL,
     OPENAI_API_KEY,
+    FIREWORKS_API_KEY,
+    FIREWORKS_API_ENDPOINT,
+    FIREWORKS_MODEL,
     OPENROUTER_API_KEY,
     OPENROUTER_MODEL,
     MISTRAL_API_KEY,
@@ -160,6 +163,7 @@ def create_config_blueprint(server_session_id=None):
             "gemini_api_key": mask_api_key(GEMINI_API_KEY),
             "openai_api_key": mask_api_key(OPENAI_API_KEY),
             "openrouter_api_key": mask_api_key(OPENROUTER_API_KEY),
+            "fireworks_api_key": mask_api_key(FIREWORKS_API_KEY),
             "mistral_api_key": mask_api_key(MISTRAL_API_KEY),
             "deepseek_api_key": mask_api_key(DEEPSEEK_API_KEY),
             "poe_api_key": mask_api_key(POE_API_KEY),
@@ -167,6 +171,7 @@ def create_config_blueprint(server_session_id=None):
             "gemini_api_key_configured": bool(GEMINI_API_KEY),
             "openai_api_key_configured": bool(OPENAI_API_KEY),
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
+            "fireworks_api_key_configured": bool(FIREWORKS_API_KEY),
             "mistral_api_key_configured": bool(MISTRAL_API_KEY),
             "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
             "poe_api_key_configured": bool(POE_API_KEY),
@@ -888,6 +893,9 @@ def create_config_blueprint(server_session_id=None):
             'GEMINI_API_KEY',
             'GEMINI_MODEL',
             'OPENAI_API_KEY',
+            'FIREWORKS_API_KEY',
+            'FIREWORKS_MODEL',
+            'FIREWORKS_API_ENDPOINT',
             'OPENROUTER_API_KEY',
             'OPENROUTER_MODEL',
             'MISTRAL_API_KEY',
@@ -948,6 +956,7 @@ def create_config_blueprint(server_session_id=None):
             "gemini_api_key_configured": bool(GEMINI_API_KEY),
             "openai_api_key_configured": bool(OPENAI_API_KEY),
             "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
+            "fireworks_api_key_configured": bool(FIREWORKS_API_KEY),
             "mistral_api_key_configured": bool(MISTRAL_API_KEY),
             "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
             "poe_api_key_configured": bool(POE_API_KEY),
@@ -956,7 +965,9 @@ def create_config_blueprint(server_session_id=None):
             "llm_provider": os.getenv('LLM_PROVIDER', 'ollama'),
             "api_endpoint": DEFAULT_OLLAMA_API_ENDPOINT or "",
             "ollama_api_endpoint": OLLAMA_API_ENDPOINT or "",
-            "openai_api_endpoint": OPENAI_API_ENDPOINT or ""
+            "openai_api_endpoint": OPENAI_API_ENDPOINT or "",
+            "fireworks_api_endpoint": FIREWORKS_API_ENDPOINT or "",
+            "fireworks_model": FIREWORKS_MODEL or ""
         })
 
     return bp

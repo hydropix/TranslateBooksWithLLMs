@@ -42,7 +42,11 @@ async def translate_file(
     mistral_api_key: Optional[str] = None,
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
+    fireworks_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    min_request_interval: float = 0.0,
+    adaptive_request_backoff: bool = True,
+    max_request_interval: float = 5.0,
     context_window: Optional[int] = None,
     auto_adjust_context: bool = True,
     min_chunk_size: int = 5,
@@ -78,7 +82,11 @@ async def translate_file(
         mistral_api_key: Mistral API key (required for mistral provider)
         deepseek_api_key: DeepSeek API key (required for deepseek provider)
         poe_api_key: Poe API key (required for poe provider)
+        fireworks_api_key: Fireworks AI API key (required for fireworks provider)
         nim_api_key: NVIDIA NIM API key
+        min_request_interval: Minimum delay between LLM requests in seconds
+        adaptive_request_backoff: Automatically increase delay when requests fail
+        max_request_interval: Maximum adaptive delay between requests in seconds
         context_window: Maximum context window size in tokens
         auto_adjust_context: Whether to automatically adjust context size
         min_chunk_size: Minimum chunk size for text splitting
@@ -157,7 +165,11 @@ async def translate_file(
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
             poe_api_key=poe_api_key,
+            fireworks_api_key=fireworks_api_key,
             nim_api_key=nim_api_key,
+            min_request_interval=min_request_interval,
+            adaptive_request_backoff=adaptive_request_backoff,
+            max_request_interval=max_request_interval,
             context_window=context_window or 2048,
             auto_adjust_context=auto_adjust_context,
             min_chunk_size=min_chunk_size,
@@ -187,7 +199,12 @@ async def translate_file(
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key
+            poe_api_key=poe_api_key,
+            fireworks_api_key=fireworks_api_key,
+            nim_api_key=nim_api_key,
+            min_request_interval=min_request_interval,
+            adaptive_request_backoff=adaptive_request_backoff,
+            max_request_interval=max_request_interval
         )
 
         result = await translate_docx_file(
@@ -256,6 +273,11 @@ async def translate_file(
         'mistral_api_key': mistral_api_key,
         'deepseek_api_key': deepseek_api_key,
         'poe_api_key': poe_api_key,
+        'fireworks_api_key': fireworks_api_key,
+        'nim_api_key': nim_api_key,
+        'min_request_interval': min_request_interval,
+        'adaptive_request_backoff': adaptive_request_backoff,
+        'max_request_interval': max_request_interval,
         'prompt_options': prompt_options,
     }
 

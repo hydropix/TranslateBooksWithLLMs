@@ -47,7 +47,11 @@ async def translate_epub_file(
     mistral_api_key: Optional[str] = None,
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
+    fireworks_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    min_request_interval: float = 0.0,
+    adaptive_request_backoff: bool = True,
+    max_request_interval: float = 5.0,
     context_window: int = 2048,
     auto_adjust_context: bool = True,
     min_chunk_size: int = 5,
@@ -90,7 +94,11 @@ async def translate_epub_file(
         mistral_api_key: Mistral API key
         deepseek_api_key: DeepSeek API key
         poe_api_key: Poe API key
+        fireworks_api_key: Fireworks API key
         nim_api_key: NVIDIA NIM API key
+        min_request_interval: Minimum delay between LLM requests in seconds
+        adaptive_request_backoff: Automatically increase delay when requests fail
+        max_request_interval: Maximum adaptive delay in seconds
         context_window: Context window size for LLM
         auto_adjust_context: Auto-adjust context based on model
         min_chunk_size: Minimum chunk size
@@ -139,7 +147,11 @@ async def translate_epub_file(
         mistral_api_key=mistral_api_key,
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
+        fireworks_api_key=fireworks_api_key,
         nim_api_key=nim_api_key,
+        min_request_interval=min_request_interval,
+        adaptive_request_backoff=adaptive_request_backoff,
+        max_request_interval=max_request_interval,
         cli_api_endpoint=cli_api_endpoint,
         initial_context=initial_context,
         log_callback=log_callback
@@ -351,7 +363,11 @@ def _create_llm_client(
     mistral_api_key: Optional[str],
     deepseek_api_key: Optional[str],
     poe_api_key: Optional[str],
+    fireworks_api_key: Optional[str],
     nim_api_key: Optional[str],
+    min_request_interval: float,
+    adaptive_request_backoff: bool,
+    max_request_interval: float,
     cli_api_endpoint: str,
     initial_context: int,
     log_callback: Optional[Callable] = None
@@ -363,7 +379,11 @@ def _create_llm_client(
         llm_provider, gemini_api_key, cli_api_endpoint, model_name,
         openai_api_key, openrouter_api_key, mistral_api_key, deepseek_api_key,
         poe_api_key=poe_api_key,
+        fireworks_api_key=fireworks_api_key,
         nim_api_key=nim_api_key,
+        min_request_interval=min_request_interval,
+        adaptive_request_backoff=adaptive_request_backoff,
+        max_request_interval=max_request_interval,
         context_window=initial_context,
         log_callback=log_callback
     )

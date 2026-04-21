@@ -131,6 +131,45 @@ Pricing: [openai.com/pricing](https://openai.com/pricing)
 
 ---
 
+## Fireworks AI (Cloud)
+
+Fireworks is OpenAI-compatible in this project. You can use it in two ways:
+
+1. **Recommended now:** select `openai` provider and set endpoint to:
+   `https://api.fireworks.ai/inference/v1/chat/completions`
+2. **Native shortcut (CLI):** select `fireworks` provider.
+
+### Setup
+
+1. Get API key from [fireworks.ai](https://fireworks.ai/)
+2. Pick one of the following:
+   - OpenAI-compatible mode:
+     - Provider: `openai`
+     - Endpoint: `https://api.fireworks.ai/inference/v1/chat/completions`
+     - API key: your Fireworks key
+   - Native mode:
+     - Provider: `fireworks`
+     - API key: your Fireworks key
+
+### CLI examples
+
+```bash
+# OpenAI-compatible mode
+python translate.py -i book.txt -o book_fr.txt \
+    --provider openai \
+    --api_endpoint https://api.fireworks.ai/inference/v1/chat/completions \
+    --openai_api_key fw-... \
+    -m accounts/fireworks/models/llama-v3p1-8b-instruct
+
+# Native Fireworks mode
+python translate.py -i book.txt -o book_fr.txt \
+    --provider fireworks \
+    --fireworks_api_key fw-... \
+    -m accounts/fireworks/models/llama-v3p1-8b-instruct
+```
+
+---
+
 ## Google Gemini (Cloud)
 
 Google's Gemini models.
@@ -169,6 +208,7 @@ LLM_PROVIDER=ollama
 OPENROUTER_API_KEY=sk-or-v1-...
 OPENAI_API_KEY=sk-...
 GEMINI_API_KEY=...
+FIREWORKS_API_KEY=fw-...
 
 # Ollama settings
 API_ENDPOINT=http://localhost:11434/api/generate

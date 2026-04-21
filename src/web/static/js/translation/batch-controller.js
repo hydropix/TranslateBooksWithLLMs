@@ -71,9 +71,11 @@ function getTranslationConfig(file) {
         source_language: sourceLanguageVal,
         target_language: targetLanguageVal,
         model: currentModel,
-        llm_api_endpoint: provider === 'openai' ?
-                         DomHelpers.getValue('openaiEndpoint') :
-                         DomHelpers.getValue('apiEndpoint'),
+        llm_api_endpoint: (provider === 'openai')
+            ? DomHelpers.getValue('openaiEndpoint')
+            : (provider === 'fireworks'
+                ? 'https://api.fireworks.ai/inference/v1/chat/completions'
+                : DomHelpers.getValue('apiEndpoint')),
         llm_provider: provider,
         gemini_api_key: provider === 'gemini' ? ApiKeyUtils.getValue('geminiApiKey') : '',
         openai_api_key: provider === 'openai' ? ApiKeyUtils.getValue('openaiApiKey') : '',
@@ -82,6 +84,7 @@ function getTranslationConfig(file) {
         deepseek_api_key: provider === 'deepseek' ? ApiKeyUtils.getValue('deepseekApiKey') : '',
         poe_api_key: provider === 'poe' ? ApiKeyUtils.getValue('poeApiKey') : '',
         nim_api_key: provider === 'nim' ? ApiKeyUtils.getValue('nimApiKey') : '',
+        fireworks_api_key: provider === 'fireworks' ? ApiKeyUtils.getValue('fireworksApiKey') : '',
         input_filename: file.name,
         output_filename: resolvedOutputFilename,
         file_type: file.fileType,

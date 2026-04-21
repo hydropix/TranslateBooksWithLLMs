@@ -2,6 +2,8 @@
 Centralized LLM client for all API communication
 """
 from typing import Optional, Dict, Any
+import asyncio
+import time
 
 from src.config import API_ENDPOINT, DEFAULT_MODEL
 from src.core.llm import create_llm_provider, LLMProvider, ContextOverflowError, RepetitionLoopError, LLMResponse
@@ -14,6 +16,13 @@ class LLMClient:
     """Centralized client for LLM API communication"""
     
     def __init__(self, provider_type: str = "ollama", **kwargs):
+        self.min_request_interval = float(kwargs.pop("min_request_interval", 0) or 0)
+        self.max_request_interval = float(kwargs.pop("max_request_interval", 5.0) or 5.0)
+        self.adaptive_request_backoff = bool(kwargs.pop("adaptive_request_backoff", True))
+        self._dynamic_request_interval = self.min_request_interval
+        self._next_request_at = 0.0
+        self._request_gate_lock = asyncio.Lock()
+
         self.provider_type = provider_type
         self.provider_kwargs = kwargs
         self._provider: Optional[LLMProvider] = None
@@ -31,6 +40,34 @@ class LLMClient:
         if not self._provider:
             self._provider = create_llm_provider(self.provider_type, **self.provider_kwargs)
         return self._provider
+
+    async def _wait_for_request_slot(self):
+        """Rate-aware pacing gate between requests (helps free/sensitive APIs)."""
+        interval = max(0.0, self._dynamic_request_interval)
+        if interval <= 0:
+            return
+
+        async with self._request_gate_lock:
+            now = time.monotonic()
+            if self._next_request_at > now:
+                await asyncio.sleep(self._next_request_at - now)
+            self._next_request_at = time.monotonic() + interval
+
+    def _update_request_pacing(self, success: bool):
+        """Adapt pacing interval based on recent request outcomes."""
+        if not self.adaptive_request_backoff:
+            return
+
+        if success:
+            self._dynamic_request_interval = max(
+                self.min_request_interval,
+                self._dynamic_request_interval * 0.9
+            )
+            return
+
+        # Failure/empty response: back off aggressively to avoid hammering APIs
+        base = self._dynamic_request_interval if self._dynamic_request_interval > 0 else max(self.min_request_interval, 0.2)
+        self._dynamic_request_interval = min(self.max_request_interval, max(self.min_request_interval, base * 2))
     
     @property
     def context_window(self) -> int:
@@ -60,11 +97,15 @@ class LLMClient:
             LLMResponse with content and token usage info, or None if failed
         """
         provider = self._get_provider()
+        await self._wait_for_request_slot()
 
         if timeout:
-            return await provider.generate(prompt, timeout, system_prompt=system_prompt)
+            response = await provider.generate(prompt, timeout, system_prompt=system_prompt)
         else:
-            return await provider.generate(prompt, system_prompt=system_prompt)
+            response = await provider.generate(prompt, system_prompt=system_prompt)
+
+        self._update_request_pacing(bool(response))
+        return response
 
     async def make_request(self, prompt: str, model: Optional[str] = None,
                     timeout: int = None, system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
@@ -86,10 +127,14 @@ class LLMClient:
         if model:
             provider.model = model
 
+        await self._wait_for_request_slot()
         if timeout:
-            return await provider.generate(prompt, timeout, system_prompt=system_prompt)
+            response = await provider.generate(prompt, timeout, system_prompt=system_prompt)
         else:
-            return await provider.generate(prompt, system_prompt=system_prompt)
+            response = await provider.generate(prompt, system_prompt=system_prompt)
+
+        self._update_request_pacing(bool(response))
+        return response
     
     def extract_translation(self, response: str) -> Optional[str]:
         """
@@ -170,7 +215,11 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                       mistral_api_key: Optional[str] = None,
                       deepseek_api_key: Optional[str] = None,
                       poe_api_key: Optional[str] = None,
+                      fireworks_api_key: Optional[str] = None,
                       nim_api_key: Optional[str] = None,
+                      min_request_interval: float = 0.0,
+                      adaptive_request_backoff: bool = True,
+                      max_request_interval: float = 5.0,
                       context_window: Optional[int] = None,
                       log_callback: Optional[callable] = None) -> Optional[LLMClient]:
     """
@@ -186,7 +235,11 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
         mistral_api_key: API key for Mistral provider
         deepseek_api_key: API key for DeepSeek provider
         poe_api_key: API key for Poe provider
+        fireworks_api_key: API key for Fireworks provider
         nim_api_key: API key for NVIDIA NIM provider
+        min_request_interval: Minimum delay between requests (seconds)
+        adaptive_request_backoff: Whether to auto-increase delay on failures
+        max_request_interval: Maximum adaptive delay (seconds)
         context_window: Context window size for the model
         log_callback: Callback function for logging
 
@@ -194,22 +247,52 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
         LLMClient instance or None if using default client
     """
     if llm_provider == "gemini" and gemini_api_key:
-        return LLMClient(provider_type="gemini", api_key=gemini_api_key, model=model_name)
+        return LLMClient(provider_type="gemini", api_key=gemini_api_key, model=model_name,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "openai":
         return LLMClient(provider_type="openai", api_endpoint=api_endpoint, model=model_name,
-                         api_key=openai_api_key, context_window=context_window, log_callback=log_callback)
+                         api_key=openai_api_key, context_window=context_window, log_callback=log_callback,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "openrouter":
-        return LLMClient(provider_type="openrouter", model=model_name, api_key=openrouter_api_key)
+        return LLMClient(provider_type="openrouter", model=model_name, api_key=openrouter_api_key,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "mistral":
-        return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key)
+        return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "deepseek":
-        return LLMClient(provider_type="deepseek", model=model_name, api_key=deepseek_api_key)
+        return LLMClient(provider_type="deepseek", model=model_name, api_key=deepseek_api_key,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "poe":
-        return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key)
+        return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "nim":
-        return LLMClient(provider_type="nim", model=model_name, api_key=nim_api_key)
+        return LLMClient(provider_type="nim", model=model_name, api_key=nim_api_key,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
+    if llm_provider == "fireworks":
+        return LLMClient(provider_type="fireworks", model=model_name,
+                         api_endpoint=api_endpoint, api_key=fireworks_api_key,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     if llm_provider == "ollama":
         # Always create a new client for Ollama to ensure proper configuration
         return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,
-                         context_window=context_window, log_callback=log_callback)
+                         context_window=context_window, log_callback=log_callback,
+                         min_request_interval=min_request_interval,
+                         adaptive_request_backoff=adaptive_request_backoff,
+                         max_request_interval=max_request_interval)
     return None

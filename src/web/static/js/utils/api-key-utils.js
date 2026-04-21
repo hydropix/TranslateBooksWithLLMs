@@ -17,7 +17,8 @@ const STATUS_ID_MAP = {
     'mistralApiKey': 'mistralKeyStatus',
     'deepseekApiKey': 'deepseekKeyStatus',
     'poeApiKey': 'poeKeyStatus',
-    'nimApiKey': 'nimKeyStatus'
+    'nimApiKey': 'nimKeyStatus',
+    'fireworksApiKey': 'fireworksKeyStatus'
 };
 
 /**
@@ -30,7 +31,8 @@ const PROVIDER_FIELD_MAP = {
     'mistral': 'mistralApiKey',
     'deepseek': 'deepseekApiKey',
     'poe': 'poeApiKey',
-    'nim': 'nimApiKey'
+    'nim': 'nimApiKey',
+    'fireworks': 'fireworksApiKey'
 };
 
 export const ApiKeyUtils = {
@@ -200,6 +202,10 @@ export const ApiKeyUtils = {
 
         if (provider === 'nim' && !isAvailable) {
             return { valid: false, message: 'NVIDIA NIM API key is required when using NIM provider.' };
+        }
+
+        if (provider === 'fireworks' && !isAvailable) {
+            return { valid: false, message: 'Fireworks API key is required when using Fireworks provider.' };
         }
 
         return { valid: true, message: '' };

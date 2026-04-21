@@ -218,6 +218,7 @@
                                     <option value="openai">OpenAI-Compatible</option>
                                     <option value="openrouter">OpenRouter (200+ models)</option>
                                     <option value="nim">NVIDIA NIM (Cloud API)</option>
+                                    <option value="fireworks">Fireworks AI (Cloud API)</option>
                                 </select>
                             </div>
                         </div>
@@ -289,6 +290,14 @@
                             <label>API Key <span id="nimKeyStatus" class="key-status"></span></label>
                             <div class="neu-inset-light">
                                 <input type="password" class="form-control" id="nimApiKey" placeholder="Get key at build.nvidia.com" autocomplete="new-password">
+                            </div>
+                        </div>
+
+                        <!-- Fireworks API Key -->
+                        <div class="form-group" id="fireworksSettings" style="display: none; margin-bottom: 0;">
+                            <label>API Key <span id="fireworksKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light">
+                                <input type="password" class="form-control" id="fireworksApiKey" placeholder="Get key at fireworks.ai" autocomplete="new-password">
                             </div>
                         </div>
                     </div>

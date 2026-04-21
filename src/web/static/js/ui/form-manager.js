@@ -447,6 +447,7 @@ export const FormManager = {
             ApiKeyUtils.setupField('deepseekApiKey', config.deepseek_api_key_configured, config.deepseek_api_key);
             ApiKeyUtils.setupField('poeApiKey', config.poe_api_key_configured, config.poe_api_key);
             ApiKeyUtils.setupField('nimApiKey', config.nim_api_key_configured, config.nim_api_key);
+            ApiKeyUtils.setupField('fireworksApiKey', config.fireworks_api_key_configured, config.fireworks_api_key);
 
             // After loading defaults, dispatch event to notify other modules
             console.log('[FormManager] Default config loaded, dispatching event');
@@ -657,6 +658,8 @@ export const FormManager = {
         let apiEndpoint;
         if (provider === 'openai') {
             apiEndpoint = DomHelpers.getValue('openaiEndpoint');
+        } else if (provider === 'fireworks') {
+            apiEndpoint = 'https://api.fireworks.ai/inference/v1/chat/completions';
         } else {
             apiEndpoint = DomHelpers.getValue('apiEndpoint');
         }
@@ -665,6 +668,11 @@ export const FormManager = {
         const geminiApiKey = provider === 'gemini' ? ApiKeyUtils.getValue('geminiApiKey') : '';
         const openaiApiKey = provider === 'openai' ? ApiKeyUtils.getValue('openaiApiKey') : '';
         const openrouterApiKey = provider === 'openrouter' ? ApiKeyUtils.getValue('openrouterApiKey') : '';
+        const mistralApiKey = provider === 'mistral' ? ApiKeyUtils.getValue('mistralApiKey') : '';
+        const deepseekApiKey = provider === 'deepseek' ? ApiKeyUtils.getValue('deepseekApiKey') : '';
+        const poeApiKey = provider === 'poe' ? ApiKeyUtils.getValue('poeApiKey') : '';
+        const nimApiKey = provider === 'nim' ? ApiKeyUtils.getValue('nimApiKey') : '';
+        const fireworksApiKey = provider === 'fireworks' ? ApiKeyUtils.getValue('fireworksApiKey') : '';
 
         // Get TTS configuration
         const ttsEnabled = DomHelpers.getElement('ttsEnabled')?.checked || false;
@@ -678,6 +686,11 @@ export const FormManager = {
             gemini_api_key: geminiApiKey,
             openai_api_key: openaiApiKey,
             openrouter_api_key: openrouterApiKey,
+            mistral_api_key: mistralApiKey,
+            deepseek_api_key: deepseekApiKey,
+            poe_api_key: poeApiKey,
+            nim_api_key: nimApiKey,
+            fireworks_api_key: fireworksApiKey,
             // Prompt options (optional system prompt instructions)
             // Technical content protection is always enabled
             prompt_options: {

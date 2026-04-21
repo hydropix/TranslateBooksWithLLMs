@@ -181,7 +181,7 @@ MIN_CHUNK_SIZE_TOKENS = 50
 """Taille minimale d'un chunk pour éviter la sur-fragmentation"""
 
 # LLM Provider configuration
-LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'ollama')  # 'ollama', 'gemini', 'openai', 'openrouter', 'mistral', 'deepseek', or 'poe'
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'ollama')  # 'ollama', 'gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', or 'fireworks'
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
@@ -209,6 +209,11 @@ POE_API_ENDPOINT = os.getenv('POE_API_ENDPOINT', 'https://api.poe.com/v1/chat/co
 NIM_API_KEY = os.getenv('NIM_API_KEY', '')
 NIM_MODEL = os.getenv('NIM_MODEL', 'meta/llama-3.1-8b-instruct')
 NIM_API_ENDPOINT = os.getenv('NIM_API_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions')
+
+# Fireworks AI configuration (OpenAI-compatible cloud API)
+FIREWORKS_API_KEY = os.getenv('FIREWORKS_API_KEY', '')
+FIREWORKS_MODEL = os.getenv('FIREWORKS_MODEL', 'accounts/fireworks/models/llama-v3p1-8b-instruct')
+FIREWORKS_API_ENDPOINT = os.getenv('FIREWORKS_API_ENDPOINT', 'https://api.fireworks.ai/inference/v1/chat/completions')
 
 # SRT-specific configuration
 SRT_LINES_PER_BLOCK = int(os.getenv('SRT_LINES_PER_BLOCK', '5'))

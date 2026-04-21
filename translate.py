@@ -9,7 +9,7 @@ import logging
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE
+from src.config import DEFAULT_MODEL, API_ENDPOINT, OPENAI_API_ENDPOINT, FIREWORKS_API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, FIREWORKS_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE
 from src.utils.file_utils import get_unique_output_path, generate_tts_for_translation
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.tts.tts_config import TTSConfig, TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
-    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
+    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "fireworks"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
     parser.add_argument("--openrouter_api_key", default=OPENROUTER_API_KEY, help="OpenRouter API key (required if using openrouter provider).")
@@ -34,6 +34,10 @@ if __name__ == "__main__":
     parser.add_argument("--deepseek_api_key", default=DEEPSEEK_API_KEY, help="DeepSeek API key (required if using deepseek provider).")
     parser.add_argument("--poe_api_key", default=POE_API_KEY, help="Poe API key (required if using poe provider). Get your key at https://poe.com/api_key")
     parser.add_argument("--nim_api_key", default=NIM_API_KEY, help="NVIDIA NIM API key (required if using nim provider). Get your key at https://build.nvidia.com/")
+    parser.add_argument("--fireworks_api_key", default=FIREWORKS_API_KEY, help="Fireworks AI API key (required if using fireworks provider). Get your key at https://fireworks.ai/")
+    parser.add_argument("--min-request-interval", type=float, default=0.0, help="Minimum delay between LLM requests in seconds (helps strict free APIs).")
+    parser.add_argument("--max-request-interval", type=float, default=5.0, help="Maximum adaptive request delay in seconds.")
+    parser.add_argument("--no-adaptive-request-backoff", action="store_true", help="Disable adaptive backoff when API starts failing/rate-limiting.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
 
     # Prompt options (optional system prompt instructions)
@@ -52,7 +56,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Auto-select default model based on provider if not explicitly set
-    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL
+    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL, FIREWORKS_MODEL
     if args.model == DEFAULT_MODEL:
         if args.provider == "nim" and NIM_MODEL:
             args.model = NIM_MODEL
@@ -66,6 +70,15 @@ if __name__ == "__main__":
             args.model = OPENROUTER_MODEL
         elif args.provider == "gemini" and GEMINI_MODEL:
             args.model = GEMINI_MODEL
+        elif args.provider == "fireworks" and FIREWORKS_MODEL:
+            args.model = FIREWORKS_MODEL
+
+    # Provider-specific endpoint defaults (only if user kept generic default value)
+    if args.api_endpoint == API_ENDPOINT:
+        if args.provider == "openai":
+            args.api_endpoint = OPENAI_API_ENDPOINT
+        elif args.provider == "fireworks":
+            args.api_endpoint = FIREWORKS_API_ENDPOINT
 
     if args.output is None:
         base, ext = os.path.splitext(args.input)
@@ -106,6 +119,8 @@ if __name__ == "__main__":
         parser.error("--poe_api_key is required when using poe provider. Get your key at https://poe.com/api_key")
     if args.provider == "nim" and not args.nim_api_key:
         parser.error("--nim_api_key is required when using nim provider. Get your key at https://build.nvidia.com/")
+    if args.provider == "fireworks" and not args.fireworks_api_key:
+        parser.error("--fireworks_api_key is required when using fireworks provider. Get your key at https://fireworks.ai/")
 
     # Log translation start
     logger.info("Translation Started", LogType.TRANSLATION_START, {
@@ -165,6 +180,10 @@ if __name__ == "__main__":
             deepseek_api_key=args.deepseek_api_key,
             poe_api_key=args.poe_api_key,
             nim_api_key=args.nim_api_key,
+            fireworks_api_key=args.fireworks_api_key,
+            min_request_interval=args.min_request_interval,
+            adaptive_request_backoff=not args.no_adaptive_request_backoff,
+            max_request_interval=args.max_request_interval,
             prompt_options=prompt_options
         ))
 

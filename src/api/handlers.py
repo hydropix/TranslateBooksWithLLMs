@@ -23,7 +23,14 @@ _PROVIDER_LIMITERS_LOCK = threading.Lock()
 
 
 def _get_provider_parallel_limit(provider: str, config: dict) -> int:
-    """Get concurrency limit for a provider (env override + sane defaults)."""
+    """
+    Determine the concurrency limit for a translation LLM provider.
+    
+    Checks for a positive integer override in the provided `config` and in environment variables, and otherwise returns a provider-specific default (1 for common cloud/free providers, 2 for other/local providers).
+    
+    Returns:
+        The concurrency limit as a positive integer indicating the maximum parallel requests allowed for the provider.
+    """
     provider = (provider or "ollama").lower()
     env_specific = os.getenv(f"PROVIDER_PARALLELISM_{provider.upper()}")
     env_global = os.getenv("PROVIDER_PARALLELISM")
@@ -46,7 +53,16 @@ def _get_provider_parallel_limit(provider: str, config: dict) -> int:
 
 
 def _get_provider_limiter(provider: str, config: dict) -> threading.Semaphore:
-    """Get/create provider semaphore shared across jobs in this process."""
+    """
+    Return a process-wide semaphore that enforces the parallelism limit for the given provider.
+    
+    Parameters:
+        provider (str): Provider name (e.g., "openai", "ollama"); defaults to "ollama" when falsy.
+        config (dict): Configuration used to determine the provider's parallelism limit (overrides and environment-derived settings).
+    
+    Returns:
+        threading.Semaphore: Semaphore keyed by "<provider>:<limit>" that controls concurrent jobs for that provider and limit.
+    """
     provider_key = (provider or "ollama").lower()
     limit = _get_provider_parallel_limit(provider_key, config)
     limiter_key = f"{provider_key}:{limit}"
@@ -61,14 +77,16 @@ def _get_provider_limiter(provider: str, config: dict) -> threading.Semaphore:
 
 def run_translation_async_wrapper(translation_id, config, state_manager, output_dir, socketio):
     """
-    Wrapper for running translation in async context
+    Run the translation coroutine in a dedicated asyncio event loop and handle uncaught errors.
     
-    Args:
-        translation_id (str): Translation job ID
-        config (dict): Translation configuration
-        state_manager: State manager instance
-        output_dir (str): Output directory path
-        socketio: SocketIO instance
+    Creates a new asyncio event loop for this worker thread, executes the translation coroutine for the given job, and on any unexpected exception updates the job's status and error fields, appends a critical log entry, and emits a websocket update so the frontend is informed.
+    
+    Parameters:
+        translation_id (str): ID of the translation job to run.
+        config (dict): Translation configuration for the job.
+        state_manager: Manager providing job state access and mutation methods.
+        output_dir (str): Directory where translation outputs are written.
+        socketio: SocketIO instance used to emit websocket updates.
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -91,14 +109,32 @@ def run_translation_async_wrapper(translation_id, config, state_manager, output_
 
 async def perform_actual_translation(translation_id, config, state_manager, output_dir, socketio):
     """
-    Perform the actual translation job
+    Run a translation job end-to-end: execute the adapter-based translation, manage checkpoints, logging, stats, interruption, finalization, and optional TTS generation.
     
-    Args:
-        translation_id (str): Translation job ID
-        config (dict): Translation configuration
-        state_manager: State manager instance
-        output_dir (str): Output directory path
-        socketio: SocketIO instance
+    This function updates the job record in state_manager (status, logs, stats, result, output_filepath, error, interrupted), emits websocket updates via socketio, coordinates checkpoint creation/cleanup, handles resume and rate-limit auto-pausing, loads optional custom instruction files, integrates OpenRouter cost callbacks when applicable, and invokes TTS generation if enabled. On completion it will mark the job as `completed` or `interrupted` (or `error`/`rate_limited` when appropriate), may remove the original uploaded file when safe, and will emit events to refresh frontend file lists and checkpoints.
+    
+    Parameters:
+        translation_id (str): Identifier of the translation job to run.
+        config (dict): Job configuration. Commonly used keys include:
+            - file_type: input file type (e.g., "txt", "epub", "srt").
+            - output_filename: desired output filename (may be adjusted to avoid collisions).
+            - file_path: path to uploaded input file (optional for inline txt content).
+            - text: inline text for txt jobs (written to a temporary file if provided).
+            - llm_provider, llm_api_endpoint and provider API keys (openai_api_key, gemini_api_key, openrouter_api_key, etc.).
+            - resume_from_index, is_resume: checkpoint/resume controls.
+            - prompt_options and prompt_options.custom_instruction_file: custom instruction loading.
+            - tts_enabled and tts_config: controls post-translation TTS generation.
+            - context/adapter tuning keys (context_window, min_chunk_size, min_request_interval, adaptive_request_backoff, max_request_interval, bilingual_output).
+        state_manager: Persistent in-memory/DB-backed state manager exposing job operations used to read/update status, logs, stats, checkpoints and other fields.
+        output_dir (str): Base server-side output directory used for generated files and temporary TXT files.
+        socketio: Socket.IO server instance used to emit realtime updates and events.
+    
+    Exceptions:
+        - RateLimitError is handled internally to pause and checkpoint the job (it will not propagate).
+        - Other exceptions are caught and recorded in state_manager as job errors; they will not propagate.
+    
+    Returns:
+        None
     """
     if not state_manager.exists(translation_id):
         return
@@ -647,19 +683,24 @@ async def _perform_tts_generation(translation_id, config, output_filepath, state
 
 def start_translation_job(translation_id, config, state_manager, output_dir, socketio):
     """
-    Start a translation job in a separate thread
-
-    Args:
-        translation_id (str): Translation job ID
-        config (dict): Translation configuration
-        state_manager: State manager instance
-        output_dir (str): Output directory path
-        socketio: SocketIO instance
+    Spawn a daemon thread to queue and execute a translation job while respecting provider-level concurrency limits.
+    
+    Parameters:
+        translation_id (str): Identifier of the translation job to run.
+        config (dict): Job configuration (includes provider selection and translation options).
+        state_manager: State manager used to read/update job state, logs, and checkpoints.
+        output_dir (str): Directory where translation outputs and temporary files are written.
+        socketio: SocketIO instance used to emit realtime job updates to clients.
     """
     provider = config.get('llm_provider', 'ollama')
     limiter = _get_provider_limiter(provider, config)
 
     def _run_with_provider_gate():
+        """
+        Acquire the provider-specific concurrency gate, mark the job as queued if present, and execute the translation worker while holding the gate.
+        
+        If the translation exists, sets its status to "queued" and emits a websocket update indicating it is queued for the provider slot. Then acquires the provider semaphore (`limiter`) and runs the translation wrapper to perform the job.
+        """
         if state_manager.exists(translation_id):
             state_manager.set_translation_field(translation_id, 'status', 'queued')
             emit_update(socketio, translation_id, {

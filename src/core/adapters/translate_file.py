@@ -55,67 +55,31 @@ async def translate_file(
     **additional_config
 ) -> bool:
     """
-    Translate a file using the adapter pattern.
-
-    This is the unified entry point for all file format translations, replacing:
-    - translate_text_file_with_callbacks() for TXT
-    - translate_srt_file_with_callbacks() for SRT
-    - translate_epub_file() for EPUB
-
-    Args:
-        input_filepath: Path to the input file
-        output_filepath: Path to the output file
-        source_language: Source language name
-        target_language: Target language name
-        model_name: LLM model identifier
-        llm_provider: LLM provider name (ollama, gemini, openai, openrouter)
-        checkpoint_manager: CheckpointManager instance for resume capability
-        translation_id: Unique identifier for this translation job
-        log_callback: Optional callback for logging (receives type and message)
-        stats_callback: Optional callback for statistics updates
-        check_interruption_callback: Optional callback to check if translation should be interrupted
-        resume_from_index: Index to resume from (if resuming from checkpoint)
-        llm_api_endpoint: LLM API endpoint URL
-        gemini_api_key: Google Gemini API key (required for gemini provider)
-        openai_api_key: OpenAI API key (required for openai provider)
-        openrouter_api_key: OpenRouter API key (required for openrouter provider)
-        mistral_api_key: Mistral API key (required for mistral provider)
-        deepseek_api_key: DeepSeek API key (required for deepseek provider)
-        poe_api_key: Poe API key (required for poe provider)
-        fireworks_api_key: Fireworks AI API key (required for fireworks provider)
-        nim_api_key: NVIDIA NIM API key
-        min_request_interval: Minimum delay between LLM requests in seconds
-        adaptive_request_backoff: Automatically increase delay when requests fail
-        max_request_interval: Maximum adaptive delay between requests in seconds
-        context_window: Maximum context window size in tokens
-        auto_adjust_context: Whether to automatically adjust context size
-        min_chunk_size: Minimum chunk size for text splitting
-        prompt_options: Optional prompt customization options
-        bilingual_output: If True, output will contain both original and translated text
-        **additional_config: Additional configuration passed to the adapter
-
+    Translate a supported file from a source language to a target language.
+    
+    Determines the file type (by extension and by content if needed) and routes translation:
+    - EPUB and DOCX use legacy translator implementations.
+    - TXT and SRT use adapter-based translation via GenericTranslator and format-specific adapters.
+    Optional provider/rate-limit settings and prompt options are forwarded to the chosen translation path.
+    
+    Parameters:
+        input_filepath (str): Path to the input file.
+        output_filepath (str): Path where the translated output will be written.
+        checkpoint_manager: Checkpoint manager used to persist and resume translation state.
+        translation_id (str): Unique identifier for this translation job.
+        log_callback (Optional[Callable]): Optional callback for log events.
+        prompt_options (Optional[Dict[str, Any]]): Prompt customization passed to the translator.
+        bilingual_output (bool): If True, include both original and translated text in the output.
+        min_request_interval (float): Minimum delay between LLM requests in seconds.
+        adaptive_request_backoff (bool): Whether to increase request delays when failures occur.
+        max_request_interval (float): Maximum adaptive delay between requests in seconds.
+        **additional_config: Additional adapter-specific configuration forwarded to the adapter.
+    
     Returns:
-        True if translation completed successfully, False otherwise
-
+        `true` if translation completed successfully, `false` otherwise.
+    
     Raises:
-        UnsupportedFormatError: If the file format is not supported
-
-    Example:
-        >>> from src.persistence.checkpoint_manager import CheckpointManager
-        >>> from src.core.adapters import translate_file
-        >>>
-        >>> checkpoint_mgr = CheckpointManager()
-        >>> success = await translate_file(
-        ...     input_filepath="book.epub",
-        ...     output_filepath="book_fr.epub",
-        ...     source_language="English",
-        ...     target_language="French",
-        ...     model_name="llama3.2",
-        ...     llm_provider="ollama",
-        ...     checkpoint_manager=checkpoint_mgr,
-        ...     translation_id="job_123",
-        ...     llm_api_endpoint="http://localhost:11434/api/generate"
-        ... )
+        UnsupportedFormatError: If the file format cannot be determined or is not supported.
     """
     # Initialize prompt_options if not provided
     if prompt_options is None:

@@ -28,9 +28,14 @@ function earlyValidationFail(message) {
 
 
 /**
- * Get translation configuration from form
- * @param {Object} file - File to translate
- * @returns {Object} Translation configuration
+ * Build the per-file translation request payload from current UI settings and the queued file's metadata.
+ *
+ * The returned config includes resolved input/output filenames, language/model selection, prompt and TTS options,
+ * provider endpoint and provider-specific API key fields (populated only for the selected provider), file/text source,
+ * and other translation flags required by the translation API.
+ *
+ * @param {Object} file - Queued file entry containing at minimum `name`, `fileType`, `filePath`, and language fields.
+ * @returns {Object} The complete translation configuration object ready to be sent to the translation API.
  */
 function getTranslationConfig(file) {
     // Use languages stored in the file object (captured when added to queue)

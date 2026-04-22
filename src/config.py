@@ -574,16 +574,12 @@ def detect_placeholder_format_in_text(text: str) -> tuple:
 
 def detect_existing_placeholder_format(text: str) -> tuple:
     """
-    Returns the unified placeholder format [idN].
-
-    Args:
-        text: Text (parameter kept for backward compatibility but unused)
-
+    Detects and returns the standardized placeholder format for placeholders like [idN].
+    
+    Parameters:
+        text (str): Accepted for backward compatibility and ignored by this function.
+    
     Returns:
-        Tuple of (prefix, suffix, pattern) for the [idN] format
-
-    Example:
-        >>> detect_existing_placeholder_format("Hello [id0] world [id1]")
-        ("[id", "]", r'\\[id(\\d+)\\]')
+        tuple: `(prefix, suffix, pattern)` where `prefix` is the placeholder prefix (e.g. "[id"), `suffix` is the placeholder suffix (e.g. "]"), and `pattern` is the regex string that matches the placeholder (e.g. r'\[id(\d+)\]').
     """
     return (PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX, PLACEHOLDER_PATTERN)

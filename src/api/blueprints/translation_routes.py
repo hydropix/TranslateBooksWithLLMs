@@ -32,17 +32,35 @@ def _resolve_api_key(value, env_var_name):
 
 def create_translation_blueprint(state_manager, start_translation_job):
     """
-    Create and configure the translation blueprint
-
-    Args:
-        state_manager: Translation state manager instance
-        start_translation_job: Function to start translation jobs
+    Create a Flask Blueprint with HTTP routes for managing translation jobs.
+    
+    This blueprint exposes endpoints to start translations, query status, interrupt jobs,
+    list translations and resumable jobs, resume a job from a checkpoint, and delete checkpoints.
+    
+    Parameters:
+        state_manager: Object responsible for persisting and querying translation state and checkpoints
+                       (must implement methods like create_translation, get_translation, exists,
+                       get_translation_summaries, get_resumable_jobs, get_all_translations,
+                       delete_checkpoint, and provide a checkpoint_manager with load_checkpoint,
+                       get_preserved_input_path, and mark_running).
+        start_translation_job: Callable that accepts (translation_id, config) to enqueue or start a translation.
+    
+    Returns:
+        Flask Blueprint configured with the translation management routes.
     """
     bp = Blueprint('translation', __name__)
 
     @bp.route('/api/translate', methods=['POST'])
     def start_translation_request():
-        """Start a new translation job"""
+        """
+        Handle POST /api/translate requests: validate the incoming payload, create and persist a translation job configuration, and queue the job for execution.
+        
+        Validates required fields (which depend on whether `file_path` is present) and rejects missing or empty values; allows an empty `text` only when `file_type` is `'txt'`. Builds a job `config` (including language/model/endpoint settings, resolved provider API keys from request values or environment variables, optional request pacing controls, prompt options, bilingual output, and optional TTS configuration), generates a unique `translation_id`, stores the job via the state manager, and starts the translation job.
+        
+        Returns:
+        	JSON with `translation_id`, a `message` confirming the job was queued, and the submitted `config_received` on success.
+        	Returns HTTP 400 with `{"error": "Missing or empty field: {field}"}` when required-field validation fails.
+        """
         data = request.json
 
         # Validate required fields

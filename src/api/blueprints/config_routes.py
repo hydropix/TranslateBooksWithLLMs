@@ -24,38 +24,13 @@ def get_config_path():
     """Get base path for configuration files (.env)"""
     return os.getcwd()
 
-from src.config import (
-    API_ENDPOINT as DEFAULT_OLLAMA_API_ENDPOINT,
-    OLLAMA_API_ENDPOINT,
-    OPENAI_API_ENDPOINT,
-    DEFAULT_MODEL,
-    REQUEST_TIMEOUT,
-    OLLAMA_NUM_CTX,
-    MAX_TRANSLATION_ATTEMPTS,
-    DEFAULT_SOURCE_LANGUAGE,
-    DEFAULT_TARGET_LANGUAGE,
-    DEBUG_MODE,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
-    OPENAI_API_KEY,
-    OPENROUTER_API_KEY,
-    OPENROUTER_MODEL,
-    MISTRAL_API_KEY,
-    MISTRAL_MODEL,
-    DEEPSEEK_API_KEY,
-    DEEPSEEK_MODEL,
-    POE_API_KEY,
-    NIM_API_KEY,
-    NIM_API_ENDPOINT,
-    NIM_MODEL,
-    POE_MODEL,
-    MAX_TOKENS_PER_CHUNK,
-    OUTPUT_FILENAME_PATTERN
-)
+import src.config as _config
+from src.config import reload_config
+
 
 # Setup logger for this module
 logger = logging.getLogger('config_routes')
-if DEBUG_MODE:
+if _config.DEBUG_MODE:
     logger.setLevel(logging.DEBUG)
 
 
@@ -89,7 +64,7 @@ def create_config_blueprint(server_session_id=None):
             "status": "ok",
             "message": "Translation API is running",
             "translate_module": "loaded",
-            "ollama_default_endpoint": DEFAULT_OLLAMA_API_ENDPOINT,
+            "ollama_default_endpoint": _config.API_ENDPOINT,
             "supported_formats": ["txt", "epub", "srt"],
             "startup_time": startup_time,  # Used to detect server restarts
             "session_id": startup_time  # Alias for compatibility with LifecycleManager
@@ -145,33 +120,34 @@ def create_config_blueprint(server_session_id=None):
                 return "***" + key[-4:]  # Show last 4 chars as indicator
             return ""  # Empty = not configured
 
+        # Read from live module to pick up values reloaded after .env save
         config_response = {
-            "api_endpoint": DEFAULT_OLLAMA_API_ENDPOINT,
-            "ollama_api_endpoint": OLLAMA_API_ENDPOINT,
-            "openai_api_endpoint": OPENAI_API_ENDPOINT,
-            "default_model": DEFAULT_MODEL,
-            "default_source_language": DEFAULT_SOURCE_LANGUAGE,
-            "default_target_language": DEFAULT_TARGET_LANGUAGE,
-            "timeout": REQUEST_TIMEOUT,
-            "context_window": OLLAMA_NUM_CTX,
-            "max_attempts": MAX_TRANSLATION_ATTEMPTS,
+            "api_endpoint": _config.API_ENDPOINT,
+            "ollama_api_endpoint": _config.OLLAMA_API_ENDPOINT,
+            "openai_api_endpoint": _config.OPENAI_API_ENDPOINT,
+            "default_model": _config.DEFAULT_MODEL,
+            "default_source_language": _config.DEFAULT_SOURCE_LANGUAGE,
+            "default_target_language": _config.DEFAULT_TARGET_LANGUAGE,
+            "timeout": _config.REQUEST_TIMEOUT,
+            "context_window": _config.OLLAMA_NUM_CTX,
+            "max_attempts": _config.MAX_TRANSLATION_ATTEMPTS,
             "retry_delay": 2,
             "supported_formats": ["txt", "epub", "srt"],
-            "gemini_api_key": mask_api_key(GEMINI_API_KEY),
-            "openai_api_key": mask_api_key(OPENAI_API_KEY),
-            "openrouter_api_key": mask_api_key(OPENROUTER_API_KEY),
-            "mistral_api_key": mask_api_key(MISTRAL_API_KEY),
-            "deepseek_api_key": mask_api_key(DEEPSEEK_API_KEY),
-            "poe_api_key": mask_api_key(POE_API_KEY),
-            "nim_api_key": mask_api_key(NIM_API_KEY),
-            "gemini_api_key_configured": bool(GEMINI_API_KEY),
-            "openai_api_key_configured": bool(OPENAI_API_KEY),
-            "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
-            "mistral_api_key_configured": bool(MISTRAL_API_KEY),
-            "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
-            "poe_api_key_configured": bool(POE_API_KEY),
-            "nim_api_key_configured": bool(NIM_API_KEY),
-            "output_filename_pattern": OUTPUT_FILENAME_PATTERN
+            "gemini_api_key": mask_api_key(_config.GEMINI_API_KEY),
+            "openai_api_key": mask_api_key(_config.OPENAI_API_KEY),
+            "openrouter_api_key": mask_api_key(_config.OPENROUTER_API_KEY),
+            "mistral_api_key": mask_api_key(_config.MISTRAL_API_KEY),
+            "deepseek_api_key": mask_api_key(_config.DEEPSEEK_API_KEY),
+            "poe_api_key": mask_api_key(_config.POE_API_KEY),
+            "nim_api_key": mask_api_key(_config.NIM_API_KEY),
+            "gemini_api_key_configured": bool(_config.GEMINI_API_KEY),
+            "openai_api_key_configured": bool(_config.OPENAI_API_KEY),
+            "openrouter_api_key_configured": bool(_config.OPENROUTER_API_KEY),
+            "mistral_api_key_configured": bool(_config.MISTRAL_API_KEY),
+            "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
+            "poe_api_key_configured": bool(_config.POE_API_KEY),
+            "nim_api_key_configured": bool(_config.NIM_API_KEY),
+            "output_filename_pattern": _config.OUTPUT_FILENAME_PATTERN
         }
 
         return jsonify(config_response)
@@ -180,7 +156,7 @@ def create_config_blueprint(server_session_id=None):
     def get_max_tokens():
         """Get MAX_TOKENS_PER_CHUNK configuration value for UI preview height adjustment"""
         return jsonify({
-            "max_tokens_per_chunk": MAX_TOKENS_PER_CHUNK
+            "max_tokens_per_chunk": _config.MAX_TOKENS_PER_CHUNK
         })
 
     def _resolve_api_key(provided_key, env_var_name, config_default):
@@ -201,10 +177,10 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_openrouter_models(provided_api_key=None):
         """Get available text-only models from OpenRouter API"""
-        api_key = _resolve_api_key(provided_api_key, 'OPENROUTER_API_KEY', OPENROUTER_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'OPENROUTER_API_KEY', _config.OPENROUTER_API_KEY)
 
         # Use OPENROUTER_MODEL from .env, fallback to claude-sonnet-4
-        default_model = OPENROUTER_MODEL if OPENROUTER_MODEL else "anthropic/claude-sonnet-4"
+        default_model = _config.OPENROUTER_MODEL if _config.OPENROUTER_MODEL else "anthropic/claude-sonnet-4"
 
         if not api_key:
             return jsonify({
@@ -256,10 +232,10 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_mistral_models(provided_api_key=None):
         """Get available models from Mistral API"""
-        api_key = _resolve_api_key(provided_api_key, 'MISTRAL_API_KEY', MISTRAL_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'MISTRAL_API_KEY', _config.MISTRAL_API_KEY)
 
         # Use MISTRAL_MODEL from .env, fallback to mistral-large-latest
-        default_model = MISTRAL_MODEL if MISTRAL_MODEL else "mistral-large-latest"
+        default_model = _config.MISTRAL_MODEL if _config.MISTRAL_MODEL else "mistral-large-latest"
 
         if not api_key:
             return jsonify({
@@ -311,10 +287,10 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_deepseek_models(provided_api_key=None):
         """Get available models from DeepSeek API"""
-        api_key = _resolve_api_key(provided_api_key, 'DEEPSEEK_API_KEY', DEEPSEEK_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'DEEPSEEK_API_KEY', _config.DEEPSEEK_API_KEY)
 
         # Use DEEPSEEK_MODEL from .env, fallback to deepseek-chat
-        default_model = DEEPSEEK_MODEL if DEEPSEEK_MODEL else "deepseek-chat"
+        default_model = _config.DEEPSEEK_MODEL if _config.DEEPSEEK_MODEL else "deepseek-chat"
 
         if not api_key:
             return jsonify({
@@ -366,10 +342,10 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_poe_models(provided_api_key=None):
         """Get available models from Poe API"""
-        api_key = _resolve_api_key(provided_api_key, 'POE_API_KEY', POE_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'POE_API_KEY', _config.POE_API_KEY)
 
         # Use POE_MODEL from .env, fallback to Claude-Sonnet-4
-        default_model = POE_MODEL if POE_MODEL else "Claude-Sonnet-4"
+        default_model = _config.POE_MODEL if _config.POE_MODEL else "Claude-Sonnet-4"
 
         if not api_key:
             return jsonify({
@@ -421,10 +397,10 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_nim_models(provided_api_key=None):
         """Get available models from NVIDIA NIM API"""
-        api_key = _resolve_api_key(provided_api_key, 'NIM_API_KEY', NIM_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'NIM_API_KEY', _config.NIM_API_KEY)
 
         # Use NIM_MODEL from .env, fallback to meta/llama-3.1-8b-instruct
-        default_model = NIM_MODEL if NIM_MODEL else "meta/llama-3.1-8b-instruct"
+        default_model = _config.NIM_MODEL if _config.NIM_MODEL else "meta/llama-3.1-8b-instruct"
 
         if not api_key:
             return jsonify({
@@ -438,7 +414,7 @@ def create_config_blueprint(server_session_id=None):
 
         try:
             # Determine base URL from endpoint
-            base_url = NIM_API_ENDPOINT.replace('/chat/completions', '').rstrip('/')
+            base_url = _config.NIM_API_ENDPOINT.replace('/chat/completions', '').rstrip('/')
             models_url = f"{base_url}/models"
             headers = {'Authorization': f'Bearer {api_key}'}
 
@@ -537,7 +513,7 @@ def create_config_blueprint(server_session_id=None):
         Always tries to fetch models dynamically from any OpenAI-compatible endpoint.
         Falls back to static list if dynamic fetch fails.
         """
-        api_key = _resolve_api_key(provided_api_key, 'OPENAI_API_KEY', OPENAI_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'OPENAI_API_KEY', _config.OPENAI_API_KEY)
 
         # Determine base URL from endpoint
         if api_endpoint:
@@ -614,10 +590,10 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_gemini_models(provided_api_key=None):
         """Get available models from Gemini API"""
-        api_key = _resolve_api_key(provided_api_key, 'GEMINI_API_KEY', GEMINI_API_KEY)
+        api_key = _resolve_api_key(provided_api_key, 'GEMINI_API_KEY', _config.GEMINI_API_KEY)
 
         # Use GEMINI_MODEL from .env, fallback to gemini-2.0-flash
-        default_model = GEMINI_MODEL if GEMINI_MODEL else "gemini-2.0-flash"
+        default_model = _config.GEMINI_MODEL if _config.GEMINI_MODEL else "gemini-2.0-flash"
 
         if not api_key:
             return jsonify({
@@ -666,7 +642,7 @@ def create_config_blueprint(server_session_id=None):
 
     def _get_ollama_models():
         """Get available models from Ollama API"""
-        ollama_base_from_ui = request.args.get('api_endpoint', DEFAULT_OLLAMA_API_ENDPOINT)
+        ollama_base_from_ui = request.args.get('api_endpoint', _config.API_ENDPOINT)
 
         try:
             base_url = ollama_base_from_ui.split('/api/')[0]
@@ -681,7 +657,7 @@ def create_config_blueprint(server_session_id=None):
 
                 return jsonify({
                     "models": model_names,
-                    "default": DEFAULT_MODEL if DEFAULT_MODEL in model_names else (model_names[0] if model_names else DEFAULT_MODEL),
+                    "default": _config.DEFAULT_MODEL if _config.DEFAULT_MODEL in model_names else (model_names[0] if model_names else _config.DEFAULT_MODEL),
                     "status": "ollama_connected",
                     "count": len(model_names)
                 })
@@ -699,7 +675,7 @@ def create_config_blueprint(server_session_id=None):
 
         return jsonify({
             "models": [],
-            "default": DEFAULT_MODEL,
+            "default": _config.DEFAULT_MODEL,
             "status": "ollama_offline_or_error",
             "count": 0,
             "error": f"Ollama is not accessible at {ollama_base_from_ui} or an error occurred. Verify that Ollama is running ('ollama serve') and the endpoint is correct."
@@ -925,7 +901,10 @@ def create_config_blueprint(server_session_id=None):
             # Update the .env file
             _update_env_file(updates)
 
-            logger.info(f"Settings saved: {list(updates.keys())}")
+            # Reload config so module-level variables reflect the new values
+            reload_config()
+
+            logger.info(f"Settings saved and config reloaded: {list(updates.keys())}")
 
             return jsonify({
                 "success": True,
@@ -945,18 +924,18 @@ def create_config_blueprint(server_session_id=None):
         API keys are masked for security - only indicates if configured.
         """
         return jsonify({
-            "gemini_api_key_configured": bool(GEMINI_API_KEY),
-            "openai_api_key_configured": bool(OPENAI_API_KEY),
-            "openrouter_api_key_configured": bool(OPENROUTER_API_KEY),
-            "mistral_api_key_configured": bool(MISTRAL_API_KEY),
-            "deepseek_api_key_configured": bool(DEEPSEEK_API_KEY),
-            "poe_api_key_configured": bool(POE_API_KEY),
-            "nim_api_key_configured": bool(NIM_API_KEY),
-            "default_model": DEFAULT_MODEL or "",
+            "gemini_api_key_configured": bool(_config.GEMINI_API_KEY),
+            "openai_api_key_configured": bool(_config.OPENAI_API_KEY),
+            "openrouter_api_key_configured": bool(_config.OPENROUTER_API_KEY),
+            "mistral_api_key_configured": bool(_config.MISTRAL_API_KEY),
+            "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
+            "poe_api_key_configured": bool(_config.POE_API_KEY),
+            "nim_api_key_configured": bool(_config.NIM_API_KEY),
+            "default_model": _config.DEFAULT_MODEL or "",
             "llm_provider": os.getenv('LLM_PROVIDER', 'ollama'),
-            "api_endpoint": DEFAULT_OLLAMA_API_ENDPOINT or "",
-            "ollama_api_endpoint": OLLAMA_API_ENDPOINT or "",
-            "openai_api_endpoint": OPENAI_API_ENDPOINT or ""
+            "api_endpoint": _config.API_ENDPOINT or "",
+            "ollama_api_endpoint": _config.OLLAMA_API_ENDPOINT or "",
+            "openai_api_endpoint": _config.OPENAI_API_ENDPOINT or ""
         })
 
     return bp

@@ -251,6 +251,48 @@ OUTPUT_FILENAME_PATTERN = os.getenv('OUTPUT_FILENAME_PATTERN', '{originalName} (
 # Debug mode (reload after .env is loaded)
 DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
 
+
+def reload_config():
+    """Reload configuration from .env file.
+
+    Called after saving settings via the web UI so that module-level
+    variables reflect the updated values without restarting the server.
+    """
+    import src.config as _cfg
+
+    load_dotenv(_env_file, override=True)
+
+    _cfg.OLLAMA_API_ENDPOINT = os.getenv('OLLAMA_API_ENDPOINT', 'http://localhost:11434/api/generate')
+    _cfg.OPENAI_API_ENDPOINT = os.getenv('OPENAI_API_ENDPOINT', 'https://api.openai.com/v1/chat/completions')
+    _cfg.API_ENDPOINT = os.getenv('API_ENDPOINT', _cfg.OLLAMA_API_ENDPOINT)
+    _cfg.DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'qwen3:14b')
+    _cfg.PORT = int(os.getenv('PORT', '5000'))
+    _cfg.REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '900'))
+    _cfg.OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '4096'))
+    _cfg.GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+    _cfg.GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+    _cfg.OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    _cfg.OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
+    _cfg.OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4')
+    _cfg.MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY', '')
+    _cfg.MISTRAL_MODEL = os.getenv('MISTRAL_MODEL', 'mistral-large-latest')
+    _cfg.MISTRAL_API_ENDPOINT = os.getenv('MISTRAL_API_ENDPOINT', 'https://api.mistral.ai/v1/chat/completions')
+    _cfg.DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
+    _cfg.DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
+    _cfg.DEEPSEEK_API_ENDPOINT = os.getenv('DEEPSEEK_API_ENDPOINT', 'https://api.deepseek.com/chat/completions')
+    _cfg.POE_API_KEY = os.getenv('POE_API_KEY', '')
+    _cfg.POE_MODEL = os.getenv('POE_MODEL', 'Claude-Sonnet-4')
+    _cfg.POE_API_ENDPOINT = os.getenv('POE_API_ENDPOINT', 'https://api.poe.com/v1/chat/completions')
+    _cfg.NIM_API_KEY = os.getenv('NIM_API_KEY', '')
+    _cfg.NIM_MODEL = os.getenv('NIM_MODEL', 'meta/llama-3.1-8b-instruct')
+    _cfg.NIM_API_ENDPOINT = os.getenv('NIM_API_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions')
+    _cfg.OUTPUT_FILENAME_PATTERN = os.getenv('OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}')
+    _cfg.LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'ollama')
+    _cfg.API_ENDPOINT = os.getenv('API_ENDPOINT', _cfg.OLLAMA_API_ENDPOINT)
+
+    if _debug_mode:
+        _config_logger.debug("📋 Configuration reloaded from .env")
+
 # Log loaded configuration in debug mode
 if DEBUG_MODE or _debug_mode:
     _config_logger.setLevel(logging.DEBUG)

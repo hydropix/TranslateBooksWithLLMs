@@ -25,6 +25,7 @@ from .providers.openrouter import OpenRouterProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
+from .providers.litellm import LiteLLMProvider
 
 
 def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
@@ -35,7 +36,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "litellm")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -152,6 +153,13 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             api_key=api_key,
             model=kwargs.get("model", NIM_MODEL),
             api_endpoint=kwargs.get("api_endpoint", NIM_API_ENDPOINT)
+        )
+
+    elif provider_type.lower() == "litellm":
+        return LiteLLMProvider(
+            model=kwargs.get("model", DEFAULT_MODEL),
+            api_key=kwargs.get("api_key"),
+            api_base=kwargs.get("api_endpoint") or kwargs.get("endpoint"),
         )
 
     else:

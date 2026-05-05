@@ -19,6 +19,9 @@ Pillow>=10.0.0
 mammoth>=1.0.0
 python-docx>=1.1.0
 
+# LiteLLM AI gateway (100+ providers) - OPTIONAL
+# pip install litellm>=1.65,<1.85
+
 # Chatterbox TTS (GPU-accelerated local TTS) - OPTIONAL
 # These dependencies have strict numpy version requirements that may conflict.
 # Install separately if needed:

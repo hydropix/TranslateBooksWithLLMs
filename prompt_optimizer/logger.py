@@ -61,7 +61,7 @@ def supports_color() -> bool:
             # Enable ANSI escape sequences on Windows
             os.system("")
             return True
-        except:
+        except Exception:
             return False
     return hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
 

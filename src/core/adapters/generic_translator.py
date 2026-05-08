@@ -355,7 +355,7 @@ class GenericTranslator:
             # Ensure cleanup even on error
             try:
                 await self.adapter.cleanup()
-            except:
+            except Exception:
                 pass
 
     def __repr__(self) -> str:

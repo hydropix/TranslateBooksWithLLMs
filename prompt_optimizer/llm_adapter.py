@@ -161,7 +161,7 @@ class TranslationAdapter:
             try:
                 error_data = e.response.json()
                 error_msg = error_data.get("error", error_msg)
-            except:
+            except Exception:
                 pass
             return TranslationResult(
                 text="", success=False,

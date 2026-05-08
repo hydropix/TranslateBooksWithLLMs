@@ -195,7 +195,7 @@ class OpenAICompatibleProvider(LLMProvider):
                                 error_message = error_json["error"].get("message", str(e))
                             else:
                                 error_message = str(error_json.get("error", e))
-                    except:
+                    except Exception:
                         error_message = f"{e} - {error_body}"
 
                 # Handle rate limiting (429)

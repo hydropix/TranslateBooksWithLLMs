@@ -55,7 +55,7 @@ class TelemetryCollector:
         try:
             mac = uuid.getnode()
             base = f"{mac}-{self.GENERATOR_NAME}"
-        except:
+        except Exception:
             base = f"{uuid.uuid4()}-{self.GENERATOR_NAME}"
 
         # Create deterministic hash

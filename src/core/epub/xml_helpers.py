@@ -35,12 +35,12 @@ def safe_iter_children(element: etree._Element) -> Iterator[etree._Element]:
                 children = list(element)
                 for child in children:
                     yield child
-        except:
+        except Exception:
             # If all else fails, use xpath
             try:
                 for child in element.xpath('*'):
                     yield child
-            except:
+            except Exception:
                 # Give up - no children accessible
                 pass
 
@@ -83,18 +83,18 @@ def safe_get_tag(element: etree._Element) -> str:
                     if hasattr(element, 'nsmap') and None in element.nsmap:
                         return f"{{{element.nsmap[None]}}}{tag_with_ns}"
                     return tag_with_ns
-        except:
+        except Exception:
             pass
 
         # Fourth try: Use QName if element has it
         try:
             if hasattr(element, 'qname'):
                 return str(element.qname)
-        except:
+        except Exception:
             pass
 
         return ""
-    except:
+    except Exception:
         return ""
 
 
@@ -113,7 +113,7 @@ def safe_get_attrib(element: etree._Element) -> Dict[str, Any]:
         if callable(attrib):
             return attrib()
         return attrib
-    except:
+    except Exception:
         return {}
 
 
@@ -148,7 +148,7 @@ def get_node_text_content_with_br_as_newline(node: etree._Element, namespaces: D
                     parts.append(child.text)
                 if hasattr(child, 'tail') and child.tail:
                     parts.append(child.tail)
-            except:
+            except Exception:
                 pass
             continue
 
@@ -214,7 +214,7 @@ def serialize_inline_tags(node: etree._Element, preserve_tags: bool = True) -> s
                 child_content = etree.tostring(child, encoding='unicode', method='xml')
                 if child_content and ' at 0x' not in child_content:
                     parts.append(child_content)
-        except:
+        except Exception:
             pass
 
         return "".join(parts)

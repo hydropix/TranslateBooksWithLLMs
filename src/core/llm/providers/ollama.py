@@ -537,7 +537,7 @@ class OllamaProvider(LLMProvider):
                     try:
                         error_data = e.response.json()
                         error_message = error_data.get("error", str(e))
-                    except:
+                    except Exception:
                         pass
 
                 # Handle context overflow errors

@@ -225,7 +225,7 @@ class TextMetadataEncoder:
                 match = re.search(r'SID:[0-9a-f]{16}', decoded)
                 if match:
                     return match.group(0)
-        except:
+        except Exception:
             pass
 
         return None
@@ -333,7 +333,7 @@ class WhitespaceMetadata:
 
             detected_id = ''.join(hex_chars)
             return f"SID-{detected_id}" if len(detected_id) == 8 else None
-        except:
+        except Exception:
             return None
 
 

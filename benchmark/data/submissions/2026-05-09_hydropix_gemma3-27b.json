@@ -1,0 +1,693 @@
+{
+  "schema_version": "1.0",
+  "submission": {
+    "submitted_by": "github:hydropix",
+    "submitted_at": "2026-05-09T21:51:31Z"
+  },
+  "environment": {
+    "tbl_version": "v0.2.0",
+    "prompt_version": "v1",
+    "judge_id": "claude-opus-4-7-rubric-v1"
+  },
+  "model": {
+    "provider": "ollama",
+    "id": "gemma3:27b"
+  },
+  "results": [
+    {
+      "text_id": "aurelius_meditations",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "灵魂啊，去吧，为所欲为；鄙视和轻蔑自己吧；再过一会儿，你尊重自己的时机就要结束了。每个人的幸福都取决于自身，但看看，你的生命已经接近尾声，却依然不尊重自己，将幸福寄托于他人的灵魂和想法。为什么这些外在发生的事情，会如此扰乱你的心绪？给自己一些时间去学习美好的事物，停止漫游和漂泊吧。",
+      "output_hash": "sha256:6256bd8641d9a7f9ceb63a02fb30c37828fc886fa73d34506b4e17f767a570aa",
+      "translation_latency_ms": 14522,
+      "scores": {
+        "accuracy": 7.0,
+        "fluency": 8.5,
+        "style": 7.0,
+        "overall": 6.5,
+        "feedback": "Contresens majeur sur l'incipit 'Do, soul, do' rendu par '为所欲为' (do as one pleases). Registre stoïque gnomique aplati. (-2.0 acc, -1.0 style)"
+      }
+    },
+    {
+      "text_id": "dorian_gray",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "工作室里弥漫着浓郁的玫瑰香气，当轻盈的夏风吹拂着花园里的树木时，阵阵浓重的丁香花香或是更为清新的粉色蔷薇香气，便随着敞开的门飘入室内。躺在波斯马鞍包制成的长沙发一角，他像往常一样，不停地抽着一支又一支香烟，亨利·沃顿勋爵正能瞥见一簇金黄色的金链花，花朵甜美而色彩如蜜。",
+      "output_hash": "sha256:3cb56d1371407d3c3aa0bb4a7c44ed3eb81c56b6ee039c346efe5a90a8a8c2c0",
+      "translation_latency_ms": 3094,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 8.0,
+        "style": 7.5,
+        "overall": 7.5,
+        "feedback": "Faithful rendering, but '波斯马鞍包' is literal and the dual subject '他...亨利·沃顿勋爵' creates redundancy. Ornate sensory register only partially captured. (-0.5 fluency, -1.0 style)"
+      }
+    },
+    {
+      "text_id": "einstein_relativity",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "在相对论出现之前，物理学界一直默契地认为时间陈述具有绝对意义，即它与参考物体的运动状态无关。但我们刚才已经看到，这个假设与同时性的最自然定义是不相容的；如果我们抛弃这个假设，那么真空中的光传播定律与相对性原理（在第七节中阐述）之间的矛盾就会消失。",
+      "output_hash": "sha256:611554ffdaa9fd51026bf186774feaded125e7a7345e75e968741d84d5125a00",
+      "translation_latency_ms": 2305,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.0,
+        "feedback": "Technically precise with established physics terms; '默契地' (mutual tacit) is a calque for 'tacitly' (silently). (-0.3 accuracy)"
+      }
+    },
+    {
+      "text_id": "emerson_self_reliance",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "相信自己：每一颗心都在那根钢铁琴弦上震动。接受神 Providence 为你安排的位置，你所处时代的社会，以及事件的关联。伟人总是这样做的，他们像孩子一样信任他们那个时代的精神，流露出他们认识到绝对可靠的东西就坐落在他们的内心，通过他们的双手发挥作用，并支配着他们的整个存在。",
+      "output_hash": "sha256:17815a76129d364634859f2217d5e13bbf856c7b35a079002da0cd2c2fd65e0b",
+      "translation_latency_ms": 2267,
+      "scores": {
+        "accuracy": 8.0,
+        "fluency": 7.5,
+        "style": 7.5,
+        "overall": 7.0,
+        "feedback": "Severe break: 'Providence' left in English inside Chinese text; 'iron string' calque '钢铁琴弦'. (-1.5 accuracy, -1.0 fluency mixed-script, -0.5 style)"
+      }
+    },
+    {
+      "text_id": "moby_dick",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "叫我以实玛利吧。那是几年前的事了——确切多久已经无所谓了——我兜里几乎没有钱，岸上也没有什么特别让我感兴趣的事，便想出海四处看看，探寻这水天一色的世界。这是我排遣忧郁、调理气血的方式。每当我发现自己变得愁眉苦脸，每当我的内心如同阴湿多雨的十一月时，我就认为该尽快出海了。",
+      "output_hash": "sha256:8bd216bbc0ae2c3d1689f8c27e0b6ddef6c60330da76076e4ef0b8d64d83f316",
+      "translation_latency_ms": 2740,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Excellent literary translation: '水天一色' for 'watery part of the world' and '调理气血' for 'regulating circulation' are idiomatic Chinese choices that preserve Melville's tone."
+      }
+    },
+    {
+      "text_id": "origin_species",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "这篇摘要，我现予以发表，必然存在不尽完善之处。我无法在此列出所有论述的参考资料和权威出处，只能恳请读者对我所陈述内容的准确性给予一定的信任。毫无疑问，其中可能会出现错误，但我希望自己一直谨慎，仅依赖于可靠的权威来源。我在这里只能阐述我所得出的总体结论，并辅以少量事实作为说明，但我希望这些在大多数情况下是足够的。",
+      "output_hash": "sha256:8d13f0f86a68c0a3c8e0eaef8de272a65d37a112fa9224e74d7ee59d24cab3cc",
+      "translation_latency_ms": 2700,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 8.0,
+        "feedback": "Faithful to Darwin's qualified scientific tone; '恳请' is slightly stronger than 'I must trust' but preserves the spirit. (-0.3 style)"
+      }
+    },
+    {
+      "text_id": "pride_prejudice",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "凡是有钱的单身汉，总想找位太太。尽管我们对一个单身汉初入新邻居时的内心感受或想法所知甚少，但这个道理却深深地烙印在周围人家的心中，他们认为这位单身汉就该属于他们女儿中的一位。",
+      "output_hash": "sha256:3146e566eb569d342e59852c0541d64a8857130964f6cf84e82bd744545902dd",
+      "translation_latency_ms": 1966,
+      "scores": {
+        "accuracy": 7.5,
+        "fluency": 9.0,
+        "style": 6.0,
+        "overall": 6.0,
+        "feedback": "Loses Austen's signature ironic 'truth universally acknowledged' framing — reads as plain narrative. 'Must be in want of' flattened to '总想找'. (-1.0 acc, -1.5 style)"
+      }
+    },
+    {
+      "text_id": "study_scarlet",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "“您去过阿富汗，我看得出来。” “你怎么知道的？”我惊讶地问道。“不必说了，”他一边自顾自地 chuckle 着说，“现在的问题是关于血红蛋白的。你一定能看出我这项发现的意义吧？” “从化学角度来看，这无疑是很有趣的，”我回答道，“但实际上——” “我的天，这可是近年来最实用的法医发现。难道你没意识到，它为我们提供了一种万无一失的血迹检验方法吗？”",
+      "output_hash": "sha256:f4a5eac95dbec71d75f91f92626555766147a847ab9e8942f0cde84e8f5d6707",
+      "translation_latency_ms": 3026,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 7.0,
+        "style": 7.5,
+        "overall": 7.5,
+        "feedback": "Untranslated 'chuckle' embedded with Chinese suffix breaks fluency mid-sentence. Otherwise the dialogue rendering is natural. (-1.0 fluency mixed-script, -0.5 calque)"
+      }
+    },
+    {
+      "text_id": "twain_innocents",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "在我看来，每当我得意地认为自己偶然发现了一幅既古老又美丽、值得赞扬的画作时，由此获得的快乐，反而成了证明它并非一幅杰作，也绝不值得称赞的确凿证据。这种事情在威尼斯已经发生过无数次。每一次，导游都会用一句“没什麼——这是文艺复兴时期的作品”来当头浇灭我高涨的热情。",
+      "output_hash": "sha256:9ba12cff2dc33f16762c05a967ad42f7a0b5ccf84b3f9be7f02d0396fa4c0f00",
+      "translation_latency_ms": 2577,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 8.0,
+        "style": 8.5,
+        "overall": 7.5,
+        "feedback": "Captures Twain's deflationary irony with idiomatic '当头浇灭', but uses Traditional 麼 in zh-Hans output. (-1.0 fluency script mismatch)"
+      }
+    },
+    {
+      "text_id": "walden",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "我走进森林，是因为我渴望过一种有目的的生活，直面生活的基本真相，并看看我能否从中有所学得，而不是等到临终时才发现我从未真正活过。我不愿度过虚伪的生活，生命如此珍贵；我也不愿轻易放弃，除非万不得已。我想要深入地生活，吮吸生命的精髓。",
+      "output_hash": "sha256:94b9440256d8999e904ecb554d99d3a8f29d399508e6697d769678c351dc46a5",
+      "translation_latency_ms": 2288,
+      "scores": {
+        "accuracy": 8.0,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 7.5,
+        "feedback": "Slight semantic drift on 'deliberately' (→ '有目的'), 'what was not life' (→ '虚伪的生活'), 'practise resignation' (→ '轻易放弃'). Reflective tone preserved. (-1.5 accuracy aggregate)"
+      }
+    },
+    {
+      "text_id": "aurelius_meditations",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Hazlo, alma, hazlo; ultraja y desprecia tu propio ser; pero aún te queda tiempo antes de que llegue el momento de respetarte, cuando este habrá terminado. La felicidad de cada hombre depende de sí mismo, pero observa que tu vida está llegando a su fin, y sin mostrarte el menor respeto, haces que tu felicidad dependa de las almas y las opiniones de otros. ¿Por qué estas cosas que suceden externamente deberían distraerte tanto? Date tiempo para aprender algo bueno y deja de vagar y deambulando sin rumbo.",
+      "output_hash": "sha256:65fcbbd8e0e8e65ed63bba4ffe2778733fcc24e18750a1aa82eb6c4ac415a26a",
+      "translation_latency_ms": 3233,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 7.5,
+        "style": 7.5,
+        "overall": 7.0,
+        "feedback": "Grammar error: 'deja de vagar y deambulando' mixes infinitive and gerund (should be 'vagar y deambular'). Archaic Stoic register reasonably attempted. (-1.5 fluency)"
+      }
+    },
+    {
+      "text_id": "dorian_gray",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "El estudio estaba impregnado del intenso aroma de las rosas, y cuando la ligera brisa veraniega agitaba los árboles del jardín, el pesado perfume de los lilas, o el más delicado aroma de las espinas florecientes de color rosa, entraba por la puerta abierta. Desde el rincón del diván cubierto de alfombras persas de montar a caballo, donde estaba tumbado fumando, como solía hacer, innumerables cigarrillos, Lord Henry Wotton podía apenas vislumbrar el brillo de las flores de color miel y de un tono miel de un labiérnago.",
+      "output_hash": "sha256:d247e0b2428aa8712b1459cb3347be8dfdbae731997e0a47a0f41a540c170055",
+      "translation_latency_ms": 3389,
+      "scores": {
+        "accuracy": 7.0,
+        "fluency": 8.0,
+        "style": 7.0,
+        "overall": 6.5,
+        "feedback": "Multiple specialized errors: saddle-bags → 'alfombras de montar' (riding rugs), laburnum → 'labiérnago' (mock privet, wrong species), thorn → bare 'espinas'. Wilde's imagery suffers. (-2.5 accuracy, -0.5 fluency)"
+      }
+    },
+    {
+      "text_id": "einstein_relativity",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Ahora bien, antes del advenimiento de la teoría de la relatividad, siempre se había dado por sentado tácitamente en la física que la declaración del tiempo tenía un significado absoluto, es decir, que era independiente del estado de movimiento del sistema de referencia. Pero acabamos de ver que esta suposición es incompatible con la definición más natural de simultaneidad; si descartamos esta suposición, entonces el conflicto entre la ley de la propagación de la luz en el vacío y el principio de relatividad (desarrollado en la Sección VII) desaparece.",
+      "output_hash": "sha256:5e8920ebceed0601360aa65637013b300262e15a8615326559ecc4937a7b036c",
+      "translation_latency_ms": 3111,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Excellent technical Spanish; established physics terminology ('en el vacío', 'simultaneidad', 'principio de relatividad'); conditional argument preserved cleanly."
+      }
+    },
+    {
+      "text_id": "emerson_self_reliance",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Confía en ti mismo: todo corazón vibra con esa cuerda de hierro. Acepta el lugar que la divina providencia te ha asignado, la sociedad de tus contemporáneos, la conexión de los acontecimientos. Los grandes hombres siempre lo han hecho, y se han confiado infantilmente al genio de su época, traicionando su percepción de que lo absolutamente confiable residía en su corazón, obrando a través de sus manos, predominando en todo su ser.",
+      "output_hash": "sha256:7ccb7c09ad1705b23e066e64512f43cf16596c733bfe3e793541856bf0b302af",
+      "translation_latency_ms": 2752,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 8.5,
+        "style": 7.5,
+        "overall": 7.5,
+        "feedback": "Modern Spanish that captures Emerson's argument; archaic 'thyself' register is flattened to 'Confía en ti'. 'Cuerda de hierro' is a literal calque. (-1.0 style, -0.3 fluency)"
+      }
+    },
+    {
+      "text_id": "moby_dick",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Llámame Ismael. Hace algunos años—no importa con exactitud cuánto tiempo—sin apenas dinero en el bolsillo y sin nada en particular que me interesara en tierra firme, pensé en navegar un poco y ver la parte acuática del mundo. Es una forma que tengo de combatir la melancolía y regular la circulación. Cada vez que me encuentro con el rostro sombrío; cada vez que es un noviembre húmedo y lloviznoso en mi alma, considero que es hora de zarpar lo antes posible.",
+      "output_hash": "sha256:ef822f079c1b869f019819400764b9be26aab8c8d69d8ce389b49936d040d4f9",
+      "translation_latency_ms": 2963,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 8.0,
+        "feedback": "Canonical Spanish 'Llámame Ismael' opener; 'rostro sombrío' weakens the specific 'growing grim about the mouth' image. (-0.5 style)"
+      }
+    },
+    {
+      "text_id": "origin_species",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Este Resumen, que ahora publico, debe ser necesariamente imperfecto. No puedo incluir aquí referencias y fuentes para mis diversas afirmaciones, y debo confiar en que el lector deposite cierta confianza en mi precisión. Sin duda, se habrán colado errores, aunque espero haber sido siempre cauteloso al basarme únicamente en fuentes fiables. Aquí solo puedo ofrecer las conclusiones generales a las que he llegado, con algunos hechos ilustrativos que, espero, serán suficientes en la mayoría de los casos.",
+      "output_hash": "sha256:8dcf3de606ae5055faadcabe83d5a32e23a4d9e07abbf524717f52bef5bdab54",
+      "translation_latency_ms": 2874,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 8.0,
+        "feedback": "Faithful Spanish rendering of Darwin's hedged stance; reads as natural academic Spanish, no notable losses."
+      }
+    },
+    {
+      "text_id": "pride_prejudice",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Es una verdad universalmente reconocida que un hombre soltero con una buena fortuna debe necesitar una esposa. Por poco que se conozcan los sentimientos o las intenciones de un hombre al entrar por primera vez en un vecindario, esta verdad está tan arraigada en las mentes de las familias circundantes, que lo consideran la propiedad legítima de una de sus hijas.",
+      "output_hash": "sha256:bb2dacbbc59fee4f535e01e146d8f7270cd95dad926f64d0ae3ccded6fcb56b0",
+      "translation_latency_ms": 2240,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Preserves Austen's 'Es una verdad universalmente reconocida' framing (canonical Spanish opener); ironic register intact. The strongest Pride and Prejudice rendering of the four."
+      }
+    },
+    {
+      "text_id": "study_scarlet",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "—Parece que ha estado en Afganistán.\n—¿Cómo demonios lo supo? —pregunté, asombrado.\n—No importa —dijo, riendo entre dientes—. La cuestión ahora es sobre la hemoglobina. ¿No duda de la importancia de este descubrimiento mío?\n—Es interesante, químicamente, sin duda —respondí—, pero en la práctica…\n—Hombre, es el descubrimiento médico-legal más práctico de los últimos años. ¿No ve que nos proporciona una prueba infalible para las manchas de sangre?",
+      "output_hash": "sha256:35e76f3e6e7564cd3caf18e2068fbd63c7a57279358aa8f9d90ae1b996a33cd3",
+      "translation_latency_ms": 3167,
+      "scores": {
+        "accuracy": 8.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 7.5,
+        "feedback": "Smooth Spanish dialogue with proper dash convention, but mistranslates 'No doubt you see' as '¿No duda de la importancia?', reversing the rhetorical question. (-1.0 accuracy)"
+      }
+    },
+    {
+      "text_id": "twain_innocents",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Me parece que cada vez que me deleito pensando haber descubierto un cuadro antiguo que es bello y digno de todo elogio, el placer que me proporciona es una prueba infalible de que no es una buena pintura y en absoluto merece ser alabada. Esto mismo me ha ocurrido más veces de las que puedo contar, en Venecia. En cada ocasión, el guía ha destrozado mi creciente entusiasmo con el comentario: “No es nada, es del Renacimiento”.",
+      "output_hash": "sha256:df7ef03737119bceb6a73a4a8c7bc57f0149d5c1de53c0127799ab32f2a19c2a",
+      "translation_latency_ms": 2676,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 8.0,
+        "feedback": "Captures Twain's deflationary irony cleanly in idiomatic Spanish; faithful rendering throughout."
+      }
+    },
+    {
+      "text_id": "walden",
+      "source_lang": "en",
+      "target_lang": "es",
+      "output": "Fui al bosque porque deseaba vivir deliberadamente, encarar solo los hechos esenciales de la vida y ver si podía aprender lo que tenía que enseñarme, y no, cuando llegara mi hora, descubrir que no había vivido. No quería vivir una vida que no fuera vida; vivir es tan precioso. Tampoco quería practicar la resignación, a menos que fuera estrictamente necesario. Quería vivir profundamente y extraer hasta la médula de la vida.",
+      "output_hash": "sha256:da122d004a89da0704e6c9ed4af6b0d12043afa83e0e9a3fd2fd2a74327874bb",
+      "translation_latency_ms": 2648,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Excellent: bone-marrow metaphor preserved as 'extraer hasta la médula'; contemplative tone intact; 'No quería vivir una vida que no fuera vida' captures Thoreau's tautology."
+      }
+    },
+    {
+      "text_id": "aurelius_meditations",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Âme, agis ainsi, rabaisse-toi et méprise-toi ; mais sache qu'il adviendra un temps où tu ne pourras plus te respecter. Le bonheur de chacun dépend de lui-même, et pourtant vois comme ta vie touche à sa fin, alors que tu ne te donnes aucun respect, faisant reposer ton bonheur sur l’avis et les pensées d’autrui. Pourquoi ces événements extérieurs devraient-ils te troubler à ce point ? Accorde-toi du temps pour apprendre quelque chose de bien et cesse de courir et de vagabonder sans but.",
+      "output_hash": "sha256:280364d58a56329ddd33dc2f175dc550b8900d96bdc99756dc7ea3cf3886de59",
+      "translation_latency_ms": 3440,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 9.0,
+        "style": 7.5,
+        "overall": 7.5,
+        "feedback": "'Le temps...sera fini' shifts the deadline to an inability ('tu ne pourras plus te respecter'); Stoic French register reasonable. (-0.5 accuracy, -0.5 style)"
+      }
+    },
+    {
+      "text_id": "dorian_gray",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "L'atelier était empli du riche parfum des roses, et lorsque la légère brise d'été s'agitait parmi les arbres du jardin, une lourde senteur de lilas, ou le parfum plus délicat de l'églantine rose, parvenait par la porte ouverte. Du coin du divan recouvert de sacs à dos persans sur lequel il était allongé, fumant d'innombrables cigarettes comme à son habitude, Lord Henry Wotton pouvait apercevoir le scintillement des fleurs miel-sucrées et miel-colorées d'un laburnum.",
+      "output_hash": "sha256:0e5be67cbd8ba77a1c044661657448bc16f46a1471789d47e1403040f0d75352",
+      "translation_latency_ms": 3285,
+      "scores": {
+        "accuracy": 7.0,
+        "fluency": 8.0,
+        "style": 7.5,
+        "overall": 7.0,
+        "feedback": "Multiple botanical/material errors: saddle-bags → 'sacs à dos persans' (= backpacks; should be 'sacoches de selle'), laburnum left untranslated (FR = 'cytise'), 'miel-sucrées' awkward compound. (-2.5 accuracy, -0.5 fluency)"
+      }
+    },
+    {
+      "text_id": "einstein_relativity",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Or, avant l’avènement de la théorie de la relativité, on avait toujours tacitement supposé en physique que l’énoncé du temps avait une signification absolue, c’est-à-dire qu’il était indépendant de l’état de mouvement du référentiel. Mais nous venons de voir que cette supposition est incompatible avec la définition la plus naturelle de la simultanéité ; si nous abandonnons cette supposition, le conflit entre la loi de la propagation de la lumière dans le vide et le principe de relativité (développé au paragraphe VII) disparaît.",
+      "output_hash": "sha256:b6dfc7b0ceb0d6d5fe22a4b75e7736c41fb2fd68ee378249c2a54a8f771b6044",
+      "translation_latency_ms": 3205,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Excellent technical French; 'paragraphe VII' for 'Section VII' is a minor convention choice but acceptable in French academic writing."
+      }
+    },
+    {
+      "text_id": "emerson_self_reliance",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Aie confiance en toi : chaque cœur vibre à cette corde de fer. Accepte la place que la divine Providence t’a réservée, la société de tes contemporains, le concours des événements. Les grands hommes ont toujours agi ainsi, se confiant, comme des enfants, au génie de leur époque, trahissant la conviction que le véritable guide était en leur cœur, agissant par leurs mains, dominant toute leur existence.",
+      "output_hash": "sha256:f70500cfd5ba1dff774b892171afd9e92a7e896dd84ffae82997468f6c4f55f7",
+      "translation_latency_ms": 2578,
+      "scores": {
+        "accuracy": 8.7,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.0,
+        "feedback": "Elegant French; 'le concours des événements' is felicitous. 'Le véritable guide' is a slight gloss for 'the absolutely trustworthy'. (-0.3 accuracy)"
+      }
+    },
+    {
+      "text_id": "moby_dick",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Appelez-moi Ismaël. Il y a quelques années – peu importe précisément combien – n’ayant guère d’argent en poche et rien de particulièrement intéressant à me retenir sur terre, je me suis dit que j’irais naviguer un peu et découvrir la partie liquide du monde. C’est une façon que j’ai de chasser la mélancolie et de réguler ma circulation sanguine. Dès que je sens ma bouche s’assombrir, dès que novembre humide et pluvieux s’installe dans mon âme, je considère qu’il est grand temps de prendre la mer le plus tôt possible.",
+      "output_hash": "sha256:1bdbcac2a625cb4018ed311c094017a43eb38b3d3a5b81b24bc461222c6f23d4",
+      "translation_latency_ms": 3476,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Canonical French 'Appelez-moi Ismaël' opener; faithful rendering of physiognomic and mood imagery, mid-19th-c maritime register preserved."
+      }
+    },
+    {
+      "text_id": "origin_species",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Cet Abrégé, que je publie aujourd’hui, sera forcément imparfait. Je ne peux ici fournir de références ni citer les sources de mes affirmations, et je dois compter sur la confiance du lecteur quant à mon exactitude. Il est certain que des erreurs s’y seront glissées, bien que j’espère avoir toujours fait preuve de prudence en ne me fiant qu’à des sources fiables. Je ne peux ici présenter que les conclusions générales auxquelles je suis parvenu, accompagnées de quelques faits à titre d’illustration, mais qui, je l’espère, suffiront dans la plupart des cas.",
+      "output_hash": "sha256:fdbacfa3b079888b3d90016504c63031219d78c6d5f4f3430b72788e3a4148b2",
+      "translation_latency_ms": 3385,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.0,
+        "feedback": "Period-appropriate scientific French ('Cet Abrégé', 'sera forcément imparfait'); Darwin's hedging fully preserved."
+      }
+    },
+    {
+      "text_id": "pride_prejudice",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Il est généralement admis qu'un homme célibataire fortuné doit avoir besoin d'une épouse. Peu importe à quel point on peut ignorer les sentiments ou les intentions d'un tel homme lorsqu'il arrive dans un nouveau voisinage, cette vérité est si solidement ancrée dans l'esprit des familles alentour qu'il est considéré comme la propriété légitime de l'une de leurs filles.",
+      "output_hash": "sha256:5007c6ba14a8c540301c7da28b944ec8b14d3f5a0ba6470c07d64a267f003dc5",
+      "translation_latency_ms": 2476,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 7.0,
+        "overall": 7.5,
+        "feedback": "'Généralement admis' is significantly weaker than 'universally acknowledged'; loses Austen's mock-universal framing that drives the chapter. (-1.0 style)"
+      }
+    },
+    {
+      "text_id": "study_scarlet",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "« Vous avez donc été en Afghanistan, je crois comprendre. » « Mais comment diable avez-vous découvert ça ? » demandai-je, stupéfait. « Peu importe, » répondit-il en riant pour lui-même. « La question est maintenant de savoir en est-on à l'hémoglobine. N'êtes-vous pas conscient de l'importance de cette découverte ? » « C'est intéressant, chimiquement, sans aucun doute, » répondis-je, « mais en pratique— » « Allons, mon ami, c'est la découverte médico-légale la plus pratique depuis des années. Ne voyez-vous pas qu'elle nous fournit un test infaillible pour les taches de sang ? »",
+      "output_hash": "sha256:ddfe6d236e5b5b51969271252760d573141b92fae496656bc21bd094e7a626e0",
+      "translation_latency_ms": 4030,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 7.5,
+        "style": 8.0,
+        "overall": 7.0,
+        "feedback": "Period-appropriate French dialogue, but contains a broken sentence: 'La question est maintenant de savoir en est-on à l'hémoglobine'. (-1.5 fluency grammar)"
+      }
+    },
+    {
+      "text_id": "twain_innocents",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Il me semble que chaque fois que je me réjouis de penser avoir découvert une peinture ancienne, belle et digne de tous les éloges, le plaisir qu’elle me procure est la preuve infaillible qu’elle n’est pas une belle toile et n’est en rien digne de commendation. Il m’est arrivé plus de fois que je ne saurais le dire, à Venise, que le guide vienne briser mon enthousiasme grandissant avec cette remarque : « Ce n’est rien, c’est de la Renaissance. »",
+      "output_hash": "sha256:94be6ac00f4395131b4207dfec9705fcb032afec2b9ee1afcbb35455874c0368",
+      "translation_latency_ms": 3186,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 8.5,
+        "style": 8.0,
+        "overall": 7.5,
+        "feedback": "Captures Twain's irony but 'commendation' is an English anglicism (FR: 'éloges' / 'louanges'). (-0.5 fluency)"
+      }
+    },
+    {
+      "text_id": "walden",
+      "source_lang": "en",
+      "target_lang": "fr",
+      "output": "Je suis allé dans les bois parce que je voulais vivre délibérément, ne faire face qu’aux faits essentiels de la vie, et voir si je ne pouvais pas apprendre ce qu’elle avait à m’enseigner, afin de ne pas découvrir, au moment de mourir, que je n’avais pas vécu. Je ne voulais pas vivre une vie sans en être, car vivre est si précieux ; ni me résigner, à moins que cela ne soit absolument nécessaire. Je voulais vivre pleinement et extraire toute la moelle de la vie.",
+      "output_hash": "sha256:3288fd5fa6af207eada5c8050a11ed0a89f40fca8beede360f5ca32656e9f1b0",
+      "translation_latency_ms": 3117,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 8.5,
+        "style": 8.5,
+        "overall": 7.5,
+        "feedback": "Faithful contemplative French; 'vivre une vie sans en être' is awkward as a rendering of 'live what was not life'. (-0.5 fluency)"
+      }
+    },
+    {
+      "text_id": "aurelius_meditations",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Linh hồn ơi, hãy cứ hành hạ và khinh miệt bản thân đi; nhưng hãy nhớ rằng, thời gian để ngươi tự trọng sắp kết thúc rồi. Hạnh phúc của mỗi người phụ thuộc vào chính mình, vậy mà ngươi lại gần hết đời mà vẫn không tự trọng, cứ tìm kiếm niềm vui nơi ý kiến và suy nghĩ của người khác. Tại sao những chuyện xảy ra bên ngoài lại khiến ngươi xao xuyến đến thế? Hãy cho bản thân chút thời gian để học hỏi điều tốt đẹp, và ngừng rong ruổi, đi lại vô ích.",
+      "output_hash": "sha256:585903356a44c29a4fe16a753cc8cc770c9593d722c0e5ecc08fda93878d7cfa",
+      "translation_latency_ms": 3346,
+      "scores": {
+        "accuracy": 8.7,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 7.5,
+        "feedback": "Captures Stoic imperative tone with archaic 'ngươi'; minor semantic compression on 'affording thyself no respect'. (-0.3 accuracy)"
+      }
+    },
+    {
+      "text_id": "dorian_gray",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Căn phòng tràn ngập hương thơm đậm đà của hoa hồng, và mỗi khi gió mùa hè nhẹ thoảng qua những hàng cây trong vườn, mùi hoa tử đằng nồng nàn hoặc hương thơm tinh tế của cây gai dại nở hoa hồng lại lan tỏa qua cánh cửa mở. Từ góc chiếc ghế dài bọc túi da ngựa Ba Tư nơi anh đang nằm, hút vô số điếu thuốc lá như thường lệ, Lord Henry Wotton có thể thoáng thấy ánh vàng óng ả của những bông hoa cây chanh vàng mật ngọt.",
+      "output_hash": "sha256:a07fbf3905f939569a519e111490dc6d8ef1be1a80a223a12f01464fb7b43e8b",
+      "translation_latency_ms": 3111,
+      "scores": {
+        "accuracy": 7.5,
+        "fluency": 9.0,
+        "style": 7.5,
+        "overall": 7.0,
+        "feedback": "Botanical errors: lilac → 'tử đằng' (wisteria, wrong species), laburnum → 'cây chanh vàng' (lemon tree, wrong species). Sensory atmosphere preserved overall. (-2.5 accuracy)"
+      }
+    },
+    {
+      "text_id": "einstein_relativity",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Trước khi có thuyết tương đối, người ta thường ngầm định trong vật lý rằng việc đo thời gian có ý nghĩa tuyệt đối, tức là không phụ thuộc vào trạng thái chuyển động của hệ quy chiếu. Nhưng chúng ta vừa thấy rằng giả định này không tương thích với định nghĩa tự nhiên nhất về tính đồng thời; nếu chúng ta loại bỏ giả định này, thì mâu thuẫn giữa định luật truyền ánh sáng trong chân không và nguyên lý tương đối (được trình bày ở Mục VII) sẽ biến mất.",
+      "output_hash": "sha256:50c4ca834e60a074782fbd6181b1ba179bb76af61e8715437877106cd745c544",
+      "translation_latency_ms": 2873,
+      "scores": {
+        "accuracy": 8.7,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.0,
+        "feedback": "Strong technical Vietnamese with established physics terminology; 'việc đo thời gian' slightly shifts 'statement of time' to 'measurement of time'. (-0.3 accuracy)"
+      }
+    },
+    {
+      "text_id": "emerson_self_reliance",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Hãy tin vào chính mình: mỗi trái tim đều rung động theo sợi dây sắt ấy. Hãy chấp nhận vị trí mà Thượng đế đã sắp đặt cho bạn, xã hội của những người cùng thời, sự kết nối của các sự kiện. Những người vĩ đại luôn làm như vậy, và phó mặc bản thân một cách hồn nhiên cho thiên tài của thời đại, thể hiện nhận thức sâu sắc rằng điều tuyệt đối đáng tin cậy ngự trị trong trái tim họ, vận hành qua đôi tay, thống trị toàn bộ con người họ.",
+      "output_hash": "sha256:2ea7aa7658fc853090a73bbbe2278215af135ec4a443860ce2e4467c2faa90d4",
+      "translation_latency_ms": 3048,
+      "scores": {
+        "accuracy": 8.7,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.0,
+        "feedback": "Clean Vietnamese; 'phó mặc' for 'confided childlike' is idiomatic. 'Thượng đế' substitutes for 'divine providence' (acceptable but flattens). (-0.3 accuracy)"
+      }
+    },
+    {
+      "text_id": "moby_dick",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Hãy gọi tôi là Ishmael. Cách đây vài năm—không cần phải nhớ chính xác là bao lâu—khi hầu bao tôi trống rỗng, và không có việc gì đặc biệt trên bờ để khiến tôi bận tâm, tôi nghĩ bụng sẽ đi biển một chút, để xem phần thế giới đầy nước này. Đó là một cách tôi thường dùng để xua tan sự u sầu và điều hòa khí huyết. Bất cứ khi nào tôi thấy bản thân trở nên cộc cằn, khi trong tâm hồn tôi là một tháng Mười ẩm ướt và mưa rả rích, tôi coi đó là dấu hiệu cho thấy đã đến lúc phải ra khơi càng sớm càng tốt.",
+      "output_hash": "sha256:befd89f524ba03f41126602e849ad1c0f7d8b2fad326e6790de8600d06d886c5",
+      "translation_latency_ms": 3736,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 7.5,
+        "feedback": "Strong Vietnamese with idiomatic 'điều hòa khí huyết'; mistranslates 'November' as 'tháng Mười' (October) instead of 'tháng Mười Một' — a factual error. (-1.5 accuracy)"
+      }
+    },
+    {
+      "text_id": "origin_species",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Tóm tắt này, mà tôi xin công bố, chắc chắn sẽ còn nhiều thiếu sót. Tôi không thể trích dẫn các nguồn tham khảo và tài liệu cho những tuyên bố của mình ở đây; và tôi chỉ có thể tin tưởng vào sự tin cậy của độc giả đối với độ chính xác của tôi. Chắc chắn sẽ có những sai sót, dù tôi hy vọng mình luôn thận trọng trong việc chỉ dựa vào những nguồn đáng tin cậy. Tôi chỉ có thể trình bày những kết luận chung mà tôi đã đạt được, cùng với một vài sự kiện minh họa, nhưng tôi hy vọng trong hầu hết các trường hợp, chúng sẽ đủ.",
+      "output_hash": "sha256:b988cc971ac9b5b186138049f2cb469692c5651607c65f95d704beb31f01c880",
+      "translation_latency_ms": 3554,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 8.0,
+        "feedback": "Faithful Vietnamese rendering of Darwin's hedged scientific stance; clean academic register."
+      }
+    },
+    {
+      "text_id": "pride_prejudice",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Người ta thường nói, một người đàn ông độc thân có gia tài kha khá chắc chắn phải cần một người vợ. Dù cảm xúc hay suy nghĩ của người đàn ông đó khi mới chuyển đến một vùng đất có thể chưa được ai biết đến, sự thật này đã ăn sâu vào tâm trí của những gia đình xung quanh, đến nỗi họ coi anh ta như tài sản thuộc về một trong những cô con gái của mình.",
+      "output_hash": "sha256:3a2ad1277f4ba73364c388df9db5913ac070d0218b5d33ab9514ad93b7d21c79",
+      "translation_latency_ms": 2505,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 9.0,
+        "style": 7.0,
+        "overall": 7.5,
+        "feedback": "Natural Vietnamese, but 'Người ta thường nói' (people often say) flattens the universal-truth opener that drives Austen's irony. (-1.0 style)"
+      }
+    },
+    {
+      "text_id": "study_scarlet",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "“Anh đã từng ở Afghanistan, tôi đoán vậy.” “Trên đời này anh biết chuyện đó từ đâu?” Tôi hỏi với vẻ kinh ngạc. “Không sao,” ông ta đáp, cười khẽ một mình. “Vấn đề bây giờ là về hemoglobin. Anh chắc hẳn thấy ý nghĩa của khám phá này của tôi chứ?” “Nó thú vị, xét về mặt hóa học, không nghi ngờ gì,” tôi trả lời, “nhưng về mặt thực tiễn—” “Ôi, anh bạn, đây là một khám phá y pháp thực tế nhất trong nhiều năm qua. Anh không thấy rằng nó cho chúng ta một xét nghiệm không thể sai sót để phát hiện vết máu sao?”",
+      "output_hash": "sha256:d52dfff2c8f65e62b5443283db5f9827c64eb08d68651df7f8375f0da40c45b3",
+      "translation_latency_ms": 3764,
+      "scores": {
+        "accuracy": 8.7,
+        "fluency": 8.5,
+        "style": 8.0,
+        "overall": 7.5,
+        "feedback": "'Tôi đoán' weakens 'I perceive'; pronoun shifts between 'ông ta' and 'anh bạn' for the same speaker. (-0.3 acc, -0.5 fluency)"
+      }
+    },
+    {
+      "text_id": "twain_innocents",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Tôi nhận thấy rằng mỗi khi tôi tự hào nghĩ rằng mình đã khám phá ra một bức tranh cổ đẹp đẽ và xứng đáng được ca ngợi, thì niềm vui mà nó mang lại chính là bằng chứng không thể chối cãi rằng đó không phải là một bức tranh đẹp và hoàn toàn không đáng được khen ngợi. Điều này đã xảy ra nhiều lần đến mức tôi không thể kể hết, đặc biệt là ở Venice. Trong mỗi trường hợp, người hướng dẫn đều dập tắt sự hưng phấn đang lớn dần của tôi bằng câu nói: “Chẳng là gì cả – nó thuộc thời Phục hưng mà thôi.”",
+      "output_hash": "sha256:efe878229d0146ca5f1fb37d16d29e2284797ac8ffaad7e683b617a967732200",
+      "translation_latency_ms": 3479,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Excellent Vietnamese rendering of Twain's deflationary irony; 'mà thôi' adds an idiomatic Vietnamese closing particle that captures the dismissive tone."
+      }
+    },
+    {
+      "text_id": "walden",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "output": "Tôi vào rừng vì tôi muốn sống một cuộc đời có ý thức, đối diện với những sự thật cốt yếu của cuộc sống, và xem liệu tôi có thể học hỏi được điều gì từ nó không, để rồi khi đến lúc nhắm mắt xuôi tay, tôi không phát hiện ra rằng mình đã không thực sự sống. Tôi không muốn sống một cuộc đời vô nghĩa, bởi lẽ sống là một điều quý giá; cũng không muốn cam chịu số phận, trừ khi thực sự cần thiết. Tôi muốn sống trọn vẹn và hút cạn tất cả tinh túy của cuộc đời.",
+      "output_hash": "sha256:e26de22ce335c16eac76c769004a20023f097bab7c7864e90265062067fa803b",
+      "translation_latency_ms": 3192,
+      "scores": {
+        "accuracy": 8.5,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 7.5,
+        "feedback": "Idiomatic Vietnamese with 'nhắm mắt xuôi tay' for the deathbed image; 'tinh túy' (essence) abstracts Thoreau's bone-marrow physical metaphor. (-0.3 acc, -0.5 style)"
+      }
+    },
+    {
+      "text_id": "kokoro",
+      "source_lang": "en",
+      "target_lang": "zh-Hans",
+      "output": "我一直称呼那个人为老师。因此，在这里也只是写“老师”，并不提及他的真名。这并非出于顾忌世俗的谨慎，而是因为对我来说，这样更自然。每当我回忆起他，总忍不住想说“老师”。即使提笔写作，也同样如此。我实在没有使用疏远的姓氏或头衔的意愿。",
+      "output_hash": "sha256:c6d72e34bff15b9fdee7ebbda062703479870e2cb0e4a81f14b07a7351276ec6",
+      "translation_latency_ms": 2507,
+      "scores": {
+        "accuracy": 8.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 7.5,
+        "feedback": "Smooth Sōseki rendering with proper '老师' as common-noun-as-address; mistranslates 頭文字 (initials) as '姓氏或头衔' (surname or title). (-1.0 accuracy)"
+      }
+    },
+    {
+      "text_id": "kokoro",
+      "source_lang": "en",
+      "target_lang": "en",
+      "output": "I always referred to that person as \"Sensei,\" and so I will simply write \"Sensei\" here without revealing their given name. This isn't so much out of a desire to avoid public attention as it is simply more natural for me. Every time I recall that person, I immediately want to say \"Sensei.\" The feeling is the same even when I pick up a pen. I have absolutely no inclination to use distant or formal initials.",
+      "output_hash": "sha256:7d4178987f2ff3e7ce1bf2a1dbd13e0e2ccda305803f85e43d32902294b1be7b",
+      "translation_latency_ms": 7380,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Strong literary rendering: correctly preserves 'Sensei' as romanized cultural term; handles 頭文字 properly as 'initials'. Reads as natural English literary prose."
+      }
+    },
+    {
+      "text_id": "unsu_jouen_nal",
+      "source_lang": "en",
+      "target_lang": "en",
+      "output": "The sullen, overcast sky threatened snow, but instead, a drizzling rain began to fall.\n\nFor Kim Cheomji, who worked as a rickshaw puller in the Jongno district, this day was a stroke of good luck he hadn’t seen in ages. It started with taking the lady from the neighboring house—though it wasn’t exactly *into* her grounds, but just outside—to the trolley stop. From there, he lingered at the station, almost begging with his eyes, watching each person disembark, hoping for a fare. Finally, he agreed to give a ride to someone who looked like a teacher, taking him to Donggwang School.\n\nThirty jeon for the first ride, fifty jeon for the second—a rare occurrence so early in the morning. Kim Cheomji, who hadn't seen a coin in nearly ten days, was almost moved to tears when the sound of ten-jeon coins jingling into his palm—three or five at a time—filled his hand.",
+      "output_hash": "sha256:04caa42ffe03bf5430fe32c6a05d5a94919ff946f9fbdf1999e0f3e29352ab10",
+      "translation_latency_ms": 5352,
+      "scores": {
+        "accuracy": 6.5,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 6.5,
+        "feedback": "Hallucinates 'Jongno district' for 동소문 (Dongsomun, East Small Gate); misreads '문안에(거기도 문밖은 아니지만)' as a possessive 'her grounds' instead of city-gate liminality. (-2.0 acc hallucination, -1.0 acc misreading, -0.5 style period detail)"
+      }
+    },
+    {
+      "text_id": "hu_shi_reform",
+      "source_lang": "en",
+      "target_lang": "en",
+      "output": "Today, there are many who discuss literary reform, but as a humble and unlearned student, I hardly feel qualified to speak on the matter. However, in recent years I have repeatedly researched this topic, supplementing my thoughts with discussions with friends and colleagues. The result of these efforts, I believe, holds some value for discussion. Therefore, I have summarized my views into eight points, which I will now present individually, for the consideration of those who are also concerned with literary reform. I believe that, for the sake of literary reform today, we must begin with these eight points. What are these eight points? First, one must have something to say. Second, avoid simply imitating the ancients. Third, one must pay attention to grammar. Fourth, avoid empty, affected lamentations. Fifth, strive to avoid clichés and stock phrases. Sixth, refrain from using allusions. Seventh, do not focus on parallelism. And eighth, do not shy away from colloquial words and expressions.",
+      "output_hash": "sha256:5d23e178693c1fa6cc1403df64acd164245d6978ec1af52d2cf3c6732b040fe3",
+      "translation_latency_ms": 5254,
+      "scores": {
+        "accuracy": 8.7,
+        "fluency": 9.0,
+        "style": 8.5,
+        "overall": 8.5,
+        "feedback": "Excellent rendering of Hu Shi's manifesto: captures '言之有物', '不作无病之呻吟', and the enumerative parallelism cleanly. Minor compression on '当世'. (-0.3 accuracy)"
+      }
+    },
+    {
+      "text_id": "lu_xun_guxiang",
+      "source_lang": "en",
+      "target_lang": "en",
+      "output": "I braved the bitter cold and returned to my hometown, over two thousand li distant, after more than twenty years of separation. It was deep winter, and as I neared my hometown, the weather grew gloomy. Cold winds blew into the cabin, whistling mournfully. Peering through the gaps in the canvas, I saw several desolate villages stretching into the distance under a drab, overcast sky—not a sign of life anywhere. My heart couldn't help but fill with sorrow. Is this the hometown I remembered so vividly for the past twenty years? The hometown I recall was far more beautiful. But when I try to remember its beauty, to speak of its charms, I find no images, no words come to mind. It seems to be as it is. So I explained it to myself: my hometown was always like this—though it may not have progressed, it certainly wasn’t as bleak as I felt. This was merely a change in my own mood, for I had returned with no cheerful expectations.",
+      "output_hash": "sha256:838b45c0bb65c59c3857e5a4c57fcea3e0332fe6c716e503c0822b04bc6e18de",
+      "translation_latency_ms": 5101,
+      "scores": {
+        "accuracy": 9.0,
+        "fluency": 9.0,
+        "style": 8.0,
+        "overall": 8.0,
+        "feedback": "Strong Lu Xun rendering, somber return-home mood preserved; '苍黄的天' loses its 'pale-yellow' specificity to bland 'drab', and the '阿！' exclamation particle is dissolved into the rhetorical question. (-0.8 style)"
+      }
+    }
+  ]
+}

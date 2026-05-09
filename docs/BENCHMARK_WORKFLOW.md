@@ -213,6 +213,52 @@ future Claude version (e.g. Opus 5) re-evaluates the same translations:
 
 ---
 
+## Switching the live wiki from v1 to v2
+
+The v2 system (this doc) coexists with the v1 wiki only through a one-shot
+**archive step**: every existing v1 wiki page is renamed with an `Archive-`
+prefix, internal cross-page links are rewritten so the archived pages still
+work standalone, and an `Archive-Index.md` is published as the entry point.
+After that, the v2 publish-wiki workflow can run without colliding.
+
+Run this **before merging the v2 branch to `main`**:
+
+```bash
+# Dry-run first to see what would be renamed
+python scripts/archive_v1_wiki.py --dry-run
+
+# Apply (commits + pushes to the wiki repo)
+python scripts/archive_v1_wiki.py --message "Archive v1 benchmark"
+
+# If you want to inspect the commit before pushing:
+python scripts/archive_v1_wiki.py --no-push
+# ...then `git -C .wiki_repo_archive push` when ready
+```
+
+What the script does:
+
+1. Clones the wiki repo into `.wiki_repo_archive/` (gitignored).
+2. Lists every `*.md` at the wiki root that is not already prefixed `Archive-`.
+3. Inside each one, rewrites cross-page links so `[Foo](Bar)` becomes
+   `[Foo](Archive-Bar)` for any link whose target is one of the pages being
+   archived.
+4. Renames the files (`Home.md` → `Archive-Home.md`, `Language-French.md` →
+   `Archive-Language-French.md`, etc.).
+5. Generates `Archive-Index.md` listing every archived page, grouped by
+   category (landing, cross-cutting tables, per-language, per-model).
+6. Commits and pushes.
+
+The v2 home template (`benchmark/wiki/templates/home.md.j2`) already includes
+a banner pointing to `Archive-Index`, so once the v2 wiki regenerates after
+the merge, visitors land on the v2 home and can click through to the
+archived v1 if they need historical scores.
+
+The `publish-wiki.yml` workflow's cleanup step only deletes `Home.md`,
+`All-Languages.md`, `All-Models.md`, `Language-*.md`, `Model-*.md` — it does
+not touch `Archive-*` pages, so the archive survives every future republish.
+
+---
+
 ## Rescoring an existing submission with a fresh judge
 
 If a stronger judge becomes available later (or you just want a second

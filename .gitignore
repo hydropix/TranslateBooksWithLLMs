@@ -40,3 +40,4 @@ secrets.*
 credentials.*
 *_secret.*
 *_credentials.*
+.wiki_repo_archive/

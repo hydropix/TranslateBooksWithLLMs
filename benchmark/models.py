@@ -71,6 +71,9 @@ class ReferenceText:
     year: int              # Publication year
     content: str           # The text excerpt (~500 chars)
     style: str             # Style description (e.g., "Prose narrative, irony")
+    source_language: str = "en"   # ISO code of the source language
+    challenges: list[str] = field(default_factory=list)
+    license: str = "public-domain"
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -81,6 +84,9 @@ class ReferenceText:
             "year": self.year,
             "content": self.content,
             "style": self.style,
+            "source_language": self.source_language,
+            "challenges": list(self.challenges),
+            "license": self.license,
         }
 
     @classmethod
@@ -93,6 +99,9 @@ class ReferenceText:
             year=data["year"],
             content=data["content"],
             style=data["style"],
+            source_language=data.get("source_language", "en"),
+            challenges=list(data.get("challenges", [])),
+            license=data.get("license", "public-domain"),
         )
 
 
@@ -162,6 +171,12 @@ class TranslationResult:
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     error: Optional[str] = None   # Error message if failed
 
+    # Aggregation metadata (populated by SubmissionAggregator).
+    # n_obs > 1 means the score is a median across multiple contributors.
+    n_obs: int = 1
+    verified: bool = True         # False for self-reported (local-model) results
+    contributors: list[str] = field(default_factory=list)
+
     @property
     def success(self) -> bool:
         """Check if translation succeeded."""
@@ -179,6 +194,9 @@ class TranslationResult:
             "evaluation_time_ms": self.evaluation_time_ms,
             "timestamp": self.timestamp,
             "error": self.error,
+            "n_obs": self.n_obs,
+            "verified": self.verified,
+            "contributors": list(self.contributors),
         }
 
     @classmethod
@@ -194,6 +212,9 @@ class TranslationResult:
             evaluation_time_ms=data.get("evaluation_time_ms", 0),
             timestamp=data.get("timestamp", datetime.now().isoformat()),
             error=data.get("error"),
+            n_obs=int(data.get("n_obs", 1)),
+            verified=bool(data.get("verified", True)),
+            contributors=list(data.get("contributors", [])),
         )
 
 
@@ -415,4 +436,137 @@ class BenchmarkRun:
     @classmethod
     def from_json(cls, json_str: str) -> "BenchmarkRun":
         """Create from JSON string."""
+        return cls.from_dict(json.loads(json_str))
+
+
+@dataclass
+class SubmissionResult:
+    """A single (text, source_lang, target_lang) result inside a submission."""
+
+    text_id: str
+    source_lang: str
+    target_lang: str
+    output: str
+    output_hash: str
+    scores: EvaluationScores
+    translation_latency_ms: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "text_id": self.text_id,
+            "source_lang": self.source_lang,
+            "target_lang": self.target_lang,
+            "output": self.output,
+            "output_hash": self.output_hash,
+            "translation_latency_ms": self.translation_latency_ms,
+            "scores": self.scores.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SubmissionResult":
+        return cls(
+            text_id=data["text_id"],
+            source_lang=data["source_lang"],
+            target_lang=data["target_lang"],
+            output=data["output"],
+            output_hash=data["output_hash"],
+            translation_latency_ms=data.get("translation_latency_ms", 0),
+            scores=EvaluationScores.from_dict(data["scores"]),
+        )
+
+
+@dataclass
+class Submission:
+    """
+    A community submission of benchmark results.
+
+    Mirrors `benchmark/schemas/submission.schema.json` (schema_version 1.0).
+    """
+
+    schema_version: str
+    submitted_by: str
+    submitted_at: str
+    tbl_version: str
+    prompt_version: str
+    judge_id: str
+    model_provider: str
+    model_id: str
+    results: list[SubmissionResult] = field(default_factory=list)
+
+    judge_seed: Optional[int] = None
+    judge_temperature: Optional[float] = None
+    notes: Optional[str] = None
+    model_context_window: Optional[int] = None
+    model_released_at: Optional[str] = None
+    model_license: Optional[str] = None
+    model_size_b_params: Optional[float] = None
+
+    def to_dict(self) -> dict:
+        env = {
+            "tbl_version": self.tbl_version,
+            "prompt_version": self.prompt_version,
+            "judge_id": self.judge_id,
+        }
+        if self.judge_seed is not None:
+            env["judge_seed"] = self.judge_seed
+        if self.judge_temperature is not None:
+            env["judge_temperature"] = self.judge_temperature
+
+        sub = {
+            "submitted_by": self.submitted_by,
+            "submitted_at": self.submitted_at,
+        }
+        if self.notes:
+            sub["notes"] = self.notes
+
+        model = {
+            "provider": self.model_provider,
+            "id": self.model_id,
+        }
+        if self.model_context_window is not None:
+            model["context_window"] = self.model_context_window
+        if self.model_released_at:
+            model["released_at"] = self.model_released_at
+        if self.model_license:
+            model["license"] = self.model_license
+        if self.model_size_b_params is not None:
+            model["size_b_params"] = self.model_size_b_params
+
+        return {
+            "schema_version": self.schema_version,
+            "submission": sub,
+            "environment": env,
+            "model": model,
+            "results": [r.to_dict() for r in self.results],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Submission":
+        sub = data.get("submission", {})
+        env = data.get("environment", {})
+        model = data.get("model", {})
+        return cls(
+            schema_version=data.get("schema_version", "1.0"),
+            submitted_by=sub.get("submitted_by", ""),
+            submitted_at=sub.get("submitted_at", ""),
+            notes=sub.get("notes"),
+            tbl_version=env.get("tbl_version", ""),
+            prompt_version=env.get("prompt_version", ""),
+            judge_id=env.get("judge_id", ""),
+            judge_seed=env.get("judge_seed"),
+            judge_temperature=env.get("judge_temperature"),
+            model_provider=model.get("provider", ""),
+            model_id=model.get("id", ""),
+            model_context_window=model.get("context_window"),
+            model_released_at=model.get("released_at"),
+            model_license=model.get("license"),
+            model_size_b_params=model.get("size_b_params"),
+            results=[SubmissionResult.from_dict(r) for r in data.get("results", [])],
+        )
+
+    def to_json(self, indent: int = 2) -> str:
+        return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "Submission":
         return cls.from_dict(json.loads(json_str))

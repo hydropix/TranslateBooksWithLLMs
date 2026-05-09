@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hydropix/TranslateBookWithLLM/schemas/model.schema.json",
+  "title": "TBL Benchmark Model Registry Entry",
+  "type": "object",
+  "required": ["id", "provider"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "provider": {
+      "enum": ["ollama", "openai", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"]
+    },
+    "context_window": { "type": "integer", "minimum": 0 },
+    "released_at": { "type": "string", "format": "date" },
+    "license": { "type": "string" },
+    "size_b_params": { "type": "number", "minimum": 0 },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Alternative IDs that map to this model"
+    },
+    "notes": { "type": "string", "maxLength": 1000 }
+  }
+}

@@ -20,10 +20,10 @@ This wiki contains translation quality benchmarks for various LLM models across 
 
 Overall performance across all tested languages:
 
-| Rank | Model | Avg Score | Accuracy | Fluency | Style | Languages Tested |
-|------|-------|-----------|----------|---------|-------|------------------|
+| Rank | Model | Avg Score | Accuracy | Fluency | Style | Languages | Obs | Verified |
+|------|-------|-----------|----------|---------|-------|-----------|-----|----------|
 {% for model in model_rankings %}
-| {{ loop.index }} | [{{ model.name }}]({{ model.page_name }}) | {{ model.indicator }} {{ model.avg_overall|round(1) }} | {{ model.avg_accuracy|round(1) }} | {{ model.avg_fluency|round(1) }} | {{ model.avg_style|round(1) }} | {{ model.languages_tested }} |
+| {{ loop.index }} | [{{ model.name }}]({{ model.page_name }}) | {{ model.indicator }} {{ model.avg_overall|round(1) }} | {{ model.avg_accuracy|round(1) }} | {{ model.avg_fluency|round(1) }} | {{ model.avg_style|round(1) }} | {{ model.languages_tested }} | {{ model.n_obs_total | default(model.languages_tested) }} | {{ model.verified_badge | default("verified") }} |
 {% endfor %}
 
 ---
@@ -32,10 +32,10 @@ Overall performance across all tested languages:
 
 Best translation quality by target language:
 
-| Rank | Language | Native | Avg Score | Best Model | Tests |
-|------|----------|--------|-----------|------------|-------|
+| Rank | Language | Native | Avg Score | Best Model | Tests | Obs | Verified |
+|------|----------|--------|-----------|------------|-------|-----|----------|
 {% for lang in language_rankings[:15] %}
-| {{ loop.index }} | [{{ lang.name }}]({{ lang.page_name }}) | {{ lang.native_name }} | {{ lang.indicator }} {{ lang.avg_overall|round(1) }} | {{ lang.best_model }} | {{ lang.total_translations }} |
+| {{ loop.index }} | [{{ lang.name }}]({{ lang.page_name }}) | {{ lang.native_name }} | {{ lang.indicator }} {{ lang.avg_overall|round(1) }} | {{ lang.best_model }} | {{ lang.total_translations }} | {{ lang.n_obs_total | default(lang.total_translations) }} | {{ lang.verified_badge | default("verified") }} |
 {% endfor %}
 
 {% if language_rankings|length > 15 %}

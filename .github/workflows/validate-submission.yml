@@ -1,0 +1,75 @@
+name: Validate Benchmark Submission
+
+on:
+  pull_request:
+    paths:
+      - 'benchmark/data/submissions/**'
+      - 'benchmark/schemas/**'
+      - 'scripts/validate_submission.py'
+      - 'scripts/replay_submission.py'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt jsonschema langdetect
+
+      - name: Identify changed submissions
+        id: files
+        run: |
+          set -e
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --name-only "origin/${{ github.base_ref }}"...HEAD \
+            | grep -E '^benchmark/data/submissions/.*\.json$' > submissions.txt || true
+          count=$(wc -l < submissions.txt | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Changed submission files: $count"
+          cat submissions.txt || true
+
+      - name: Schema validation
+        if: steps.files.outputs.count != '0'
+        run: |
+          xargs -a submissions.txt python scripts/validate_submission.py
+
+      - name: Replay sampling
+        if: steps.files.outputs.count != '0'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          POE_API_KEY:        ${{ secrets.POE_API_KEY }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          MISTRAL_API_KEY:    ${{ secrets.MISTRAL_API_KEY }}
+          DEEPSEEK_API_KEY:   ${{ secrets.DEEPSEEK_API_KEY }}
+          NIM_API_KEY:        ${{ secrets.NIM_API_KEY }}
+        run: |
+          mapfile -t FILES < submissions.txt
+          python scripts/replay_submission.py \
+            --files "${FILES[@]}" \
+            --sample-pct 10 \
+            --max-divergence 1.0 \
+            --chrf-threshold 0.85 \
+            --report replay_report.md
+
+      - name: Post replay report as PR comment
+        if: always() && steps.files.outputs.count != '0'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmark-replay
+          path: replay_report.md

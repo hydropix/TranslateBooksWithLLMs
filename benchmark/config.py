@@ -284,17 +284,30 @@ class BenchmarkConfig:
                 "Set OPENAI_API_ENDPOINT in .env or use --openai-endpoint"
             )
 
-        if not self.paths.languages_file.exists():
-            errors.append(f"Languages file not found: {self.paths.languages_file}")
+        if self.translation_provider == "poe" and not self.poe.api_key:
+            errors.append(
+                "Poe API key not configured. Required for translation. "
+                "Set POE_API_KEY in .env or use --poe-key"
+            )
 
-        if not self.paths.reference_texts_file.exists():
-            errors.append(f"Reference texts file not found: {self.paths.reference_texts_file}")
+        # Accept either the split layout or the legacy monolithic YAMLs.
+        split_lang_dir = self.paths.base_dir / "data" / "languages"
+        if not split_lang_dir.is_dir() and not self.paths.languages_file.exists():
+            errors.append(
+                f"Languages data not found at {split_lang_dir} or {self.paths.languages_file}"
+            )
+
+        split_texts_dir = self.paths.base_dir / "data" / "reference_texts"
+        if not split_texts_dir.is_dir() and not self.paths.reference_texts_file.exists():
+            errors.append(
+                f"Reference texts not found at {split_texts_dir} or {self.paths.reference_texts_file}"
+            )
 
         # Validate translation provider
-        if self.translation_provider not in ("ollama", "openai", "openrouter"):
+        if self.translation_provider not in ("ollama", "openai", "openrouter", "poe"):
             errors.append(
                 f"Invalid translation provider: {self.translation_provider}. "
-                "Must be 'ollama', 'openai', or 'openrouter'"
+                "Must be 'ollama', 'openai', 'openrouter', or 'poe'"
             )
 
         return errors

@@ -23,6 +23,7 @@ tests/.placeholder_tests/
 /plan/
 /experiments
 /tests
+/benchmark_results/
 
 # Ad-hoc scratch scripts at repo root — keep them out of commits.
 # Real tests live under tests/, real entrypoints are translate.py / translation_api.py / launcher.py.

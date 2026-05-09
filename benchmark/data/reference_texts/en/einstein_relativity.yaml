@@ -1,0 +1,15 @@
+id: einstein_relativity
+title: "Relativity: The Special and General Theory"
+author: Albert Einstein
+year: 1920
+source_language: en
+style: Popular-science exposition with logical reasoning
+challenges:
+- Abstract physics concepts (simultaneity, reference frames, motion) in plain prose
+- Logical connectors and conditional reasoning ("if... then", "we have just seen", "tacitly assumed")
+- Latin scientific phrases (i.e., in vacuo) that have established translation conventions
+- Maintaining clarity of an argument that overturns intuitive assumptions
+text: |
+  Now before the advent of the theory of relativity it had always tacitly been assumed in physics that the statement of time had an absolute significance, i.e. that it is independent of the state of motion of the body of reference. But we have just seen that this assumption is incompatible with the most natural definition of simultaneity; if we discard this assumption, then the conflict between the law of the propagation of light in vacuo and the principle of relativity (developed in Section VII) disappears.
+license: public-domain
+character_count: 511

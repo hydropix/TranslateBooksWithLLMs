@@ -1,0 +1,14 @@
+id: twain_innocents
+title: The Innocents Abroad
+author: Mark Twain
+year: 1869
+source_language: en
+style: Deadpan humorous travel narration
+challenges:
+- Ironic understatement and mock-naive voice
+- Mixed registers shifting from elevated to colloquial American idiom
+- Idioms like "what in the mischief" that resist literal translation
+text: |
+  It seems to me that whenever I glory to think that for once I have discovered an ancient painting that is beautiful and worthy of all praise, the pleasure it gives me is an infallible proof that it is not a beautiful picture and not in any wise worthy of commendation. This very thing has occurred more times than I can mention, in Venice. In every single instance the guide has crushed out my swelling enthusiasm with the remark: “It is nothing--it is of the Renaissance.”
+license: public-domain
+character_count: 473

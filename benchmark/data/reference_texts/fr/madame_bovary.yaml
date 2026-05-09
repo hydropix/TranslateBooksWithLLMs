@@ -1,0 +1,15 @@
+id: madame_bovary
+title: Madame Bovary
+author: Gustave Flaubert
+year: 1857
+source_language: fr
+style: Free indirect discourse and lyrical description
+challenges:
+- Style indirect libre (narrator merging into character's reverie)
+- Sustained imparfait/conditionnel mood and unreal hypothesis
+- Sensory clichés of romantic exoticism without irony breaking
+- Long periodic sentences with embedded clauses
+text: |
+  Elle songeait quelquefois que c’étaient là pourtant les plus beaux jours de sa vie, la lune de miel, comme on disait. Pour en goûter la douceur, il eût fallu, sans doute, s’en aller vers ces pays à noms sonores où les lendemains de mariage ont de plus suaves paresses! Dans des chaises de poste, sous des stores de soie bleue, on monte au pas des routes escarpées, écoutant la chanson du postillon, qui se répète dans la montagne avec les clochettes des chèvres et le bruit sourd de la cascade.
+license: public-domain
+character_count: 494

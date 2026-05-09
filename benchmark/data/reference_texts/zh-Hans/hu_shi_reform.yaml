@@ -1,0 +1,15 @@
+id: hu_shi_reform
+title: "文学改良刍议 (Wénxué gǎiliáng chúyì / A Modest Proposal for Literary Reform)"
+author: "胡适 (Hu Shi)"
+year: 1917
+source_language: zh-Hans
+style: Early-20th-century argumentative essay bridging classical and vernacular registers
+challenges:
+- Classical-vernacular tension (吾, 之, 者何) inside a modernizing manifesto
+- Enumerative parallelism (一曰…二曰…) demanding consistent target-language rhythm
+- Programmatic terms of art (言之有物, 不摹仿古人, 不用典, 不讲对仗) needing scholarly precision
+- Authorial self-reference in the third person (记者末学不文) shifting register mid-sentence
+text: |
+  今之谈文学改良者众矣，记者末学不文，何足以言此。然年来颇于此事再四研思，辅以友朋辩论，其结果所得，颇不无讨论之价值。因综括所怀见解，列为八事，分别言之，以与当世之留意文学改良者一研究之。吾以为今日而言文学改良，须从八事入手。八事者何？一曰，须言之有物。二曰，不摹仿古人。三曰，须讲求文法。四曰，不作无病之呻吟。五曰，务去滥调套语。六曰，不用典。七曰，不讲对仗。八曰，不避俗字俗语。
+license: public-domain
+character_count: 190

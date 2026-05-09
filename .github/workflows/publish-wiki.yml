@@ -1,0 +1,75 @@
+name: Publish Benchmark Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'benchmark/data/**'
+      - 'benchmark/wiki/templates/**'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Aggregate all submissions
+        run: |
+          python -m benchmark.cli aggregate-submissions \
+            --run-id aggregated \
+            --output benchmark_results/aggregated.json \
+            --allow-empty
+
+      - name: Generate wiki pages
+        if: hashFiles('benchmark_results/aggregated.json') != ''
+        run: |
+          python -m benchmark.cli wiki aggregated
+
+      - name: Push to wiki repo
+        if: hashFiles('wiki/Home.md') != ''
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
+          WIKI_REPO_URL: https://x-access-token:${{ secrets.WIKI_PUSH_TOKEN }}@github.com/${{ github.repository }}.wiki.git
+        run: |
+          set -e
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          rm -rf .wiki_repo
+          git clone "$WIKI_REPO_URL" .wiki_repo
+
+          # Mirror the generated wiki/ flat layout into the wiki repo.
+          # Remove old language/model pages first so renames clean up.
+          find .wiki_repo -maxdepth 1 -name 'Language-*.md' -delete
+          find .wiki_repo -maxdepth 1 -name 'Model-*.md' -delete
+          rm -f .wiki_repo/Home.md .wiki_repo/All-Languages.md .wiki_repo/All-Models.md
+
+          cp wiki/*.md .wiki_repo/
+
+          cd .wiki_repo
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No wiki changes to push."
+            exit 0
+          fi
+          git commit -m "Update benchmark wiki (aggregated)"
+          git push

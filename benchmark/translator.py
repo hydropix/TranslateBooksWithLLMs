@@ -12,8 +12,22 @@ from typing import Optional, Callable, Union
 
 from benchmark.config import BenchmarkConfig
 from benchmark.models import ReferenceText, TranslationResult
-from src.core.llm import OllamaProvider, OpenAICompatibleProvider, OpenRouterProvider, LLMProvider
+from src.core.llm import OllamaProvider, OpenAICompatibleProvider, OpenRouterProvider, PoeProvider, LLMProvider
 from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
+
+
+# Map BCP-47 codes to display names used in the translation prompt.
+_LANG_NAME = {
+    "en": "English", "fr": "French", "de": "German", "es": "Spanish",
+    "it": "Italian", "pt": "Portuguese", "ja": "Japanese", "ko": "Korean",
+    "zh-Hans": "Chinese (Simplified)", "zh-Hant": "Chinese (Traditional)",
+    "ru": "Russian", "ar": "Arabic", "vi": "Vietnamese", "id": "Indonesian",
+}
+
+
+def code_to_language_name(code: str, fallback: Optional[str] = None) -> str:
+    """Best-effort BCP-47 code → human display name. Falls back to the code."""
+    return _LANG_NAME.get(code, fallback or code)
 
 
 @dataclass
@@ -24,6 +38,8 @@ class TranslationRequest:
     target_language: str
     target_language_name: str
     model: str
+    source_language: str = "en"
+    source_language_name: str = "English"
 
 
 class BenchmarkTranslator:
@@ -62,6 +78,7 @@ class BenchmarkTranslator:
             "ollama": "Ollama",
             "openai": "OpenAI-compatible provider",
             "openrouter": "OpenRouter",
+            "poe": "Poe",
         }
         return labels.get(self.provider_type, self.provider_type)
 
@@ -82,6 +99,14 @@ class BenchmarkTranslator:
                 self._providers[model] = OpenRouterProvider(
                     api_key=self.config.openrouter.api_key,
                     model=model
+                )
+            elif self.provider_type == "poe":
+                if not self.config.poe.api_key:
+                    raise ValueError("Poe API key is required for translation. "
+                                     "Set POE_API_KEY in .env or use --poe-key")
+                self._providers[model] = PoeProvider(
+                    api_key=self.config.poe.api_key,
+                    model=model,
                 )
             elif self.provider_type == "openai":
                 self._providers[model] = OpenAICompatibleProvider(
@@ -199,7 +224,7 @@ Provide your translation now:"""
 
             system_prompt, user_prompt = self._build_prompt(
                 text=request.text.content,
-                source_language=self.config.source_language,
+                source_language=request.source_language_name,
                 target_language=request.target_language_name
             )
 

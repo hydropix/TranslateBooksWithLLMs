@@ -1,0 +1,15 @@
+id: quijote
+title: Don Quijote de la Mancha
+author: Miguel de Cervantes
+year: 1605
+source_language: es
+style: Early Modern Spanish narrative with classical syntax and ironic distance
+challenges:
+- Archaic forms (dellos, hanegas) and Golden Age vocabulary
+- Long periodic sentences with chained subordinate clauses
+- Cervantine irony — mock-serious tone the translator must not flatten
+- Idiomatic phrasing (de todo punto, llegó a tanto su curiosidad y desatino)
+text: |
+  Es, pues, de saber que este sobredicho hidalgo, los ratos que estaba ocioso, que eran los más del año, se daba a leer libros de caballerías, con tanta afición y gusto, que olvidó casi de todo punto el ejercicio de la caza, y aun la administración de su hacienda. Y llegó a tanto su curiosidad y desatino en esto, que vendió muchas hanegas de tierra de sembradura para comprar libros de caballerías en que leer, y así, llevó a su casa todos cuantos pudo haber dellos.
+license: public-domain
+character_count: 466

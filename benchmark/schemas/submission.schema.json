@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hydropix/TranslateBookWithLLM/schemas/submission.schema.json",
+  "title": "TBL Benchmark Submission",
+  "type": "object",
+  "required": ["schema_version", "submission", "environment", "model", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "submission": {
+      "type": "object",
+      "required": ["submitted_by", "submitted_at"],
+      "additionalProperties": false,
+      "properties": {
+        "submitted_by": {
+          "type": "string",
+          "pattern": "^github:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$",
+          "description": "GitHub identity in the form 'github:<username>'"
+        },
+        "submitted_at": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string", "maxLength": 2000 }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["tbl_version", "prompt_version", "judge_id"],
+      "additionalProperties": false,
+      "properties": {
+        "tbl_version": { "type": "string" },
+        "prompt_version": { "type": "string" },
+        "judge_id": { "type": "string" },
+        "judge_seed": { "type": "integer" },
+        "judge_temperature": { "type": "number", "minimum": 0, "maximum": 2 }
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": ["provider", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "enum": ["ollama", "openai", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"]
+        },
+        "id": { "type": "string", "minLength": 1 },
+        "context_window": { "type": "integer", "minimum": 0 },
+        "released_at": { "type": "string", "format": "date" },
+        "license": { "type": "string" },
+        "size_b_params": { "type": "number", "minimum": 0 }
+      }
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/result" }
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "required": ["text_id", "source_lang", "target_lang", "output", "output_hash", "scores"],
+      "additionalProperties": false,
+      "properties": {
+        "text_id": { "type": "string", "minLength": 1 },
+        "source_lang": { "type": "string", "minLength": 2 },
+        "target_lang": { "type": "string", "minLength": 2 },
+        "output": { "type": "string" },
+        "output_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "translation_latency_ms": { "type": "integer", "minimum": 0 },
+        "scores": {
+          "type": "object",
+          "required": ["accuracy", "fluency", "style", "overall"],
+          "additionalProperties": false,
+          "properties": {
+            "accuracy": { "type": "number", "minimum": 1, "maximum": 10 },
+            "fluency":  { "type": "number", "minimum": 1, "maximum": 10 },
+            "style":    { "type": "number", "minimum": 1, "maximum": 10 },
+            "overall":  { "type": "number", "minimum": 1, "maximum": 10 },
+            "feedback": { "type": "string", "maxLength": 1000 }
+          }
+        }
+      }
+    }
+  }
+}

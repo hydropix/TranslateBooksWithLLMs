@@ -1,0 +1,20 @@
+id: unsu_jouen_nal
+title: 운수 좋은 날
+author: 현진건
+year: 1924
+source_language: ko
+style: Realist third-person narration in 1920s colonial-era Korean, mixing literary register with vernacular peasant detail
+challenges:
+- Implicit subjects and topic-comment syntax that resist direct mapping to English SVO
+- Mimetic onomatopoeia (추적추적, 어정어정, 찰깍) carrying tactile and aural texture
+- Period-specific vocabulary (인력거꾼, 김 첨지, 백통화, 동소문) tied to colonial Joseon rickshaw culture
+- Long, comma-stacked sentences blending narrator interiority with social observation
+- Mixed Hangul-Hanja notation (東光學校) signalling formal/institutional registers
+text: |
+  새침하게 흐린 품이 눈이 올 듯하더니 눈은 아니 오고 얼다가 만 비가 추적추적 내리었다.
+
+  이날이야말로 동소문 안에서 인력거꾼 노릇을 하는 김 첨지에게는 오래간만에도 닥친 운수 좋은 날이었다. 문안에(거기도 문밖은 아니지만) 들어간답시는 앞집 마나님을 전찻길까지 모셔다 드린 것을 비롯으로 행여나 손님이 있을까 하고 정류장에서 어정어정하며 내리는 사람 하나하나에게 거의 비는 듯한 눈결을 보내고 있다가 마침내 교원인 듯한 양복장이를 동광학교(東光學校)까지 태워다 주기로 되었다.
+
+  첫번에 삼십 전, 둘째 번에 오십 전 - 아침 댓바람에 그리 흔치 않은 일이었다. 그야말로 재수가 옴붙어서 근 열흘 동안 돈 구경도 못한 김 첨지는 십 전짜리 백통화 서 푼, 또는 다섯 푼이 찰깍하고 손바닥에 떨어질 제 거의 눈물을 흘릴 만큼 기뻤었다.
+license: public-domain
+character_count: 410

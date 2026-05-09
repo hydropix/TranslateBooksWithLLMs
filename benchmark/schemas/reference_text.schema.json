@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hydropix/TranslateBookWithLLM/schemas/reference_text.schema.json",
+  "title": "TBL Benchmark Reference Text",
+  "type": "object",
+  "required": ["id", "title", "source_language", "text", "style"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "description": "Unique snake_case identifier for the text"
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "author": { "type": "string" },
+    "year": { "type": "integer" },
+    "source_language": {
+      "type": "string",
+      "pattern": "^[a-zA-Z]{2,3}(-[A-Za-z0-9]{2,8})?$"
+    },
+    "style": { "type": "string" },
+    "challenges": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "license": { "type": "string", "default": "public-domain" },
+    "era": { "type": "string" },
+    "character_count": { "type": "integer", "minimum": 0 }
+  }
+}

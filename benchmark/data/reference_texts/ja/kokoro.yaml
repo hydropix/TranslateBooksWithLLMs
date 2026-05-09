@@ -1,0 +1,15 @@
+id: kokoro
+title: こころ
+author: 夏目漱石
+year: 1914
+source_language: ja
+style: First-person introspective narration in early-modern colloquial Japanese
+challenges:
+- Pronoun and referent ambiguity (その人, 先生 used as common noun and address)
+- Subtle shifts between past habit and present reflection
+- Honorific/affective register attached to a title rather than a name
+- Idiomatic phrasing (世間を憚る, 心持は同じ事である) without direct equivalents
+text: |
+  私はその人を常に先生と呼んでいた。だからここでもただ先生と書くだけで本名は打ち明けない。これは世間を憚る遠慮というよりも、その方が私にとって自然だからである。私はその人の記憶を呼び起すごとに、すぐ「先生」といいたくなる。筆を執っても心持は同じ事である。よそよそしい頭文字などはとても使う気にならない。
+license: public-domain
+character_count: 150

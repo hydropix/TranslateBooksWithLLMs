@@ -18,12 +18,14 @@ from typing import Optional, Callable, Generator
 import yaml
 
 from benchmark.config import BenchmarkConfig
+from benchmark.data_loader import load_languages, load_reference_texts
 from benchmark.models import (
     Language, LanguageCategory, ReferenceText, TranslationResult,
     BenchmarkRun, EvaluationScores
 )
 from benchmark.translator import (
     BenchmarkTranslator, TranslationRequest,
+    code_to_language_name,
     test_ollama_connection, get_available_ollama_models,
     test_openai_translation_connection, get_available_openai_models,
     test_openrouter_translation_connection, get_available_openrouter_models
@@ -83,78 +85,21 @@ class BenchmarkRunner:
             self._log("info", f"{stage}: {current}/{total} ({percent:.1f}%)")
 
     def load_languages(self) -> dict[str, Language]:
-        """
-        Load languages from YAML configuration.
-
-        Returns:
-            Dictionary of language code -> Language
-        """
-        yaml_path = self.config.paths.languages_file
-
-        if not yaml_path.exists():
-            raise FileNotFoundError(f"Languages file not found: {yaml_path}")
-
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-
-        languages = {}
-
-        # Map YAML category names to enum values
-        category_map = {
-            "european_major": LanguageCategory.EUROPEAN_MAJOR,
-            "asian": LanguageCategory.ASIAN,
-            "semitic": LanguageCategory.SEMITIC,
-            "cyrillic": LanguageCategory.CYRILLIC,
-            "classical": LanguageCategory.CLASSICAL,
-            "minority": LanguageCategory.MINORITY,
-        }
-
-        for cat_key, cat_data in data.get("categories", {}).items():
-            category = category_map.get(cat_key, LanguageCategory.EUROPEAN_MAJOR)
-
-            for lang_data in cat_data.get("languages", []):
-                code = str(lang_data["code"])  # Ensure string (YAML may parse "no" as boolean)
-                languages[code] = Language(
-                    code=code,
-                    name=lang_data["name"],
-                    category=category,
-                    native_name=lang_data["native_name"],
-                    is_rtl=lang_data.get("rtl", False),
-                    script=lang_data.get("script", "Latin"),
-                )
-
+        """Load languages from the split layout (or legacy YAML)."""
+        languages = load_languages(
+            base_dir=self.config.paths.base_dir,
+            legacy_file=self.config.paths.languages_file,
+        )
         self._languages = languages
         self._log("info", f"Loaded {len(languages)} languages")
         return languages
 
     def load_reference_texts(self) -> dict[str, ReferenceText]:
-        """
-        Load reference texts from YAML configuration.
-
-        Returns:
-            Dictionary of text id -> ReferenceText
-        """
-        yaml_path = self.config.paths.reference_texts_file
-
-        if not yaml_path.exists():
-            raise FileNotFoundError(f"Reference texts file not found: {yaml_path}")
-
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-
-        texts = {}
-
-        for text_data in data.get("texts", []):
-            text_id = text_data["id"]
-            texts[text_id] = ReferenceText(
-                id=text_id,
-                title=text_data["title"],
-                author=text_data["author"],
-                year=text_data["year"],
-                content=text_data["text"].strip(),
-                style=text_data["style"],
-            )
-
+        """Load reference texts from the split layout (or legacy YAML)."""
+        texts = load_reference_texts(
+            base_dir=self.config.paths.base_dir,
+            legacy_file=self.config.paths.reference_texts_file,
+        )
         self._texts = texts
         self._log("info", f"Loaded {len(texts)} reference texts")
         return texts
@@ -186,22 +131,19 @@ class BenchmarkRunner:
             if code in self._languages
         ]
 
-    async def validate_setup(self) -> tuple[bool, list[str]]:
+    async def validate_setup(self, evaluate: bool = True) -> tuple[bool, list[str]]:
         """
         Validate the benchmark setup.
 
-        Returns:
-            Tuple of (all_valid, list of error messages)
+        Args:
+            evaluate: When False, skip evaluator connection checks.
         """
         errors = []
 
-        # Validate config
         config_errors = self.config.validate()
         errors.extend(config_errors)
 
-        # Test translation provider connection
         if self.config.translation_provider == "openrouter":
-            # Test OpenRouter for translation
             or_trans_ok, or_trans_msg = await test_openrouter_translation_connection(self.config)
             if not or_trans_ok:
                 errors.append(f"OpenRouter (translation): {or_trans_msg}")
@@ -213,50 +155,56 @@ class BenchmarkRunner:
                 errors.append(f"OpenAI-compatible (translation): {openai_msg}")
             else:
                 self._log("info", f"OpenAI-compatible (translation): {openai_msg}")
+        elif self.config.translation_provider == "poe":
+            if not self.config.poe.api_key:
+                errors.append("Poe API key not configured. Set POE_API_KEY in .env or use --poe-key.")
+            else:
+                self._log("info", "Poe (translation): API key present")
         else:
-            # Test Ollama connection
             ollama_ok, ollama_msg = await test_ollama_connection(self.config)
             if not ollama_ok:
                 errors.append(f"Ollama: {ollama_msg}")
             else:
                 self._log("info", f"Ollama: {ollama_msg}")
 
-        # Test evaluator provider connection
-        if self.config.evaluator_provider == "poe":
-            poe_ok, poe_msg = await test_poe_connection(self.config)
-            if not poe_ok:
-                errors.append(f"Poe (evaluation): {poe_msg}")
+        if evaluate:
+            if self.config.evaluator_provider == "poe":
+                poe_ok, poe_msg = await test_poe_connection(self.config)
+                if not poe_ok:
+                    errors.append(f"Poe (evaluation): {poe_msg}")
+                else:
+                    self._log("info", f"Poe (evaluation): {poe_msg}")
             else:
-                self._log("info", f"Poe (evaluation): {poe_msg}")
+                openrouter_ok, openrouter_msg = await test_openrouter_connection(self.config)
+                if not openrouter_ok:
+                    errors.append(f"OpenRouter (evaluation): {openrouter_msg}")
+                else:
+                    self._log("info", f"OpenRouter (evaluation): {openrouter_msg}")
         else:
-            openrouter_ok, openrouter_msg = await test_openrouter_connection(self.config)
-            if not openrouter_ok:
-                errors.append(f"OpenRouter (evaluation): {openrouter_msg}")
-            else:
-                self._log("info", f"OpenRouter (evaluation): {openrouter_msg}")
+            self._log("info", "Evaluator check skipped (--no-evaluate)")
 
         return len(errors) == 0, errors
+
+    def _resolve_lang_name(self, code: str) -> str:
+        """Resolve a language code to its display name (loaded data, then fallback map)."""
+        lang = self._languages.get(code)
+        if lang is not None:
+            return lang.name
+        return code_to_language_name(code)
 
     def _generate_jobs(
         self,
         models: list[str],
-        languages: list[Language],
+        pairs: list[tuple[str, str]],
         texts: list[ReferenceText],
-        existing_results: Optional[list[TranslationResult]] = None
+        existing_results: Optional[list[TranslationResult]] = None,
     ) -> Generator[TranslationRequest, None, None]:
         """
-        Generate translation jobs, skipping already completed ones.
+        Generate translation jobs for the given (source, target) pairs.
 
-        Args:
-            models: List of provider model names
-            languages: List of target languages
-            texts: List of reference texts
-            existing_results: Results from a previous run (for resumption)
-
-        Yields:
-            TranslationRequest objects
+        For each pair, only reference texts whose `source_language` matches the
+        pair's source code are emitted.
         """
-        # Build set of completed jobs for fast lookup
         completed = set()
         if existing_results:
             for result in existing_results:
@@ -264,35 +212,47 @@ class BenchmarkRunner:
                     key = (result.source_text_id, result.target_language, result.model)
                     completed.add(key)
 
-        # Generate jobs for all combinations
-        for model in models:
-            for language in languages:
-                for text in texts:
-                    key = (text.id, language.code, model)
-                    if key not in completed:
-                        yield TranslationRequest(
-                            text=text,
-                            target_language=language.code,
-                            target_language_name=language.name,
-                            model=model
-                        )
+        for src_code, tgt_code in pairs:
+            src_name = self._resolve_lang_name(src_code)
+            tgt_name = self._resolve_lang_name(tgt_code)
+            src_texts = [t for t in texts if t.source_language == src_code]
+            if not src_texts:
+                self._log("warning", f"No reference texts for source language '{src_code}', skipping pair {src_code}->{tgt_code}")
+                continue
+
+            for model in models:
+                for text in src_texts:
+                    key = (text.id, tgt_code, model)
+                    if key in completed:
+                        continue
+                    yield TranslationRequest(
+                        text=text,
+                        target_language=tgt_code,
+                        target_language_name=tgt_name,
+                        source_language=src_code,
+                        source_language_name=src_name,
+                        model=model,
+                    )
 
     async def run(
         self,
         models: list[str],
         language_codes: Optional[list[str]] = None,
-        resume_run: Optional[BenchmarkRun] = None
+        pairs: Optional[list[tuple[str, str]]] = None,
+        resume_run: Optional[BenchmarkRun] = None,
+        evaluate: bool = True,
     ) -> BenchmarkRun:
         """
         Execute a complete benchmark run.
 
         Args:
             models: List of provider model names to benchmark
-            language_codes: Language codes to test (None = quick test set)
+            language_codes: Target language codes (English source assumed). Used
+                only when `pairs` is None.
+            pairs: Explicit (source_code, target_code) pairs. Overrides `language_codes`.
             resume_run: Optional previous run to resume
-
-        Returns:
-            BenchmarkRun with all results
+            evaluate: When False, skip the LLM judge step entirely (translations
+                are produced with `scores=None`).
         """
         # Load data if not already loaded
         if not self._languages:
@@ -300,23 +260,35 @@ class BenchmarkRunner:
         if not self._texts:
             self.load_reference_texts()
 
-        # Determine languages to test
-        if language_codes is None:
-            language_codes = self.config.quick_languages
+        # Resolve pairs: explicit list wins, else build from language_codes assuming English source.
+        if pairs is None:
+            if language_codes is None:
+                language_codes = self.config.quick_languages
+            pairs = [("en", code) for code in language_codes]
 
-        languages = self.filter_languages(language_codes)
-        texts = list(self._texts.values())
+        # Drop pairs whose target language is unknown.
+        validated_pairs: list[tuple[str, str]] = []
+        for src_code, tgt_code in pairs:
+            if tgt_code not in self._languages:
+                self._log("warning", f"Unknown target language '{tgt_code}', skipping {src_code}->{tgt_code}")
+                continue
+            validated_pairs.append((src_code, tgt_code))
 
-        if not languages:
-            raise ValueError("No valid languages specified")
+        if not validated_pairs:
+            raise ValueError("No valid (source, target) pairs to run.")
         if not models:
             raise ValueError("No models specified")
 
-        # Determine evaluator model based on provider
+        texts = list(self._texts.values())
+        target_codes = sorted({tgt for _, tgt in validated_pairs})
+
+        # Determine evaluator model based on provider (label only — actual call gated by `evaluate`).
         if self.config.evaluator_provider == "poe":
             evaluator_model = self.config.poe.default_model
         else:
             evaluator_model = self.config.openrouter.default_model
+        if not evaluate:
+            evaluator_model = "skipped"
 
         # Create or resume run
         if resume_run:
@@ -328,49 +300,50 @@ class BenchmarkRunner:
                 run_id=str(uuid.uuid4())[:8],
                 started_at=datetime.now().isoformat(),
                 models=models,
-                languages=language_codes,
+                languages=target_codes,
                 evaluator_model=evaluator_model,
             )
             self._log("info", f"Starting new run {run.run_id}")
 
         # Log run parameters
+        pair_strs = [f"{s}->{t}" for s, t in validated_pairs]
         self._log("info", f"Models: {', '.join(models)}")
-        self._log("info", f"Languages: {', '.join([l.name for l in languages])}")
+        self._log("info", f"Pairs: {', '.join(pair_strs)}")
         self._log("info", f"Texts: {len(texts)}")
-        self._log("info", f"Total translations: {run.total_expected}")
+        if not evaluate:
+            self._log("info", "Auto-evaluation disabled (--no-evaluate). Translations will have scores=None.")
 
-        # Initialize translator and evaluator
+        # Initialize translator (and evaluator only if needed)
         self._translator = BenchmarkTranslator(
             self.config,
             self.log_callback,
             provider_type=self.config.translation_provider
         )
-        self._evaluator = TranslationEvaluator(
-            self.config, 
-            self.log_callback,
-            provider=self.config.evaluator_provider
-        )
+        if evaluate:
+            self._evaluator = TranslationEvaluator(
+                self.config,
+                self.log_callback,
+                provider=self.config.evaluator_provider
+            )
+        else:
+            self._evaluator = None
 
         try:
-            # Generate jobs
             jobs = list(self._generate_jobs(
                 models=models,
-                languages=languages,
+                pairs=validated_pairs,
                 texts=texts,
                 existing_results=run.results if resume_run else None
             ))
 
             self._log("info", f"Jobs to process: {len(jobs)}")
 
-            # Process jobs
             for i, job in enumerate(jobs):
                 self._progress("translation", i + 1, len(jobs))
 
-                # Translate
                 result = await self._translator.translate(job)
 
-                # Evaluate if translation succeeded
-                if result.success and result.translated_text:
+                if evaluate and result.success and result.translated_text and self._evaluator is not None:
                     source_text = self.get_text(result.source_text_id)
                     if source_text:
                         scores, eval_time = await self._evaluator.evaluate(
@@ -382,7 +355,6 @@ class BenchmarkRunner:
                         result.scores = scores
                         result.evaluation_time_ms = eval_time
 
-                        # Log score
                         self._log(
                             "info",
                             f"  Score: {scores.overall:.1f}/10 "
@@ -403,11 +375,13 @@ class BenchmarkRunner:
             self._log("info", "=" * 50)
             self._log("info", f"Run {run.run_id} completed")
             self._log("info", f"Total translations: {run.total_completed}")
-            self._log("info", f"Success rate: {sum(1 for r in run.results if r.success) / len(run.results) * 100:.1f}%")
+            if run.results:
+                success_rate = sum(1 for r in run.results if r.success) / len(run.results) * 100
+                self._log("info", f"Success rate: {success_rate:.1f}%")
 
-            # Evaluation cost summary
-            cost_summary = self._evaluator.get_cost_summary()
-            self._log("info", f"Evaluation cost: ${cost_summary['total_cost_usd']:.4f}")
+            if self._evaluator is not None:
+                cost_summary = self._evaluator.get_cost_summary()
+                self._log("info", f"Evaluation cost: ${cost_summary['total_cost_usd']:.4f}")
 
             return run
 

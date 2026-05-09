@@ -9,10 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from ..config import BenchmarkConfig, get_score_indicator
+from ..data_loader import load_languages, load_reference_texts
 from ..models import BenchmarkRun, LanguageCategory
 from ..results.storage import ResultsStorage
 
@@ -117,31 +117,33 @@ class WikiGenerator:
             lstrip_blocks=True,
         )
 
-        # Load language data
-        self._languages_data = self._load_languages()
+        # Load language data via the unified loader (split or legacy YAML).
+        self._languages = load_languages(
+            base_dir=self.config.paths.base_dir,
+            legacy_file=self.config.paths.languages_file,
+        )
 
-    def _load_languages(self) -> dict:
-        """Load language definitions from YAML."""
-        languages_file = self.config.paths.languages_file
-        if languages_file.exists():
-            with open(languages_file, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f)
-        return {"categories": {}}
+    _CATEGORY_LABELS = {
+        LanguageCategory.EUROPEAN_MAJOR: "European Major Languages",
+        LanguageCategory.ASIAN: "Asian Languages",
+        LanguageCategory.SEMITIC: "Semitic Languages",
+        LanguageCategory.CYRILLIC: "Cyrillic Languages",
+        LanguageCategory.CLASSICAL: "Classical/Historical Languages",
+        LanguageCategory.MINORITY: "Minority/Regional Languages",
+    }
 
     def _get_language_info(self, code: str) -> dict:
         """Get language info by code."""
-        for category_data in self._languages_data.get("categories", {}).values():
-            for lang in category_data.get("languages", []):
-                if lang["code"] == code:
-                    return {
-                        "code": lang["code"],
-                        "name": lang["name"],
-                        "native_name": lang.get("native_name", lang["name"]),
-                        "script": lang.get("script", "Latin"),
-                        "category": category_data.get("name", "Unknown"),
-                        "is_rtl": lang.get("rtl", False),
-                    }
-        # Fallback for unknown codes
+        lang = self._languages.get(code)
+        if lang is not None:
+            return {
+                "code": lang.code,
+                "name": lang.name,
+                "native_name": lang.native_name,
+                "script": lang.script,
+                "category": self._CATEGORY_LABELS.get(lang.category, lang.category.value),
+                "is_rtl": lang.is_rtl,
+            }
         return {
             "code": code,
             "name": code,
@@ -214,14 +216,34 @@ class WikiGenerator:
 
         return self.output_dir
 
+    def _aggregation_summary_for_results(self, results: list) -> dict:
+        """Compute n_obs and verified ratio for a slice of results."""
+        n_obs_total = sum(getattr(r, "n_obs", 1) for r in results)
+        n_results = len(results)
+        verified = sum(1 for r in results if getattr(r, "verified", True))
+        return {
+            "n_obs_total": n_obs_total,
+            "verified_results": verified,
+            "self_reported_results": n_results - verified,
+            "verified_badge": (
+                "verified" if n_results > 0 and verified == n_results
+                else ("self-reported" if verified == 0 else "mixed")
+            ),
+        }
+
     def _generate_home(self, run: BenchmarkRun) -> None:
         """Generate Home.md page."""
         template = self._env.get_template("home.md.j2")
 
         # Calculate model rankings
         model_stats = run.get_model_stats()
+        results_by_model: dict = {}
+        for r in run.results:
+            results_by_model.setdefault(r.model, []).append(r)
+
         model_rankings = []
         for stats in sorted(model_stats, key=lambda x: x.avg_overall, reverse=True):
+            agg = self._aggregation_summary_for_results(results_by_model.get(stats.model, []))
             model_rankings.append({
                 "name": stats.model,
                 "page_name": self._model_page_name(stats.model),
@@ -231,13 +253,19 @@ class WikiGenerator:
                 "avg_style": stats.avg_style,
                 "indicator": get_score_indicator(stats.avg_overall),
                 "languages_tested": stats.successful_translations,
+                **agg,
             })
 
         # Calculate language rankings
         language_stats = run.get_language_stats()
+        results_by_lang: dict = {}
+        for r in run.results:
+            results_by_lang.setdefault(r.target_language, []).append(r)
+
         language_rankings = []
         for stats in sorted(language_stats, key=lambda x: x.avg_overall, reverse=True):
             lang_info = self._get_language_info(stats.language_code)
+            agg = self._aggregation_summary_for_results(results_by_lang.get(stats.language_code, []))
             language_rankings.append({
                 "name": lang_info["name"],
                 "native_name": lang_info["native_name"],
@@ -246,6 +274,7 @@ class WikiGenerator:
                 "indicator": get_score_indicator(stats.avg_overall),
                 "best_model": stats.best_model or "N/A",
                 "total_translations": stats.total_translations,
+                **agg,
             })
 
         # Group languages by category
@@ -268,20 +297,26 @@ class WikiGenerator:
     def _generate_all_languages_page(self, run: BenchmarkRun) -> None:
         """Generate All-Languages.md page."""
         language_stats = run.get_language_stats()
+        results_by_lang: dict = {}
+        for r in run.results:
+            results_by_lang.setdefault(r.target_language, []).append(r)
 
-        headers = ["Language", "Native Name", "Category", "Avg Score", "Best Model"]
+        headers = ["Language", "Native Name", "Category", "Avg Score", "Best Model", "Obs", "Verified"]
         rows = []
 
         for stats in sorted(language_stats, key=lambda x: x.avg_overall, reverse=True):
             lang_info = self._get_language_info(stats.language_code)
             indicator = get_score_indicator(stats.avg_overall)
             page_name = self._language_page_name(lang_info['name'])
+            agg = self._aggregation_summary_for_results(results_by_lang.get(stats.language_code, []))
             rows.append([
                 f"[{lang_info['name']}]({page_name})",
                 lang_info['native_name'],
                 lang_info['category'],
                 f"{indicator} {stats.avg_overall:.1f}",
                 stats.best_model or "N/A",
+                str(agg["n_obs_total"]),
+                agg["verified_badge"],
             ])
 
         table = format_markdown_table(headers, rows)
@@ -292,13 +327,17 @@ class WikiGenerator:
     def _generate_all_models_page(self, run: BenchmarkRun) -> None:
         """Generate All-Models.md page."""
         model_stats = run.get_model_stats()
+        results_by_model: dict = {}
+        for r in run.results:
+            results_by_model.setdefault(r.model, []).append(r)
 
-        headers = ["Model", "Avg Score", "Accuracy", "Fluency", "Style", "Languages"]
+        headers = ["Model", "Avg Score", "Accuracy", "Fluency", "Style", "Languages", "Obs", "Verified"]
         rows = []
 
         for stats in sorted(model_stats, key=lambda x: x.avg_overall, reverse=True):
             indicator = get_score_indicator(stats.avg_overall)
             page_name = self._model_page_name(stats.model)
+            agg = self._aggregation_summary_for_results(results_by_model.get(stats.model, []))
             rows.append([
                 f"[{stats.model}]({page_name})",
                 f"{indicator} {stats.avg_overall:.1f}",
@@ -306,6 +345,8 @@ class WikiGenerator:
                 f"{stats.avg_fluency:.1f}",
                 f"{stats.avg_style:.1f}",
                 str(stats.successful_translations),
+                str(agg["n_obs_total"]),
+                agg["verified_badge"],
             ])
 
         table = format_markdown_table(headers, rows)
@@ -482,28 +523,20 @@ class WikiGenerator:
         """Group language rankings by category."""
         categories_map: dict = {}
 
-        for lang in language_rankings:
-            lang_info = None
-            for category_key, category_data in self._languages_data.get("categories", {}).items():
-                for l in category_data.get("languages", []):
-                    if l["name"] == lang["name"]:
-                        category_name = category_data.get("name", "Other")
-                        if category_name not in categories_map:
-                            categories_map[category_name] = {
-                                "name": category_name,
-                                "languages": [],
-                            }
-                        categories_map[category_name]["languages"].append(lang)
-                        lang_info = l
-                        break
-                if lang_info:
-                    break
+        # Build name -> category-label map from the loaded languages.
+        name_to_category = {
+            lang.name: self._CATEGORY_LABELS.get(lang.category, lang.category.value)
+            for lang in self._languages.values()
+        }
 
-            # If not found, add to Other
-            if not lang_info:
-                if "Other" not in categories_map:
-                    categories_map["Other"] = {"name": "Other", "languages": []}
-                categories_map["Other"]["languages"].append(lang)
+        for lang in language_rankings:
+            category_name = name_to_category.get(lang["name"], "Other")
+            if category_name not in categories_map:
+                categories_map[category_name] = {
+                    "name": category_name,
+                    "languages": [],
+                }
+            categories_map[category_name]["languages"].append(lang)
 
         return list(categories_map.values())
 
@@ -610,10 +643,9 @@ class WikiGenerator:
         }
 
     def _load_reference_texts(self) -> dict:
-        """Load reference texts from YAML."""
-        ref_file = self.config.paths.reference_texts_file
-        if ref_file.exists():
-            with open(ref_file, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-                return {t["id"]: t for t in data.get("texts", [])}
-        return {}
+        """Load reference texts as a flat {id: dict} map for template usage."""
+        texts = load_reference_texts(
+            base_dir=self.config.paths.base_dir,
+            legacy_file=self.config.paths.reference_texts_file,
+        )
+        return {t.id: t.to_dict() for t in texts.values()}

@@ -1,0 +1,15 @@
+id: poincare_science
+title: La Science et l’Hypothèse
+author: Henri Poincaré
+year: 1902
+source_language: fr
+style: French academic essay, early 20th-century philosophy of science
+challenges:
+- Long periodic sentences with multiple subordinate clauses
+- Abstract epistemological vocabulary (hypothèse, mathématicien, expérimentateur, sceptique)
+- French typographic conventions (espace insécable before ; and ?, curly apostrophes)
+- Philosophical balance and antithesis ("Douter de tout ou tout croire")
+text: |
+  Quand on a un peu plus réfléchi, on a aperçu la place tenue par l’hypothèse ; on a vu que le mathématicien ne saurait s’en passer et que l’expérimentateur ne s’en passe pas davantage. Et alors, on s’est demandé si toutes ces constructions étaient bien solides et on a cru qu’un souffle allait les abattre. Être sceptique de cette façon, c’est encore être superficiel. Douter de tout ou tout croire, ce sont deux solutions également commodes, qui l’une et l’autre nous dispensent de réfléchir.
+license: public-domain
+character_count: 492

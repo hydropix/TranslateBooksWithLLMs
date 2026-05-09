@@ -1,0 +1,15 @@
+id: origin_species
+title: On the Origin of Species
+author: Charles Darwin
+year: 1859
+source_language: en
+style: Victorian scientific argumentation
+challenges:
+- Preserving scientific hedging and qualified claims across languages
+- Long subordinate clauses with conditional reasoning
+- Author's first-person epistemic stance ("I hope", "No doubt", "I must trust")
+- 19th-century formal scientific register
+text: |
+  This Abstract, which I now publish, must necessarily be imperfect. I cannot here give references and authorities for my several statements; and I must trust to the reader reposing some confidence in my accuracy. No doubt errors will have crept in, though I hope I have always been cautious in trusting to good authorities alone. I can here give only the general conclusions at which I have arrived, with a few facts in illustration, but which, I hope, in most cases will suffice.
+license: public-domain
+character_count: 479

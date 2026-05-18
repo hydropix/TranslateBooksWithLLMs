@@ -59,7 +59,8 @@ const OPENAI_MODELS = [
  * Fallback DeepSeek models list (used when API fetch fails)
  */
 const DEEPSEEK_FALLBACK_MODELS = [
-    { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
     { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (Thinking)' }
 ];
 
@@ -1040,7 +1041,7 @@ export const ProviderManager = {
                 // Use fallback list
                 const errorMessage = data.error || 'Could not load models from DeepSeek API';
                 MessageLogger.showMessage(`${errorMessage}. Using fallback list.`, 'warning');
-                populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-chat', 'deepseek');
+                populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-v4-pro', 'deepseek');
                 MessageLogger.addLog(`Using fallback DeepSeek models list`);
 
                 StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
@@ -1050,7 +1051,7 @@ export const ProviderManager = {
             // Use fallback list on error
             MessageLogger.showMessage(`Error: ${error.message}. Using fallback list.`, 'warning');
             MessageLogger.addLog(`DeepSeek API error: ${error.message}. Using fallback list.`);
-            populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-chat', 'deepseek');
+            populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-v4-pro', 'deepseek');
 
             StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
             StatusManager.setConnected('deepseek', DEEPSEEK_FALLBACK_MODELS.length);

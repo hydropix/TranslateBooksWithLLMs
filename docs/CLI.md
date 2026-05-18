@@ -137,7 +137,7 @@ python translate.py -i book.txt -o book_fr.txt \
 python translate.py -i book.txt -o book_fr.txt \
     --provider deepseek \
     --deepseek_api_key xxx \
-    -m deepseek-chat
+    -m deepseek-v4-pro
 
 # Poe
 python translate.py -i book.txt -o book_fr.txt \

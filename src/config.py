@@ -101,7 +101,7 @@ _RELOADABLE_ENV_SETTINGS = (
     ('MISTRAL_API_KEY',     'MISTRAL_API_KEY',     ''),
     ('MISTRAL_MODEL',       'MISTRAL_MODEL',       'mistral-large-latest'),
     ('DEEPSEEK_API_KEY',    'DEEPSEEK_API_KEY',    ''),
-    ('DEEPSEEK_MODEL',      'DEEPSEEK_MODEL',      'deepseek-chat'),
+    ('DEEPSEEK_MODEL',      'DEEPSEEK_MODEL',      'deepseek-v4-pro'),
     ('POE_API_KEY',         'POE_API_KEY',         ''),
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),

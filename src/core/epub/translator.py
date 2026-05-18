@@ -16,6 +16,7 @@ import tempfile
 import aiofiles
 from typing import Dict, Any, Optional, Callable, Tuple, List
 from pathlib import Path
+from urllib.parse import unquote
 from lxml import etree
 
 from src.config import (
@@ -198,6 +199,15 @@ async def translate_epub_file(
 
             # 4. Save translated files
             await _save_translated_files(
+                parsed_xhtml_docs=results['parsed_docs'],
+                log_callback=log_callback
+            )
+
+            # 4.5. Update NCX table-of-contents labels from translated XHTML
+            # headings. This preserves <content src="..."> jump targets while
+            # localizing the reader's side-panel TOC for EPUB2 books.
+            _update_ncx_toc_labels_from_translated_docs(
+                opf_dir=manifest_data['opf_dir'],
                 parsed_xhtml_docs=results['parsed_docs'],
                 log_callback=log_callback
             )
@@ -1047,6 +1057,156 @@ async def _save_translated_files(
         except Exception as e_write:
             if log_callback:
                 log_callback("epub_write_error", f"Error writing '{file_path_abs}': {e_write}")
+
+
+def _update_ncx_toc_labels_from_translated_docs(
+    opf_dir: str,
+    parsed_xhtml_docs: Dict[str, etree._Element],
+    log_callback: Optional[Callable] = None
+) -> Dict[str, int]:
+    """
+    Update EPUB2 NCX TOC labels using translated XHTML headings.
+
+    The NCX side-panel TOC stores display labels separately from the XHTML body
+    in ``navLabel/text`` nodes. Body translation does not touch those labels,
+    so this helper maps each NCX ``content src`` target back to the already
+    translated XHTML document and copies the translated heading text into the
+    NCX label. The ``content src`` attribute is never modified, preserving
+    reader navigation.
+    """
+    stats = {"updated": 0, "unchanged": 0, "errors": 0}
+    opf_dir_path = Path(opf_dir)
+    ncx_paths = list(opf_dir_path.glob("*.ncx"))
+    if not ncx_paths:
+        return stats
+
+    docs_by_path = {
+        os.path.normcase(os.path.abspath(path)): doc
+        for path, doc in parsed_xhtml_docs.items()
+    }
+    ns = {"ncx": "http://www.daisy.org/z3986/2005/ncx/"}
+
+    for ncx_path in ncx_paths:
+        try:
+            parser = etree.XMLParser(encoding="utf-8", recover=True, remove_blank_text=False)
+            tree = etree.parse(str(ncx_path), parser)
+            changed = False
+
+            for nav_point in tree.findall(".//ncx:navPoint", namespaces=ns):
+                text_el = nav_point.find("./ncx:navLabel/ncx:text", namespaces=ns)
+                content_el = nav_point.find("./ncx:content", namespaces=ns)
+                if text_el is None or content_el is None:
+                    stats["unchanged"] += 1
+                    continue
+
+                src = content_el.get("src")
+                if not src:
+                    stats["unchanged"] += 1
+                    continue
+
+                translated_title = _get_translated_title_for_ncx_src(
+                    src=src,
+                    opf_dir=opf_dir,
+                    docs_by_path=docs_by_path
+                )
+                if not translated_title:
+                    stats["unchanged"] += 1
+                    continue
+
+                if text_el.text != translated_title:
+                    text_el.text = translated_title
+                    changed = True
+                    stats["updated"] += 1
+                else:
+                    stats["unchanged"] += 1
+
+            if changed:
+                tree.write(
+                    str(ncx_path),
+                    encoding="utf-8",
+                    xml_declaration=True,
+                    pretty_print=True
+                )
+        except Exception as exc:
+            stats["errors"] += 1
+            if log_callback:
+                log_callback("epub_ncx_toc_error", f"Could not update NCX TOC '{ncx_path}': {exc}")
+
+    if log_callback and (stats["updated"] or stats["errors"]):
+        log_callback(
+            "epub_ncx_toc_updated",
+            f"📚 NCX TOC labels updated: {stats['updated']} updated, "
+            f"{stats['unchanged']} unchanged, {stats['errors']} errors"
+        )
+
+    return stats
+
+
+def _get_translated_title_for_ncx_src(
+    src: str,
+    opf_dir: str,
+    docs_by_path: Dict[str, etree._Element]
+) -> Optional[str]:
+    href, fragment = _split_ncx_src(src)
+    if not href:
+        return None
+
+    file_path = os.path.normcase(os.path.abspath(os.path.join(opf_dir, href)))
+    doc_root = docs_by_path.get(file_path)
+    if doc_root is None:
+        return None
+
+    if fragment:
+        anchor = _find_element_by_id_or_name(doc_root, fragment)
+        if anchor is not None:
+            title = _extract_heading_text_near_anchor(anchor)
+            if title:
+                return title
+
+    return _extract_first_heading_text(doc_root)
+
+
+def _split_ncx_src(src: str) -> Tuple[str, Optional[str]]:
+    href, _, fragment = src.partition("#")
+    return unquote(href), unquote(fragment) if fragment else None
+
+
+def _find_element_by_id_or_name(doc_root: etree._Element, fragment: str) -> Optional[etree._Element]:
+    for element in doc_root.iter():
+        if element.get("id") == fragment or element.get("name") == fragment:
+            return element
+    return None
+
+
+def _extract_heading_text_near_anchor(anchor: etree._Element) -> Optional[str]:
+    current = anchor
+    while current is not None:
+        if _local_name(current) in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            return _normalized_element_text(current)
+        current = current.getparent()
+
+    return _normalized_element_text(anchor)
+
+
+def _extract_first_heading_text(doc_root: etree._Element) -> Optional[str]:
+    for element in doc_root.iter():
+        if _local_name(element) in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            title = _normalized_element_text(element)
+            if title:
+                return title
+    return None
+
+
+def _normalized_element_text(element: etree._Element) -> Optional[str]:
+    text = " ".join("".join(element.itertext()).split())
+    return text or None
+
+
+def _local_name(element: etree._Element) -> str:
+    try:
+        return etree.QName(element).localname.lower()
+    except ValueError:
+        return str(element.tag).split("}", 1)[-1].lower()
 
 
 def _repackage_epub(

@@ -192,7 +192,9 @@ Chinese LLM provider with 64K context and OpenAI-compatible API. Supports thinki
 
 ### Models
 
-- `deepseek-chat` — general chat (V3)
+- `deepseek-v4-pro` — high-quality model
+- `deepseek-v4-flash` — faster economical model
+- `deepseek-chat` — legacy alias scheduled for deprecation on 2026-07-24
 - `deepseek-reasoner` — reasoning model with `<think>` blocks
 
 ### Setup
@@ -206,7 +208,7 @@ Chinese LLM provider with 64K context and OpenAI-compatible API. Supports thinki
 python translate.py -i book.txt -o book_fr.txt \
     --provider deepseek \
     --deepseek_api_key your-key \
-    -m deepseek-chat
+    -m deepseek-v4-pro
 ```
 
 Pricing: [api-docs.deepseek.com/quick_start/pricing](https://api-docs.deepseek.com/quick_start/pricing)

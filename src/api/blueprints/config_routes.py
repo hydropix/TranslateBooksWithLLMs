@@ -314,8 +314,8 @@ def create_config_blueprint(server_session_id=None):
         """Get available models from DeepSeek API"""
         api_key = _resolve_api_key(provided_api_key, 'DEEPSEEK_API_KEY', _config.DEEPSEEK_API_KEY)
 
-        # Use DEEPSEEK_MODEL from .env, fallback to deepseek-chat
-        default_model = _config.DEEPSEEK_MODEL if _config.DEEPSEEK_MODEL else "deepseek-chat"
+        # Use DEEPSEEK_MODEL from .env, fallback to the current DeepSeek recommended model.
+        default_model = _config.DEEPSEEK_MODEL if _config.DEEPSEEK_MODEL else "deepseek-v4-pro"
 
         if not api_key:
             return jsonify({

@@ -125,7 +125,7 @@ python translate.py -i book.txt --provider mistral \
 
 # With DeepSeek
 python translate.py -i book.txt --provider deepseek \
-    --deepseek_api_key YOUR_KEY -m deepseek-chat -tl French
+    --deepseek_api_key YOUR_KEY -m deepseek-v4-pro -tl French
 
 # With Poe
 python translate.py -i book.txt --provider poe \

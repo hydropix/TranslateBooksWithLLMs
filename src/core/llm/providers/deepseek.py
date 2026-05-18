@@ -28,17 +28,18 @@ class DeepSeekProvider(LLMProvider):
     Provider for DeepSeek API.
 
     DeepSeek provides powerful language models with excellent price/performance:
-        - deepseek-chat: Fast and economical model for translation
+        - deepseek-v4-pro: Recommended high-quality model for translation
+        - deepseek-v4-flash: Faster economical model
 
     Configuration:
         endpoint: https://api.deepseek.com/chat/completions
-        model: Model identifier (e.g., "deepseek-chat")
+        model: Model identifier (e.g., "deepseek-v4-pro")
         api_key: DeepSeek API key
 
     Example:
         >>> provider = DeepSeekProvider(
         ...     api_key="your-api-key",
-        ...     model="deepseek-chat"
+        ...     model="deepseek-v4-pro"
         ... )
         >>> response = await provider.generate("Translate: Hello")
     """
@@ -47,6 +48,8 @@ class DeepSeekProvider(LLMProvider):
     MODELS_URL = "https://api.deepseek.com/models"
 
     MODEL_CONTEXT_SIZES = {
+        "deepseek-v4-pro": 64000,
+        "deepseek-v4-flash": 64000,
         "deepseek-chat": 64000,
         "deepseek-reasoner": 64000,
         "deepseek-coder": 16000,
@@ -54,9 +57,8 @@ class DeepSeekProvider(LLMProvider):
     }
 
     FALLBACK_MODELS = [
-        "deepseek-chat",
-        "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "deepseek-v4-flash",
     ]
 
     THINKING_MODELS = ["deepseek-reasoner", "deepseek-r1"]
@@ -65,7 +67,7 @@ class DeepSeekProvider(LLMProvider):
     def __init__(
         self,
         api_key: Union[str, List[str]],
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-pro",
         api_endpoint: Optional[str] = None,
         disable_thinking: bool = True
     ):
@@ -74,7 +76,7 @@ class DeepSeekProvider(LLMProvider):
 
         Args:
             api_key: DeepSeek API key
-            model: Model identifier (default: deepseek-chat)
+            model: Model identifier (default: deepseek-v4-pro)
             api_endpoint: Optional custom API endpoint
             disable_thinking: For models that think by default (V4 family),
                 inject ``thinking={"type":"disabled"}`` to skip reasoning tokens.

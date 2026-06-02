@@ -6,6 +6,11 @@ import argparse
 import asyncio
 import logging
 
+# Force UTF-8 stdio before anything prints, so emoji log lines (💬, ✅, ❌, ...)
+# don't crash on Windows cp1252 consoles. See issue #184.
+from src.utils.console import ensure_utf8_stdio
+ensure_utf8_stdio()
+
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 

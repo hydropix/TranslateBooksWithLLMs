@@ -18,15 +18,9 @@ from pathlib import Path
 from typing import Optional
 
 # Force UTF-8 stdio so emoji prints (e.g. 💬, ❌, ⚠️) don't crash on Windows
-# consoles using cp1252 (charmap codec). errors='replace' keeps the process
-# alive even on terminals that can't render some glyphs.
-for _stream_name in ("stdout", "stderr"):
-    _stream = getattr(sys, _stream_name, None)
-    if _stream is not None and hasattr(_stream, "reconfigure"):
-        try:
-            _stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+# cp1252 consoles. See issue #184.
+from src.utils.console import ensure_utf8_stdio
+ensure_utf8_stdio()
 
 from benchmark.aggregator import CLOUD_PROVIDERS, BenchmarkAggregator
 from benchmark.config import BenchmarkConfig, DEFAULT_EVALUATOR_MODEL, DEFAULT_EVALUATOR_PROVIDER, DEFAULT_POE_EVALUATOR_MODEL

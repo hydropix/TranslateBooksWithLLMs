@@ -39,11 +39,9 @@ logging.getLogger('werkzeug').setLevel(logging.WARNING)
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-# Fix Windows console encoding for emojis
-if sys.platform == 'win32':
-    import codecs
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
+# Force UTF-8 stdio so emoji log lines don't crash on Windows cp1252 consoles.
+from src.utils.console import ensure_utf8_stdio
+ensure_utf8_stdio()
 
 from src.config import (
     API_ENDPOINT as DEFAULT_OLLAMA_API_ENDPOINT,

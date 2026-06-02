@@ -106,6 +106,10 @@ _RELOADABLE_ENV_SETTINGS = (
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
+    # LiteLLM gateway (CLI-only). Provider-prefixed model name, e.g.
+    # "anthropic/claude-sonnet-4-6". Keys are read from each provider's native
+    # env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), not from a single key.
+    ('LITELLM_MODEL',       'LITELLM_MODEL',       ''),
     ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
     # Webhook notifications — kept here so the web UI can change them at runtime

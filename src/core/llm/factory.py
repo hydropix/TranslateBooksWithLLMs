@@ -14,7 +14,8 @@ from src.config import (
     DEEPSEEK_API_KEY, DEEPSEEK_MODEL, DEEPSEEK_API_ENDPOINT,
     DEEPSEEK_DISABLE_THINKING,
     POE_API_KEY, POE_MODEL, POE_API_ENDPOINT,
-    NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT
+    NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT,
+    LITELLM_MODEL
 )
 from .base import LLMProvider, normalize_api_keys
 from .providers.ollama import OllamaProvider
@@ -24,6 +25,7 @@ from .providers.openrouter import OpenRouterProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
+from .providers.litellm import LiteLLMProvider
 
 
 def _require_key(raw, error_message: str):
@@ -46,7 +48,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -162,6 +164,16 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             model=kwargs.get("model", NIM_MODEL),
             api_endpoint=kwargs.get("api_endpoint", NIM_API_ENDPOINT),
             provider_name="nim",
+        )
+
+    elif provider_type.lower() == "litellm":
+        # LiteLLM reads credentials from each provider's native env var, so no
+        # key is required here. api_base is taken only from a dedicated kwarg,
+        # never from the generic `endpoint` (which defaults to the Ollama URL).
+        return LiteLLMProvider(
+            model=kwargs.get("model") or LITELLM_MODEL or DEFAULT_MODEL,
+            api_key=kwargs.get("api_key") or kwargs.get("litellm_api_key"),
+            api_base=kwargs.get("litellm_api_base"),
         )
 
     else:

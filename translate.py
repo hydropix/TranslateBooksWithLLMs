@@ -33,7 +33,7 @@ if __name__ == "__main__":
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
-    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
+    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
     parser.add_argument("--openrouter_api_key", default=OPENROUTER_API_KEY, help="OpenRouter API key (required if using openrouter provider).")
@@ -61,10 +61,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Auto-select default model based on provider if not explicitly set
-    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL
+    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL, LITELLM_MODEL
     if args.model == DEFAULT_MODEL:
         if args.provider == "nim" and NIM_MODEL:
             args.model = NIM_MODEL
+        elif args.provider == "litellm" and LITELLM_MODEL:
+            args.model = LITELLM_MODEL
         elif args.provider == "mistral" and MISTRAL_MODEL:
             args.model = MISTRAL_MODEL
         elif args.provider == "deepseek" and DEEPSEEK_MODEL:
@@ -117,6 +119,13 @@ if __name__ == "__main__":
         parser.error("--poe_api_key is required when using poe provider. Get your key at https://poe.com/api_key")
     if args.provider == "nim" and not args.nim_api_key:
         parser.error("--nim_api_key is required when using nim provider. Get your key at https://build.nvidia.com/")
+    # LiteLLM needs a provider-prefixed model name; the default Ollama model
+    # won't route. Keys come from each provider's native env var, so we only
+    # guard the model here rather than an API key.
+    if args.provider == "litellm" and args.model == DEFAULT_MODEL:
+        parser.error("litellm provider requires a provider-prefixed model. "
+                     "Set LITELLM_MODEL in .env or pass -m, e.g. "
+                     "-m anthropic/claude-sonnet-4-6")
 
     # Refinement is monolingual: mismatched source/target almost always
     # means the user forgot. Warn but proceed using target_lang.

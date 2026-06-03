@@ -260,11 +260,19 @@ class OpenRouterProvider(LLMProvider):
                     print(f"[OpenRouter] WARN: Unexpected response format: {result}")
                     return None
 
-                response_text = result["choices"][0].get("message", {}).get("content", "")
+                # NOTE: a present-but-null "content" makes .get(..., "") return None,
+                # so coalesce with `or ""` to guarantee a string downstream.
+                response_text = result["choices"][0].get("message", {}).get("content") or ""
 
                 usage = result.get("usage", {})
                 prompt_tokens = usage.get("prompt_tokens", 0)
                 completion_tokens = usage.get("completion_tokens", 0)
+
+                if not response_text.strip():
+                    print(f"[OpenRouter] WARN: Empty response from model '{self.model}' "
+                          f"({prompt_tokens}+{completion_tokens} tokens). The model likely "
+                          f"refused or filtered this chunk (sensitive/policy-flagged content "
+                          f"or provider-side moderation). Try a different model.")
 
                 if "cost" in result:
                     cost = float(result.get("cost", 0))

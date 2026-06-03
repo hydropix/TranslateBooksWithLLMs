@@ -115,7 +115,7 @@ def _apply_reloadable_env_settings():
 _apply_reloadable_env_settings()
 
 PORT = int(os.getenv('PORT', '5000'))
-REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '900'))
+REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '300'))
 OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '4096'))
 
 

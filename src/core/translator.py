@@ -242,6 +242,20 @@ async def _make_llm_request_with_adaptive_context(
             last_response = llm_response
             full_raw_response = llm_response.content
 
+            if not full_raw_response or not full_raw_response.strip():
+                # Empty/null content: the model returned nothing. This is almost
+                # always a refusal or a provider-side moderation/policy block on
+                # sensitive content (not a truncation), so retrying with a larger
+                # context would not help. Fail this unit cleanly with a clear hint
+                # instead of crashing later on None slicing.
+                if log_callback:
+                    log_callback("empty_llm_response",
+                        "⚠️ Model returned an empty response (0 tokens). This usually "
+                        "means the model refused or filtered this chunk — common with "
+                        "sensitive/policy-flagged content or provider-side moderation. "
+                        "Try a different model.")
+                return None, main_content, last_response
+
             # Check if we should retry with larger context (adaptive strategy)
             if context_manager and llm_response.was_truncated:
                 if context_manager.should_retry_with_larger_context(

@@ -8,7 +8,7 @@
       "customXml/item1.xml": "a86086ffc5d8e83ebd6c71a55d1d2efaa31b137977f5f3a752366e1023612144",
       "customXml/itemProps1.xml": "c542307b13ec29a8b546217bb37936ab4822e044b265d2952985ec3d6afed24e",
       "docProps/app.xml": "be664981c3141cddfc59362beb287ebf20d0773660e2dd6faac5968a5930a081",
-      "docProps/core.xml": "2fab9ff95da474ede569f8d37a423f9e80299a669abe32331f35de56f5d65cb9",
+      "docProps/core.xml": "74bc9f659aff9dad8564d547dbe09ebb49c9826587b341412813b137de811662",
       "docProps/thumbnail.jpeg": "96367138dc44ce09bf2c8f0f8e49348a1478d2c5c0af69bbc2bbc38b63cdcead",
       "word/_rels/document.xml.rels": "1e7f0eb144a98e199249314f61ff32a8de2a27e56d8e9ee6b524e1c6b235d377",
       "word/document.xml": "3e2ffef28e9942627f26aef84f6ed0375e8157157841f5ac012f673a6175e958",
@@ -34,7 +34,7 @@
       "successful_after_retry": 0,
       "successful_first_try": 0,
       "token_alignment_used": 0,
-      "total_chunks": 7
+      "total_chunks": 3
     },
     {
       "completed_chunks": 1,
@@ -48,7 +48,7 @@
       "successful_after_retry": 0,
       "successful_first_try": 1,
       "token_alignment_used": 0,
-      "total_chunks": 7
+      "total_chunks": 3
     },
     {
       "completed_chunks": 2,
@@ -62,7 +62,7 @@
       "successful_after_retry": 0,
       "successful_first_try": 2,
       "token_alignment_used": 0,
-      "total_chunks": 7
+      "total_chunks": 3
     },
     {
       "completed_chunks": 3,
@@ -76,63 +76,7 @@
       "successful_after_retry": 0,
       "successful_first_try": 3,
       "token_alignment_used": 0,
-      "total_chunks": 7
-    },
-    {
-      "completed_chunks": 4,
-      "enable_refinement": false,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 4,
-      "refinement_chunks_completed": 0,
-      "refinement_phase": false,
-      "successful_after_retry": 0,
-      "successful_first_try": 4,
-      "token_alignment_used": 0,
-      "total_chunks": 7
-    },
-    {
-      "completed_chunks": 5,
-      "enable_refinement": false,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 5,
-      "refinement_chunks_completed": 0,
-      "refinement_phase": false,
-      "successful_after_retry": 0,
-      "successful_first_try": 5,
-      "token_alignment_used": 0,
-      "total_chunks": 7
-    },
-    {
-      "completed_chunks": 6,
-      "enable_refinement": false,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 6,
-      "refinement_chunks_completed": 0,
-      "refinement_phase": false,
-      "successful_after_retry": 0,
-      "successful_first_try": 6,
-      "token_alignment_used": 0,
-      "total_chunks": 7
-    },
-    {
-      "completed_chunks": 7,
-      "enable_refinement": false,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 7,
-      "refinement_chunks_completed": 0,
-      "refinement_phase": false,
-      "successful_after_retry": 0,
-      "successful_first_try": 7,
-      "token_alignment_used": 0,
-      "total_chunks": 7
+      "total_chunks": 3
     }
   ]
 }

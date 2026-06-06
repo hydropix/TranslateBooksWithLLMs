@@ -220,6 +220,17 @@ async def translate_epub_file(
                 log_callback=log_callback
             )
 
+            # 4.6. Update the EPUB3 navigation document (nav.xhtml) TOC links
+            # the same way. EPUB3 readers build their TOC from this document
+            # rather than the NCX, so without this step the side-panel keeps the
+            # source-language titles even though the body is translated.
+            _update_nav_toc_labels_from_translated_docs(
+                opf_dir=manifest_data['opf_dir'],
+                opf_tree=manifest_data['opf_tree'],
+                parsed_xhtml_docs=results['parsed_docs'],
+                log_callback=log_callback
+            )
+
             # 5. Update metadata
             _update_epub_metadata(
                 opf_tree=manifest_data['opf_tree'],
@@ -1188,9 +1199,9 @@ def _update_ncx_toc_labels_from_translated_docs(
                     stats["unchanged"] += 1
                     continue
 
-                translated_title = _get_translated_title_for_ncx_src(
+                translated_title = _get_translated_title_for_src(
                     src=src,
-                    opf_dir=opf_dir,
+                    base_dir=opf_dir,
                     docs_by_path=docs_by_path
                 )
                 if not translated_title:
@@ -1226,16 +1237,21 @@ def _update_ncx_toc_labels_from_translated_docs(
     return stats
 
 
-def _get_translated_title_for_ncx_src(
+def _get_translated_title_for_src(
     src: str,
-    opf_dir: str,
+    base_dir: str,
     docs_by_path: Dict[str, etree._Element]
 ) -> Optional[str]:
+    """Resolve a TOC ``src``/``href`` to the translated heading text.
+
+    ``base_dir`` is the directory the link is relative to (the NCX file's
+    directory for EPUB2, the nav document's directory for EPUB3).
+    """
     href, fragment = _split_ncx_src(src)
     if not href:
         return None
 
-    file_path = os.path.normcase(os.path.abspath(os.path.join(opf_dir, href)))
+    file_path = os.path.normcase(os.path.abspath(os.path.join(base_dir, href)))
     doc_root = docs_by_path.get(file_path)
     if doc_root is None:
         return None
@@ -1248,6 +1264,126 @@ def _get_translated_title_for_ncx_src(
                 return title
 
     return _extract_first_heading_text(doc_root)
+
+
+def _find_nav_doc_href(opf_tree: etree._ElementTree) -> Optional[str]:
+    """Return the href of the EPUB3 navigation document, or None.
+
+    The nav document is the manifest item carrying ``properties="nav"``.
+    """
+    opf_root = opf_tree.getroot()
+    manifest = opf_root.find('.//opf:manifest', namespaces=NAMESPACES)
+    if manifest is None:
+        return None
+    for item in manifest.findall('.//opf:item', namespaces=NAMESPACES):
+        props = (item.get("properties") or "").split()
+        if "nav" in props:
+            return item.get("href")
+    return None
+
+
+def _set_anchor_text(anchor: etree._Element, title: str) -> None:
+    """Replace an ``<a>`` element's visible text with ``title``.
+
+    TOC links are normally plain text, but some carry inline markup (e.g. a
+    numbering ``<span>``). Clearing children and setting ``text`` guarantees
+    the link displays exactly the translated heading.
+    """
+    for child in list(anchor):
+        anchor.remove(child)
+    anchor.text = title
+
+
+def _update_nav_toc_labels_from_translated_docs(
+    opf_dir: str,
+    opf_tree: etree._ElementTree,
+    parsed_xhtml_docs: Dict[str, etree._Element],
+    log_callback: Optional[Callable] = None
+) -> Dict[str, int]:
+    """
+    Update EPUB3 nav document TOC links using translated XHTML headings.
+
+    EPUB3 readers build their table of contents from the navigation document
+    (``<nav epub:type="toc">``) rather than the legacy NCX. The link labels in
+    that document are stored separately from the chapter bodies, so body
+    translation never touches them. This helper maps each TOC ``<a href>``
+    target back to the already translated XHTML heading and copies the
+    translated text into the link, leaving ``href`` untouched so navigation
+    keeps working. Non-TOC navs (``landmarks``, ``page-list``) are skipped.
+    """
+    stats = {"updated": 0, "unchanged": 0, "errors": 0}
+
+    nav_href = _find_nav_doc_href(opf_tree)
+    if not nav_href:
+        return stats
+
+    nav_path = os.path.join(opf_dir, unquote(nav_href))
+    if not os.path.exists(nav_path):
+        return stats
+
+    # nav links are relative to the nav document's own directory.
+    nav_dir = os.path.dirname(nav_path)
+    docs_by_path = {
+        os.path.normcase(os.path.abspath(path)): doc
+        for path, doc in parsed_xhtml_docs.items()
+    }
+    epub_type_attr = f"{{{NAMESPACES['epub']}}}type"
+    skip_types = {"landmarks", "page-list"}
+
+    try:
+        parser = etree.XMLParser(encoding="utf-8", recover=True, remove_blank_text=False)
+        tree = etree.parse(str(nav_path), parser)
+        changed = False
+
+        for nav_el in tree.iter():
+            if _local_name(nav_el) != "nav":
+                continue
+            if (nav_el.get(epub_type_attr) or "").strip() in skip_types:
+                continue
+
+            for anchor in nav_el.iter():
+                if _local_name(anchor) != "a":
+                    continue
+                src = anchor.get("href")
+                if not src:
+                    continue
+
+                translated_title = _get_translated_title_for_src(
+                    src=src,
+                    base_dir=nav_dir,
+                    docs_by_path=docs_by_path
+                )
+                if not translated_title:
+                    stats["unchanged"] += 1
+                    continue
+
+                if _normalized_element_text(anchor) != translated_title:
+                    _set_anchor_text(anchor, translated_title)
+                    changed = True
+                    stats["updated"] += 1
+                else:
+                    stats["unchanged"] += 1
+
+        if changed:
+            tree.write(
+                str(nav_path),
+                encoding="utf-8",
+                xml_declaration=True,
+                pretty_print=False
+            )
+    except Exception as exc:
+        stats["errors"] += 1
+        if log_callback:
+            log_callback("epub_nav_toc_error", f"Could not update nav TOC '{nav_path}': {exc}")
+
+    if log_callback and (stats["updated"] or stats["errors"]):
+        log_callback(
+            "epub_nav_toc_updated",
+            f"📚 EPUB3 nav TOC labels updated: {stats['updated']} updated, "
+            f"{stats['unchanged']} unchanged, {stats['errors']} errors"
+        )
+
+    return stats
 
 
 def _split_ncx_src(src: str) -> Tuple[str, Optional[str]]:

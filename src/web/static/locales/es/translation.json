@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "{{count}} fallback(s) de formato",
   "completion_placeholder_errors": "{{count}} imperfección(es) de formato",
   "completion_warning_heading": "Las traducciones son correctas — solo el formato puede requerir atención",
+  "completion_warning_heading_untranslated": "Algunos fragmentos no se pudieron traducir y permanecen en el idioma original",
   "completion_warning_token_alignment": "{{count}} fragmento(s) con colocación aproximada de etiquetas",
   "completion_warning_untranslated": "{{count}} fragmento(s) conservados en el idioma original",
   "completion_warning_placeholder_errors": "{{count}} imperfección(es) de formato",

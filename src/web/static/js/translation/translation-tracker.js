@@ -789,7 +789,13 @@ export const TranslationTracker = {
         icon.textContent = 'warning';
         heading.appendChild(icon);
         const headingText = document.createElement('span');
-        headingText.textContent = t('translation:completion_warning_heading');
+        // When chunks were left in the source language (Phase 3 fallback) or
+        // outright failed, the optimistic "translations are correct" heading is
+        // misleading — surface the missing-content message instead.
+        const hasUntranslatedContent = untranslated > 0 || failed > 0;
+        headingText.textContent = t(hasUntranslatedContent
+            ? 'translation:completion_warning_heading_untranslated'
+            : 'translation:completion_warning_heading');
         heading.appendChild(headingText);
         block.appendChild(heading);
 

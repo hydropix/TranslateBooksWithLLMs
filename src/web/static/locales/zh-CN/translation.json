@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "{{count}} 次排版回退",
   "completion_placeholder_errors": "{{count}} 处排版瑕疵",
   "completion_warning_heading": "翻译正确 — 仅排版可能需要留意",
+  "completion_warning_heading_untranslated": "部分分块无法翻译，仍保留为原文语言",
   "completion_warning_token_alignment": "{{count}} 个分块的标签位置为近似放置",
   "completion_warning_untranslated": "{{count}} 个分块保留为原文",
   "completion_warning_placeholder_errors": "{{count}} 处排版瑕疵",

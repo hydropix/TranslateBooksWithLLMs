@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "{{count}} repli(s) de formatage",
   "completion_placeholder_errors": "{{count}} imperfection(s) de formatage",
   "completion_warning_heading": "Les traductions sont correctes — seul le formatage peut nécessiter de l'attention",
+  "completion_warning_heading_untranslated": "Certains chunks n'ont pas pu être traduits et restent dans la langue source",
   "completion_warning_token_alignment": "{{count}} chunk(s) avec placement de balises approximatif",
   "completion_warning_untranslated": "{{count}} chunk(s) laissé(s) dans la langue source",
   "completion_warning_placeholder_errors": "{{count}} imperfection(s) de formatage",

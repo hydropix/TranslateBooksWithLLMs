@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "{{count}} Formatierungs-Fallback(s)",
   "completion_placeholder_errors": "{{count}} Formatierungsmangel",
   "completion_warning_heading": "Die Übersetzungen sind korrekt — nur die Formatierung könnte Aufmerksamkeit benötigen",
+  "completion_warning_heading_untranslated": "Einige Chunks konnten nicht übersetzt werden und verbleiben in der Ausgangssprache",
   "completion_warning_token_alignment": "{{count}} Chunk(s) mit ungefährer Tag-Platzierung",
   "completion_warning_untranslated": "{{count}} Chunk(s) in Ausgangssprache belassen",
   "completion_warning_placeholder_errors": "{{count}} Formatierungsmangel",

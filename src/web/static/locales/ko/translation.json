@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "서식 폴백 {{count}}건",
   "completion_placeholder_errors": "서식 미흡 {{count}}건",
   "completion_warning_heading": "번역은 정확합니다 — 서식만 확인이 필요할 수 있습니다",
+  "completion_warning_heading_untranslated": "일부 청크를 번역하지 못해 원본 언어로 남아 있습니다",
   "completion_warning_token_alignment": "태그 위치가 근사적인 청크 {{count}}개",
   "completion_warning_untranslated": "원문 그대로 유지된 청크 {{count}}개",
   "completion_warning_placeholder_errors": "서식 미흡 {{count}}건",

@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "{{count}} formatting fallback(s)",
   "completion_placeholder_errors": "{{count}} formatting issue(s)",
   "completion_warning_heading": "Translations are correct — only the formatting may need attention",
+  "completion_warning_heading_untranslated": "Some chunks could not be translated and remain in the source language",
   "completion_warning_token_alignment": "{{count}} chunk(s) with approximate tag placement",
   "completion_warning_untranslated": "{{count}} chunk(s) kept in source language",
   "completion_warning_placeholder_errors": "{{count}} formatting issue(s)",

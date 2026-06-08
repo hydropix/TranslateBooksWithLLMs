@@ -104,6 +104,7 @@
   "completion_fallback_chunks": "書式フォールバック {{count}} 件",
   "completion_placeholder_errors": "書式の不備 {{count}} 件",
   "completion_warning_heading": "翻訳は正しいですが、書式のみ確認が必要です",
+  "completion_warning_heading_untranslated": "一部のチャンクは翻訳できず、ソース言語のまま残っています",
   "completion_warning_token_alignment": "タグ配置が近似的なチャンク {{count}} 件",
   "completion_warning_untranslated": "原文のままのチャンク {{count}} 件",
   "completion_warning_placeholder_errors": "書式の不備 {{count}} 件",

@@ -8,6 +8,22 @@
 let API_BASE_URL = window.location.origin;
 
 /**
+ * Append the per-session API token (issue #210) as a query parameter.
+ *
+ * Used only for URLs reached by a top-level navigation or an anchor download
+ * (file download, glossary export), which cannot send the X-API-Token header
+ * the fetch-based calls rely on.
+ * @param {string} url - Absolute or relative URL
+ * @returns {string} URL carrying the token query parameter
+ */
+function withToken(url) {
+    const token = window.__API_TOKEN__;
+    if (!token) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
+/**
  * Handle API errors consistently
  * @param {Response} response - Fetch response
  * @returns {Promise<Object>} Parsed error data
@@ -174,7 +190,7 @@ export const ApiClient = {
      * @returns {string} Download URL
      */
     getFileDownloadUrl(filename) {
-        return `${API_BASE_URL}/api/files/${encodeURIComponent(filename)}`;
+        return withToken(`${API_BASE_URL}/api/files/${encodeURIComponent(filename)}`);
     },
 
     /**
@@ -569,7 +585,7 @@ export const ApiClient = {
     },
 
     getGlossaryExportUrl(gid, format = 'json') {
-        return `${API_BASE_URL}/api/glossaries/${gid}/export?format=${encodeURIComponent(format)}`;
+        return withToken(`${API_BASE_URL}/api/glossaries/${gid}/export?format=${encodeURIComponent(format)}`);
     },
 
     async suggestGlossaryTerms(gid, payload) {

@@ -23,7 +23,6 @@ import threading
 from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask
-from flask_cors import CORS
 from flask_socketio import SocketIO
 
 # Configure logging
@@ -55,6 +54,7 @@ from src.api.routes import configure_routes
 from src.api.websocket import configure_websocket_handlers
 from src.api.handlers import start_translation_job
 from src.api.translation_state import get_state_manager
+from src.api.auth import register_auth
 
 
 # Initialize Flask app with static folder configuration
@@ -87,8 +87,15 @@ app = Flask(__name__,
             static_folder=static_folder_path,
             template_folder=template_folder_path,
             static_url_path='/static')
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# Security (issue #210): no wildcard CORS. The SPA is served from and talks to
+# the same origin, so it needs no CORS headers at all; omitting cors_allowed_origins
+# makes Socket.IO fall back to its same-origin default (it derives the allowed
+# origin from the request Host, which keeps localhost, 127.0.0.1 and LAN/Docker
+# access working). Cross-origin pages can therefore no longer read responses.
+socketio = SocketIO(app, async_mode='threading')
+
+# Gate every /api/ route behind the per-session token (issue #210).
+register_auth(app)
 
 # Thread-safe state manager (generates unique session ID for this server instance)
 state_manager = get_state_manager()

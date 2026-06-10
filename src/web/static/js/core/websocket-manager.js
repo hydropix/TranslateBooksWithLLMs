@@ -21,7 +21,9 @@ export const WebSocketManager = {
             return;
         }
 
-        socket = io();
+        // Authenticate the handshake with the per-session token (issue #210);
+        // the server refuses connections without it.
+        socket = io({ auth: { token: window.__API_TOKEN__ } });
 
         // Connection events
         socket.on('connect', () => {

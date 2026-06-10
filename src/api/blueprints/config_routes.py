@@ -84,11 +84,16 @@ def create_config_blueprint(server_session_id=None):
         if not os.path.exists(interface_path):
             return f"<h1>Error: Interface not found</h1><p>Looked in: {interface_path}</p>", 404
 
+        from src.api.auth import API_TOKEN
         return render_template(
             'translation_interface.html',
             initial_locale=resolve_ui_locale(request),
             supported_locales=SUPPORTED_UI_LOCALES,
             app_version=__version__,
+            # Per-session token handed to the SPA so it can authenticate every
+            # /api/ call and the Socket.IO handshake (issue #210). Same-origin
+            # delivery means a foreign page cannot read it.
+            api_token=API_TOKEN,
         )
 
     @bp.route('/api/ui-locale', methods=['POST'])

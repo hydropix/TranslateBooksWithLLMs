@@ -12,6 +12,33 @@
     <script>
         window.__INITIAL_LOCALE__ = {{ initial_locale|default('en')|tojson }};
         window.__APP_VERSION__    = {{ app_version|default('dev')|tojson }};
+
+        // Per-session API token (issue #210). The server gates every /api/
+        // route and the Socket.IO handshake on it. Patch fetch() once, before
+        // any module loads, so every same-origin /api/ call carries the token
+        // header automatically and no call site can forget it.
+        window.__API_TOKEN__ = {{ api_token|default('')|tojson }};
+        (function () {
+            var token = window.__API_TOKEN__;
+            if (!token) return;
+            var origin = window.location.origin;
+            var origFetch = window.fetch.bind(window);
+            window.fetch = function (input, init) {
+                init = init || {};
+                var url = (typeof input === 'string') ? input : (input && input.url) || '';
+                var isApi = false;
+                try {
+                    var u = new URL(url, origin);
+                    isApi = (u.origin === origin) && u.pathname.indexOf('/api/') === 0;
+                } catch (e) { isApi = false; }
+                if (isApi) {
+                    var headers = new Headers(init.headers || {});
+                    if (!headers.has('X-API-Token')) headers.set('X-API-Token', token);
+                    init = Object.assign({}, init, { headers: headers });
+                }
+                return origFetch(input, init);
+            };
+        })();
     </script>
 
     <!-- i18next runtime (CDN UMD, pinned). The HTTP backend lazy-loads

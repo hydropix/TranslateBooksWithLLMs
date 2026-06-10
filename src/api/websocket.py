@@ -4,14 +4,22 @@ WebSocket handlers for real-time communication
 from flask import request
 from flask_socketio import emit
 
+from .auth import is_authorized
 from .socket_events import EVENT_TRANSLATION_UPDATE, LLM_RESPONSE_TYPES
 
 
 def configure_websocket_handlers(socketio, state_manager):
     """Configure WebSocket event handlers"""
-    
+
     @socketio.on('connect')
-    def handle_websocket_connect():
+    def handle_websocket_connect(auth):
+        # Reject handshakes that don't carry the per-session token (issue #210).
+        # The SPA passes it via io({ auth: { token } }); a cross-origin page can
+        # neither read nor guess it. Returning False refuses the connection.
+        token = auth.get('token') if isinstance(auth, dict) else None
+        if not is_authorized(token):
+            print(f'🚫 WebSocket handshake rejected (bad token): {request.sid}')
+            return False
         print(f'🔌 WebSocket client connected: {request.sid}')
         emit('connected', {'message': 'Connected to translation server via WebSocket'})
 

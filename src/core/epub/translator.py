@@ -737,8 +737,7 @@ def _precount_chunks_plain_text(doc_root, max_tokens_per_chunk: int) -> int:
     """
     try:
         from .plain_extractor import extract_plain_paragraphs
-        from src.core.text_processor import split_text_into_chunks
-        from src.core.common.plain_text_pipeline import PARAGRAPH_SEPARATOR
+        from src.core.common.plain_text_pipeline import build_plain_segments
 
         body = doc_root.find('.//{http://www.w3.org/1999/xhtml}body')
         if body is None:
@@ -750,15 +749,7 @@ def _precount_chunks_plain_text(doc_root, max_tokens_per_chunk: int) -> int:
         if not paragraphs:
             return 0
 
-        full_text = PARAGRAPH_SEPARATOR.join(p for p in paragraphs if p is not None)
-        if not full_text.strip():
-            return 0
-
-        chunks = split_text_into_chunks(
-            text=full_text,
-            max_tokens_per_chunk=max_tokens_per_chunk,
-        )
-        return len(chunks)
+        return len(build_plain_segments(paragraphs, max_tokens_per_chunk))
     except Exception:
         return 0
 

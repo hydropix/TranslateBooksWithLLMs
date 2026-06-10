@@ -2,15 +2,20 @@
 Plain-text translation pipeline used by Plain Text Mode.
 
 Skips placeholder preservation and HTML chunking entirely. Paragraphs are
-joined, chunked by token count, translated with has_placeholders=False, then
-re-split on the paragraph separator.
+grouped into token-budgeted segments that remember which source paragraph
+indices they cover, translated with has_placeholders=False, then written back
+to those exact indices. Empty source paragraphs (image-only blocks) are never
+sent to the LLM and keep their slot; a paragraph larger than the token budget
+is split into sentence pieces that all collapse back into its single slot
+(issue #203: count-only realignment shifted every paragraph after an empty or
+oversized block).
 
 Used by the EPUB and DOCX adapters when prompt_options['plain_text_mode'] is True.
 """
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from src.core.text_processor import split_text_into_chunks
+from src.core.chunking.token_chunker import TokenChunker
 from src.core.translator import generate_translation_request
 from src.core.post_processor import clean_translated_text
 from src.core.epub.translation_metrics import TranslationMetrics
@@ -32,7 +37,8 @@ def _reconcile_paragraph_counts(
     expected_count: int,
 ) -> List[str]:
     """
-    Best-effort alignment when the LLM merged or split paragraphs.
+    Best-effort alignment when the LLM merged or split paragraphs inside one
+    segment. The blast radius is the segment, never the whole document.
 
     - translated == expected: return as-is
     - translated < expected: pad with empty strings
@@ -46,6 +52,102 @@ def _reconcile_paragraph_counts(
     head = translated_paragraphs[:expected_count - 1]
     tail = " ".join(translated_paragraphs[expected_count - 1:])
     return head + [tail]
+
+
+def build_plain_segments(
+    paragraphs: List[str],
+    max_tokens_per_chunk: int,
+) -> List[Dict[str, Any]]:
+    """
+    Group source paragraphs into translation segments that track their indices.
+
+    Each segment is {'indices': [int, ...], 'text': str, 'partial': bool}:
+    - whole-paragraph segments cover consecutive non-empty paragraphs joined
+      with PARAGRAPH_SEPARATOR ('partial' False, one index per paragraph);
+    - an oversized paragraph yields several sentence-piece segments that share
+      the same single index ('partial' True).
+
+    Empty/whitespace-only paragraphs are skipped here and restored by index at
+    reassembly time.
+    """
+    chunker = TokenChunker(max_tokens=max_tokens_per_chunk)
+    sep_tokens = chunker.count_tokens(PARAGRAPH_SEPARATOR)
+
+    segments: List[Dict[str, Any]] = []
+    cur_indices: List[int] = []
+    cur_texts: List[str] = []
+    cur_tokens = 0
+
+    def flush():
+        nonlocal cur_indices, cur_texts, cur_tokens
+        if cur_indices:
+            segments.append({
+                'indices': cur_indices,
+                'text': PARAGRAPH_SEPARATOR.join(cur_texts),
+                'partial': False,
+            })
+            cur_indices, cur_texts, cur_tokens = [], [], 0
+
+    for idx, paragraph in enumerate(paragraphs):
+        text = paragraph or ""
+        if not text.strip():
+            continue
+
+        tokens = chunker.count_tokens(text)
+
+        if tokens > chunker.max_tokens:
+            flush()
+            sentences = chunker.split_paragraph_into_sentences(text)
+            if len(sentences) > 1:
+                pieces = chunker._chunk_units(sentences, separator=" ")
+            else:
+                pieces = [text]
+            for piece in pieces:
+                segments.append({'indices': [idx], 'text': piece, 'partial': True})
+            continue
+
+        potential = cur_tokens + tokens + (sep_tokens if cur_indices else 0)
+        if cur_indices and potential > chunker.max_tokens:
+            flush()
+        cur_indices.append(idx)
+        cur_texts.append(text)
+        cur_tokens = cur_tokens + tokens + (sep_tokens if len(cur_indices) > 1 else 0)
+
+    flush()
+    return segments
+
+
+def _reassemble(
+    segments: List[Dict[str, Any]],
+    translated_parts: List[str],
+    source_paragraphs: List[str],
+) -> List[str]:
+    """
+    Write each segment's translation back to the source indices it covers.
+
+    Empty source slots keep their original (empty) value; pieces of an
+    oversized paragraph are concatenated in order into its single slot.
+    """
+    out: List[Optional[str]] = [None] * len(source_paragraphs)
+    partial_pieces: Dict[int, List[str]] = {}
+
+    for segment, translated in zip(segments, translated_parts):
+        text = translated or ""
+        if segment['partial']:
+            partial_pieces.setdefault(segment['indices'][0], []).append(text.strip())
+        else:
+            parts = _split_translated_back_to_paragraphs(text)
+            parts = _reconcile_paragraph_counts(parts, len(segment['indices']))
+            for k, idx in enumerate(segment['indices']):
+                out[idx] = parts[k]
+
+    for idx, pieces in partial_pieces.items():
+        out[idx] = " ".join(p for p in pieces if p)
+
+    return [
+        slot if slot is not None else source_paragraphs[i]
+        for i, slot in enumerate(out)
+    ]
 
 
 async def translate_paragraphs_plain(
@@ -93,12 +195,25 @@ async def translate_paragraphs_plain(
             stats_callback(stats.to_dict())
         return source, stats, False
 
-    full_text = PARAGRAPH_SEPARATOR.join(source)
+    segments = build_plain_segments(source, max_tokens_per_chunk)
 
-    chunks = split_text_into_chunks(
-        text=full_text,
-        max_tokens_per_chunk=max_tokens_per_chunk,
-    )
+    # Chunk dicts mirror split_text_into_chunks() output; context comes from
+    # the neighboring segments.
+    chunks: List[Dict[str, str]] = []
+    for i, segment in enumerate(segments):
+        if i > 0:
+            context_before = segments[i - 1]['text'].split(PARAGRAPH_SEPARATOR)[-1]
+        else:
+            context_before = ""
+        if i < len(segments) - 1:
+            context_after = segments[i + 1]['text'].split(PARAGRAPH_SEPARATOR)[0]
+        else:
+            context_after = ""
+        chunks.append({
+            'context_before': context_before,
+            'main_content': segment['text'],
+            'context_after': context_after,
+        })
 
     stats.total_chunks = len(chunks)
     if stats_callback:
@@ -205,15 +320,9 @@ async def translate_paragraphs_plain(
                 f"⏸️ Plain-text translation interrupted at chunk {processed + 1}/{len(chunks)}"
             )
         _fill_remaining_with_source()
-        return _finalize([p if p is not None else "" for p in translated_parts], source), stats, True
+        safe_parts = [p if p is not None else "" for p in translated_parts]
+        return _reassemble(segments, safe_parts, source), stats, True
 
     # Any None left (shouldn't happen) falls back to empty string.
     safe_parts = [p if p is not None else "" for p in translated_parts]
-    return _finalize(safe_parts, source), stats, False
-
-
-def _finalize(translated_parts: List[str], source_paragraphs: List[str]) -> List[str]:
-    """Reassemble translated chunks into a paragraph list aligned with the source count."""
-    joined = PARAGRAPH_SEPARATOR.join(translated_parts)
-    parts = _split_translated_back_to_paragraphs(joined)
-    return _reconcile_paragraph_counts(parts, len(source_paragraphs))
+    return _reassemble(segments, safe_parts, source), stats, False

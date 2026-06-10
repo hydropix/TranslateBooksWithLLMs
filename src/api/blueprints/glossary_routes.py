@@ -10,7 +10,6 @@ import asyncio
 import csv
 import io
 import logging
-import os
 import posixpath
 import re
 import zipfile
@@ -25,6 +24,7 @@ from src.core.glossary import build_glossary_block, filter_glossary
 from src.core.glossary import suggest_terms as ner_suggest_terms
 from src.core.glossary.models import GlossaryConfig
 from src.core.llm.exceptions import RateLimitError
+from src.api.api_keys import provider_env_var, resolve_api_key
 
 _NER_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
 _NER_TEXT_EXTS = {'.txt', '.srt'}
@@ -853,20 +853,15 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
             model = data.get('model') or _config.DEFAULT_MODEL
             api_endpoint = data.get('api_endpoint') or _config.API_ENDPOINT
 
-            api_key = data.get('api_key')
-            if not api_key:
-                env_key_map = {
-                    'gemini': 'GEMINI_API_KEY',
-                    'openai': 'OPENAI_API_KEY',
-                    'openrouter': 'OPENROUTER_API_KEY',
-                    'mistral': 'MISTRAL_API_KEY',
-                    'deepseek': 'DEEPSEEK_API_KEY',
-                    'poe': 'POE_API_KEY',
-                    'nim': 'NIM_API_KEY',
-                }
-                env_var = env_key_map.get(provider_type)
-                if env_var:
-                    api_key = os.getenv(env_var) or getattr(_config, env_var, None)
+            # The frontend sends the '__USE_ENV__' sentinel (or nothing) when the
+            # key field is empty but a key is configured in .env; resolve_api_key
+            # turns that back into the real, possibly multi-key, env value.
+            env_var = provider_env_var(provider_type)
+            api_key = resolve_api_key(
+                data.get('api_key'),
+                env_var,
+                getattr(_config, env_var, '') if env_var else '',
+            ) or None
 
             try:
                 provider = create_llm_provider(

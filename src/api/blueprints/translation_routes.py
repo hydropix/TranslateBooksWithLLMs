@@ -16,6 +16,7 @@ from src.config import (
     MAX_PARALLEL_TRANSLATIONS,
 )
 from src.tts.tts_config import TTSConfig
+from src.api.api_keys import resolve_api_key as _resolve_api_key
 
 
 def _clamp_parallel_workers(value):
@@ -30,23 +31,6 @@ def _clamp_parallel_workers(value):
         return max(1, min(MAX_PARALLEL_TRANSLATIONS, int(value)))
     except (TypeError, ValueError):
         return PARALLEL_TRANSLATIONS
-
-
-def _resolve_api_key(value, env_var_name):
-    """
-    Resolve API key value from request or environment.
-
-    Args:
-        value: Value from request (can be actual key, '__USE_ENV__', or empty)
-        env_var_name: Name of environment variable to fall back to
-
-    Returns:
-        Resolved API key string
-    """
-    if value == '__USE_ENV__' or not value:
-        # Use environment variable
-        return os.getenv(env_var_name, '')
-    return value
 
 
 # Cloud providers whose key lives in config['<provider>_api_key'] and env var

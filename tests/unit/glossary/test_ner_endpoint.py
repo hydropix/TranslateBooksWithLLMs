@@ -115,5 +115,66 @@ class TestSuggestTermsRateLimit:
         assert body["retry_after"] is None
 
 
+class _CapturingProvider:
+    """Stand-in provider that records init kwargs and returns no candidates."""
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    async def suggest(self, *args, **kwargs):  # pragma: no cover - unused
+        return [], []
+
+    async def close(self):
+        pass
+
+
+class TestSuggestTermsApiKeyResolution:
+    """The endpoint must resolve the '__USE_ENV__' sentinel to the env key.
+
+    Regression for issue #200: with keys configured in .env, the frontend
+    sends api_key='__USE_ENV__'. The endpoint used to forward that literal
+    string to the provider, yielding 'API key not valid' from Gemini.
+    """
+
+    def _create_glossary(self, store):
+        return store.create_glossary(
+            name="env-key-test",
+            source_language="English",
+            target_language="French",
+        )
+
+    def test_use_env_sentinel_resolves_to_env_key(self, client, store):
+        glossary = self._create_glossary(store)
+
+        captured = {}
+
+        def _fake_factory(**kwargs):
+            captured.update(kwargs)
+            return _CapturingProvider(**kwargs)
+
+        async def _fake_suggest(*args, **kwargs):
+            return [], []
+
+        with patch(
+            "src.core.llm.factory.create_llm_provider",
+            side_effect=_fake_factory,
+        ), patch(
+            "src.api.blueprints.glossary_routes.ner_suggest_terms",
+            side_effect=_fake_suggest,
+        ), patch.dict(os.environ, {"GEMINI_API_KEY": "real-env-key"}):
+            response = client.post(
+                f"/api/glossaries/{glossary.id}/suggest-terms",
+                json={
+                    "text": "Some sample source text to analyze.",
+                    "provider": "gemini",
+                    "model": "gemini-3.1-flash-lite",
+                    "api_key": "__USE_ENV__",
+                },
+            )
+
+        assert response.status_code == 200, response.get_json()
+        assert captured.get("api_key") == "real-env-key"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

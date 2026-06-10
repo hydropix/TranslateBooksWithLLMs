@@ -29,6 +29,8 @@ from src.core.glossary.models import GlossaryConfig
 from src.core.llm.factory import create_llm_provider
 from src.core.pricing.pricing_data import get_default_pricing
 from src.core.sampling import cap_chunk_text, select_sample_indices
+from src.api.api_keys import provider_env_var as _provider_env_var
+from src.api.api_keys import resolve_api_key as _resolve_api_key
 from src.core.text_processor import split_text_into_chunks
 from src.prompts.prompts import (
     generate_refinement_prompt, generate_translation_prompt,
@@ -70,30 +72,6 @@ def _small_document_warning(total: int, count: int, requested: int) -> Dict[str,
         "code": "warning_small_document",
         "params": {"total": total, "count": count, "requested": requested},
     }
-
-
-def _resolve_api_key(value: Any, env_var_name: str) -> str:
-    """Resolve `__USE_ENV__` placeholder to the actual env var value.
-
-    Mirrors `_resolve_api_key` in translation_routes.py — kept inline to avoid
-    cross-blueprint imports.
-    """
-    if value == "__USE_ENV__" or not value:
-        return os.getenv(env_var_name, "")
-    return value
-
-
-def _provider_env_var(provider: str) -> str:
-    """Return the env var name conventionally used for a provider's API key."""
-    return {
-        "gemini": "GEMINI_API_KEY",
-        "openai": "OPENAI_API_KEY",
-        "openrouter": "OPENROUTER_API_KEY",
-        "mistral": "MISTRAL_API_KEY",
-        "deepseek": "DEEPSEEK_API_KEY",
-        "poe": "POE_API_KEY",
-        "nim": "NIM_API_KEY",
-    }.get(provider.lower(), "")
 
 
 def _extract_plain_text(file_path: str, file_type: str) -> str:

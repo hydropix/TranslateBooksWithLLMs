@@ -50,6 +50,7 @@ import src.config as _config
 from src.config import reload_config
 from src import __version__
 from src.core.llm.base import normalize_api_keys
+from src.api.api_keys import resolve_api_key as _resolve_api_key
 
 # Setup logger for this module
 logger = logging.getLogger('config_routes')
@@ -262,17 +263,6 @@ def create_config_blueprint(server_session_id=None):
         return jsonify({
             "max_tokens_per_chunk": _config.MAX_TOKENS_PER_CHUNK
         })
-
-    def _resolve_api_key(provided_key, env_var_name, config_default):
-        """Resolve API key from provided value, .env marker, or config default.
-
-        Returns the raw (possibly comma-separated) value — provider constructors
-        normalize via base.py. Callers that bypass providers (e.g. listing
-        endpoints using requests.get directly) must call _first_key() themselves.
-        """
-        if provided_key and provided_key != '__USE_ENV__':
-            return provided_key
-        return os.getenv(env_var_name, config_default)
 
     def _first_key(raw):
         """Pick the first usable key from a (possibly comma-separated) value.

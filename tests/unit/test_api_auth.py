@@ -35,6 +35,15 @@ def client():
     app.view_functions['config.serve_interface'] = serve_interface
     app.add_url_rule('/page', endpoint='config.serve_interface')
 
+    # /api/health is the unauthenticated liveness probe (config.health_check),
+    # hit by the Docker HEALTHCHECK and CI with no token. Mirror its endpoint
+    # name so the exemption is exercised through the /api/ prefix.
+    def health_check():
+        return jsonify({"status": "ok"})
+
+    app.view_functions['config.health_check'] = health_check
+    app.add_url_rule('/api/health', endpoint='config.health_check')
+
     with app.test_client() as c:
         yield c
 
@@ -75,6 +84,14 @@ def test_page_endpoint_is_exempt(client):
 def test_non_api_path_is_not_gated(client):
     # The root page carries no /api/ prefix and must remain reachable.
     assert client.get('/').status_code == 200
+
+
+def test_health_endpoint_is_exempt(client):
+    # The liveness probe must answer without a token: the Docker HEALTHCHECK
+    # and CI smoke test call it unauthenticated, and it exposes no secrets.
+    resp = client.get('/api/health')
+    assert resp.status_code == 200
+    assert resp.get_json() == {"status": "ok"}
 
 
 def test_is_authorized_constant_time_compare():

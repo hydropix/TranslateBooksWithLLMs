@@ -37,8 +37,14 @@ TOKEN_HEADER = 'X-API-Token'
 TOKEN_QUERY = 'token'
 
 # Reachable without a token: the page itself (it delivers the token), Flask's
-# static endpoint, and CORS preflight. Everything under /api/ is gated.
-_EXEMPT_ENDPOINTS = frozenset({'config.serve_interface', 'static'})
+# static endpoint, and the unauthenticated liveness probe. CORS preflight is
+# handled separately below. Everything else under /api/ is gated.
+#
+# /api/health is intentionally public: container HEALTHCHECK and CI smoke tests
+# hit it with no credentials, and it exposes nothing sensitive (status, version,
+# default Ollama endpoint, startup_time used by the client to detect restarts) —
+# never the session token, masked keys, or webhook secrets.
+_EXEMPT_ENDPOINTS = frozenset({'config.serve_interface', 'config.health_check', 'static'})
 
 
 def _token_from_request():

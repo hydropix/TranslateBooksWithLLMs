@@ -15,6 +15,7 @@ import re
 import zipfile
 from pathlib import Path
 from typing import List, Optional, Tuple
+from urllib.parse import quote
 
 from flask import Blueprint, Response, jsonify, request
 from lxml import etree
@@ -286,9 +287,23 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
 
     def _safe_filename(name: str) -> str:
         """Turn a glossary name into a download-safe file stem."""
-        cleaned = ''.join(c if c.isalnum() or c in ('-', '_', '.') else '_' for c in (name or 'glossary'))
+        cleaned = re.sub(r'[^A-Za-z0-9._-]+', '_', name or 'glossary')
         cleaned = cleaned.strip('._') or 'glossary'
         return cleaned
+
+    def _attachment_disposition(filename: str) -> str:
+        """Build a WSGI-safe attachment header with UTF-8 filename support."""
+        normalized = (filename or 'glossary').replace('\r', ' ').replace('\n', ' ').strip() or 'glossary'
+        if '.' in normalized:
+            stem, suffix = normalized.rsplit('.', 1)
+            safe_suffix = re.sub(r'[^A-Za-z0-9]+', '', suffix)
+            ascii_fallback = _safe_filename(stem)
+            if safe_suffix:
+                ascii_fallback = f'{ascii_fallback}.{safe_suffix}'
+        else:
+            ascii_fallback = _safe_filename(normalized)
+        encoded = quote(normalized, safe='')
+        return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
 
     def _terms_from_payload(payload) -> List[GlossaryTerm]:
         """Build a list of GlossaryTerm from a JSON payload (list or dict)."""
@@ -645,7 +660,6 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                 return jsonify({"error": f"Glossary {gid} not found"}), 404
 
             fmt = (request.args.get('format') or 'json').lower()
-            stem = _safe_filename(glossary.name)
 
             if fmt == 'csv':
                 buffer = io.StringIO()
@@ -661,7 +675,7 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                     buffer.getvalue(),
                     mimetype='text/csv; charset=utf-8',
                     headers={
-                        'Content-Disposition': f'attachment; filename={stem}.csv'
+                        'Content-Disposition': _attachment_disposition(f'{glossary.name or "glossary"}.csv')
                     },
                 )
 
@@ -677,7 +691,7 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                     _json.dumps(payload, ensure_ascii=False, indent=2),
                     mimetype='application/json; charset=utf-8',
                     headers={
-                        'Content-Disposition': f'attachment; filename={stem}.json'
+                        'Content-Disposition': _attachment_disposition(f'{glossary.name or "glossary"}.json')
                     },
                 )
 

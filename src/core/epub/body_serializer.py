@@ -9,6 +9,7 @@ from typing import Tuple, Optional
 import re
 
 from src.utils.unified_logger import info, LogType
+from .boilerplate_filter import strip_web_boilerplate
 from .exceptions import XmlParsingError, BodyExtractionError
 
 
@@ -86,7 +87,9 @@ def normalize_whitespace(html: str) -> str:
 
 def extract_body_html(
     doc_root: etree._Element,
-    normalize: bool = True
+    normalize: bool = True,
+    strip_boilerplate: bool = True,
+    log_callback=None,
 ) -> Tuple[str, Optional[etree._Element]]:
     """
     Extract the HTML content of <body> as a string.
@@ -94,10 +97,19 @@ def extract_body_html(
     Args:
         doc_root: Root of the parsed XHTML document
         normalize: If True, normalize excessive whitespace (default: True)
+        strip_boilerplate: If True, remove web-scraping boilerplate (social
+            share bars, related-post widgets, prev/next nav, hidden elements)
+            before serialization so it is never translated (issue #239). The
+            EPUB3 TOC navigation is preserved.
+        log_callback: Optional callback for logging removed-boilerplate counts
 
     Returns:
         Tuple (body_inner_html, body_element)
         Returns ("", None) if no body element found
+
+    Note: when strip_boilerplate is True the body element is mutated in place;
+    both translation paths replace the body content afterwards, so the removed
+    elements simply never appear in the output.
     """
     # Try XHTML namespace first, then fallback to no namespace
     body = doc_root.find('.//{http://www.w3.org/1999/xhtml}body')
@@ -106,6 +118,9 @@ def extract_body_html(
 
     if body is None:
         return "", None
+
+    if strip_boilerplate:
+        strip_web_boilerplate(body, log_callback=log_callback)
 
     # Serialize the inner content of body (without the <body> tag itself)
     inner_html = etree.tostring(body, encoding='unicode', method='html')

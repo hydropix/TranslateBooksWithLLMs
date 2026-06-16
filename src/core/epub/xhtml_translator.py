@@ -594,7 +594,7 @@ def _setup_translation(
         Tuple of (body_html, body_element, tag_preserver)
     """
     # Extract body
-    body_html, body_element = extract_body_html(doc_root)
+    body_html, body_element = extract_body_html(doc_root, log_callback=log_callback)
 
     # Initialize tag preserver (use container if provided, otherwise create directly)
     if container is not None:

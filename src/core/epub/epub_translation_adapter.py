@@ -48,7 +48,7 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
             - body_html: HTML content from body
             - context: Dict avec body_element et preserver
         """
-        body_html, body_element = extract_body_html(source)
+        body_html, body_element = extract_body_html(source, log_callback=log_callback)
 
         if log_callback:
             log_callback("body_extracted", f"Extracted {len(body_html)} chars from XHTML body")

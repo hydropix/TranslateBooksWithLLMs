@@ -39,7 +39,7 @@
       "additionalProperties": false,
       "properties": {
         "provider": {
-          "enum": ["ollama", "openai", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"]
+          "enum": ["ollama", "openai", "openrouter", "requesty", "gemini", "mistral", "deepseek", "poe", "nim"]
         },
         "id": { "type": "string", "minLength": 1 },
         "context_window": { "type": "integer", "minimum": 0 },

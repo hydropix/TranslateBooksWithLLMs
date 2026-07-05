@@ -53,7 +53,7 @@ Each skill confirms via `AskUserQuestion` before any user-visible action
 
 ```bash
 python -m benchmark.cli run \
-  -p <ollama|poe|openrouter|openai> \
+  -p <ollama|poe|openrouter|requesty|openai> \
   -m <model-id> \
   --no-evaluate \
   --pair-set <quick|standard|full>

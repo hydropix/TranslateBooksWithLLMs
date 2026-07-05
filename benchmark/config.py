@@ -72,6 +72,22 @@ class OpenRouterConfig:
 
 
 @dataclass
+class RequestyConfig:
+    """Configuration for Requesty (OpenAI-compatible) provider."""
+
+    api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("REQUESTY_API_KEY")
+    )
+    endpoint: str = "https://router.requesty.ai/v1/chat/completions"
+    default_model: str = "openai/gpt-4o-mini"
+    timeout: int = 120
+
+    # Request headers
+    site_url: str = "https://github.com/yourusername/TranslateBookWithLLM"
+    site_name: str = "TranslateBookWithLLM Benchmark"
+
+
+@dataclass
 class OpenAICompatibleConfig:
     """Configuration for OpenAI-compatible translation provider."""
 
@@ -153,13 +169,14 @@ class BenchmarkConfig:
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     openai: OpenAICompatibleConfig = field(default_factory=OpenAICompatibleConfig)
     openrouter: OpenRouterConfig = field(default_factory=OpenRouterConfig)
+    requesty: RequestyConfig = field(default_factory=RequestyConfig)
     poe: PoeConfig = field(default_factory=PoeConfig)
     paths: PathConfig = field(default_factory=PathConfig)
 
     # Benchmark settings
     source_language: str = "English"
 
-    # Translation provider ("ollama", "openai", or "openrouter")
+    # Translation provider ("ollama", "openai", "openrouter", or "requesty")
     translation_provider: str = "ollama"
 
     # Evaluator provider ("openrouter" or "poe")
@@ -178,6 +195,7 @@ class BenchmarkConfig:
     def from_cli_args(
         cls,
         openrouter_key: Optional[str] = None,
+        requesty_key: Optional[str] = None,
         openai_key: Optional[str] = None,
         openai_endpoint: Optional[str] = None,
         evaluator_model: Optional[str] = None,
@@ -192,6 +210,9 @@ class BenchmarkConfig:
 
         if openrouter_key:
             config.openrouter.api_key = openrouter_key
+
+        if requesty_key:
+            config.requesty.api_key = requesty_key
 
         if openai_key:
             config.openai.api_key = openai_key
@@ -249,6 +270,12 @@ class BenchmarkConfig:
                 "Set OPENROUTER_API_KEY in .env or use --openrouter-key"
             )
 
+        if self.translation_provider == "requesty" and not self.requesty.api_key:
+            errors.append(
+                "Requesty API key not configured. Required for translation. "
+                "Set REQUESTY_API_KEY in .env or use --requesty-key"
+            )
+
         if self.translation_provider == "openai" and not self.openai.endpoint:
             errors.append(
                 "OpenAI-compatible endpoint not configured. Required for translation. "
@@ -275,10 +302,10 @@ class BenchmarkConfig:
             )
 
         # Validate translation provider
-        if self.translation_provider not in ("ollama", "openai", "openrouter", "poe"):
+        if self.translation_provider not in ("ollama", "openai", "openrouter", "requesty", "poe"):
             errors.append(
                 f"Invalid translation provider: {self.translation_provider}. "
-                "Must be 'ollama', 'openai', 'openrouter', or 'poe'"
+                "Must be 'ollama', 'openai', 'openrouter', 'requesty', or 'poe'"
             )
 
         return errors

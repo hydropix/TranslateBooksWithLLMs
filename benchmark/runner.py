@@ -28,7 +28,8 @@ from benchmark.translator import (
     code_to_language_name,
     test_ollama_connection, get_available_ollama_models,
     test_openai_translation_connection, get_available_openai_models,
-    test_openrouter_translation_connection, get_available_openrouter_models
+    test_openrouter_translation_connection, get_available_openrouter_models,
+    test_requesty_translation_connection, get_available_requesty_models
 )
 from benchmark.evaluator import (
     TranslationEvaluator, test_openrouter_connection, test_poe_connection
@@ -149,6 +150,12 @@ class BenchmarkRunner:
                 errors.append(f"OpenRouter (translation): {or_trans_msg}")
             else:
                 self._log("info", f"OpenRouter (translation): {or_trans_msg}")
+        elif self.config.translation_provider == "requesty":
+            rq_trans_ok, rq_trans_msg = await test_requesty_translation_connection(self.config)
+            if not rq_trans_ok:
+                errors.append(f"Requesty (translation): {rq_trans_msg}")
+            else:
+                self._log("info", f"Requesty (translation): {rq_trans_msg}")
         elif self.config.translation_provider == "openai":
             openai_ok, openai_msg = await test_openai_translation_connection(self.config)
             if not openai_ok:
@@ -440,6 +447,9 @@ async def quick_benchmark(
     if models is None:
         if config.translation_provider == "openrouter":
             provider_models = await get_available_openrouter_models(config)
+            models = [m["id"] if isinstance(m, dict) else m for m in provider_models]
+        elif config.translation_provider == "requesty":
+            provider_models = await get_available_requesty_models(config)
             models = [m["id"] if isinstance(m, dict) else m for m in provider_models]
         elif config.translation_provider == "openai":
             provider_models = await get_available_openai_models(config)

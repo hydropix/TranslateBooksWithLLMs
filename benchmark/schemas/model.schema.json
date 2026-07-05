@@ -8,7 +8,7 @@
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "provider": {
-      "enum": ["ollama", "openai", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"]
+      "enum": ["ollama", "openai", "openrouter", "requesty", "gemini", "mistral", "deepseek", "poe", "nim"]
     },
     "context_window": { "type": "integer", "minimum": 0 },
     "released_at": { "type": "string", "format": "date" },

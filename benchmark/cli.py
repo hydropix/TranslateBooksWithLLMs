@@ -38,6 +38,7 @@ from benchmark.wiki.generator import WikiGenerator
 from benchmark.translator import (
     get_available_ollama_models,
     get_available_openrouter_models,
+    get_available_requesty_models,
     get_available_openai_models,
 )
 
@@ -98,6 +99,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     evaluator_provider = getattr(args, 'evaluator_provider', DEFAULT_EVALUATOR_PROVIDER)
     config = BenchmarkConfig.from_cli_args(
         openrouter_key=args.openrouter_key,
+        requesty_key=getattr(args, 'requesty_key', None),
         openai_key=args.openai_key,
         openai_endpoint=args.openai_endpoint,
         poe_key=args.poe_key,
@@ -127,6 +129,14 @@ def cmd_run(args: argparse.Namespace) -> int:
                 log_callback("error", "No OpenRouter models available.")
                 return 1
             # Extract model IDs
+            models = [m["id"] if isinstance(m, dict) else m for m in models_data[:10]]
+            print(colored(f"Found {len(models_data)} models. Using top 10: {', '.join(models[:3])}...", Colors.GREEN))
+        elif provider == "requesty":
+            print(colored("Fetching available Requesty models...", Colors.CYAN))
+            models_data = asyncio.run(get_available_requesty_models(config))
+            if not models_data:
+                log_callback("error", "No Requesty models available.")
+                return 1
             models = [m["id"] if isinstance(m, dict) else m for m in models_data[:10]]
             print(colored(f"Found {len(models_data)} models. Using top 10: {', '.join(models[:3])}...", Colors.GREEN))
         elif provider == "openai":
@@ -370,6 +380,9 @@ def _fetch_model_ids(provider: str, config: BenchmarkConfig) -> list[str]:
     if provider == "openrouter":
         models = asyncio.run(get_available_openrouter_models(config)) or []
         return [m.get("id") if isinstance(m, dict) else m for m in models]
+    if provider == "requesty":
+        models = asyncio.run(get_available_requesty_models(config)) or []
+        return [m.get("id") if isinstance(m, dict) else m for m in models]
     if provider == "openai":
         models = asyncio.run(get_available_openai_models(config)) or []
         return [m.get("id") if isinstance(m, dict) else m for m in models]
@@ -415,6 +428,7 @@ def cmd_models(args: argparse.Namespace) -> int:
     """List available models for benchmarking, or validate a specific id."""
     config = BenchmarkConfig.from_cli_args(
         openrouter_key=args.openrouter_key,
+        requesty_key=getattr(args, "requesty_key", None),
         openai_key=args.openai_key,
         openai_endpoint=args.openai_endpoint,
         poe_key=getattr(args, "poe_key", None),
@@ -473,6 +487,31 @@ def cmd_models(args: argparse.Namespace) -> int:
         print()
         print(colored("Tip: Use -m to specify models, e.g.:", Colors.YELLOW))
         print("  python -m benchmark.cli run -p openrouter -m anthropic/claude-sonnet-4 openai/gpt-4o")
+
+    elif provider == "requesty":
+        print(colored("Fetching Requesty models...\n", Colors.CYAN))
+        models = asyncio.run(get_available_requesty_models(config))
+
+        if not models:
+            log_callback("error", "Failed to fetch Requesty models")
+            return 1
+
+        print(colored(f"Available Requesty Models ({len(models)}):\n", Colors.BOLD))
+
+        # Table header
+        print(f"{'Model ID':<50}")
+        print("-" * 50)
+
+        for model in models[:50]:  # Limit to 50 for readability
+            if isinstance(model, dict):
+                model_id = model.get("id", "unknown")
+            else:
+                model_id = model
+            print(f"{model_id:<50}")
+
+        print()
+        print(colored("Tip: Use -m to specify models, e.g.:", Colors.YELLOW))
+        print("  python -m benchmark.cli run -p requesty -m openai/gpt-4o-mini")
 
     elif provider == "openai":
         print(colored("Fetching OpenAI-compatible models...\n", Colors.CYAN))
@@ -1035,10 +1074,10 @@ Examples:
     )
     run_parser.add_argument(
         "-p", "--provider",
-        choices=["ollama", "openai", "openrouter", "poe"],
+        choices=["ollama", "openai", "openrouter", "requesty", "poe"],
         default="ollama",
         help="Translation provider: 'ollama' (local), 'openai' (OpenAI-compatible), "
-             "'openrouter' (cloud), or 'poe' (Poe.com unified API)."
+             "'openrouter' (cloud), 'requesty' (OpenAI-compatible router), or 'poe' (Poe.com unified API)."
     )
     run_parser.add_argument(
         "--pairs",
@@ -1073,6 +1112,11 @@ Examples:
         "--openrouter-key",
         help="OpenRouter API key (for evaluation, and translation if using --provider openrouter). "
              "Can also be set via OPENROUTER_API_KEY env var."
+    )
+    run_parser.add_argument(
+        "--requesty-key",
+        help="Requesty API key (for translation if using --provider requesty). "
+             "Can also be set via REQUESTY_API_KEY env var."
     )
     run_parser.add_argument(
         "--evaluator-provider",
@@ -1152,7 +1196,7 @@ Examples:
     models_parser = subparsers.add_parser("models", help="List available models for benchmarking")
     models_parser.add_argument(
         "-p", "--provider",
-        choices=["ollama", "openai", "openrouter", "poe"],
+        choices=["ollama", "openai", "openrouter", "requesty", "poe"],
         default="ollama",
         help="Provider to list models for (default: ollama)"
     )
@@ -1167,6 +1211,10 @@ Examples:
     models_parser.add_argument(
         "--openrouter-key",
         help="OpenRouter API key (required for listing OpenRouter models)"
+    )
+    models_parser.add_argument(
+        "--requesty-key",
+        help="Requesty API key (required for listing Requesty models)"
     )
     models_parser.add_argument(
         "--poe-key",

@@ -34,7 +34,7 @@ from .models import (
 )
 
 
-CLOUD_PROVIDERS = {"openai", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"}
+CLOUD_PROVIDERS = {"openai", "openrouter", "requesty", "gemini", "mistral", "deepseek", "poe", "nim"}
 
 
 @dataclass

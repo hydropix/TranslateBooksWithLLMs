@@ -78,6 +78,7 @@ class BenchmarkTranslator:
             "ollama": "Ollama",
             "openai": "OpenAI-compatible provider",
             "openrouter": "OpenRouter",
+            "requesty": "Requesty",
             "poe": "Poe",
         }
         return labels.get(self.provider_type, self.provider_type)
@@ -99,6 +100,17 @@ class BenchmarkTranslator:
                 self._providers[model] = OpenRouterProvider(
                     api_key=self.config.openrouter.api_key,
                     model=model
+                )
+            elif self.provider_type == "requesty":
+                if not self.config.requesty.api_key:
+                    raise ValueError("Requesty API key is required for translation. "
+                                     "Set REQUESTY_API_KEY in .env or use --requesty-key")
+                self._providers[model] = OpenAICompatibleProvider(
+                    api_endpoint=self.config.requesty.endpoint,
+                    api_key=self.config.requesty.api_key,
+                    model=model,
+                    log_callback=lambda level, msg: self._log(level, msg),
+                    provider_name="requesty"
                 )
             elif self.provider_type == "poe":
                 if not self.config.poe.api_key:
@@ -519,3 +531,95 @@ async def test_openrouter_translation_connection(config: BenchmarkConfig) -> tup
 
     except Exception as e:
         return False, f"OpenRouter connection test failed: {e}"
+
+
+async def _fetch_requesty_models(config: BenchmarkConfig) -> list[dict]:
+    """
+    Fetch and filter models from the Requesty (OpenAI-compatible) endpoint.
+
+    Args:
+        config: Benchmark configuration
+
+    Returns:
+        List of model dicts with id, name, and owned_by fields.
+        Empty list if the endpoint is unreachable or returns no models.
+    """
+    import httpx
+
+    base_url = config.requesty.endpoint.replace("/chat/completions", "").rstrip("/")
+    headers = {}
+    if config.requesty.api_key:
+        headers["Authorization"] = f"Bearer {config.requesty.api_key}"
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(f"{base_url}/models", headers=headers)
+        response.raise_for_status()
+
+        data = response.json()
+        models = []
+        for model in data.get("data", []):
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+            if "embedding" in model_id.lower() or "whisper" in model_id.lower():
+                continue
+            models.append({
+                "id": model_id,
+                "name": model_id,
+                "owned_by": model.get("owned_by", "unknown"),
+            })
+
+        models.sort(key=lambda item: item["name"].lower())
+        return models
+
+
+async def get_available_requesty_models(config: BenchmarkConfig) -> list[dict]:
+    """
+    Get list of available Requesty models.
+
+    Args:
+        config: Benchmark configuration
+
+    Returns:
+        List of model dicts with id and name. Empty list on failure.
+    """
+    if not config.requesty.api_key:
+        print("⚠️ Requesty API key not configured. Returning default model.")
+        return [{"id": config.requesty.default_model, "name": config.requesty.default_model}]
+
+    try:
+        return await _fetch_requesty_models(config)
+    except Exception as e:
+        print(f"⚠️ Failed to fetch Requesty models: {e}")
+        return [{"id": config.requesty.default_model, "name": config.requesty.default_model}]
+
+
+async def test_requesty_translation_connection(config: BenchmarkConfig) -> tuple[bool, str]:
+    """
+    Test if Requesty is accessible for translation.
+
+    Args:
+        config: Benchmark configuration
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import httpx
+
+    if not config.requesty.api_key:
+        return False, "Requesty API key not configured"
+
+    try:
+        models = await _fetch_requesty_models(config)
+        if not models:
+            return False, "No Requesty models available"
+
+        model_names = [m["id"] if isinstance(m, dict) else m for m in models[:5]]
+        return True, f"Requesty connected. Available models: {', '.join(model_names)}..."
+
+    except httpx.ConnectError:
+        return False, f"Cannot connect to Requesty endpoint at {config.requesty.endpoint}"
+    except httpx.HTTPStatusError as e:
+        return False, f"Requesty HTTP error: {e.response.status_code}"
+    except Exception as e:
+        return False, f"Requesty connection test failed: {e}"

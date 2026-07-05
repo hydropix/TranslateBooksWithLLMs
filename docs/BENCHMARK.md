@@ -29,8 +29,9 @@ python -m benchmark.cli wiki-publish
 
 ## Prerequisites
 
-1. **Translation backend**: Ollama, OpenAI-compatible endpoint, or OpenRouter
+1. **Translation backend**: Ollama, OpenAI-compatible endpoint, OpenRouter, or Requesty
 2. **OpenRouter API key** for translation evaluation (get one at [openrouter.ai](https://openrouter.ai))
+   - For Requesty translation, get a key at [app.requesty.ai/api-keys](https://app.requesty.ai/api-keys)
 
 ## CLI Commands
 
@@ -49,10 +50,11 @@ python -m benchmark.cli run [OPTIONS]
 | `-m, --models MODEL [MODEL ...]` | Specific provider models to test. If omitted, auto-detects available models from the selected provider |
 | `-l, --languages CODE [CODE ...]` | Language codes to test (e.g., `fr de ja zh`). Default: quick test set (19 languages) |
 | `--full` | Run full benchmark with all 40+ languages |
-| `-p, --provider {ollama,openai,openrouter}` | Translation backend to benchmark |
+| `-p, --provider {ollama,openai,openrouter,requesty}` | Translation backend to benchmark |
 | `--openai-key KEY` | API key for OpenAI-compatible translation backends |
 | `--openai-endpoint URL` | OpenAI-compatible endpoint or `/v1` base URL |
 | `--openrouter-key KEY` | OpenRouter API key (can also use `OPENROUTER_API_KEY` env var) |
+| `--requesty-key KEY` | Requesty API key (can also use `REQUESTY_API_KEY` env var) |
 | `--evaluator MODEL` | OpenRouter model for evaluation (default: `anthropic/claude-haiku-4.5`) |
 | `--ollama-endpoint URL` | Custom Ollama endpoint (default: from `.env` or `http://localhost:11434/api/generate`) |
 | `--resume RUN_ID` | Resume an interrupted benchmark run |
@@ -241,6 +243,10 @@ REQUEST_TIMEOUT=900
 
 # OpenRouter Configuration (for evaluation)
 OPENROUTER_API_KEY=your_key_here
+
+# Requesty Configuration (OpenAI-compatible translation provider)
+# Get a key at https://app.requesty.ai/api-keys
+REQUESTY_API_KEY=your_key_here
 
 # Wiki Publishing
 WIKI_REPO_URL=https://github.com/your-username/TranslateBookWithLLM.wiki.git

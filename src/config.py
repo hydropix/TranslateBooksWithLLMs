@@ -67,6 +67,8 @@ _RELOADABLE_ENV_SETTINGS = (
     ('MISTRAL_MODEL',       'MISTRAL_MODEL',       'mistral-large-latest'),
     ('DEEPSEEK_API_KEY',    'DEEPSEEK_API_KEY',    ''),
     ('DEEPSEEK_MODEL',      'DEEPSEEK_MODEL',      'deepseek-v4-pro'),
+    ('ATLASCLOUD_API_KEY',  'ATLASCLOUD_API_KEY',  ''),
+    ('ATLASCLOUD_MODEL',    'ATLASCLOUD_MODEL',    'qwen/qwen3.5-flash'),
     ('POE_API_KEY',         'POE_API_KEY',         ''),
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
@@ -343,11 +345,12 @@ MIN_CHUNK_SIZE_TOKENS = 50
 
 # LLM Provider configuration
 # LLM_PROVIDER, GEMINI_*, OPENAI_*, OPENROUTER_API_KEY/MODEL, MISTRAL_API_KEY/MODEL,
-# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL are loaded via
+# DEEPSEEK_API_KEY/MODEL, ATLASCLOUD_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL are loaded via
 # _apply_reloadable_env_settings() so reload_config() can refresh them at runtime.
 OPENROUTER_API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 MISTRAL_API_ENDPOINT = os.getenv('MISTRAL_API_ENDPOINT', 'https://api.mistral.ai/v1/chat/completions')
 DEEPSEEK_API_ENDPOINT = os.getenv('DEEPSEEK_API_ENDPOINT', 'https://api.deepseek.com/chat/completions')
+ATLASCLOUD_API_ENDPOINT = os.getenv('ATLASCLOUD_API_ENDPOINT', 'https://api.atlascloud.ai/v1/chat/completions')
 # DeepSeek V4 models (deepseek-v4-flash, deepseek-v4-pro) enable thinking by default,
 # wasting ~10-25x tokens on translation. Set to 'false' to keep thinking enabled.
 DEEPSEEK_DISABLE_THINKING = os.getenv('DEEPSEEK_DISABLE_THINKING', 'true').lower() == 'true'
@@ -641,6 +644,7 @@ class TranslationConfig:
     openrouter_api_key: str = OPENROUTER_API_KEY
     mistral_api_key: str = MISTRAL_API_KEY
     deepseek_api_key: str = DEEPSEEK_API_KEY
+    atlascloud_api_key: str = ATLASCLOUD_API_KEY
     poe_api_key: str = POE_API_KEY
     nim_api_key: str = NIM_API_KEY
 
@@ -684,6 +688,7 @@ class TranslationConfig:
             openrouter_api_key=getattr(args, 'openrouter_api_key', OPENROUTER_API_KEY),
             mistral_api_key=getattr(args, 'mistral_api_key', MISTRAL_API_KEY),
             deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
+            atlascloud_api_key=getattr(args, 'atlascloud_api_key', ATLASCLOUD_API_KEY),
             poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
             nim_api_key=getattr(args, 'nim_api_key', NIM_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
@@ -730,6 +735,7 @@ class TranslationConfig:
             openrouter_api_key=request_data.get('openrouter_api_key', OPENROUTER_API_KEY),
             mistral_api_key=request_data.get('mistral_api_key', MISTRAL_API_KEY),
             deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
+            atlascloud_api_key=request_data.get('atlascloud_api_key', ATLASCLOUD_API_KEY),
             poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
             nim_api_key=request_data.get('nim_api_key', NIM_API_KEY),
             max_tokens_per_chunk=clamped_max_tokens,
@@ -754,6 +760,7 @@ class TranslationConfig:
             'openrouter_api_key': self.openrouter_api_key,
             'mistral_api_key': self.mistral_api_key,
             'deepseek_api_key': self.deepseek_api_key,
+            'atlascloud_api_key': self.atlascloud_api_key,
             'poe_api_key': self.poe_api_key,
             'nim_api_key': self.nim_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,

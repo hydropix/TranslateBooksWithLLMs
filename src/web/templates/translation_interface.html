@@ -809,6 +809,7 @@
                                 <select class="form-control" id="llmProvider">
                                     <option value="ollama">Ollama (Local)</option>
                                     <option value="poe">Poe (Multi-Provider)</option>
+                                    <option value="atlascloud">Atlas Cloud (Cloud API)</option>
                                     <option value="deepseek">DeepSeek (Cloud API)</option>
                                     <option value="mistral">Mistral (Cloud API)</option>
                                     <option value="gemini">Gemini (Cloud)</option>
@@ -870,6 +871,14 @@
                             <label><span data-i18n="settings:api_key">API Key</span> <span id="deepseekKeyStatus" class="key-status"></span></label>
                             <div class="neu-inset-light">
                                 <input type="password" class="form-control" id="deepseekApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_deepseek;title:settings:api_key_rotation_tip" placeholder="Enter DeepSeek API key" autocomplete="new-password" title="Tip: enter several keys separated by commas to enable automatic rotation on rate-limit (HTTP 429) — useful to chain free-tier accounts.">
+                            </div>
+                        </div>
+
+                        <!-- Atlas Cloud API Key -->
+                        <div class="form-group" id="atlascloudSettings" style="display: none; margin-bottom: 0;">
+                            <label><span data-i18n="settings:api_key">API Key</span> <span id="atlascloudKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light">
+                                <input type="password" class="form-control" id="atlascloudApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_atlascloud;title:settings:api_key_rotation_tip" placeholder="Enter Atlas Cloud API key" autocomplete="new-password" title="Tip: enter several keys separated by commas to enable automatic rotation on rate-limit (HTTP 429) — useful to chain free-tier accounts.">
                             </div>
                         </div>
 

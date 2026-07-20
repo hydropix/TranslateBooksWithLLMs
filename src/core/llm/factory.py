@@ -14,6 +14,7 @@ from src.config import (
     MISTRAL_API_KEY, MISTRAL_MODEL, MISTRAL_API_ENDPOINT,
     DEEPSEEK_API_KEY, DEEPSEEK_MODEL, DEEPSEEK_API_ENDPOINT,
     DEEPSEEK_DISABLE_THINKING,
+    ATLASCLOUD_API_KEY, ATLASCLOUD_MODEL, ATLASCLOUD_API_ENDPOINT,
     POE_API_KEY, POE_MODEL, POE_API_ENDPOINT,
     NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT,
     LITELLM_MODEL
@@ -25,6 +26,7 @@ from .providers.gemini import GeminiProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
+from .providers.atlascloud import AtlasCloudProvider
 from .providers.poe import PoeProvider
 from .providers.litellm import LiteLLMProvider
 
@@ -49,7 +51,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "atlascloud", "poe", "nim", "litellm")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -146,6 +148,17 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             model=kwargs.get("model", DEEPSEEK_MODEL),
             api_endpoint=DEEPSEEK_API_ENDPOINT,
             disable_thinking=kwargs.get("deepseek_disable_thinking", DEEPSEEK_DISABLE_THINKING)
+        )
+    elif provider_type.lower() == "atlascloud":
+        api_key = _require_key(
+            kwargs.get("api_key") or kwargs.get("atlascloud_api_key")
+            or os.getenv("ATLASCLOUD_API_KEY", ATLASCLOUD_API_KEY),
+            "Atlas Cloud provider requires an API key. Set ATLASCLOUD_API_KEY environment variable or pass api_key parameter."
+        )
+        return AtlasCloudProvider(
+            api_key=api_key,
+            model=kwargs.get("model", ATLASCLOUD_MODEL),
+            api_endpoint=kwargs.get("api_endpoint", ATLASCLOUD_API_ENDPOINT),
         )
     elif provider_type.lower() == "poe":
         api_key = _require_key(

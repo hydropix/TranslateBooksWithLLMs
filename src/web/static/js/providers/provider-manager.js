@@ -44,6 +44,11 @@ const DEEPSEEK_FALLBACK_MODELS = [
     { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (Thinking)' }
 ];
 
+const ATLASCLOUD_FALLBACK_MODELS = [
+    { value: 'qwen/qwen3.5-flash', label: 'Qwen 3.5 Flash' },
+    { value: 'deepseek-ai/deepseek-v4-pro', label: 'DeepSeek V4 Pro' }
+];
+
 /**
  * Comprehensive Poe models list - organized by provider
  * Poe has a /v1/models API endpoint, but this fallback list is used when API fails
@@ -344,6 +349,7 @@ export const ProviderManager = {
         // Get mistral, deepseek, poe and nim settings elements once
         const mistralSettings = DomHelpers.getElement('mistralSettings');
         const deepseekSettings = DomHelpers.getElement('deepseekSettings');
+        const atlascloudSettings = DomHelpers.getElement('atlascloudSettings');
         const poeSettings = DomHelpers.getElement('poeSettings');
         const nimSettings = DomHelpers.getElement('nimSettings');
 
@@ -356,6 +362,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadOllamaModels();
@@ -367,6 +374,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'block';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadPoeModels();
@@ -378,6 +386,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadGeminiModels();
@@ -389,6 +398,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadOpenAIModels();
@@ -400,6 +410,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'block';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadOpenRouterModels();
@@ -411,6 +422,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'block';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadMistralModels();
@@ -422,9 +434,22 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'block';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
             if (loadModels) this.loadDeepSeekModels();
+        } else if (provider === 'atlascloud') {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'block';
+            if (poeSettings) poeSettings.style.display = 'none';
+            if (nimSettings) nimSettings.style.display = 'none';
+            if (loadModels) this.loadAtlasCloudModels();
         } else if (provider === 'nim') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -433,6 +458,7 @@ export const ProviderManager = {
             if (openrouterSettings) openrouterSettings.style.display = 'none';
             if (mistralSettings) mistralSettings.style.display = 'none';
             if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (atlascloudSettings) atlascloudSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'block';
             if (loadModels) this.loadNimModels();
@@ -468,6 +494,8 @@ export const ProviderManager = {
             this.loadMistralModels();
         } else if (provider === 'deepseek') {
             this.loadDeepSeekModels();
+        } else if (provider === 'atlascloud') {
+            this.loadAtlasCloudModels();
         } else if (provider === 'nim') {
             this.loadNimModels();
         }
@@ -925,6 +953,60 @@ export const ProviderManager = {
 
             StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
             StatusManager.setConnected('deepseek', DEEPSEEK_FALLBACK_MODELS.length);
+        }
+    },
+
+    async loadAtlasCloudModels() {
+        const modelSelect = DomHelpers.getElement('model');
+        if (!modelSelect) return;
+
+        setPlaceholderOption(modelSelect, 'settings:search_models_loading_atlascloud');
+        StatusManager.setChecking();
+
+        try {
+            const apiKey = ApiKeyUtils.getValue('atlascloudApiKey');
+            if (!apiKey) {
+                MessageLogger.showMessage(t('settings:atlascloud_key_required'), 'warning');
+                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
+                StatusManager.setError(t('settings:status_no_api_key'));
+                return;
+            }
+
+            const data = await ApiClient.getModels('atlascloud', { apiKey });
+
+            if (data.models && data.models.length > 0) {
+                MessageLogger.showMessage('', '');
+
+                const formattedModels = data.models.map(m => ({
+                    value: m.id,
+                    label: m.name || m.id,
+                    context_length: m.context_length
+                }));
+
+                populateModelSelect(formattedModels, data.default, 'atlascloud');
+                MessageLogger.addLog(t('settings:atlascloud_models_loaded_log', { count: data.count }));
+
+                SettingsManager.applyPendingModelSelection();
+                ModelDetector.checkAndShowRecommendation();
+
+                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
+                StatusManager.setConnected('atlascloud', data.count);
+            } else {
+                const errorMessage = data.error || t('settings:atlascloud_default_error');
+                MessageLogger.showMessage(t('settings:deepseek_fallback_msg', { message: errorMessage }), 'warning');
+                populateModelSelect(ATLASCLOUD_FALLBACK_MODELS, 'qwen/qwen3.5-flash', 'atlascloud');
+                MessageLogger.addLog(t('settings:atlascloud_fallback_log'));
+
+                StateManager.setState('models.availableModels', ATLASCLOUD_FALLBACK_MODELS.map(m => m.value));
+                StatusManager.setConnected('atlascloud', ATLASCLOUD_FALLBACK_MODELS.length);
+            }
+        } catch (error) {
+            MessageLogger.showMessage(t('settings:deepseek_error_fallback_msg', { error: error.message }), 'warning');
+            MessageLogger.addLog(t('settings:atlascloud_error_fallback_log', { error: error.message }));
+            populateModelSelect(ATLASCLOUD_FALLBACK_MODELS, 'qwen/qwen3.5-flash', 'atlascloud');
+
+            StateManager.setState('models.availableModels', ATLASCLOUD_FALLBACK_MODELS.map(m => m.value));
+            StatusManager.setConnected('atlascloud', ATLASCLOUD_FALLBACK_MODELS.length);
         }
     },
 

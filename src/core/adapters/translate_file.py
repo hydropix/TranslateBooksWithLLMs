@@ -41,6 +41,7 @@ async def translate_file(
     openrouter_api_key: Optional[str] = None,
     mistral_api_key: Optional[str] = None,
     deepseek_api_key: Optional[str] = None,
+    atlascloud_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
     context_window: Optional[int] = None,
@@ -178,6 +179,7 @@ async def translate_file(
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
+            atlascloud_api_key=atlascloud_api_key,
             poe_api_key=poe_api_key,
             nim_api_key=nim_api_key,
             context_window=context_window or 2048,
@@ -211,6 +213,7 @@ async def translate_file(
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
+            atlascloud_api_key=atlascloud_api_key,
             poe_api_key=poe_api_key
         )
 
@@ -281,6 +284,7 @@ async def translate_file(
         'openrouter_api_key': openrouter_api_key,
         'mistral_api_key': mistral_api_key,
         'deepseek_api_key': deepseek_api_key,
+        'atlascloud_api_key': atlascloud_api_key,
         'poe_api_key': poe_api_key,
         'prompt_options': prompt_options,
     }

@@ -24,6 +24,7 @@ PROVIDER_ENV_VARS = {
     'openrouter': 'OPENROUTER_API_KEY',
     'mistral': 'MISTRAL_API_KEY',
     'deepseek': 'DEEPSEEK_API_KEY',
+    'atlascloud': 'ATLASCLOUD_API_KEY',
     'poe': 'POE_API_KEY',
     'nim': 'NIM_API_KEY',
 }

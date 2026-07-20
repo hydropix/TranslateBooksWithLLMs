@@ -91,6 +91,7 @@ function getTranslationConfig(file) {
         openrouter_api_key: provider === 'openrouter' ? ApiKeyUtils.getValue('openrouterApiKey') : '',
         mistral_api_key: provider === 'mistral' ? ApiKeyUtils.getValue('mistralApiKey') : '',
         deepseek_api_key: provider === 'deepseek' ? ApiKeyUtils.getValue('deepseekApiKey') : '',
+        atlascloud_api_key: provider === 'atlascloud' ? ApiKeyUtils.getValue('atlascloudApiKey') : '',
         poe_api_key: provider === 'poe' ? ApiKeyUtils.getValue('poeApiKey') : '',
         nim_api_key: provider === 'nim' ? ApiKeyUtils.getValue('nimApiKey') : '',
         input_filename: file.name,

@@ -167,6 +167,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_mistral_models(api_key)
         elif provider == 'deepseek':
             return _get_deepseek_models(api_key)
+        elif provider == 'atlascloud':
+            return _get_atlascloud_models(api_key)
         elif provider == 'poe':
             return _get_poe_models(api_key)
         elif provider == 'nim':
@@ -200,6 +202,7 @@ def create_config_blueprint(server_session_id=None):
         openrouter_mask, openrouter_count = mask_api_key(_config.OPENROUTER_API_KEY)
         mistral_mask, mistral_count = mask_api_key(_config.MISTRAL_API_KEY)
         deepseek_mask, deepseek_count = mask_api_key(_config.DEEPSEEK_API_KEY)
+        atlascloud_mask, atlascloud_count = mask_api_key(_config.ATLASCLOUD_API_KEY)
         poe_mask, poe_count = mask_api_key(_config.POE_API_KEY)
         nim_mask, nim_count = mask_api_key(_config.NIM_API_KEY)
 
@@ -220,6 +223,7 @@ def create_config_blueprint(server_session_id=None):
             "openrouter_api_key": openrouter_mask,
             "mistral_api_key": mistral_mask,
             "deepseek_api_key": deepseek_mask,
+            "atlascloud_api_key": atlascloud_mask,
             "poe_api_key": poe_mask,
             "nim_api_key": nim_mask,
             "gemini_api_key_count": gemini_count,
@@ -227,6 +231,7 @@ def create_config_blueprint(server_session_id=None):
             "openrouter_api_key_count": openrouter_count,
             "mistral_api_key_count": mistral_count,
             "deepseek_api_key_count": deepseek_count,
+            "atlascloud_api_key_count": atlascloud_count,
             "poe_api_key_count": poe_count,
             "nim_api_key_count": nim_count,
             "gemini_api_key_configured": gemini_count > 0,
@@ -234,6 +239,7 @@ def create_config_blueprint(server_session_id=None):
             "openrouter_api_key_configured": openrouter_count > 0,
             "mistral_api_key_configured": mistral_count > 0,
             "deepseek_api_key_configured": deepseek_count > 0,
+            "atlascloud_api_key_configured": atlascloud_count > 0,
             "poe_api_key_configured": poe_count > 0,
             "nim_api_key_configured": nim_count > 0,
             "output_filename_pattern": _config.OUTPUT_FILENAME_PATTERN,
@@ -398,6 +404,24 @@ def create_config_blueprint(server_session_id=None):
             display_name="DeepSeek",
             api_key_missing_message=(
                 "DeepSeek API key is required. Set DEEPSEEK_API_KEY "
+                "environment variable or pass api_key parameter."
+            ),
+        )
+
+    def _get_atlascloud_models(provided_api_key=None):
+        """Get available models from Atlas Cloud API"""
+        from src.core.llm import AtlasCloudProvider
+        return _fetch_provider_models(
+            provided_api_key=provided_api_key,
+            env_var='ATLASCLOUD_API_KEY',
+            config_api_key=_config.ATLASCLOUD_API_KEY,
+            config_default_model=_config.ATLASCLOUD_MODEL,
+            provider_class=AtlasCloudProvider,
+            fallback_model="qwen/qwen3.5-flash",
+            status_prefix="atlascloud",
+            display_name="Atlas Cloud",
+            api_key_missing_message=(
+                "Atlas Cloud API key is required. Set ATLASCLOUD_API_KEY "
                 "environment variable or pass api_key parameter."
             ),
         )
@@ -918,6 +942,8 @@ def create_config_blueprint(server_session_id=None):
             'MISTRAL_MODEL',
             'DEEPSEEK_API_KEY',
             'DEEPSEEK_MODEL',
+            'ATLASCLOUD_API_KEY',
+            'ATLASCLOUD_MODEL',
             'POE_API_KEY',
             'POE_MODEL',
             'NIM_API_KEY',
@@ -1069,6 +1095,7 @@ def create_config_blueprint(server_session_id=None):
             "openrouter_api_key_configured": bool(_config.OPENROUTER_API_KEY),
             "mistral_api_key_configured": bool(_config.MISTRAL_API_KEY),
             "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
+            "atlascloud_api_key_configured": bool(_config.ATLASCLOUD_API_KEY),
             "poe_api_key_configured": bool(_config.POE_API_KEY),
             "nim_api_key_configured": bool(_config.NIM_API_KEY),
             "default_model": _config.DEFAULT_MODEL or "",

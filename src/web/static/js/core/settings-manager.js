@@ -148,6 +148,7 @@ export const SettingsManager = {
             { id: 'openrouterApiKey', event: 'input' },
             { id: 'mistralApiKey', event: 'input' },
             { id: 'deepseekApiKey', event: 'input' },
+            { id: 'atlascloudApiKey', event: 'input' },
             { id: 'poeApiKey', event: 'input' },
             { id: 'nimApiKey', event: 'input' },
             { id: 'disableAutoPause', event: 'change' },
@@ -475,6 +476,9 @@ export const SettingsManager = {
             } else if (provider === 'deepseek') {
                 const key = DomHelpers.getValue('deepseekApiKey');
                 if (key) envSettings['DEEPSEEK_API_KEY'] = key;
+            } else if (provider === 'atlascloud') {
+                const key = DomHelpers.getValue('atlascloudApiKey');
+                if (key) envSettings['ATLASCLOUD_API_KEY'] = key;
             } else if (provider === 'poe') {
                 const key = DomHelpers.getValue('poeApiKey');
                 if (key) envSettings['POE_API_KEY'] = key;
@@ -543,6 +547,8 @@ export const SettingsManager = {
                     envSettings['MISTRAL_MODEL'] = model;
                 } else if (provider === 'deepseek') {
                     envSettings['DEEPSEEK_MODEL'] = model;
+                } else if (provider === 'atlascloud') {
+                    envSettings['ATLASCLOUD_MODEL'] = model;
                 } else if (provider === 'poe') {
                     envSettings['POE_MODEL'] = model;
                 } else if (provider === 'nim') {

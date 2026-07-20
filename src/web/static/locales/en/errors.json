@@ -20,6 +20,7 @@
   "api_key_required_openrouter": "OpenRouter API key is required when using OpenRouter provider.",
   "api_key_required_mistral": "Mistral API key is required when using Mistral provider.",
   "api_key_required_deepseek": "DeepSeek API key is required when using DeepSeek provider.",
+  "api_key_required_atlascloud": "Atlas Cloud API key is required when using Atlas Cloud provider.",
   "api_key_required_poe": "Poe API key is required. Get your key at poe.com/api_key",
   "api_key_required_nim": "NVIDIA NIM API key is required when using NIM provider."
 }

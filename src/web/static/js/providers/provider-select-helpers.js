@@ -14,6 +14,7 @@ import { t } from '../i18n/i18n.js';
 export const PROVIDER_LOGOS = {
     ollama: '/static/img/providers/ollama.png',
     poe: '/static/img/providers/poe.png',
+    atlascloud: '/static/img/providers/openai.png',
     deepseek: '/static/img/providers/deepseek.png',
     mistral: '/static/img/providers/mistral.png',
     gemini: '/static/img/providers/gemini.png',
@@ -25,6 +26,7 @@ export const PROVIDER_LOGOS = {
 export const PROVIDER_META = {
     ollama: { name: 'Ollama', description: 'Local' },
     poe: { name: 'Poe', description: 'Multi-Provider' },
+    atlascloud: { name: 'Atlas Cloud', description: 'Cloud API' },
     deepseek: { name: 'DeepSeek', description: 'Cloud API' },
     mistral: { name: 'Mistral', description: 'Cloud API' },
     gemini: { name: 'Gemini', description: 'Cloud' },
@@ -34,7 +36,7 @@ export const PROVIDER_META = {
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
-export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
+export const PROVIDER_ORDER = ['atlascloud', 'deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
 
 /**
  * Replace the dropdown content with a single placeholder option whose text
@@ -138,7 +140,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             if (modelId === defaultModel) { opt.selected = true; defaultFound = true; }
             (optgroup || selectEl).appendChild(opt);
         });
-    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim') {
+    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'atlascloud' || provider === 'nim') {
         list.forEach((m) => {
             // Same dual-shape tolerance as the openai branch: Settings sends
             // `{value, label}`, the Sample tab forwards the raw `{id, name}`.

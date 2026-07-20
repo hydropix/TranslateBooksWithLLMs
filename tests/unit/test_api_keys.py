@@ -25,10 +25,12 @@ class TestProviderEnvVar:
         assert provider_env_var('gemini') == 'GEMINI_API_KEY'
         assert provider_env_var('openai') == 'OPENAI_API_KEY'
         assert provider_env_var('nim') == 'NIM_API_KEY'
+        assert provider_env_var('atlascloud') == 'ATLASCLOUD_API_KEY'
 
     def test_case_insensitive(self):
         assert provider_env_var('Gemini') == 'GEMINI_API_KEY'
         assert provider_env_var('OPENAI') == 'OPENAI_API_KEY'
+        assert provider_env_var('AtlasCloud') == 'ATLASCLOUD_API_KEY'
 
     def test_keyless_or_unknown_provider_returns_empty(self):
         assert provider_env_var('ollama') == ''

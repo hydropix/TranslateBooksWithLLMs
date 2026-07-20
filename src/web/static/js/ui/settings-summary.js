@@ -21,6 +21,7 @@ const PROVIDER_LABELS = {
     openrouter: 'OpenRouter',
     mistral: 'Mistral',
     deepseek: 'DeepSeek',
+    atlascloud: 'Atlas Cloud',
     poe: 'Poe',
     nim: 'NVIDIA NIM',
 };

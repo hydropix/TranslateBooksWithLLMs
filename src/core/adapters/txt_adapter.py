@@ -11,6 +11,8 @@ This adapter handles plain text files by:
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from src.core.chunking.reassembly import join_translated_chunks
+
 from .format_adapter import FormatAdapter
 from .translation_unit import TranslationUnit
 
@@ -132,6 +134,17 @@ class TxtAdapter(FormatAdapter):
         Returns:
             Complete translated file as bytes
         """
+        if not bilingual:
+            # Standard format: join on the separator each chunk was split on, so
+            # paragraph breaks survive the chunk seams and a sentence-level split
+            # inside a paragraph does not become a new paragraph.
+            final_text = join_translated_chunks(
+                self.translated_chunks,
+                self.chunks,
+                fallbacks=[c['main_content'] for c in self.chunks]
+            )
+            return final_text.encode('utf-8')
+
         text_chunks = []
         separator = "─" * 40
 
@@ -139,20 +152,14 @@ class TxtAdapter(FormatAdapter):
             original = self.chunks[i]['main_content'].strip()
             translated = translated_chunk.strip() if translated_chunk else original
 
-            if bilingual:
-                # Bilingual format: original, blank line, translation, separator
-                block = f"{original}\n\n{translated}\n\n{separator}"
-                text_chunks.append(block)
-            else:
-                # Standard format: translation only
-                text_chunks.append(translated if translated_chunk else original)
+            # Bilingual format: original, blank line, translation, separator
+            block = f"{original}\n\n{translated}\n\n{separator}"
+            text_chunks.append(block)
 
-        # Join chunks
-        joiner = "\n\n" if bilingual else "\n"
-        final_text = joiner.join(text_chunks)
+        final_text = "\n\n".join(text_chunks)
 
         # Remove trailing separator in bilingual mode
-        if bilingual and final_text.endswith(separator):
+        if final_text.endswith(separator):
             final_text = final_text[:-len(separator)].rstrip()
 
         return final_text.encode('utf-8')

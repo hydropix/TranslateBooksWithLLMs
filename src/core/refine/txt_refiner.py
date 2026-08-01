@@ -9,6 +9,7 @@ import os
 import aiofiles
 from typing import Optional, Callable, Dict, Any
 
+from src.core.chunking.reassembly import join_translated_chunks
 from src.core.text_processor import split_text_into_chunks
 from src.core.translator import refine_chunks
 from src.config import DEFAULT_MODEL, API_ENDPOINT
@@ -126,7 +127,7 @@ async def refine_txt_file(
     )
 
     from src.config import ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE
-    final_text = "\n".join(refined_parts)
+    final_text = join_translated_chunks(refined_parts, structured_chunks)
     if ATTRIBUTION_ENABLED:
         footer = f"\n\n{'=' * 60}\n"
         footer += f"Refined with {GENERATOR_NAME}\n"

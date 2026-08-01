@@ -114,7 +114,9 @@ def build_plain_segments(
             flush()
             sentences = chunker.split_paragraph_into_sentences(text)
             if len(sentences) > 1:
-                pieces = chunker._chunk_units(sentences, separator=" ")
+                # _chunk_units returns {"text", "join_before"} records; this
+                # pipeline tracks paragraph identity itself and only needs the text.
+                pieces = [p["text"] for p in chunker._chunk_units(sentences, separator=" ")]
             else:
                 pieces = [text]
             for piece in pieces:

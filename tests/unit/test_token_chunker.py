@@ -211,6 +211,61 @@ class TestTokenChunker:
             assert tokens <= chunker.max_tokens * 2
 
 
+class TestTokenChunkerJoinWith:
+    """Tests for the `join_with` key that drives TXT reassembly (issue #208)."""
+
+    # Three ~11-token paragraphs; max_tokens=25 forces exactly two chunks.
+    PARAGRAPHS = [
+        "First paragraph with a reasonable amount of content in it.",
+        "Second paragraph with a reasonable amount of content in it.",
+        "Third paragraph with a reasonable amount of content in it.",
+    ]
+
+    def test_paragraph_boundaries_join_with_blank_line(self):
+        """Paragraph-level seams carry "\\n\\n" and round-trip to the source."""
+        chunker = TokenChunker(max_tokens=25, soft_limit_ratio=0.5)
+        text = "\n\n".join(self.PARAGRAPHS)
+        chunks = chunker.chunk_text(text)
+
+        assert len(chunks) > 1
+        assert chunks[0]["join_with"] == ""
+        assert all(c["join_with"] == "\n\n" for c in chunks[1:])
+        assert "\n\n".join(c["main_content"] for c in chunks) == text
+
+    def test_sentence_split_run_marks_continuations_with_a_space(self):
+        """A paragraph split at sentence level keeps its chunks joined by " "."""
+        chunker = TokenChunker(max_tokens=30, soft_limit_ratio=0.5)
+        text = " ".join(f"Sentence number {i} goes right here." for i in range(12))
+        chunks = chunker.chunk_text(text)
+
+        assert len(chunks) > 1
+        joins = [c["join_with"] for c in chunks]
+        assert " " in joins, f"expected a sentence-level seam, got {joins}"
+
+        # The chunk that opens the sentence run is a paragraph start, not a
+        # continuation: it is either chunk 0 ("") or a "\n\n" seam.
+        first_of_run = joins.index(" ") - 1
+        assert joins[first_of_run] in ("", "\n\n")
+
+    def test_empty_text_still_returns_no_chunks(self):
+        """Empty and whitespace-only input still produce no chunks."""
+        chunker = TokenChunker()
+        assert chunker.chunk_text("") == []
+        assert chunker.chunk_text("   ") == []
+
+    def test_context_keys_are_preserved(self):
+        """The three pre-existing keys survive the join_with addition."""
+        chunker = TokenChunker(max_tokens=25, soft_limit_ratio=0.5)
+        chunks = chunker.chunk_text("\n\n".join(self.PARAGRAPHS))
+
+        assert chunks
+        for chunk in chunks:
+            assert "context_before" in chunk
+            assert "main_content" in chunk
+            assert "context_after" in chunk
+            assert "join_with" in chunk
+
+
 class TestTokenChunkerEdgeCases:
     """Edge case tests for TokenChunker."""
 

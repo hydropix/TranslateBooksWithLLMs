@@ -11,6 +11,16 @@ import tiktoken
 from src.config import SENTENCE_TERMINATORS
 
 
+def _chunk(text: str, join_before: str) -> Dict[str, str]:
+    """Build a raw chunk record.
+
+    `join_before` is the separator that re-attaches this chunk to the previous
+    one, so reassembly can tell a paragraph boundary from a sentence-level split
+    inside a single source paragraph.
+    """
+    return {"text": text, "join_before": join_before}
+
+
 class TokenChunker:
     """
     Token-based text chunker that respects natural boundaries.
@@ -98,16 +108,21 @@ class TokenChunker:
 
         return sentences
 
-    def _chunk_units(self, units: List[str], separator: str = "\n\n") -> List[str]:
+    def _chunk_units(self, units: List[str], separator: str = "\n\n") -> List[Dict[str, str]]:
         """
         Chunk a list of text units (paragraphs or sentences) into appropriately sized chunks.
+
+        Each item is {"text": <chunk text>, "join_before": <separator that
+        re-attaches this chunk to the previous one>}. `join_before` on the first
+        item of the returned list is the caller's `separator` and is ignored by
+        the top-level caller.
 
         Args:
             units: List of text units to chunk
             separator: Separator to use when joining units
 
         Returns:
-            List of chunk strings
+            List of {"text", "join_before"} dictionaries
         """
         # Minimum chunk size threshold - chunks smaller than this will be merged
         # with adjacent content rather than saved separately
@@ -131,39 +146,49 @@ class TokenChunker:
                     current_tokens = 0
                 elif current_units:
                     # Current chunk is big enough, save it
-                    chunks.append(separator.join(current_units))
+                    chunks.append(_chunk(separator.join(current_units), separator))
                     current_units = []
                     current_tokens = 0
 
                 # If it's a paragraph, try splitting into sentences
                 sentences = self.split_paragraph_into_sentences(unit)
                 if len(sentences) > 1:
-                    # Recursively chunk sentences
+                    # Recursively chunk sentences; those chunks are continuations
+                    # of the same source paragraph and carry join_before=" ".
                     sentence_chunks = self._chunk_units(sentences, separator=" ")
 
                     # Prepend small prefix to first sentence chunk if exists
                     if prefix_units and sentence_chunks:
                         prefix_text = separator.join(prefix_units)
                         prefix_tokens = self.count_tokens(prefix_text)
-                        first_chunk_tokens = self.count_tokens(sentence_chunks[0])
+                        first_chunk_tokens = self.count_tokens(sentence_chunks[0]["text"])
 
                         # Only merge if combined size is reasonable
                         if prefix_tokens + first_chunk_tokens <= self.max_tokens:
-                            sentence_chunks[0] = prefix_text + separator + sentence_chunks[0]
+                            sentence_chunks[0]["text"] = (
+                                prefix_text + separator + sentence_chunks[0]["text"]
+                            )
                         else:
                             # Prefix too big, save it separately
-                            chunks.append(prefix_text)
+                            chunks.append(_chunk(prefix_text, separator))
                     elif prefix_units:
                         # No sentence chunks but have prefix
-                        chunks.append(separator.join(prefix_units))
+                        chunks.append(_chunk(separator.join(prefix_units), separator))
+
+                    if sentence_chunks:
+                        # The run starts a new paragraph relative to whatever
+                        # preceded it; only chunks 2..n are continuations.
+                        sentence_chunks[0]["join_before"] = separator
 
                     chunks.extend(sentence_chunks)
                 else:
                     # Can't split further, prepend prefix if any
                     if prefix_units:
-                        chunks.append(separator.join(prefix_units) + separator + unit)
+                        chunks.append(
+                            _chunk(separator.join(prefix_units) + separator + unit, separator)
+                        )
                     else:
-                        chunks.append(unit)
+                        chunks.append(_chunk(unit, separator))
                 continue
 
             # Check if adding this unit would exceed limits
@@ -175,13 +200,13 @@ class TokenChunker:
             # If we're past soft limit, check if we should start a new chunk
             if current_tokens >= self.soft_limit and potential_tokens > self.max_tokens:
                 # Save current chunk and start new one
-                chunks.append(separator.join(current_units))
+                chunks.append(_chunk(separator.join(current_units), separator))
                 current_units = [unit]
                 current_tokens = unit_tokens
             elif potential_tokens > self.max_tokens:
                 # Would exceed hard limit, start new chunk
                 if current_units:
-                    chunks.append(separator.join(current_units))
+                    chunks.append(_chunk(separator.join(current_units), separator))
                 current_units = [unit]
                 current_tokens = unit_tokens
             else:
@@ -191,7 +216,7 @@ class TokenChunker:
 
         # Don't forget the last chunk
         if current_units:
-            chunks.append(separator.join(current_units))
+            chunks.append(_chunk(separator.join(current_units), separator))
 
         return chunks
 
@@ -214,6 +239,8 @@ class TokenChunker:
             - context_before: Last paragraph of previous chunk (for context)
             - main_content: Main content to translate
             - context_after: First paragraph of next chunk (for context)
+            - join_with: Separator that re-attaches this chunk to the previous
+              one on reassembly ("" for the first chunk)
         """
         if not text or not text.strip():
             return []
@@ -233,17 +260,19 @@ class TokenChunker:
         # Build structured chunks with context
         structured_chunks = []
 
-        for i, chunk_content in enumerate(raw_chunks):
+        for i, raw_chunk in enumerate(raw_chunks):
+            chunk_content = raw_chunk["text"]
+
             # Context before: last part of previous chunk
             if i > 0:
-                prev_paragraphs = self.split_into_paragraphs(raw_chunks[i - 1])
+                prev_paragraphs = self.split_into_paragraphs(raw_chunks[i - 1]["text"])
                 context_before = prev_paragraphs[-1] if prev_paragraphs else ""
             else:
                 context_before = ""
 
             # Context after: first part of next chunk
             if i < len(raw_chunks) - 1:
-                next_paragraphs = self.split_into_paragraphs(raw_chunks[i + 1])
+                next_paragraphs = self.split_into_paragraphs(raw_chunks[i + 1]["text"])
                 context_after = next_paragraphs[0] if next_paragraphs else ""
             else:
                 context_after = ""
@@ -251,7 +280,8 @@ class TokenChunker:
             structured_chunks.append({
                 "context_before": context_before,
                 "main_content": chunk_content,
-                "context_after": context_after
+                "context_after": context_after,
+                "join_with": "" if i == 0 else raw_chunk["join_before"]
             })
 
         return structured_chunks

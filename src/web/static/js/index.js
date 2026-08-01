@@ -343,6 +343,15 @@ function wireModuleEvents() {
         TranslationTracker.updateActiveTranslationsState();
     });
 
+    // Desync recovery (visibility change / 10s consistency check) -> tracker.
+    // Injected instead of imported: translation-tracker.js already imports
+    // LifecycleManager, so a static import the other way would close a cycle.
+    // Issue #224.
+    LifecycleManager.setDesyncHandlers({
+        onTerminalStatus: (data) => TranslationTracker.handleTranslationUpdate(data),
+        onJobMissing: () => TranslationTracker.resetUIToIdle(),
+    });
+
     WebSocketManager.on('translation_update', (data) => {
         TranslationTracker.handleTranslationUpdate(data);
     });

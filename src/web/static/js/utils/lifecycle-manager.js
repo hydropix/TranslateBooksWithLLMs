@@ -18,6 +18,21 @@ const TRANSLATION_STATE_STORAGE_KEY = `tbl_translation_state_v${STORAGE_VERSION}
 
 export const LifecycleManager = {
     /**
+     * Handlers invoked when a visibility/interval consistency check finds the
+     * server and the UI disagree. Injected from index.js so this module does not
+     * import the tracker (translation-tracker.js already imports this module).
+     * @type {{onTerminalStatus: (data: object) => void, onJobMissing: () => void} | null}
+     */
+    _desyncHandlers: null,
+
+    /**
+     * @param {{onTerminalStatus: (data: object) => void, onJobMissing: () => void}} handlers
+     */
+    setDesyncHandlers(handlers) {
+        this._desyncHandlers = handlers;
+    },
+
+    /**
      * Initialize lifecycle manager
      */
     initialize() {
@@ -222,22 +237,20 @@ export const LifecycleManager = {
             const data = await ApiClient.getTranslationStatus(tidToCheck);
             const serverStatus = data.status;
 
-            if (serverStatus === 'completed' || serverStatus === 'error' || serverStatus === 'interrupted' || serverStatus === 'rate_limited') {
+            if (serverStatus === 'completed' || serverStatus === 'error' || serverStatus === 'interrupted' || serverStatus === 'rate_limited' || serverStatus === 'partial') {
                 MessageLogger.addLog(t('common:state_desync_syncing', { status: serverStatus }));
 
-                window.dispatchEvent(new CustomEvent('translationUpdate', {
-                    detail: {
-                        translation_id: tidToCheck,
-                        status: serverStatus,
-                        result: data.result_preview || `[${serverStatus}]`,
-                        error: data.error
-                    }
-                }));
+                this._desyncHandlers?.onTerminalStatus({
+                    translation_id: tidToCheck,
+                    status: serverStatus,
+                    result: data.result_preview || `[${serverStatus}]`,
+                    error: data.error,
+                });
             }
         } catch (error) {
             if (error.message && error.message.includes('404')) {
                 MessageLogger.addLog(t('common:translation_job_missing'));
-                window.dispatchEvent(new CustomEvent('resetUIToIdle'));
+                this._desyncHandlers?.onJobMissing();
             } else {
                 console.error('Error checking state consistency:', error);
             }

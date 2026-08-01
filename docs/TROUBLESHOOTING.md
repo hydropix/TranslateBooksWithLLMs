@@ -8,6 +8,7 @@ Solutions to common problems with TranslateBookWithLLM.
 
 - [Connection Issues](#connection-issues)
 - [Model Issues](#model-issues)
+- [Context Length Configuration](#context-length-configuration)
 - [Performance Issues](#performance-issues)
 - [Thinking Models](#thinking-models)
 - [EPUB Issues](#epub-issues)
@@ -88,6 +89,8 @@ Solutions to common problems with TranslateBookWithLLM.
 
 **Formula**: `required_context = prompt_tokens + (MAX_TOKENS_PER_CHUNK * 2) + 50`
 
+**See also**: [Context Length Configuration](#context-length-configuration) to find your model's real limit.
+
 ### "Out of memory" / OOM errors
 
 **Cause**: Not enough RAM/VRAM for the model.
@@ -97,6 +100,44 @@ Solutions to common problems with TranslateBookWithLLM.
 2. Reduce context window: `OLLAMA_NUM_CTX=2048`
 3. Close other applications
 4. Try a cloud provider (OpenRouter, Gemini, OpenAI)
+
+---
+
+## Context Length Configuration
+
+### "How do I set the context length?"
+
+**Cause**: The context window belongs to the model server, not to TBL. Ollama and LM Studio decide how many tokens a loaded model can hold; TBL can only stay inside that budget, or ask Ollama for a bigger one. It cannot raise the limit of an OpenAI-compatible server such as LM Studio.
+
+**Symptoms of a context window that is too small**: output truncated mid-chunk, the same sentence repeated until the response ends, or chunks left in the source language.
+
+**Step 1 — check the model's real context window**
+
+- **Ollama**: `ollama show <model>` prints the model's details, including its context length. Use `ollama list` to get the exact model name.
+- **LM Studio**: the context length is a *load setting* of the model, chosen in the app before or when the model is loaded. Check the value there and reload the model if it needs to be larger.
+
+An advertised context length is only an upper bound - a server can load the model with less.
+
+**Step 2 — set the two TBL settings in `.env`**
+
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `MAX_TOKENS_PER_CHUNK` | `450` (`src/config.py`) | Hard token limit for the source text of one chunk. The web UI clamps requested values to 50-1000. |
+| `OLLAMA_NUM_CTX` | `4096` (`src/config.py`) | Context window requested from Ollama (`num_ctx`). **Ollama only** - other providers ignore it. |
+
+**Formula**: `required_context = prompt_tokens + (MAX_TOKENS_PER_CHUNK * 2) + 50`, where `prompt_tokens` is roughly 500 (instructions) plus `MAX_TOKENS_PER_CHUNK` (source text), and the response buffer is doubled because a translation can be up to twice as long as its source.
+
+| `MAX_TOKENS_PER_CHUNK` | Context needed |
+|------------------------|----------------|
+| 450 (default) | ~2048 |
+| 700 | ~4096 |
+| 800 | ~4096 |
+
+**Solutions**:
+1. **Ollama**: raise `OLLAMA_NUM_CTX` to at least the value the formula gives, or lower `MAX_TOKENS_PER_CHUNK` until it fits the model you already load.
+2. **LM Studio, llama.cpp, vLLM and other OpenAI-compatible servers**: `OLLAMA_NUM_CTX` has no effect. Raise the context in the server's own load settings, or lower `MAX_TOKENS_PER_CHUNK` to fit what the server allocates.
+3. Leave `AUTO_ADJUST_CONTEXT=true` (default, Ollama only): the runtime starts at `ADAPTIVE_CONTEXT_INITIAL` (2048) and grows by `ADAPTIVE_CONTEXT_STEP` (2048) when a prompt would not fit, instead of allocating `OLLAMA_NUM_CTX` upfront.
+4. Remember that context costs memory - see ["Out of memory" / OOM errors](#out-of-memory--oom-errors) if raising it destabilizes the server.
 
 ---
 

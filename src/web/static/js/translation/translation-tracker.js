@@ -22,6 +22,10 @@ const STORAGE_VERSION = 1;
 const STORAGE_KEY_PREFIX = 'tbl_translation_state';
 const TRANSLATION_STATE_STORAGE_KEY = `${STORAGE_KEY_PREFIX}_v${STORAGE_VERSION}`;
 
+// Statuses that end a job server-side. Only these can reset the UI to idle.
+const TERMINAL_STATUSES = new Set(['completed', 'partial', 'error', 'interrupted', 'rate_limited']);
+const MAX_OWNED_JOB_IDS = 50;
+
 /**
  * Validate translation state structure
  * @param {any} data - Data to validate
@@ -158,6 +162,7 @@ export const TranslationTracker = {
                 StateManager.setState('translation.isBatchActive', savedState.isBatchActive);
                 StateManager.setState('translation.activeJobs', savedState.activeJobs || []);
                 StateManager.setState('translation.hasActive', savedState.hasActive || false);
+                StateManager.setState('translation.ownedJobIds', savedState.ownedJobIds || []);
 
                 DomHelpers.show('progressSection');
                 DomHelpers.show('interruptBtn');
@@ -228,6 +233,7 @@ export const TranslationTracker = {
         StateManager.setState('translation.isBatchActive', false);
         StateManager.setState('translation.activeJobs', []);
         StateManager.setState('translation.hasActive', false);
+        StateManager.setState('translation.ownedJobIds', []);
     },
 
     /**
@@ -257,6 +263,7 @@ export const TranslationTracker = {
                 isBatchActive: StateManager.getState('translation.isBatchActive'),
                 activeJobs: StateManager.getState('translation.activeJobs'),
                 hasActive: StateManager.getState('translation.hasActive'),
+                ownedJobIds: StateManager.getState('translation.ownedJobIds') || [],
                 timestamp: Date.now()
             };
 
@@ -288,6 +295,37 @@ export const TranslationTracker = {
         } catch (error) {
             console.error('Failed to clear translation state from localStorage:', error);
         }
+    },
+
+    /**
+     * Record a translation id as owned by this tab. Idempotent. FIFO-capped at
+     * MAX_OWNED_JOB_IDS so a long-lived tab cannot grow the persisted state
+     * without bound.
+     * @param {string} translationId
+     */
+    registerOwnedJob(translationId) {
+        if (!translationId) return;
+
+        const owned = StateManager.getState('translation.ownedJobIds') || [];
+        if (owned.includes(translationId)) return;
+
+        const next = [...owned, translationId];
+        while (next.length > MAX_OWNED_JOB_IDS) {
+            next.shift();
+        }
+
+        StateManager.setState('translation.ownedJobIds', next);
+    },
+
+    /**
+     * @param {string} translationId
+     * @returns {boolean} true only if registerOwnedJob was called for this id
+     *   (in this tab, or in a previous session restored from localStorage).
+     */
+    ownsJob(translationId) {
+        if (!translationId) return false;
+        const owned = StateManager.getState('translation.ownedJobIds') || [];
+        return owned.includes(translationId);
     },
 
     /**
@@ -329,6 +367,7 @@ export const TranslationTracker = {
                         fileRef: matchingFile,
                         translationId: job.translation_id
                     });
+                    this.registerOwnedJob(job.translation_id);
                     StateManager.setState('translation.isBatchActive', true);
 
                     DomHelpers.show('progressSection');
@@ -388,6 +427,10 @@ export const TranslationTracker = {
         StateManager.subscribe('translation.activeJobs', () => {
             this.saveTranslationState();
         });
+
+        StateManager.subscribe('translation.ownedJobIds', () => {
+            this.saveTranslationState();
+        });
     },
 
     /**
@@ -398,10 +441,14 @@ export const TranslationTracker = {
         const currentJob = StateManager.getState('translation.currentJob');
 
         if (!currentJob || data.translation_id !== currentJob.translationId) {
-            if (data.translation_id && !currentJob) {
-                if (data.status === 'completed' || data.status === 'partial' || data.status === 'error' || data.status === 'interrupted' || data.status === 'rate_limited') {
-                    this.resetUIToIdle();
-                }
+            // A terminal event with no current job is only ours to act on if this tab
+            // started the job. Without this check, a straggler from a previous file
+            // (currentJob is nulled before the queue advances) or an event for another
+            // tab's job wipes the batch UI mid-run. Issue #225.
+            if (!currentJob && data.translation_id
+                && TERMINAL_STATUSES.has(data.status)
+                && this.ownsJob(data.translation_id)) {
+                this.resetUIToIdle();
             }
             return;
         }
@@ -580,6 +627,19 @@ export const TranslationTracker = {
             // Partial jobs still produced a best-effort output file; the card
             // surfaces it together with the warning block and its advice.
             this.renderCompletionCard(currentFile, resultData);
+        }
+
+        // Retire the id before nulling currentJob: this file's terminal event has
+        // been handled, so a duplicate copy of it arriving while the queue advances
+        // is no longer owned and is ignored by handleTranslationUpdate. Issue #225.
+        if (currentJob.translationId) {
+            const owned = StateManager.getState('translation.ownedJobIds') || [];
+            if (owned.includes(currentJob.translationId)) {
+                StateManager.setState(
+                    'translation.ownedJobIds',
+                    owned.filter(id => id !== currentJob.translationId)
+                );
+            }
         }
 
         StateManager.setState('translation.currentJob', null);

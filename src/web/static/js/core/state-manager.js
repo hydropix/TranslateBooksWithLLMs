@@ -18,7 +18,10 @@ const state = {
         currentJob: null,        // Current processing job { fileRef, translationId }
         isBatchActive: false,    // Whether a batch is currently running
         activeJobs: [],          // List of active translation jobs
-        hasActive: false         // Quick flag for active translations
+        hasActive: false,        // Quick flag for active translations
+        // Translation ids, most-recent last, that this browser tab started or
+        // adopted. Used to ignore terminal events belonging to another tab.
+        ownedJobIds: []
     },
     ui: {
         currentProvider: 'ollama',  // Selected LLM provider
@@ -165,7 +168,7 @@ export const StateManager = {
         if (!key) {
             // Reset entire state
             state.files = { toProcess: [], selected: new Set(), managed: [] };
-            state.translation = { currentJob: null, isBatchActive: false, activeJobs: [], hasActive: false };
+            state.translation = { currentJob: null, isBatchActive: false, activeJobs: [], hasActive: false, ownedJobIds: [] };
             state.ui = { currentProvider: 'ollama', currentModel: null, isAdvancedOpen: false, messages: [] };
             state.models = { currentLoadRequest: null, availableModels: [] };
 
@@ -180,6 +183,7 @@ export const StateManager = {
                 'translation.isBatchActive': false,
                 'translation.activeJobs': [],
                 'translation.hasActive': false,
+                'translation.ownedJobIds': [],
                 'ui.messages': []
             };
 

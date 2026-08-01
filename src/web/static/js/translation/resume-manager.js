@@ -10,6 +10,7 @@ import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { ProgressManager } from './progress-manager.js';
+import { TranslationTracker } from './translation-tracker.js';
 import { t, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
 import { createProviderModelPicker } from '../providers/provider-model-picker.js';
 
@@ -362,6 +363,7 @@ export const ResumeManager = {
                     fileType: jobData.config?.file_type || 'txt'
                 }
             });
+            TranslationTracker.registerOwnedJob(translationId);
 
             // Mark as batch active
             StateManager.setState('translation.isBatchActive', true);

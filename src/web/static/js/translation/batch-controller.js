@@ -320,6 +320,7 @@ export const BatchController = {
                 fileRef: fileToTranslate,
                 translationId: data.translation_id
             });
+            TranslationTracker.registerOwnedJob(data.translation_id);
 
             fileToTranslate.translationId = data.translation_id;
             updateFileStatusInList(fileToTranslate.name, 'Submitted', data.translation_id);

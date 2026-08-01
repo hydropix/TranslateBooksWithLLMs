@@ -24,7 +24,36 @@ from src.core.adapters import translate_file, refine_file
 from src.core.progress import snapshot_from_legacy_stats
 from src.tts.tts_config import TTSConfig
 from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE, EVENT_INTERRUPTION
+from .completion_status import classify_completion
 from .websocket import emit_update
+
+
+def _format_stats_summary(config, stats, verdict):
+    """Build the ' | 8/10 chunks (1 failed) (1 untranslated)' log suffix.
+
+    Shared by the three outcomes of the finalization branch so they all report
+    the same counters. Returns an empty string when the job has no chunks.
+
+    Args:
+        config: Translation config (only 'file_type' is read).
+        stats: The job stats payload.
+        verdict: The CompletionVerdict for this job.
+
+    Returns:
+        The formatted suffix, or "" when total_chunks is 0.
+    """
+    total = stats.get('total_chunks', 0) or 0
+    if total <= 0:
+        return ""
+
+    completed = stats.get('completed_chunks', 0)
+    unit = 'subtitles' if config['file_type'] == 'srt' else 'chunks'
+    summary = f" | {completed}/{total} {unit}"
+    if verdict.failed_chunks > 0:
+        summary += f" ({verdict.failed_chunks} failed)"
+    if verdict.fallback_chunks > 0:
+        summary += f" ({verdict.fallback_chunks} untranslated)"
+    return summary
 
 
 def _notification_context(config, translation_id, elapsed_time, error=None):
@@ -601,31 +630,39 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 _log_message_callback("cleanup_skipped_no_preserve", "ℹ️ Skipped cleanup - preserved file not found, keeping original for resume")
 
         elif state_manager.get_translation_field(translation_id, 'status') != 'error':
-            # Get stats for consolidated message
-            final_stats = stats
-            stats_summary = ""
-            failed = 0
-            if (config['file_type'] in ('txt', 'srt')
-                    or (config['file_type'] == 'epub' and stats.get('total_chunks', 0) > 0)):
-                completed = final_stats.get('completed_chunks', 0)
-                failed = final_stats.get('failed_chunks', 0)
-                total = final_stats.get('total_chunks', 0)
-                unit = 'subtitles' if config['file_type'] == 'srt' else 'chunks'
-                stats_summary = f" | {completed}/{total} {unit}"
-                if failed > 0:
-                    stats_summary += f" ({failed} failed)"
+            # Single source of truth for "did this job actually succeed?".
+            # Reads the stats directly, so it is not gated by file type.
+            verdict = classify_completion(stats, output_filepath_on_server)
+            stats_summary = _format_stats_summary(config, stats, verdict)
 
-            # If chunks remain in failed state after auto-retry, keep the job resumable
-            # as 'partial' instead of marking it 'completed' and deleting the checkpoint.
-            # The user can then resume to retry the failed chunks without re-running the file.
-            if failed > 0:
+            if verdict.status == 'error':
+                # The translation loop ran to the end but produced no usable
+                # output file. Report it honestly instead of claiming success.
+                state_manager.set_translation_field(translation_id, 'status', 'error')
+                state_manager.set_translation_field(translation_id, 'error', verdict.error)
+                _log_message_callback("summary_error_no_output",
+                    f"❌ Translation finished without a usable output file in {elapsed_time:.2f}s"
+                    f"{stats_summary} — {verdict.error}")
+                final_status_payload['status'] = 'error'
+                final_status_payload['error'] = verdict.error
+                checkpoint_manager.mark_error(translation_id)
+                await asyncio.to_thread(notify, EVENT_FAILURE,
+                    _notification_context(config, translation_id, elapsed_time,
+                                          error=verdict.error))
+                # No cleanup_completed_job — the checkpoint is deliberately kept,
+                # it is the only way back for this job.
+            elif verdict.status == 'partial':
+                # Chunks failed outright and/or fell back to their source text.
+                # Keep the job resumable instead of marking it 'completed' and
+                # deleting the checkpoint, so the user can retry those chunks.
                 state_manager.set_translation_field(translation_id, 'status', 'partial')
                 _log_message_callback("summary_partial",
-                    f"⚠️ Translation finished with {failed} failed chunk(s) in {elapsed_time:.2f}s"
+                    f"⚠️ Translation finished with {verdict.failed_chunks} failed "
+                    f"and {verdict.fallback_chunks} untranslated chunk(s) in {elapsed_time:.2f}s"
                     f"{stats_summary} — checkpoint kept for retry")
                 final_status_payload['status'] = 'partial'
                 checkpoint_manager.mark_partial(translation_id)
-                # Skip cleanup_completed_job — we want the checkpoint to survive for retry.
+                # No cleanup_completed_job — the checkpoint is deliberately kept for retry.
             else:
                 state_manager.set_translation_field(translation_id, 'status', 'completed')
                 _log_message_callback("summary_completed", f"✅ Translation completed in {elapsed_time:.2f}s{stats_summary}")
@@ -637,8 +674,10 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 checkpoint_manager.cleanup_completed_job(translation_id)
 
             # Clean up uploaded file if it exists and is in the uploads directory
-            # On completion, we can safely delete the original upload file
-            if 'file_path' in config and config['file_path']:
+            # On completion (or a partial run) we can safely delete the original
+            # upload. Never on the 'error' outcome: with no output file, the
+            # uploaded source is the only way to resume.
+            if verdict.status != 'error' and 'file_path' in config and config['file_path']:
                 uploaded_file_path = config['file_path']
                 # Convert to Path object for reliable path operations
                 upload_path = Path(uploaded_file_path)

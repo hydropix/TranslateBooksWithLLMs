@@ -441,6 +441,13 @@ class CheckpointManager:
         """
         return self.db.update_job_progress(translation_id, status='partial')
 
+    def mark_error(self, translation_id: str) -> bool:
+        """
+        Mark a job as errored. The job stays resumable (get_resumable_jobs
+        includes 'error'), so the checkpoint must NOT be cleaned up.
+        """
+        return self.db.update_job_progress(translation_id, status='error')
+
     def mark_completed(self, translation_id: str) -> bool:
         """
         Mark a job as completed.

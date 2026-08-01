@@ -1,0 +1,14 @@
+name: Verify tag matches src/__version__.py
+
+on:
+  workflow_call:
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/check_tag_version.py "${{ github.ref_name }}"

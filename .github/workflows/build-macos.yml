@@ -10,7 +10,13 @@ permissions:
   contents: write
 
 jobs:
+  verify-version:
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/verify-tag-version.yml
+
   build-macos:
+    needs: verify-version
+    if: ${{ !failure() && !cancelled() }}
     strategy:
       fail-fast: false
       matrix:

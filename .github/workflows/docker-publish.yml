@@ -11,7 +11,13 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  verify-version:
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/verify-tag-version.yml
+
   build-and-push:
+    needs: verify-version
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

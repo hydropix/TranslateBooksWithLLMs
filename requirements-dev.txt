@@ -5,3 +5,7 @@
 
 pytest>=7.0
 pytest-asyncio>=0.21
+
+# End-to-end tests (tests/e2e, deselected by default).
+# After installing, download the browser once: python -m playwright install chromium
+playwright>=1.55

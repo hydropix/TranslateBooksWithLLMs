@@ -19,6 +19,8 @@ from src.config import (
     MAX_TRANSLATION_ATTEMPTS,
     TEMPERATURE,
     GEMINI_SAFETY_THRESHOLD,
+    GEMINI_THINKING_LEVEL,
+    GEMINI_THINKING_BUDGET,
 )
 from ..base import LLMProvider, LLMResponse
 from ..exceptions import ContextOverflowError
@@ -77,13 +79,34 @@ class GeminiProvider(LLMProvider):
         self.api_endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     def _is_thinking_model(self) -> bool:
-        """Check if the current model supports thinking mode (Gemini 2.5+)."""
-        return "2.5" in self.model
+        """Check if the current model supports thinking mode (Gemini 2.5+ and 3.x)."""
+        return "2.5" in self.model or "gemini-3" in self.model
 
     def _get_thinking_config(self) -> dict:
-        """Return thinkingConfig to disable thinking for supported models."""
-        if self._is_thinking_model():
-            return {"thinkingConfig": {"thinkingBudget": 0}}
+        """
+        Build the thinkingConfig block for this request, based on the model
+        generation and the GEMINI_THINKING_LEVEL / GEMINI_THINKING_BUDGET env
+        settings.
+
+        Gemini 3.x models use the newer `thinkingLevel` field (minimal/low/
+        medium/high). Gemini 2.5.x models use the older `thinkingBudget`
+        field (a token count; 0 disables thinking, -1 is dynamic).
+
+        Thinking is billed as output tokens, so for mechanical tasks like
+        translation, turning it down (or off, where the model allows it)
+        can meaningfully cut cost with little to no quality impact.
+        """
+        if "gemini-3" in self.model:
+            # default levels: medium for Flash, minimal for Flash-Lite, high for Pro
+            thinking_level = GEMINI_THINKING_LEVEL if GEMINI_THINKING_LEVEL is not None else 'minimal'
+            return {"thinkingConfig": {"thinkingLevel": thinking_level}}
+
+        if "2.5" in self.model:
+            # Preserve the previous hardcoded behavior (thinking off) when
+            # the user hasn't set an explicit budget, for backward compat.
+            budget = GEMINI_THINKING_BUDGET if GEMINI_THINKING_BUDGET is not None else 0
+            return {"thinkingConfig": {"thinkingBudget": budget}}
+
         return {}
 
     async def get_available_models(self) -> list[dict]:

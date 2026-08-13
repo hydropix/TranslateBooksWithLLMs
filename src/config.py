@@ -300,6 +300,31 @@ TEMPERATURE = float(os.getenv('TEMPERATURE', '0.3'))
 # BLOCK_LOW_AND_ABOVE, HARM_BLOCK_THRESHOLD_UNSPECIFIED.
 GEMINI_SAFETY_THRESHOLD = os.getenv('GEMINI_SAFETY_THRESHOLD', 'BLOCK_NONE')
 
+# Gemini "thinking" (reasoning) controls. Thinking tokens are billed at the
+# (higher) output token rate, so for a mechanical task like translation they
+# mostly just inflate the bill without improving quality.
+#
+# GEMINI_THINKING_LEVEL applies to Gemini 3.x models via the `thinkingLevel`
+# field. Valid values: minimal, low, medium, high. Leave unset to use the
+# model's own default (medium for Flash, minimal for Flash-Lite, high for Pro).
+# Not every level is supported by every model; Pro models reject "minimal".
+GEMINI_THINKING_LEVEL = os.getenv('GEMINI_THINKING_LEVEL', '').strip().lower() or None
+_VALID_GEMINI_THINKING_LEVELS = {"minimal", "low", "medium", "high"}
+if GEMINI_THINKING_LEVEL and GEMINI_THINKING_LEVEL not in _VALID_GEMINI_THINKING_LEVELS:
+    print(
+        f"⚠️  GEMINI_THINKING_LEVEL='{GEMINI_THINKING_LEVEL}' is not recognized. "
+        f"Valid values: {', '.join(sorted(_VALID_GEMINI_THINKING_LEVELS))}. "
+        f"Falling back to the model's default thinking level."
+    )
+    GEMINI_THINKING_LEVEL = None
+
+# GEMINI_THINKING_BUDGET applies to Gemini 2.5.x models via the older
+# `thinkingBudget` field (an explicit token count). 0 disables thinking,
+# -1 enables dynamic thinking (model decides), or set a specific token count.
+# If unset, 2.5 models default to thinkingBudget=0 (thinking off) as before.
+_gemini_thinking_budget_raw = os.getenv('GEMINI_THINKING_BUDGET', '').strip()
+GEMINI_THINKING_BUDGET = int(_gemini_thinking_budget_raw) if _gemini_thinking_budget_raw else None
+
 # Auto-pause on HTTP 429 rate limit
 # When True (default): translation pauses after retries are exhausted; user resumes manually.
 # When False: translation auto-resumes from the last checkpoint after waiting `retry_after`

@@ -155,6 +155,28 @@ python translate.py -i book.txt -o book_fr.txt \
     -m gemini-2.0-flash
 ```
 
+### Thinking / Reasoning Control
+
+Some Gemini models ("thinking" models — Gemini 2.5.x and 3.x) reason before
+answering, and those reasoning tokens are billed at the (higher) *output*
+token rate. For a mechanical task like translation, reasoning rarely
+improves quality but can noticeably inflate the bill. Set one of these in
+your `.env` file:
+
+```bash
+# Gemini 3.x models (gemini-3.6-flash, gemini-3.5-flash, gemini-3.5-flash-lite, ...)
+# Valid values: minimal, low, medium, high
+GEMINI_THINKING_LEVEL=minimal
+
+# Gemini 2.5.x models (gemini-2.5-flash, ...) — explicit token budget
+# 0 disables thinking, -1 enables dynamic thinking
+GEMINI_THINKING_BUDGET=0
+```
+
+Leave both unset to keep the previous default (thinking off on 2.5 models,
+model default on 3.x models). Not every level is supported by every model —
+Pro-tier models, for example, reject `minimal`.
+
 ---
 
 ## Mistral (Cloud)

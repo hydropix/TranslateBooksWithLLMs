@@ -29,6 +29,11 @@ def build_refine_client(
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    xai_api_key: Optional[str] = None,
+    opencode_api_key: Optional[str] = None,
+    opencodego_api_key: Optional[str] = None,
+    ollamacloud_api_key: Optional[str] = None,
     log_callback: Optional[Any] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """Create the refine LLM client and (optional) context manager.
@@ -54,6 +59,11 @@ def build_refine_client(
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
+        anthropic_api_key=anthropic_api_key,
+        xai_api_key=xai_api_key,
+        opencode_api_key=opencode_api_key,
+        opencodego_api_key=opencodego_api_key,
+        ollamacloud_api_key=ollamacloud_api_key,
         cli_api_endpoint=cli_api_endpoint,
         initial_context=initial_context,
         log_callback=log_callback,

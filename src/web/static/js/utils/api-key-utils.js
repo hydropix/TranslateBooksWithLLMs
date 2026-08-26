@@ -18,7 +18,12 @@ const STATUS_ID_MAP = {
     'mistralApiKey': 'mistralKeyStatus',
     'deepseekApiKey': 'deepseekKeyStatus',
     'poeApiKey': 'poeKeyStatus',
-    'nimApiKey': 'nimKeyStatus'
+    'nimApiKey': 'nimKeyStatus',
+    'anthropicApiKey': 'anthropicKeyStatus',
+    'xaiApiKey': 'xaiKeyStatus',
+    'opencodeApiKey': 'opencodeKeyStatus',
+    'opencodegoApiKey': 'opencodegoKeyStatus',
+    'ollamacloudApiKey': 'ollamacloudKeyStatus'
 };
 
 /**
@@ -31,7 +36,12 @@ const PROVIDER_FIELD_MAP = {
     'mistral': 'mistralApiKey',
     'deepseek': 'deepseekApiKey',
     'poe': 'poeApiKey',
-    'nim': 'nimApiKey'
+    'nim': 'nimApiKey',
+    'anthropic': 'anthropicApiKey',
+    'xai': 'xaiApiKey',
+    'opencode': 'opencodeApiKey',
+    'opencodego': 'opencodegoApiKey',
+    'ollamacloud': 'ollamacloudApiKey'
 };
 
 export const ApiKeyUtils = {
@@ -211,6 +221,18 @@ export const ApiKeyUtils = {
 
         if (provider === 'nim' && !isAvailable) {
             return { valid: false, message: t('errors:api_key_required_nim') };
+        }
+
+        if (['anthropic', 'xai', 'opencode', 'opencodego', 'ollamacloud'].includes(provider) && !isAvailable) {
+            return { valid: false, message: t('errors:api_key_required') };
+        }
+
+        if (provider === 'chatgpt') {
+            const signedIn = document.getElementById('chatgptOauthStatus')
+                ?.getAttribute('data-i18n') === 'settings:chatgpt_signed_in';
+            if (!signedIn) {
+                return { valid: false, message: t('settings:chatgpt_sign_in_to_load') };
+            }
         }
 
         return { valid: true, message: '' };

@@ -23,6 +23,29 @@ function withToken(url) {
     return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
+const TOKEN_RELOAD_FLAG = 'tbl_reloading_stale_api_token';
+
+/**
+ * After a Docker recreate the HTML page still holds the previous process
+ * token, so every /api/ call returns 401 Unauthorized. Reload once to pick
+ * up the new token from the server-rendered page.
+ * @returns {boolean} True if a reload was triggered
+ */
+export function reloadIfStaleApiToken() {
+    try {
+        if (typeof sessionStorage === 'undefined') return false;
+        if (sessionStorage.getItem(TOKEN_RELOAD_FLAG)) {
+            sessionStorage.removeItem(TOKEN_RELOAD_FLAG);
+            return false;
+        }
+        sessionStorage.setItem(TOKEN_RELOAD_FLAG, '1');
+    } catch {
+        return false;
+    }
+    window.location.reload();
+    return true;
+}
+
 /**
  * Handle API errors consistently
  *
@@ -40,6 +63,9 @@ async function handleApiError(response) {
         errorData = await response.json();
     } catch {
         errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+    }
+    if (response.status === 401 && errorData.code === 'missing_or_invalid_token') {
+        reloadIfStaleApiToken();
     }
     const label = errorData.error || '';
     const detail = errorData.message || '';
@@ -327,6 +353,13 @@ export const ApiClient = {
             return await apiRequest(`/api/models?${params.toString()}`);
         }
 
+        if (provider === 'chatgpt') {
+            return await apiRequest('/api/models', {
+                method: 'POST',
+                body: JSON.stringify({ provider: 'chatgpt' }),
+            });
+        }
+
         // Gemini/OpenRouter/OpenAI: POST request (API key in body - more secure)
         const body = {
             provider: provider,
@@ -342,6 +375,24 @@ export const ApiClient = {
             method: 'POST',
             body: JSON.stringify(body)
         });
+    },
+
+    async chatgptOAuthStart() {
+        return await apiRequest('/api/oauth/chatgpt/device/start', { method: 'POST' });
+    },
+
+    async chatgptOAuthPoll(deviceAuthId, userCode) {
+        return await apiRequest('/api/oauth/chatgpt/device/poll', {
+            method: 'POST',
+            body: JSON.stringify({
+                device_auth_id: deviceAuthId,
+                user_code: userCode,
+            }),
+        });
+    },
+
+    async chatgptOAuthLogout() {
+        return await apiRequest('/api/oauth/chatgpt/logout', { method: 'POST' });
     },
 
     // ========================================

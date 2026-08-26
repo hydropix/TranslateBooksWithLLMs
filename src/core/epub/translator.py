@@ -59,6 +59,11 @@ async def translate_epub_file(
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    xai_api_key: Optional[str] = None,
+    opencode_api_key: Optional[str] = None,
+    opencodego_api_key: Optional[str] = None,
+    ollamacloud_api_key: Optional[str] = None,
     context_window: int = 2048,
     auto_adjust_context: bool = True,
     min_chunk_size: int = 5,
@@ -152,6 +157,11 @@ async def translate_epub_file(
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
+        anthropic_api_key=anthropic_api_key,
+        xai_api_key=xai_api_key,
+        opencode_api_key=opencode_api_key,
+        opencodego_api_key=opencodego_api_key,
+        ollamacloud_api_key=ollamacloud_api_key,
         cli_api_endpoint=cli_api_endpoint,
         initial_context=initial_context,
         log_callback=log_callback
@@ -561,6 +571,11 @@ def _create_llm_client(
     nim_api_key: Optional[str],
     cli_api_endpoint: str,
     initial_context: int,
+    anthropic_api_key: Optional[str] = None,
+    xai_api_key: Optional[str] = None,
+    opencode_api_key: Optional[str] = None,
+    opencodego_api_key: Optional[str] = None,
+    ollamacloud_api_key: Optional[str] = None,
     log_callback: Optional[Callable] = None
 ) -> Any:
     """Create LLM client with specified configuration."""
@@ -571,6 +586,11 @@ def _create_llm_client(
         openai_api_key, openrouter_api_key, mistral_api_key, deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
+        anthropic_api_key=anthropic_api_key,
+        xai_api_key=xai_api_key,
+        opencode_api_key=opencode_api_key,
+        opencodego_api_key=opencodego_api_key,
+        ollamacloud_api_key=ollamacloud_api_key,
         context_window=initial_context,
         log_callback=log_callback
     )

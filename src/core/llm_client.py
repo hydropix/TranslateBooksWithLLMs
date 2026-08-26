@@ -47,7 +47,9 @@ class LLMClient:
         self.provider_kwargs['context_window'] = value
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None,
-                      timeout: int = None) -> Optional[LLMResponse]:
+                      timeout: int = None, temperature: Optional[float] = None,
+                      top_p: Optional[float] = None,
+                      max_tokens: Optional[int] = None) -> Optional[LLMResponse]:
         """
         Generate a response from the LLM (alias for make_request for backward compatibility)
 
@@ -61,13 +63,24 @@ class LLMClient:
         """
         provider = self._get_provider()
 
+        options = {
+            key: value for key, value in {
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_tokens": max_tokens,
+            }.items() if value is not None
+        }
         if timeout:
-            return await provider.generate(prompt, timeout, system_prompt=system_prompt)
-        else:
-            return await provider.generate(prompt, system_prompt=system_prompt)
+            return await provider.generate(
+                prompt, timeout, system_prompt=system_prompt, **options
+            )
+        return await provider.generate(prompt, system_prompt=system_prompt, **options)
 
     async def make_request(self, prompt: str, model: Optional[str] = None,
-                    timeout: int = None, system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
+                    timeout: int = None, system_prompt: Optional[str] = None,
+                    temperature: Optional[float] = None,
+                    top_p: Optional[float] = None,
+                    max_tokens: Optional[int] = None) -> Optional[LLMResponse]:
         """
         Make a request to the LLM API with error handling and retries
 
@@ -86,10 +99,18 @@ class LLMClient:
         if model:
             provider.model = model
 
+        options = {
+            key: value for key, value in {
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_tokens": max_tokens,
+            }.items() if value is not None
+        }
         if timeout:
-            return await provider.generate(prompt, timeout, system_prompt=system_prompt)
-        else:
-            return await provider.generate(prompt, system_prompt=system_prompt)
+            return await provider.generate(
+                prompt, timeout, system_prompt=system_prompt, **options
+            )
+        return await provider.generate(prompt, system_prompt=system_prompt, **options)
     
     def extract_translation(self, response: str) -> Optional[str]:
         """
@@ -171,6 +192,11 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                       deepseek_api_key: Optional[str] = None,
                       poe_api_key: Optional[str] = None,
                       nim_api_key: Optional[str] = None,
+                      anthropic_api_key: Optional[str] = None,
+                      xai_api_key: Optional[str] = None,
+                      opencode_api_key: Optional[str] = None,
+                      opencodego_api_key: Optional[str] = None,
+                      ollamacloud_api_key: Optional[str] = None,
                       context_window: Optional[int] = None,
                       log_callback: Optional[callable] = None) -> Optional[LLMClient]:
     """
@@ -208,6 +234,57 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
         return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key)
     if llm_provider == "nim":
         return LLMClient(provider_type="nim", model=model_name, api_key=nim_api_key)
+    if llm_provider == "anthropic":
+        return LLMClient(
+            provider_type="anthropic",
+            model=model_name,
+            api_key=anthropic_api_key,
+            api_endpoint=api_endpoint,
+            context_window=context_window,
+            log_callback=log_callback,
+        )
+    if llm_provider == "xai":
+        return LLMClient(
+            provider_type="xai",
+            model=model_name,
+            api_key=xai_api_key,
+            api_endpoint=api_endpoint,
+            context_window=context_window,
+            log_callback=log_callback,
+        )
+    if llm_provider == "opencode":
+        return LLMClient(
+            provider_type="opencode",
+            model=model_name,
+            api_key=opencode_api_key,
+            api_endpoint=api_endpoint,
+            context_window=context_window,
+            log_callback=log_callback,
+        )
+    if llm_provider == "opencodego":
+        return LLMClient(
+            provider_type="opencodego",
+            model=model_name,
+            api_key=opencodego_api_key,
+            api_endpoint=api_endpoint,
+            context_window=context_window,
+            log_callback=log_callback,
+        )
+    if llm_provider == "ollamacloud":
+        return LLMClient(
+            provider_type="ollamacloud",
+            model=model_name,
+            api_key=ollamacloud_api_key,
+            context_window=context_window,
+            log_callback=log_callback,
+        )
+    if llm_provider == "chatgpt":
+        return LLMClient(
+            provider_type="chatgpt",
+            model=model_name,
+            context_window=context_window,
+            log_callback=log_callback,
+        )
     if llm_provider == "ollama":
         # Always create a new client for Ollama to ensure proper configuration
         return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,

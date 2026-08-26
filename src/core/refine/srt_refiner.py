@@ -40,6 +40,11 @@ async def refine_srt_file(
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    xai_api_key: Optional[str] = None,
+    opencode_api_key: Optional[str] = None,
+    opencodego_api_key: Optional[str] = None,
+    ollamacloud_api_key: Optional[str] = None,
     prompt_options: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Run a refinement-only pass on an already-translated SRT file."""
@@ -97,6 +102,11 @@ async def refine_srt_file(
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
+        anthropic_api_key=anthropic_api_key,
+        xai_api_key=xai_api_key,
+        opencode_api_key=opencode_api_key,
+        opencodego_api_key=opencodego_api_key,
+        ollamacloud_api_key=ollamacloud_api_key,
         log_callback=log_callback,
     )
 

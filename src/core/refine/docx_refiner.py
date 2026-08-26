@@ -34,6 +34,11 @@ async def refine_docx_file(
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    anthropic_api_key: Optional[str] = None,
+    xai_api_key: Optional[str] = None,
+    opencode_api_key: Optional[str] = None,
+    opencodego_api_key: Optional[str] = None,
+    ollamacloud_api_key: Optional[str] = None,
     context_window: int = 2048,
     auto_adjust_context: bool = True,
     prompt_options: Optional[Dict] = None,
@@ -59,6 +64,11 @@ async def refine_docx_file(
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
+        anthropic_api_key=anthropic_api_key,
+        xai_api_key=xai_api_key,
+        opencode_api_key=opencode_api_key,
+        opencodego_api_key=opencodego_api_key,
+        ollamacloud_api_key=ollamacloud_api_key,
         log_callback=log_callback,
     )
     if llm_client is None:

@@ -43,6 +43,10 @@ DEFAULT_ALLOWED_HOSTS = frozenset({
     'api.deepseek.com',
     'api.poe.com',
     'integrate.api.nvidia.com',
+    'api.anthropic.com',
+    'api.x.ai',
+    'opencode.ai',
+    'ollama.com',
 })
 
 # Server defaults read from src.config. A user who points one of these at their
@@ -56,6 +60,11 @@ _CONFIGURED_ENDPOINT_ATTRS = (
     'DEEPSEEK_API_ENDPOINT',
     'POE_API_ENDPOINT',
     'NIM_API_ENDPOINT',
+    'ANTHROPIC_API_ENDPOINT',
+    'XAI_API_ENDPOINT',
+    'OPENCODE_API_ENDPOINT',
+    'OPENCODE_GO_API_ENDPOINT',
+    'OLLAMA_CLOUD_API_ENDPOINT',
 )
 
 # Non-IP hostnames that always denote the machine the server runs on.

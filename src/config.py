@@ -71,6 +71,17 @@ _RELOADABLE_ENV_SETTINGS = (
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
+    ('ANTHROPIC_API_KEY',   'ANTHROPIC_API_KEY',   ''),
+    ('ANTHROPIC_MODEL',     'ANTHROPIC_MODEL',     'claude-sonnet-4-6'),
+    ('XAI_API_KEY',         'XAI_API_KEY',         ''),
+    ('XAI_MODEL',           'XAI_MODEL',           'grok-4.5'),
+    ('OPENCODE_API_KEY',    'OPENCODE_API_KEY',    ''),
+    ('OPENCODE_MODEL',      'OPENCODE_MODEL',      'deepseek-v4-flash'),
+    ('OPENCODE_GO_API_KEY', 'OPENCODE_GO_API_KEY', ''),
+    ('OPENCODE_GO_MODEL',   'OPENCODE_GO_MODEL',   'deepseek-v4-pro'),
+    ('OLLAMA_CLOUD_API_KEY', 'OLLAMA_CLOUD_API_KEY', ''),
+    ('OLLAMA_CLOUD_MODEL',  'OLLAMA_CLOUD_MODEL',  'gpt-oss:120b'),
+    ('CHATGPT_MODEL',       'CHATGPT_MODEL',       'gpt-5.4'),
     # LiteLLM gateway (CLI-only). Provider-prefixed model name, e.g.
     # "anthropic/claude-sonnet-4-6". Keys are read from each provider's native
     # env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), not from a single key.
@@ -119,6 +130,12 @@ def _apply_reloadable_env_settings():
             g[attr] = raw
     # Legacy alias: API_ENDPOINT falls back to OLLAMA_API_ENDPOINT
     g['API_ENDPOINT'] = os.getenv('API_ENDPOINT', g['OLLAMA_API_ENDPOINT'])
+    # Hosted Ollama Cloud key may reuse the generic OLLAMA_API_KEY name.
+    if not str(g.get('OLLAMA_CLOUD_API_KEY') or '').strip():
+        g['OLLAMA_CLOUD_API_KEY'] = os.getenv('OLLAMA_API_KEY', '')
+    # OpenCode Go falls back to the Zen key when the Go-specific one is empty.
+    if not str(g.get('OPENCODE_GO_API_KEY') or '').strip():
+        g['OPENCODE_GO_API_KEY'] = os.getenv('OPENCODE_API_KEY', g.get('OPENCODE_API_KEY', ''))
 
 
 _apply_reloadable_env_settings()
@@ -376,6 +393,53 @@ POE_DISABLE_THINKING = os.getenv('POE_DISABLE_THINKING', 'true').lower() == 'tru
 # needs. Set to 'false' to allow retrieval.
 POE_DISABLE_WEB_SEARCH = os.getenv('POE_DISABLE_WEB_SEARCH', 'true').lower() == 'true'
 NIM_API_ENDPOINT = os.getenv('NIM_API_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions')
+ANTHROPIC_API_ENDPOINT = os.getenv('ANTHROPIC_API_ENDPOINT', 'https://api.anthropic.com/v1')
+XAI_API_ENDPOINT = os.getenv('XAI_API_ENDPOINT', 'https://api.x.ai/v1')
+OPENCODE_API_ENDPOINT = os.getenv('OPENCODE_API_ENDPOINT', 'https://opencode.ai/zen/v1')
+OPENCODE_GO_API_ENDPOINT = os.getenv('OPENCODE_GO_API_ENDPOINT', 'https://opencode.ai/zen/go/v1')
+OLLAMA_CLOUD_API_ENDPOINT = os.getenv('OLLAMA_CLOUD_API_ENDPOINT', 'https://ollama.com/v1')
+
+
+def provider_default_endpoint(provider: str) -> str:
+    """Server-side default endpoint for a provider.
+
+    Used wherever a request may omit ``api_endpoint`` (NER, auto glossary,
+    auto style, …): the fallback must be the provider's own endpoint, never
+    the local Ollama one.
+    """
+    provider = (provider or '').lower()
+    if provider == 'ollama':
+        return API_ENDPOINT
+    if provider == 'openai':
+        return OPENAI_API_ENDPOINT
+    if provider == 'openrouter':
+        return OPENROUTER_API_ENDPOINT
+    if provider == 'mistral':
+        return MISTRAL_API_ENDPOINT
+    if provider == 'deepseek':
+        return DEEPSEEK_API_ENDPOINT
+    if provider == 'poe':
+        return POE_API_ENDPOINT
+    if provider == 'nim':
+        return NIM_API_ENDPOINT
+    if provider == 'anthropic':
+        return ANTHROPIC_API_ENDPOINT
+    if provider == 'xai':
+        return XAI_API_ENDPOINT
+    if provider == 'opencode':
+        return OPENCODE_API_ENDPOINT
+    if provider == 'opencodego':
+        return OPENCODE_GO_API_ENDPOINT
+    if provider == 'ollamacloud':
+        return OLLAMA_CLOUD_API_ENDPOINT
+    return API_ENDPOINT
+
+
+def is_provider_endpoint_override(provider: str, requested_endpoint: str) -> bool:
+    """True when the request chose a host other than this provider's default."""
+    normalized = (requested_endpoint or "").strip().rstrip("/")
+    default = (provider_default_endpoint(provider) or "").strip().rstrip("/")
+    return bool(normalized) and normalized != default
 
 # SRT-specific configuration
 # Single knob for both translate and refine: every SRT block sent to the
@@ -685,6 +749,11 @@ class TranslationConfig:
     deepseek_api_key: str = DEEPSEEK_API_KEY
     poe_api_key: str = POE_API_KEY
     nim_api_key: str = NIM_API_KEY
+    anthropic_api_key: str = ANTHROPIC_API_KEY
+    xai_api_key: str = XAI_API_KEY
+    opencode_api_key: str = OPENCODE_API_KEY
+    opencodego_api_key: str = OPENCODE_GO_API_KEY
+    ollamacloud_api_key: str = OLLAMA_CLOUD_API_KEY
 
     # LLM parameters
     timeout: int = REQUEST_TIMEOUT
@@ -728,6 +797,11 @@ class TranslationConfig:
             deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
             poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
             nim_api_key=getattr(args, 'nim_api_key', NIM_API_KEY),
+            anthropic_api_key=getattr(args, 'anthropic_api_key', ANTHROPIC_API_KEY),
+            xai_api_key=getattr(args, 'xai_api_key', XAI_API_KEY),
+            opencode_api_key=getattr(args, 'opencode_api_key', OPENCODE_API_KEY),
+            opencodego_api_key=getattr(args, 'opencodego_api_key', OPENCODE_GO_API_KEY),
+            ollamacloud_api_key=getattr(args, 'ollamacloud_api_key', OLLAMA_CLOUD_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=getattr(args, 'parallel', PARALLEL_TRANSLATIONS)
@@ -777,6 +851,11 @@ class TranslationConfig:
             deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
             poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
             nim_api_key=request_data.get('nim_api_key', NIM_API_KEY),
+            anthropic_api_key=request_data.get('anthropic_api_key', ANTHROPIC_API_KEY),
+            xai_api_key=request_data.get('xai_api_key', XAI_API_KEY),
+            opencode_api_key=request_data.get('opencode_api_key', OPENCODE_API_KEY),
+            opencodego_api_key=request_data.get('opencodego_api_key', OPENCODE_GO_API_KEY),
+            ollamacloud_api_key=request_data.get('ollamacloud_api_key', OLLAMA_CLOUD_API_KEY),
             max_tokens_per_chunk=clamped_max_tokens,
             soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=clamped_workers
@@ -801,6 +880,11 @@ class TranslationConfig:
             'deepseek_api_key': self.deepseek_api_key,
             'poe_api_key': self.poe_api_key,
             'nim_api_key': self.nim_api_key,
+            'anthropic_api_key': self.anthropic_api_key,
+            'xai_api_key': self.xai_api_key,
+            'opencode_api_key': self.opencode_api_key,
+            'opencodego_api_key': self.opencodego_api_key,
+            'ollamacloud_api_key': self.ollamacloud_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'soft_limit_ratio': self.soft_limit_ratio,
             'parallel_workers': self.parallel_workers

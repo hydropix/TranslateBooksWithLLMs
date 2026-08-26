@@ -87,6 +87,7 @@ export function createProviderModelPicker(container, { config = {}, onChange } =
     }).join('');
 
     const showEndpoint = ENDPOINT_PROVIDERS.has(col.provider);
+    const showKey = col.provider !== 'chatgpt';
 
     container.innerHTML = `
         <div class="provider-model-picker" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -107,7 +108,7 @@ export function createProviderModelPicker(container, { config = {}, onChange } =
                    value="${DomHelpers.escapeHtml(col.api_endpoint || '')}"
                    placeholder="${DomHelpers.escapeHtml(endpointPlaceholder(col.provider))}">
         </div>
-        <div class="form-group" style="margin: 10px 0 0;">
+        <div class="form-group pmp-key-wrap" style="margin: 10px 0 0; ${showKey ? '' : 'display: none;'}">
             <label data-i18n="settings:api_key_optional">API key (optional)</label>
             <input type="password" id="${keyId}" class="form-control pmp-key" autocomplete="off"
                    data-i18n-attr="placeholder:settings:api_key_env_placeholder"
@@ -123,6 +124,7 @@ export function createProviderModelPicker(container, { config = {}, onChange } =
     const modelSelectEl = container.querySelector('.pmp-model');
     const endpointWrap = container.querySelector('.pmp-endpoint-wrap');
     const endpointInput = container.querySelector('.pmp-endpoint');
+    const keyWrap = container.querySelector('.pmp-key-wrap');
     const keyInput = container.querySelector('.pmp-key');
 
     const emitChange = () => {
@@ -165,6 +167,7 @@ export function createProviderModelPicker(container, { config = {}, onChange } =
             col.api_endpoint = settingsEndpoints[newProvider] || '';
             const takesEndpoint = ENDPOINT_PROVIDERS.has(newProvider);
             if (endpointWrap) endpointWrap.style.display = takesEndpoint ? '' : 'none';
+            if (keyWrap) keyWrap.style.display = newProvider === 'chatgpt' ? 'none' : '';
             if (endpointInput) {
                 endpointInput.value = col.api_endpoint;
                 endpointInput.placeholder = endpointPlaceholder(newProvider);

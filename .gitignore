@@ -34,6 +34,9 @@ tests/.placeholder_tests/
 /tmp_*.py
 /test_*.py
 
+# ChatGPT OAuth tokens (cwd or data/)
+chatgpt_oauth.json
+
 # Common secret/credential file patterns
 *.pem
 *.key

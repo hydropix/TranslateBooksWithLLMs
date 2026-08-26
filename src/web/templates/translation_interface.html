@@ -963,6 +963,12 @@
                                     <option value="openai">OpenAI-Compatible</option>
                                     <option value="openrouter">OpenRouter (200+ models)</option>
                                     <option value="nim">NVIDIA NIM (Cloud API)</option>
+                                    <option value="anthropic">Anthropic (Claude)</option>
+                                    <option value="xai">xAI (Grok)</option>
+                                    <option value="opencode">OpenCode Zen</option>
+                                    <option value="opencodego">OpenCode Go</option>
+                                    <option value="ollamacloud">Ollama Cloud</option>
+                                    <option value="chatgpt">ChatGPT (OAuth)</option>
                                 </select>
                             </div>
                         </div>
@@ -1034,6 +1040,40 @@
                             <label><span data-i18n="settings:api_key">API Key</span> <span id="nimKeyStatus" class="key-status"></span></label>
                             <div class="neu-inset-light">
                                 <input type="password" class="form-control" id="nimApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_nim;title:settings:api_key_rotation_tip" placeholder="Get key at build.nvidia.com" autocomplete="new-password" title="Tip: enter several keys separated by commas to enable automatic rotation on rate-limit (HTTP 429) — useful to chain free-tier accounts.">
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="anthropicSettings" style="display: none; margin-bottom: 0;">
+                            <label><span data-i18n="settings:api_key">API Key</span> <span id="anthropicKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light"><input type="password" class="form-control" id="anthropicApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_anthropic;title:settings:api_key_rotation_tip" placeholder="Anthropic API key" autocomplete="new-password"></div>
+                        </div>
+                        <div class="form-group" id="xaiSettings" style="display: none; margin-bottom: 0;">
+                            <label><span data-i18n="settings:api_key">API Key</span> <span id="xaiKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light"><input type="password" class="form-control" id="xaiApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_xai;title:settings:api_key_rotation_tip" placeholder="xAI API key" autocomplete="new-password"></div>
+                        </div>
+                        <div class="form-group" id="opencodeSettings" style="display: none; margin-bottom: 0;">
+                            <label><span data-i18n="settings:api_key">API Key</span> <span id="opencodeKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light"><input type="password" class="form-control" id="opencodeApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_opencode;title:settings:api_key_rotation_tip" placeholder="OpenCode Zen API key" autocomplete="new-password"></div>
+                        </div>
+                        <div class="form-group" id="opencodegoSettings" style="display: none; margin-bottom: 0;">
+                            <label><span data-i18n="settings:api_key">API Key</span> <span id="opencodegoKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light"><input type="password" class="form-control" id="opencodegoApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_opencodego;title:settings:api_key_rotation_tip" placeholder="OpenCode Go API key" autocomplete="new-password"></div>
+                        </div>
+                        <div class="form-group" id="ollamacloudSettings" style="display: none; margin-bottom: 0;">
+                            <label><span data-i18n="settings:api_key">API Key</span> <span id="ollamacloudKeyStatus" class="key-status"></span></label>
+                            <div class="neu-inset-light"><input type="password" class="form-control" id="ollamacloudApiKey" data-i18n-attr="placeholder:settings:api_key_placeholder_ollamacloud;title:settings:api_key_rotation_tip" placeholder="Ollama Cloud API key" autocomplete="new-password"></div>
+                        </div>
+                        <div class="form-group" id="chatgptSettings" style="display: none; margin-bottom: 0;">
+                            <p id="chatgptOauthHint" data-i18n="settings:chatgpt_oauth_hint" style="color: var(--text-muted-light); font-size: 0.75rem; margin: 0 0 0.5rem;">Sign in with a ChatGPT Plus or Pro account. A device code will appear; open the verification link, enter the code, then models load automatically. No API key is required.</p>
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                                <button type="button" class="btn btn-secondary" id="chatgptSignInBtn" data-i18n="settings:chatgpt_sign_in">Sign in with ChatGPT</button>
+                                <button type="button" class="btn btn-secondary" id="chatgptSignOutBtn" data-i18n="settings:chatgpt_sign_out" style="display: none;">Sign out</button>
+                                <span id="chatgptOauthStatus" class="key-status" data-i18n="settings:chatgpt_signed_out">Signed out</span>
+                            </div>
+                            <div id="chatgptDevicePanel" style="display: none;">
+                                <label data-i18n="settings:chatgpt_device_code_label">Device code</label>
+                                <div class="neu-inset-light" style="margin-bottom: 8px;"><code id="chatgptDeviceCode"></code></div>
+                                <a id="chatgptDeviceLink" href="#" target="_blank" rel="noopener noreferrer"></a>
                             </div>
                         </div>
                     </div>

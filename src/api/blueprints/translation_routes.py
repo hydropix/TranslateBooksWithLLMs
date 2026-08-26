@@ -46,7 +46,7 @@ def _clamp_parallel_workers(value):
 # '<PROVIDER>_API_KEY'. The mapping is mechanical, so supporting a new provider
 # in the resume-override path requires only adding it here (and nowhere else in
 # this file).
-_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim')
+_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'anthropic', 'xai', 'opencode', 'opencodego', 'ollamacloud')
 
 # Providers that talk to a user-supplied endpoint; the others use a built-in one.
 _ENDPOINT_PROVIDERS = ('ollama', 'openai')
@@ -56,7 +56,9 @@ _ENDPOINT_PROVIDERS = ('ollama', 'openai')
 # The others use a constant or a .env endpoint and ignore the request field,
 # so an endpoint sent alongside them is inert and must not be treated as an
 # override — the frontend sends llm_api_endpoint unconditionally.
-_ENDPOINT_CONSUMING_PROVIDERS = ('ollama', 'openai', 'nim')
+_ENDPOINT_CONSUMING_PROVIDERS = (
+    'ollama', 'openai', 'nim', 'anthropic', 'xai', 'opencode', 'opencodego',
+)
 
 
 def _server_default_endpoint(provider):
@@ -71,6 +73,16 @@ def _server_default_endpoint(provider):
         return _config.OPENAI_API_ENDPOINT
     if provider == 'nim':
         return _config.NIM_API_ENDPOINT
+    if provider == 'anthropic':
+        return _config.ANTHROPIC_API_ENDPOINT
+    if provider == 'xai':
+        return _config.XAI_API_ENDPOINT
+    if provider == 'opencode':
+        return _config.OPENCODE_API_ENDPOINT
+    if provider == 'opencodego':
+        return _config.OPENCODE_GO_API_ENDPOINT
+    if provider == 'ollamacloud':
+        return _config.OLLAMA_CLOUD_API_ENDPOINT
     return ''
 
 
@@ -175,8 +187,17 @@ def _validate_provider_credentials(config):
     """
     provider = (config.get('llm_provider') or 'ollama').lower()
 
+    if provider == 'chatgpt':
+        from src.core.llm.chatgpt_oauth import status_payload
+        if not status_payload().get("signed_in"):
+            return jsonify({
+                "error": "ChatGPT is not signed in",
+                "message": "Sign in with ChatGPT in Settings before starting or resuming a job.",
+            }), 400
+        return None
+
     if provider in _KEY_PROVIDERS:
-        env_var = f"{provider.upper()}_API_KEY"
+        env_var = _provider_env_var(provider)
         # 'openai' also covers OpenAI-compatible local endpoints (llama.cpp,
         # LM Studio, vLLM) where a key is legitimately absent — only require
         # one for the official API, mirroring the factory's heuristic.
@@ -184,6 +205,10 @@ def _validate_provider_credentials(config):
                         or 'api.openai.com' in (config.get('llm_api_endpoint') or ''))
         if key_required:
             resolved = config.get(f"{provider}_api_key") or os.getenv(env_var)
+            if provider == 'opencodego':
+                resolved = resolved or os.getenv('OPENCODE_API_KEY')
+            if provider == 'ollamacloud':
+                resolved = resolved or os.getenv('OLLAMA_API_KEY')
             if not resolved:
                 return jsonify({
                     "error": "Missing API key for provider",
@@ -259,8 +284,11 @@ def _apply_resume_overrides(config, overrides):
         provider = (config.get('llm_provider') or 'ollama').lower()
         raw_key = overrides.get('api_key')
         if provider in _KEY_PROVIDERS and raw_key not in (None, ''):
-            env_var = f"{provider.upper()}_API_KEY"
-            config[f"{provider}_api_key"] = _resolve_api_key(raw_key, env_var)
+            env_var = _provider_env_var(provider)
+            resolved = _resolve_api_key(raw_key, env_var)
+            if provider == 'opencodego' and not resolved:
+                resolved = _resolve_api_key(raw_key, 'OPENCODE_API_KEY')
+            config[f"{provider}_api_key"] = resolved
 
     # A resume can point the job at a different host, either through the
     # override body or through the endpoint stored in the checkpoint. The same
@@ -302,13 +330,14 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         """Start a new translation job"""
         data = request.json
 
-        # Validate required fields
+        provider = (data.get('llm_provider') or 'ollama').lower()
+        endpoint_required = provider in ('ollama', 'openai')
         if 'file_path' in data:
             required_fields = ['file_path', 'source_language', 'target_language',
-                             'model', 'llm_api_endpoint', 'output_filename', 'file_type']
+                             'model', 'output_filename', 'file_type']
         else:
             required_fields = ['text', 'source_language', 'target_language',
-                             'model', 'llm_api_endpoint', 'output_filename']
+                             'model', 'output_filename']
 
         for field in required_fields:
             if field not in data or (isinstance(data[field], str) and not data[field].strip()) or (not isinstance(data[field], str) and data[field] is None):
@@ -316,6 +345,11 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                     pass
                 else:
                     return jsonify({"error": f"Missing or empty field: {field}"}), 400
+
+        if endpoint_required:
+            endpoint = data.get('llm_api_endpoint')
+            if not isinstance(endpoint, str) or not endpoint.strip():
+                return jsonify({"error": "Missing or empty field: llm_api_endpoint"}), 400
 
         # Generate unique translation ID
         translation_id = f"trans_{int(time.time() * 1000)}"
@@ -325,7 +359,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'source_language': data['source_language'],
             'target_language': data['target_language'],
             'model': data['model'],
-            'llm_api_endpoint': data['llm_api_endpoint'],
+            'llm_api_endpoint': data.get('llm_api_endpoint') or '',
             'request_timeout': int(data.get('timeout', REQUEST_TIMEOUT)),
             'context_window': int(data.get('context_window', OLLAMA_NUM_CTX)),
             'max_attempts': int(data.get('max_attempts', 2)),
@@ -336,6 +370,19 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'gemini_api_key': _resolve_api_key(data.get('gemini_api_key'), 'GEMINI_API_KEY'),
             'openai_api_key': _resolve_api_key(data.get('openai_api_key'), 'OPENAI_API_KEY'),
             'openrouter_api_key': _resolve_api_key(data.get('openrouter_api_key'), 'OPENROUTER_API_KEY'),
+            'mistral_api_key': _resolve_api_key(data.get('mistral_api_key'), 'MISTRAL_API_KEY'),
+            'deepseek_api_key': _resolve_api_key(data.get('deepseek_api_key'), 'DEEPSEEK_API_KEY'),
+            'poe_api_key': _resolve_api_key(data.get('poe_api_key'), 'POE_API_KEY'),
+            'nim_api_key': _resolve_api_key(data.get('nim_api_key'), 'NIM_API_KEY'),
+            'anthropic_api_key': _resolve_api_key(data.get('anthropic_api_key'), 'ANTHROPIC_API_KEY'),
+            'xai_api_key': _resolve_api_key(data.get('xai_api_key'), 'XAI_API_KEY'),
+            'opencode_api_key': _resolve_api_key(data.get('opencode_api_key'), 'OPENCODE_API_KEY'),
+            'opencodego_api_key': _resolve_api_key(
+                data.get('opencodego_api_key'), 'OPENCODE_GO_API_KEY'
+            ) or _resolve_api_key(data.get('opencodego_api_key'), 'OPENCODE_API_KEY'),
+            'ollamacloud_api_key': _resolve_api_key(
+                data.get('ollamacloud_api_key'), 'OLLAMA_CLOUD_API_KEY'
+            ) or _resolve_api_key(data.get('ollamacloud_api_key'), 'OLLAMA_API_KEY'),
             # Prompt options (optional instructions to include in the system prompt)
             'prompt_options': data.get('prompt_options', {}),
             # Auto-pause on rate limit toggle (request overrides .env default)
@@ -348,8 +395,17 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'refine_after': data.get('refine_after', False),
             # TTS configuration
             'tts_enabled': data.get('tts_enabled', False),
-            'tts_config': TTSConfig.from_web_request(data).to_dict() if data.get('tts_enabled') else None
+            'tts_config': TTSConfig.from_web_request(data).to_dict() if data.get('tts_enabled') else None,
         }
+
+        raw_chunk = data.get('max_tokens_per_chunk')
+        if raw_chunk is not None and str(raw_chunk).strip() != '':
+            try:
+                config['max_tokens_per_chunk'] = max(
+                    MIN_CHUNK_SIZE_TOKENS, int(raw_chunk)
+                )
+            except (TypeError, ValueError):
+                pass
 
         # Add file-specific or text-specific configuration
         if 'file_path' in data:

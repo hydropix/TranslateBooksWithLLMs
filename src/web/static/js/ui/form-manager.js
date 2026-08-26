@@ -402,6 +402,14 @@ export const FormManager = {
                 }
             }
 
+            // Provider + model saved in .env win over localStorage / HTML defaults.
+            if (config.llm_provider) {
+                const providerSelect = DomHelpers.getElement('llmProvider');
+                if (providerSelect) {
+                    providerSelect.value = config.llm_provider;
+                }
+            }
+
             // Parallel requests default (seeds the input; per-job request overrides it)
             if (config.parallel_translations) {
                 const parallelWorkersInput = DomHelpers.getElement('parallelWorkers');
@@ -460,6 +468,11 @@ export const FormManager = {
             ApiKeyUtils.setupField('deepseekApiKey', config.deepseek_api_key_configured, config.deepseek_api_key, config.deepseek_api_key_count);
             ApiKeyUtils.setupField('poeApiKey', config.poe_api_key_configured, config.poe_api_key, config.poe_api_key_count);
             ApiKeyUtils.setupField('nimApiKey', config.nim_api_key_configured, config.nim_api_key, config.nim_api_key_count);
+            ApiKeyUtils.setupField('anthropicApiKey', config.anthropic_api_key_configured, config.anthropic_api_key, config.anthropic_api_key_count);
+            ApiKeyUtils.setupField('xaiApiKey', config.xai_api_key_configured, config.xai_api_key, config.xai_api_key_count);
+            ApiKeyUtils.setupField('opencodeApiKey', config.opencode_api_key_configured, config.opencode_api_key, config.opencode_api_key_count);
+            ApiKeyUtils.setupField('opencodegoApiKey', config.opencodego_api_key_configured, config.opencodego_api_key, config.opencodego_api_key_count);
+            ApiKeyUtils.setupField('ollamacloudApiKey', config.ollamacloud_api_key_configured, config.ollamacloud_api_key, config.ollamacloud_api_key_count);
 
             // After loading defaults, dispatch event to notify other modules
             console.log('[FormManager] Default config loaded, dispatching event');
@@ -651,11 +664,17 @@ export const FormManager = {
         const provider = DomHelpers.getValue('llmProvider');
         const model = DomHelpers.getValue('model');
 
-        // Get API endpoint based on provider
-        let apiEndpoint;
+        // Get API endpoint based on provider. Only providers with a visible
+        // endpoint field (ollama, openai) send one from the form. Cloud
+        // providers (anthropic, xai, opencode, ...) resolve their endpoint
+        // server-side from the .env/config defaults; forwarding the Ollama
+        // endpoint here used to redirect every request to the local server,
+        // which answered 404 "model not found" and silently kept the source
+        // language in the output file.
+        let apiEndpoint = '';
         if (provider === 'openai') {
             apiEndpoint = DomHelpers.getValue('openaiEndpoint');
-        } else {
+        } else if (provider === 'ollama') {
             apiEndpoint = DomHelpers.getValue('apiEndpoint');
         }
 
@@ -685,6 +704,11 @@ export const FormManager = {
             gemini_api_key: geminiApiKey,
             openai_api_key: openaiApiKey,
             openrouter_api_key: openrouterApiKey,
+            anthropic_api_key: provider === 'anthropic' ? ApiKeyUtils.getValue('anthropicApiKey') : '',
+            xai_api_key: provider === 'xai' ? ApiKeyUtils.getValue('xaiApiKey') : '',
+            opencode_api_key: provider === 'opencode' ? ApiKeyUtils.getValue('opencodeApiKey') : '',
+            opencodego_api_key: provider === 'opencodego' ? ApiKeyUtils.getValue('opencodegoApiKey') : '',
+            ollamacloud_api_key: provider === 'ollamacloud' ? ApiKeyUtils.getValue('ollamacloudApiKey') : '',
             // Prompt options (optional system prompt instructions)
             // Technical content protection is always enabled
             prompt_options: promptOptions,
@@ -696,6 +720,7 @@ export const FormManager = {
             parallel_workers: provider === 'ollama'
                 ? 1
                 : (parseInt(DomHelpers.getValue('parallelWorkers'), 10) || 1),
+            max_tokens_per_chunk: parseInt(DomHelpers.getValue('maxTokensPerChunk'), 10) || undefined,
             // TTS configuration
             tts_enabled: ttsEnabled,
             tts_voice: ttsEnabled ? (DomHelpers.getValue('ttsVoice') || '') : '',
@@ -724,7 +749,12 @@ export const FormManager = {
             return { valid: false, message: t('translation:validation_model_required') };
         }
 
-        if (!config.llm_api_endpoint) {
+        // The endpoint field is only meaningful for providers that expose one
+        // (ollama, openai). Cloud providers resolve their endpoint from the
+        // server defaults, so an empty llm_api_endpoint is valid for them.
+        const provider = config.llm_provider;
+        const needsEndpoint = provider === 'ollama' || provider === 'openai';
+        if (needsEndpoint && !config.llm_api_endpoint) {
             return { valid: false, message: t('translation:validation_endpoint_empty') };
         }
 

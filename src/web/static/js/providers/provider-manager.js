@@ -169,6 +169,8 @@ const OLLAMA_RETRY_INTERVAL = 3000; // 3 seconds
 const OLLAMA_MAX_SILENT_RETRIES = 5; // Show message after 5 failed attempts
 let ollamaRetryTimer = null;
 let ollamaRetryCount = 0;
+let chatgptPollTimer = null;
+const CHATGPT_POLL_INTERVAL_MS = 3000;
 
 /**
  * Replace the model dropdown content with a single placeholder option whose
@@ -223,6 +225,7 @@ export const ProviderManager = {
             providerSelect.addEventListener('change', () => {
                 // Stop any ongoing Ollama retries when switching providers
                 this.stopOllamaAutoRetry();
+                this.stopChatGPTPoll();
                 this.toggleProviderSettings();
             });
         }
@@ -252,6 +255,20 @@ export const ProviderManager = {
         // This fixes GitHub issue #108 part 2: Ollama endpoint was using
         // localhost instead of the configured remote server.
         this.toggleProviderSettings(false);
+
+        const chatgptSignInBtn = DomHelpers.getElement('chatgptSignInBtn');
+        if (chatgptSignInBtn) {
+            chatgptSignInBtn.addEventListener('click', () => this.startChatGPTSignIn());
+        }
+        const chatgptSignOutBtn = DomHelpers.getElement('chatgptSignOutBtn');
+        if (chatgptSignOutBtn) {
+            chatgptSignOutBtn.addEventListener('click', () => this.signOutChatGPT());
+        }
+        window.addEventListener('localeChanged', () => {
+            if (DomHelpers.getValue('llmProvider') === 'chatgpt') {
+                this.loadChatGPTModels();
+            }
+        });
 
         // Check if config is already loaded (race condition fix)
         const serverConfig = StateManager.getState('ui.defaultConfig');
@@ -311,7 +328,7 @@ export const ProviderManager = {
         if (modelSelect) {
             SearchableSelectFactory.create('model', {
                 placeholder: t('settings:search_models_placeholder'),
-                allowCustomValue: true, // Allow custom bot names for Poe
+                allowCustomValue: true, // Poe bots / local OpenAI-compatible names
                 onSelect: (option) => {
                     // Trigger model detection check
                     ModelDetector.checkAndShowRecommendation();
@@ -334,6 +351,12 @@ export const ProviderManager = {
         // Update state
         StateManager.setState('ui.currentProvider', provider);
 
+        const modelSelectInstance = SearchableSelectFactory.get('model');
+        if (modelSelectInstance) {
+            const listedOnly = ['anthropic', 'xai', 'opencode', 'opencodego', 'ollamacloud', 'chatgpt'].includes(provider);
+            modelSelectInstance.options.allowCustomValue = !listedOnly;
+        }
+
         // Get provider settings elements
         const ollamaSettings = DomHelpers.getElement('ollamaSettings');
         const geminiSettings = DomHelpers.getElement('geminiSettings');
@@ -346,6 +369,13 @@ export const ProviderManager = {
         const deepseekSettings = DomHelpers.getElement('deepseekSettings');
         const poeSettings = DomHelpers.getElement('poeSettings');
         const nimSettings = DomHelpers.getElement('nimSettings');
+        const anthropicSettings = DomHelpers.getElement('anthropicSettings');
+        const xaiSettings = DomHelpers.getElement('xaiSettings');
+        const opencodeSettings = DomHelpers.getElement('opencodeSettings');
+        const opencodegoSettings = DomHelpers.getElement('opencodegoSettings');
+        const ollamacloudSettings = DomHelpers.getElement('ollamacloudSettings');
+        const chatgptSettings = DomHelpers.getElement('chatgptSettings');
+        [anthropicSettings, xaiSettings, opencodeSettings, opencodegoSettings, ollamacloudSettings, chatgptSettings].forEach(el => { if (el) el.style.display = 'none'; });
 
         // Show/hide provider-specific settings (use inline style for elements with inline display:none)
         if (provider === 'ollama') {
@@ -436,6 +466,28 @@ export const ProviderManager = {
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'block';
             if (loadModels) this.loadNimModels();
+        } else if (['anthropic', 'xai', 'opencode', 'opencodego', 'ollamacloud'].includes(provider)) {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (poeSettings) poeSettings.style.display = 'none';
+            if (nimSettings) nimSettings.style.display = 'none';
+            if (loadModels) this.loadGenericCloudModels(provider);
+        } else if (provider === 'chatgpt') {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (poeSettings) poeSettings.style.display = 'none';
+            if (nimSettings) nimSettings.style.display = 'none';
+            if (loadModels) this.loadChatGPTModels();
         }
 
         // Parallel translation is only useful for cloud providers; a single
@@ -470,7 +522,172 @@ export const ProviderManager = {
             this.loadDeepSeekModels();
         } else if (provider === 'nim') {
             this.loadNimModels();
+        } else if (['anthropic', 'xai', 'opencode', 'opencodego', 'ollamacloud'].includes(provider)) {
+            this.loadGenericCloudModels(provider);
+        } else if (provider === 'chatgpt') {
+            this.loadChatGPTModels();
         }
+    },
+
+    async loadGenericCloudModels(provider) {
+        const modelSelect = DomHelpers.getElement('model');
+        if (!modelSelect) return;
+        const field = `${provider}ApiKey`;
+        const setting = DomHelpers.getElement(`${provider}Settings`);
+        if (setting) setting.style.display = 'block';
+        const fallback = {
+            anthropic: [{ value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' }],
+            xai: [{ value: 'grok-4.5', label: 'Grok 4.5' }],
+            opencode: [
+                { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+                { value: 'kimi-k3', label: 'Kimi K3' },
+                { value: 'glm-5.2', label: 'GLM 5.2' },
+                { value: 'minimax-m2.7', label: 'MiniMax M2.7' },
+            ],
+            opencodego: [
+                { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+                { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+                { value: 'kimi-k3', label: 'Kimi K3' },
+                { value: 'glm-5.2', label: 'GLM 5.2' },
+            ],
+            ollamacloud: [
+                { value: 'gpt-oss:120b', label: 'gpt-oss:120b' },
+                { value: 'kimi-k2.6', label: 'kimi-k2.6' },
+                { value: 'glm-5.1', label: 'glm-5.1' },
+                { value: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+                { value: 'minimax-m2.7', label: 'minimax-m2.7' },
+            ],
+        }[provider];
+        try {
+            const data = await ApiClient.getModels(provider, { apiKey: ApiKeyUtils.getValue(field) });
+            if (data.status === 'api_key_missing') {
+                populateModelSelect(fallback, fallback[0].value, provider);
+                StatusManager.setDisconnected(t('errors:api_key_required'));
+                return;
+            }
+            const models = (data.models || []).map(m => ({ value: m.id, label: m.name || m.id, context_length: m.context_length }));
+            populateModelSelect(models.length ? models : fallback, data.default || fallback[0].value, provider);
+            StatusManager.setConnected(provider, models.length || fallback.length);
+        } catch (error) {
+            populateModelSelect(fallback, fallback[0].value, provider);
+            StatusManager.setError(error.message);
+        }
+    },
+
+    _updateChatGPTAuthUi(signedIn) {
+        const signInBtn = DomHelpers.getElement('chatgptSignInBtn');
+        const signOutBtn = DomHelpers.getElement('chatgptSignOutBtn');
+        const statusEl = DomHelpers.getElement('chatgptOauthStatus');
+        const panel = DomHelpers.getElement('chatgptDevicePanel');
+        if (signInBtn) signInBtn.style.display = signedIn ? 'none' : 'inline-block';
+        if (signOutBtn) signOutBtn.style.display = signedIn ? 'inline-block' : 'none';
+        if (statusEl) {
+            const key = signedIn ? 'settings:chatgpt_signed_in' : 'settings:chatgpt_signed_out';
+            statusEl.setAttribute('data-i18n', key);
+            statusEl.textContent = t(key);
+        }
+        if (signedIn && panel) panel.style.display = 'none';
+    },
+
+    stopChatGPTPoll() {
+        if (chatgptPollTimer) {
+            clearTimeout(chatgptPollTimer);
+            chatgptPollTimer = null;
+        }
+    },
+
+    async loadChatGPTModels() {
+        const modelSelect = DomHelpers.getElement('model');
+        if (!modelSelect) return;
+        const setting = DomHelpers.getElement('chatgptSettings');
+        if (setting) setting.style.display = 'block';
+        setPlaceholderOption(modelSelect, 'settings:search_models_loading');
+        StatusManager.setChecking();
+        try {
+            const data = await ApiClient.getModels('chatgpt');
+            if (DomHelpers.getValue('llmProvider') !== 'chatgpt') return;
+            if (data.status === 'chatgpt_signed_out') {
+                setPlaceholderOption(modelSelect, 'settings:chatgpt_sign_in_to_load');
+                this._updateChatGPTAuthUi(false);
+                StatusManager.setDisconnected(t('settings:chatgpt_sign_in_to_load'));
+                return;
+            }
+            const models = (data.models || []).map(m => ({
+                value: m.id || m.value || '',
+                label: m.name || m.label || m.id || '',
+            })).filter(m => m.value);
+            if (!models.length) {
+                setPlaceholderOption(modelSelect, 'settings:chatgpt_sign_in_to_load');
+                this._updateChatGPTAuthUi(data.status === 'chatgpt_connected');
+                StatusManager.setError(data.error || t('settings:chatgpt_sign_in_to_load'));
+                return;
+            }
+            populateModelSelect(models, data.default || models[0].value, 'chatgpt');
+            this._updateChatGPTAuthUi(true);
+            StatusManager.setConnected('chatgpt', models.length);
+            SettingsManager.applyPendingModelSelection();
+            ModelDetector.checkAndShowRecommendation();
+        } catch (error) {
+            setPlaceholderOption(modelSelect, 'settings:chatgpt_sign_in_to_load');
+            this._updateChatGPTAuthUi(false);
+            StatusManager.setError(error.message);
+        }
+    },
+
+    async startChatGPTSignIn() {
+        this.stopChatGPTPoll();
+        const panel = DomHelpers.getElement('chatgptDevicePanel');
+        const codeEl = DomHelpers.getElement('chatgptDeviceCode');
+        const linkEl = DomHelpers.getElement('chatgptDeviceLink');
+        try {
+            const data = await ApiClient.chatgptOAuthStart();
+            if (!data.user_code || !data.device_auth_id) {
+                StatusManager.setError(data.message || data.error || t('settings:chatgpt_sign_in_to_load'));
+                return;
+            }
+            if (codeEl) codeEl.textContent = data.user_code;
+            if (linkEl) {
+                const url = data.verification_url || '';
+                linkEl.href = url || '#';
+                linkEl.textContent = url;
+            }
+            if (panel) panel.style.display = 'block';
+            this._pollChatGPTDevice(data.device_auth_id, data.user_code);
+        } catch (error) {
+            StatusManager.setError(error.message);
+        }
+    },
+
+    _pollChatGPTDevice(deviceAuthId, userCode) {
+        this.stopChatGPTPoll();
+        chatgptPollTimer = setTimeout(async () => {
+            chatgptPollTimer = null;
+            if (DomHelpers.getValue('llmProvider') !== 'chatgpt') return;
+            try {
+                const data = await ApiClient.chatgptOAuthPoll(deviceAuthId, userCode);
+                if (data.pending) {
+                    this._pollChatGPTDevice(deviceAuthId, userCode);
+                    return;
+                }
+                this._updateChatGPTAuthUi(true);
+                await this.loadChatGPTModels();
+            } catch (error) {
+                StatusManager.setError(error.message);
+            }
+        }, CHATGPT_POLL_INTERVAL_MS);
+    },
+
+    async signOutChatGPT() {
+        this.stopChatGPTPoll();
+        try {
+            await ApiClient.chatgptOAuthLogout();
+        } catch (error) {
+            StatusManager.setError(error.message);
+        }
+        this._updateChatGPTAuthUi(false);
+        const panel = DomHelpers.getElement('chatgptDevicePanel');
+        if (panel) panel.style.display = 'none';
+        await this.loadChatGPTModels();
     },
 
     /**

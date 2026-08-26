@@ -87,9 +87,13 @@ function getTranslationConfig(file) {
         source_language: sourceLanguageVal,
         target_language: targetLanguageVal,
         model: currentModel,
+        // Cloud providers resolve their endpoint from server defaults; only
+        // ollama/openai expose an endpoint field in the form. Forwarding the
+        // Ollama endpoint for e.g. opencode redirected requests to the local
+        // server (404 "model not found") and left the output untranslated.
         llm_api_endpoint: provider === 'openai' ?
                          DomHelpers.getValue('openaiEndpoint') :
-                         DomHelpers.getValue('apiEndpoint'),
+                         (provider === 'ollama' ? DomHelpers.getValue('apiEndpoint') : ''),
         llm_provider: provider,
         gemini_api_key: provider === 'gemini' ? ApiKeyUtils.getValue('geminiApiKey') : '',
         openai_api_key: provider === 'openai' ? ApiKeyUtils.getValue('openaiApiKey') : '',
@@ -98,6 +102,11 @@ function getTranslationConfig(file) {
         deepseek_api_key: provider === 'deepseek' ? ApiKeyUtils.getValue('deepseekApiKey') : '',
         poe_api_key: provider === 'poe' ? ApiKeyUtils.getValue('poeApiKey') : '',
         nim_api_key: provider === 'nim' ? ApiKeyUtils.getValue('nimApiKey') : '',
+        anthropic_api_key: provider === 'anthropic' ? ApiKeyUtils.getValue('anthropicApiKey') : '',
+        xai_api_key: provider === 'xai' ? ApiKeyUtils.getValue('xaiApiKey') : '',
+        opencode_api_key: provider === 'opencode' ? ApiKeyUtils.getValue('opencodeApiKey') : '',
+        opencodego_api_key: provider === 'opencodego' ? ApiKeyUtils.getValue('opencodegoApiKey') : '',
+        ollamacloud_api_key: provider === 'ollamacloud' ? ApiKeyUtils.getValue('ollamacloudApiKey') : '',
         input_filename: file.name,
         output_filename: resolvedOutputFilename,
         file_type: file.fileType,
@@ -111,6 +120,7 @@ function getTranslationConfig(file) {
         parallel_workers: provider === 'ollama'
             ? 1
             : (parseInt(DomHelpers.getValue('parallelWorkers'), 10) || 1),
+        max_tokens_per_chunk: parseInt(DomHelpers.getValue('maxTokensPerChunk'), 10) || undefined,
         tts_enabled: ttsEnabled,
         tts_voice: ttsEnabled ? (DomHelpers.getValue('ttsVoice') || '') : '',
         tts_rate: ttsEnabled ? (DomHelpers.getValue('ttsRate') || '+0%') : '+0%',

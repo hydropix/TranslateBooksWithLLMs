@@ -20,6 +20,12 @@ export const PROVIDER_LOGOS = {
     openai: '/static/img/providers/openai.png',
     openrouter: '/static/img/providers/openrouter.png',
     nim: '/static/img/providers/nvidia.png',
+    anthropic: '/static/img/providers/anthropic.svg',
+    xai: '/static/img/providers/xai.svg',
+    opencode: '/static/img/providers/opencode.svg',
+    opencodego: '/static/img/providers/opencodego.svg',
+    ollamacloud: '/static/img/providers/ollama.png',
+    chatgpt: '/static/img/providers/openai.png',
 };
 
 export const PROVIDER_META = {
@@ -31,10 +37,16 @@ export const PROVIDER_META = {
     openai: { name: 'OpenAI', description: 'Compatible' },
     openrouter: { name: 'OpenRouter', description: '200+ models' },
     nim: { name: 'NVIDIA NIM', description: 'Cloud API' },
+    anthropic: { name: 'Anthropic', description: 'Claude API' },
+    xai: { name: 'xAI', description: 'Grok API' },
+    opencode: { name: 'OpenCode Zen', description: 'Pay-as-you-go' },
+    opencodego: { name: 'OpenCode Go', description: 'Subscription' },
+    ollamacloud: { name: 'Ollama Cloud', description: 'Hosted' },
+    chatgpt: { name: 'ChatGPT', description: 'OAuth' },
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
-export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
+export const PROVIDER_ORDER = ['anthropic', 'chatgpt', 'deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'ollamacloud', 'openai', 'opencode', 'opencodego', 'openrouter', 'poe', 'xai'];
 
 /**
  * Replace the dropdown content with a single placeholder option whose text
@@ -152,12 +164,15 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             selectEl.appendChild(opt);
         });
     } else {
-        // Ollama: plain strings
+        // Ollama uses strings; generic cloud providers may return either
+        // strings or {value,label}/{id,name} objects.
         list.forEach((name) => {
+            const value = typeof name === 'string' ? name : (name.value ?? name.id ?? name.name ?? '');
+            const label = typeof name === 'string' ? name : (name.label ?? name.name ?? value);
             const opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
-            if (name === defaultModel) { opt.selected = true; defaultFound = true; }
+            opt.value = value;
+            opt.textContent = label;
+            if (value === defaultModel) { opt.selected = true; defaultFound = true; }
             selectEl.appendChild(opt);
         });
     }

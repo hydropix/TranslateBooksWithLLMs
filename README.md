@@ -53,20 +53,29 @@ That's it. On first launch, you choose a translation provider:
 <a href="https://mistral.ai/"><img src="src/web/static/img/providers/mistral.png" alt="Mistral" height="32"></a>&nbsp;&nbsp;
 <a href="https://www.deepseek.com/"><img src="src/web/static/img/providers/deepseek.png" alt="DeepSeek" height="32"></a>&nbsp;&nbsp;
 <a href="https://deepmind.google/technologies/gemini/"><img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32"></a>&nbsp;&nbsp;
-<a href="https://build.nvidia.com/"><img src="src/web/static/img/providers/nvidia.png" alt="NVIDIA NIM" height="32"></a>
+<a href="https://build.nvidia.com/"><img src="src/web/static/img/providers/nvidia.png" alt="NVIDIA NIM" height="32"></a>&nbsp;&nbsp;
+<a href="https://www.anthropic.com/"><img src="src/web/static/img/providers/anthropic.svg" alt="Anthropic" height="32"></a>&nbsp;&nbsp;
+<a href="https://x.ai/"><img src="src/web/static/img/providers/xai.svg" alt="xAI" height="32"></a>&nbsp;&nbsp;
+<a href="https://opencode.ai/"><img src="src/web/static/img/providers/opencode.svg" alt="OpenCode" height="32"></a>
 </p>
 
 | Provider | Type | Get started |
 |----------|------|-------------|
+| **Anthropic** | Cloud (Messages API) | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| **ChatGPT** | Cloud (OAuth, Plus/Pro) | Sign in from the web UI — no API key |
 | **DeepSeek** | Cloud | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
 | **Gemini** | Cloud | [Google AI Studio](https://aistudio.google.com/apikey) |
 | **Mistral** | Cloud | [console.mistral.ai](https://console.mistral.ai/api-keys) |
 | **NVIDIA NIM** | Cloud | [build.nvidia.com](https://build.nvidia.com/) |
 | **Ollama** | Local | [ollama.com](https://ollama.com/) |
+| **Ollama Cloud** | Cloud | [ollama.com/settings/keys](https://ollama.com/settings/keys) |
 | **OpenAI** | Cloud | [platform.openai.com](https://platform.openai.com/api-keys) |
 | **OpenAI-Compatible** | Local (llama.cpp, LM Studio, vLLM, LocalAI...) | Point to your server's endpoint |
+| **OpenCode Go** | Cloud (subscription) | [opencode.ai/auth](https://opencode.ai/auth) |
+| **OpenCode Zen** | Cloud (pay-as-you-go) | [opencode.ai/auth](https://opencode.ai/auth) |
 | **OpenRouter** | Cloud (200+ models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | **Poe** | Cloud (multi-model) | [poe.com/api_key](https://poe.com/api_key) |
+| **xAI** | Cloud | [console.x.ai](https://console.x.ai/) |
 
 See [docs/PROVIDERS.md](docs/PROVIDERS.md) for detailed setup instructions.
 

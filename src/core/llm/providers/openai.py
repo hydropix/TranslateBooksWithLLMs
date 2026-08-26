@@ -79,7 +79,8 @@ class OpenAICompatibleProvider(LLMProvider):
         return endpoint
 
     async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
-                      system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
+                      system_prompt: Optional[str] = None,
+                      **generation_options) -> Optional[LLMResponse]:
         """
         Generate text using an OpenAI compatible API.
 
@@ -102,6 +103,10 @@ class OpenAICompatibleProvider(LLMProvider):
             "messages": messages,
             "stream": False,
         }
+        for option in ("temperature", "top_p", "max_tokens", "frequency_penalty", "presence_penalty", "thinking", "enable_thinking"):
+            value = generation_options.get(option)
+            if value is not None:
+                payload[option] = value
 
         # Only add thinking-disable params for local servers (llama.cpp, vLLM, LM Studio)
         # Skip for official OpenAI API and cloud providers (NVIDIA NIM, etc.)

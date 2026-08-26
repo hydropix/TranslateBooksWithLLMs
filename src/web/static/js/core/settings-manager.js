@@ -9,6 +9,7 @@
 import { ApiClient } from './api-client.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { MessageLogger } from '../ui/message-logger.js';
+import { ApiKeyUtils } from '../utils/api-key-utils.js';
 import { t } from '../i18n/i18n.js';
 
 // Storage configuration with versioning
@@ -150,6 +151,11 @@ export const SettingsManager = {
             { id: 'deepseekApiKey', event: 'input' },
             { id: 'poeApiKey', event: 'input' },
             { id: 'nimApiKey', event: 'input' },
+            { id: 'anthropicApiKey', event: 'input' },
+            { id: 'xaiApiKey', event: 'input' },
+            { id: 'opencodeApiKey', event: 'input' },
+            { id: 'opencodegoApiKey', event: 'input' },
+            { id: 'ollamacloudApiKey', event: 'input' },
             { id: 'disableAutoPause', event: 'change' },
             { id: 'parallelWorkers', event: 'input' },
             { id: 'maxTokensPerChunk', event: 'input' }
@@ -448,26 +454,41 @@ export const SettingsManager = {
             const provider = DomHelpers.getValue('llmProvider');
 
             if (provider === 'gemini') {
-                const key = DomHelpers.getValue('geminiApiKey');
+                const key = ApiKeyUtils.getValue('geminiApiKey');
                 if (key) envSettings['GEMINI_API_KEY'] = key;
             } else if (provider === 'openai') {
-                const key = DomHelpers.getValue('openaiApiKey');
+                const key = ApiKeyUtils.getValue('openaiApiKey');
                 if (key) envSettings['OPENAI_API_KEY'] = key;
             } else if (provider === 'openrouter') {
-                const key = DomHelpers.getValue('openrouterApiKey');
+                const key = ApiKeyUtils.getValue('openrouterApiKey');
                 if (key) envSettings['OPENROUTER_API_KEY'] = key;
             } else if (provider === 'mistral') {
-                const key = DomHelpers.getValue('mistralApiKey');
+                const key = ApiKeyUtils.getValue('mistralApiKey');
                 if (key) envSettings['MISTRAL_API_KEY'] = key;
             } else if (provider === 'deepseek') {
-                const key = DomHelpers.getValue('deepseekApiKey');
+                const key = ApiKeyUtils.getValue('deepseekApiKey');
                 if (key) envSettings['DEEPSEEK_API_KEY'] = key;
             } else if (provider === 'poe') {
-                const key = DomHelpers.getValue('poeApiKey');
+                const key = ApiKeyUtils.getValue('poeApiKey');
                 if (key) envSettings['POE_API_KEY'] = key;
             } else if (provider === 'nim') {
-                const key = DomHelpers.getValue('nimApiKey');
+                const key = ApiKeyUtils.getValue('nimApiKey');
                 if (key) envSettings['NIM_API_KEY'] = key;
+            } else if (provider === 'anthropic') {
+                const key = ApiKeyUtils.getValue('anthropicApiKey');
+                if (key) envSettings['ANTHROPIC_API_KEY'] = key;
+            } else if (provider === 'xai') {
+                const key = ApiKeyUtils.getValue('xaiApiKey');
+                if (key) envSettings['XAI_API_KEY'] = key;
+            } else if (provider === 'opencode') {
+                const key = ApiKeyUtils.getValue('opencodeApiKey');
+                if (key) envSettings['OPENCODE_API_KEY'] = key;
+            } else if (provider === 'opencodego') {
+                const key = ApiKeyUtils.getValue('opencodegoApiKey');
+                if (key) envSettings['OPENCODE_GO_API_KEY'] = key;
+            } else if (provider === 'ollamacloud') {
+                const key = ApiKeyUtils.getValue('ollamacloudApiKey');
+                if (key) envSettings['OLLAMA_CLOUD_API_KEY'] = key;
             }
 
             // Save endpoints to .env
@@ -544,6 +565,18 @@ export const SettingsManager = {
                     envSettings['POE_MODEL'] = model;
                 } else if (provider === 'nim') {
                     envSettings['NIM_MODEL'] = model;
+                } else if (provider === 'anthropic') {
+                    envSettings['ANTHROPIC_MODEL'] = model;
+                } else if (provider === 'xai') {
+                    envSettings['XAI_MODEL'] = model;
+                } else if (provider === 'opencode') {
+                    envSettings['OPENCODE_MODEL'] = model;
+                } else if (provider === 'opencodego') {
+                    envSettings['OPENCODE_GO_MODEL'] = model;
+                } else if (provider === 'ollamacloud') {
+                    envSettings['OLLAMA_CLOUD_MODEL'] = model;
+                } else if (provider === 'chatgpt') {
+                    envSettings['CHATGPT_MODEL'] = model;
                 } else {
                     // Ollama and OpenAI use DEFAULT_MODEL
                     envSettings['DEFAULT_MODEL'] = model;

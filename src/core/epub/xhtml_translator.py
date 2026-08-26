@@ -1022,10 +1022,18 @@ async def _translate_all_chunks_with_checkpoint(
     # Interruption: the scheduler stopped launching new chunks. The delivered
     # slots form a contiguous prefix, so the state saved here resumes exactly
     # where this pass stopped.
+    #
+    # `_next_pending_index()` is the first never-attempted chunk. A repair
+    # pass only retries CHUNK_UNTRANSLATED work below that pointer, so
+    # next_index can already be len(chunks) while pending work remains.
+    # `delivered < len(pending)` is what detects that incomplete retry.
     next_index = _next_pending_index()
-    interrupted = bool(next_index < len(chunks)
-                       and check_interruption_callback
-                       and check_interruption_callback())
+    pass_incomplete = delivered < len(pending)
+    interrupted = bool(
+        check_interruption_callback
+        and check_interruption_callback()
+        and (next_index < len(chunks) or pass_incomplete)
+    )
 
     # Persist a pass that stopped before its last scheduled chunk. Two cases
     # reach here:

@@ -307,3 +307,51 @@ async def test_interrupted_run_persists_pending_tail(monkeypatch, temp_checkpoin
     assert state.chunk_statuses[:done] == [CHUNK_TRANSLATED] * done
     assert state.chunk_statuses[done:] == [CHUNK_PENDING] * (len(chunks) - done)
     assert unfinished_chunk_indices(state.chunk_statuses) == list(range(done, len(chunks)))
+
+
+@pytest.mark.asyncio
+async def test_interrupted_retry_pass_reports_interrupted(
+    monkeypatch, temp_checkpoint_manager
+):
+    """A pause mid-repair must not look like a completed pass.
+
+    Repair work is CHUNK_UNTRANSLATED below the resume pointer, so
+    `_next_pending_index()` is already len(chunks). The caller uses
+    was_interrupted to skip reconstruction and keep [partial] outputs.
+    """
+    calls = _stub_generate(monkeypatch, lambda text: "Retried.")
+
+    chunks = [
+        {'text': f'Paragraphe {i}.', 'local_tag_map': {}, 'global_indices': []}
+        for i in range(3)
+    ]
+    translation_id, file_href = "outcomes_retry_interrupt", "OEBPS/chapter3.xhtml"
+
+    translated, _stats, was_interrupted = await xt._translate_all_chunks_with_checkpoint(
+        chunks=chunks,
+        source_language="French",
+        target_language="English",
+        model_name="test-model",
+        llm_client=object(),
+        max_retries=1,
+        context_manager=None,
+        placeholder_format=PLACEHOLDER_TUPLE,
+        checkpoint_manager=temp_checkpoint_manager,
+        translation_id=translation_id,
+        file_href=file_href,
+        file_path=file_href,
+        start_chunk_index=len(chunks),
+        translated_chunks=["Source 0.", "Source 1.", "Source 2."],
+        chunk_statuses=[CHUNK_UNTRANSLATED, CHUNK_UNTRANSLATED, CHUNK_UNTRANSLATED],
+        check_interruption_callback=lambda: len(calls) >= 1,
+        parallel_workers=1,
+    )
+
+    assert was_interrupted is True
+    assert len(calls) == 1
+    assert translated == ["Retried.", "Source 1.", "Source 2."]
+    state = temp_checkpoint_manager.load_xhtml_partial_state(translation_id, file_href)
+    assert state is not None
+    assert state.validate() is True
+    assert state.chunk_statuses[0] == CHUNK_TRANSLATED
+    assert state.chunk_statuses[1:] == [CHUNK_UNTRANSLATED, CHUNK_UNTRANSLATED]

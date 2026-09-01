@@ -394,6 +394,30 @@ class TestWeakLlmSafety:
             "Le 1<sup>er</sup> chapitre<br/>", "The 1st chapter"
         ) == "Le 1er chapitre"
 
+    def test_markdown_marker_stripping_removes_heading_hashes(self):
+        from src.core.common.plain_text_pipeline import (
+            strip_hallucinated_markdown_markers,
+        )
+
+        # A heading line the model decorated with "# " in Plain Text Mode:
+        # the marker goes away, the translation stays.
+        assert strip_hallucinated_markdown_markers(
+            "# บทที่ 6: การกำหนดความลับและเบาะแส"
+        ) == "บทที่ 6: การกำหนดความลับและเบาะแส"
+        assert strip_hallucinated_markdown_markers(
+            "## Chapter 6"
+        ) == "Chapter 6"
+        # Leading whitespace before the marker must still be caught.
+        assert strip_hallucinated_markdown_markers(
+            "   ### Chapitre 6"
+        ) == "Chapitre 6"
+        # A lone "#" with no following text is not a heading marker - keep it.
+        assert strip_hallucinated_markdown_markers("#") == "#"
+        # Plain paragraphs with no marker are untouched.
+        assert strip_hallucinated_markdown_markers(
+            "Un paragraphe normal."
+        ) == "Un paragraphe normal."
+
 
 # === D. Plain Text Mode: the rebuild must never lose content ===
 

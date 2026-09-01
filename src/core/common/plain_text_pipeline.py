@@ -27,6 +27,7 @@ from src.prompts.prompts import PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION
 PARAGRAPH_SEPARATOR = "\n\n"
 _RESPLIT_REGEX = re.compile(r"\n{2,}")
 _MARKUP_TAG_REGEX = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*?)?/?>")
+_MARKDOWN_HEADING_MARKER_REGEX = re.compile(r"^\s*(?:#{1,6}\s*)+")
 
 
 def strip_hallucinated_markup(translated: str, source: str) -> str:
@@ -41,6 +42,23 @@ def strip_hallucinated_markup(translated: str, source: str) -> str:
     if "<" not in translated or "<" in source:
         return translated
     return _MARKUP_TAG_REGEX.sub("", translated)
+
+
+def strip_hallucinated_markdown_markers(translated: str) -> str:
+    """Remove leading markdown heading markers the model invented.
+
+    Dry Plain Text Mode sends the LLM a bare heading line like
+    "Chapter 6: Define Secrets and Clues" with no structure, and models
+    conditioned on markdown titles tend to echo "# " prefixes back. The
+    '#', '##', ... are content-adding noise, so drop them. A translation
+    that is a lone marker ("#") with no text is left as-is.
+    """
+    if not translated:
+        return translated
+    stripped = _MARKDOWN_HEADING_MARKER_REGEX.sub("", translated, count=1)
+    if not stripped:
+        return translated
+    return stripped
 
 
 def _split_translated_back_to_paragraphs(translated_text: str) -> List[str]:
@@ -519,6 +537,7 @@ async def translate_paragraphs_plain(
                     cleaned = clean_translated_text(value)
                     cleaned = strip_hallucinated_markup(
                         cleaned, chunks[i].get('main_content', ''))
+                    cleaned = strip_hallucinated_markdown_markers(cleaned)
                     translated_parts[i] = cleaned
                     stats.successful_first_try += 1
                     # A wrong paragraph count is reconciled silently at

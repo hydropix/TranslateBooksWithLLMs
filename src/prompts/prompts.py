@@ -87,6 +87,8 @@ _PLAIN_TEXT_FORMAT_RULES = (
     "\n8. Separate every output paragraph with ONE BLANK LINE - never a single newline"
     "\n9. Do NOT merge two paragraphs into one, and do NOT split one paragraph into two"
     "\n10. An empty input paragraph stays empty - do not fill it"
+    "\n11. Do NOT add markdown heading markers (#, ##, ###, etc.) or any other "
+    "markdown formatting symbols to your output - output plain translated text only"
 )
 
 # prompt_options key carrying the paragraph count of the segment being retried.
@@ -109,10 +111,10 @@ def _plain_text_format_rules(prompt_options: Optional[Dict[str, Any]] = None) ->
     if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
         return _PLAIN_TEXT_FORMAT_RULES
     return _PLAIN_TEXT_FORMAT_RULES + (
-        "\n11. RETRY: your previous answer for this exact text had the WRONG number of paragraphs"
-        f"\n12. This input contains EXACTLY {expected} paragraph(s); your output MUST contain "
+        "\n12. RETRY: your previous answer for this exact text had the WRONG number of paragraphs"
+        f"\n13. This input contains EXACTLY {expected} paragraph(s); your output MUST contain "
         f"EXACTLY {expected} paragraph(s), separated by ONE BLANK LINE"
-        "\n13. Count the paragraphs before answering. A disclaimer, an author's note, a chapter "
+        "\n14. Count the paragraphs before answering. A disclaimer, an author's note, a chapter "
         "heading or any short standalone line IS a paragraph and IS content: translate each one "
         "as its own paragraph - never drop it, never fold it into the next one, never summarize it"
     )

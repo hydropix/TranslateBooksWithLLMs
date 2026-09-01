@@ -393,6 +393,11 @@ def replace_body_with_paragraphs(
                 _add_class(block, "plain-text-untranslated")
             elif bilingual:
                 _add_class(block, "plain-text-target")
+            # A model trained on markdown sometimes decorates a bare heading
+            # line with "# " prefixes in Plain Text Mode (e.g. "# Chapter 6").
+            # The heading tag already gives the structure, so drop the markers.
+            if raw_tag in ("h1", "h2", "h3", "h4", "h5", "h6") and text.startswith("#"):
+                text = text.lstrip("#").strip()
             block.text = text or source_text
 
         # Emit anchored images right after

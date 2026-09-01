@@ -171,7 +171,7 @@ class TestPlainModeTables:
             "<tr><td>Paris</td><td>2.1 million</td></tr>"
             "</table>"
         )
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         joined = " ".join(paragraphs)
 
         assert "Paris" in joined, "table cell text was deleted"
@@ -183,7 +183,7 @@ class TestPlainModeTables:
             "<p>Intro.</p>"
             "<table><tr><td>Cell text</td></tr></table>"
         )
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, paragraphs, tags, images)
 
         rebuilt_text = " ".join("".join(body.itertext()).split())
@@ -197,7 +197,7 @@ class TestPlainModeFigures:
             '<figure><img src="images/map.png" alt="Map"/>'
             "<figcaption>A map of the region</figcaption></figure>"
         )
-        paragraphs, tags, images_by_paragraph = extract_plain_paragraphs(body)
+        paragraphs, tags, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(
@@ -208,7 +208,7 @@ class TestPlainModeFigures:
         body = _parse_body(
             '<figure><img src="x.png"/><figcaption>The caption</figcaption></figure>'
         )
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         assert "The caption" in " ".join(paragraphs)
 
     def test_picture_wrapped_image_is_anchored(self):
@@ -216,7 +216,7 @@ class TestPlainModeFigures:
             "<p>Some text.</p>"
             '<picture><source srcset="big.webp"/><img src="fallback.jpg"/></picture>'
         )
-        _, _, images_by_paragraph = extract_plain_paragraphs(body)
+        _, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(img.get("src") == "fallback.jpg" for img in anchored)
@@ -225,7 +225,7 @@ class TestPlainModeFigures:
         body = _parse_body(
             '<p>Text around <figure><img src="inline.png"/></figure> an inline figure.</p>'
         )
-        _, _, images_by_paragraph = extract_plain_paragraphs(body)
+        _, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(img.get("src") == "inline.png" for img in anchored)
@@ -235,7 +235,7 @@ class TestPlainModeFigures:
             "<p>Para.</p>"
             '<figure><img src="kept.png"/><figcaption>Cap</figcaption></figure>'
         )
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, paragraphs, tags, images)
 
         srcs = [img.get("src") for img in _all_imgs(body)]
@@ -244,7 +244,7 @@ class TestPlainModeFigures:
     def test_standalone_image_still_anchored(self):
         # Pre-existing behavior that must not regress.
         body = _parse_body('<p>Hello.</p><img src="standalone.png"/>')
-        _, _, images_by_paragraph = extract_plain_paragraphs(body)
+        _, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(img.get("src") == "standalone.png" for img in anchored)
@@ -254,7 +254,7 @@ class TestPlainModeFigures:
         body = _parse_body(
             "<p>Text.</p><svg xmlns='http://www.w3.org/2000/svg'><text>chart</text></svg>"
         )
-        paragraphs, _, images_by_paragraph = extract_plain_paragraphs(body)
+        paragraphs, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
         assert "chart" not in " ".join(paragraphs)
         assert not images_by_paragraph
 
@@ -292,7 +292,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
 
         body = _parse_body(self.BODY_INNER)
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         await plain_pipeline.translate_paragraphs_plain(
             paragraphs=paragraphs,
             source_language="English",
@@ -327,7 +327,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
 
         body = _parse_body(self.BODY_INNER)
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         translated, _, interrupted = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=paragraphs,
             source_language="English",
@@ -429,7 +429,7 @@ class TestPlainModeCoverPage:
         body = _parse_body(SVG_COVER_BODY)
         before = etree.tostring(body, encoding="unicode")
 
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         assert paragraphs == [] and images == {}, (
             "precondition: the SVG subtree yields no translatable paragraph"
         )
@@ -445,7 +445,7 @@ class TestPlainModeCoverPage:
 
     def test_already_empty_body_stays_a_no_op(self):
         body = _parse_body("")
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, paragraphs, tags, images)
 
         assert len(body) == 0
@@ -488,7 +488,7 @@ class TestPlainModeEmptyTranslation:
 
     def test_empty_translation_falls_back_to_the_source_text(self):
         body = _parse_body("<p>A paragraph the model returned nothing for.</p>")
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, [""], tags, images, source_paragraphs=paragraphs
         )
@@ -502,7 +502,7 @@ class TestPlainModeEmptyTranslation:
         body = _parse_body("<p>First.</p><p></p><p>Second.</p>")
         input_p_count = _count_p(body)
 
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, list(paragraphs), tags, images, source_paragraphs=paragraphs
         )
@@ -511,7 +511,7 @@ class TestPlainModeEmptyTranslation:
 
     def test_bilingual_empty_translation_emits_the_source_once(self):
         body = _parse_body("<p>Le texte source.</p>")
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, [""], tags, images, bilingual=True, source_paragraphs=paragraphs
         )
@@ -526,7 +526,7 @@ class TestPlainModeEmptyTranslation:
         # Callers predating the source-text fallback pass no source_paragraphs.
         # An empty translation must still emit an (empty) block, not nothing.
         body = _parse_body("<p>Original.</p>")
-        _, tags, images = extract_plain_paragraphs(body)
+        _, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, [""], tags, images)
 
         assert _count_p(body) == 1
@@ -537,7 +537,7 @@ class TestPlainModeEmptyTranslation:
         # stands in for the block, so a source <p><img/></p> comes out as one
         # <p>, not two.
         body = _parse_body('<p><img src="x.jpg"/></p>')
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, list(paragraphs), tags, images, source_paragraphs=paragraphs
         )

@@ -899,7 +899,7 @@ def _precount_chunks_plain_text(doc_root, max_tokens_per_chunk: int) -> int:
         if body is None:
             return 0
 
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         if not paragraphs:
             return 0
 

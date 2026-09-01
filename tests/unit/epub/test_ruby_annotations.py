@@ -177,7 +177,7 @@ class TestPlainTextPath:
 
     def test_reading_no_longer_glued_to_base(self):
         body = _body("<p>彼は<ruby>宇宙<rt>そら</rt></ruby>を見上げた。</p>")
-        paragraphs, _tags, _images = extract_plain_paragraphs(body)
+        paragraphs, _tags, _images, _attrib = extract_plain_paragraphs(body)
         assert paragraphs == ["彼は宇宙（そら）を見上げた。"]
         assert "宇宙そら" not in paragraphs[0]
 
@@ -199,7 +199,7 @@ class TestPlainTextPath:
         body = _body(
             '<p><ruby>宇宙<rt>そら</rt></ruby><img src="a.png"/></p>'
         )
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         assert paragraphs == ["宇宙（そら）"]
         assert tags == ["p"]
         assert len(images[0]) == 1

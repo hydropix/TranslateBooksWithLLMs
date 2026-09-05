@@ -3,11 +3,22 @@ Checkpoint manager for translation job persistence and resume functionality.
 """
 
 import os
+import re
 import shutil
 from typing import Optional, Dict, List, Any, Tuple
 from pathlib import Path
 from .database import Database
 from src.utils.security import SecurityError, resolve_within, safe_extract_zip
+
+
+# Uploaded files are stored as "<16 hex chars>_<original name>"; the prefix is
+# an implementation detail that must never reach the user interface.
+_UPLOAD_PREFIX_RE = re.compile(r'^[0-9a-f]{16}_')
+
+
+def _strip_upload_prefix(filename: str) -> str:
+    """Remove the 16-hex upload prefix from a stored filename, if present."""
+    return _UPLOAD_PREFIX_RE.sub('', filename)
 
 
 class CheckpointManager:
@@ -136,7 +147,8 @@ class CheckpointManager:
         completed_chunks: Optional[int] = None,
         failed_chunks: Optional[int] = None,
         epub_accumulated_stats: Optional[Dict[str, Any]] = None,
-        unfinished_units: Optional[Dict[str, List[int]]] = None
+        unfinished_units: Optional[Dict[str, List[int]]] = None,
+        degraded_units: Optional[Dict[str, List[int]]] = None
     ) -> bool:
         """
         Save a checkpoint after translating a chunk.
@@ -155,6 +167,12 @@ class CheckpointManager:
                 translate ({file_href: [chunk_index, ...]}, issue #261).
                 Stored verbatim in the progress JSON so the next resume knows
                 which files still have to be re-entered.
+            degraded_units: EPUB per-file index of the chunks that are
+                translated but carry only approximate tag positions (token
+                alignment, {file_href: [chunk_index, ...]}). Stored verbatim
+                alongside the map above, and kept separate from it on purpose:
+                those chunks are never retried automatically (D3), so they must
+                not reach the unfinished index, which drives the verdict.
 
         Returns:
             True if saved successfully
@@ -178,7 +196,8 @@ class CheckpointManager:
             completed_chunks=completed_chunks,
             failed_chunks=failed_chunks,
             epub_accumulated_stats=epub_accumulated_stats,
-            unfinished_units=unfinished_units
+            unfinished_units=unfinished_units,
+            degraded_units=degraded_units
         )
 
         # Update translation context if provided
@@ -273,6 +292,42 @@ class CheckpointManager:
             # Extract output filename
             output_filename = config.get('output_filename', 'unknown')
             job['output_filename'] = output_filename if output_filename != 'unknown' else 'unknown'
+
+        return jobs
+
+    def get_job_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Get the most recently completed jobs, newest first.
+
+        Args:
+            limit: Maximum number of rows to return (clamped by the database
+                layer to 1..200)
+
+        Returns:
+            List of completed job summaries enriched with display fields.
+            The raw 'config' stays attached; the HTTP layer strips it.
+        """
+        jobs = self.db.get_job_history(limit)
+
+        for job in jobs:
+            config = job.get('config') or {}
+            progress = job.get('progress') or {}
+
+            # Prefer the filename persisted with the job. Rows created before
+            # that field existed only carry the on-disk path, whose basename
+            # still wears the 16-hex upload prefix.
+            input_filename = config.get('input_filename')
+            if not input_filename:
+                input_path = config.get('file_path') or config.get('preserved_input_path')
+                if input_path:
+                    input_filename = _strip_upload_prefix(Path(input_path).name)
+                else:
+                    input_filename = 'unknown'
+
+            job['input_filename'] = input_filename
+            job['output_filename'] = config.get('output_filename', 'unknown')
+            job['total_chunks'] = progress.get('total_chunks', 0)
+            job['completed_chunks'] = progress.get('completed_chunks', 0)
 
         return jobs
 
@@ -502,17 +557,34 @@ class CheckpointManager:
 
         return db_deleted
 
-    def cleanup_completed_job(self, translation_id: str) -> bool:
+    def prune_job_data(self, translation_id: str) -> bool:
         """
-        Automatically clean up a completed job (immediate cleanup).
+        Drop the bulky resume data of a job while keeping its database row.
+
+        Called on the success path: the translation_jobs row survives so the
+        job can be listed by the history endpoint (and is swept later by
+        cleanup_old_jobs), but the checkpoint chunks and the preserved upload
+        directory are removed because nothing can resume from them any more.
+
+        This method NEVER touches translation_jobs. Use delete_checkpoint for
+        the user-initiated "forget this job entirely" path.
 
         Args:
             translation_id: Job identifier
 
         Returns:
-            True if cleaned up successfully
+            True if the chunks were deleted successfully
         """
-        return self.delete_checkpoint(translation_id)
+        ok = self.db.delete_chunks(translation_id)
+
+        job_upload_dir = self.uploads_dir / translation_id
+        if job_upload_dir.exists():
+            try:
+                shutil.rmtree(job_upload_dir)
+            except Exception as e:
+                print(f"Warning: Could not delete upload directory: {e}")
+
+        return ok
 
     def get_preserved_input_path(self, translation_id: str) -> Optional[str]:
         """

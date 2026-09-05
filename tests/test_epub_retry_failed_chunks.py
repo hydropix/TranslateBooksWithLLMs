@@ -17,6 +17,12 @@ Three scenarios, in order:
    translated in the output EPUB.
 3. Pass 2 with the starvation still in place retries exactly once, stays
    `partial` and keeps its ticket - no false success, no retry loop.
+
+A second family covers the token-aligned (Phase 2) chunks: they are translated
+with approximate tag positions, so they never enter the automatic work set
+(design decision D3) and never move the verdict away from `completed`. They are
+retryable only through the explicit `retry_token_aligned` opt-in the completion
+card sends.
 """
 
 import zipfile
@@ -28,6 +34,7 @@ import pytest
 import src.core.epub.translator as epub_translator
 import src.core.epub.xhtml_translator as xhtml_translator
 from src.api.completion_status import classify_completion
+from src.common.placeholder_format import PlaceholderFormat
 from src.persistence.checkpoint_manager import CheckpointManager
 
 
@@ -170,7 +177,8 @@ def epub_job(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 async def _run_pass(job, monkeypatch, resume_from_index, starve,
-                    payload_sink=None, interrupt_after=None):
+                    payload_sink=None, interrupt_after=None, degrade=False,
+                    retry_token_aligned=False):
     """Run one EPUB pass and return (stats, chunk_requests, log_kinds).
 
     `starve` decides whether the sentinel chunk is answered. Every chunk-level
@@ -186,6 +194,15 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
     once that many chunk-level requests have been issued - the machinery of
     tests/test_xhtml_chunk_interruption.py, lifted to the book level so a plain
     interrupted resume can be told apart from a repair pass.
+
+    `degrade` pushes the sentinel chunk into Phase 2 instead of Phase 3: the
+    Phase 1 answer comes back with every placeholder dropped (so validation
+    fails) while the placeholder-free Phase 2 request is answered normally, and
+    token alignment reinserts the tags proportionally. The chunk ends up
+    TRANSLATED with approximate tag positions - the state this feature is about.
+
+    `retry_token_aligned` is the explicit opt-in the completion card sends: it
+    widens the pass's work set to those chunks.
     """
     requests = []
     log_kinds = []
@@ -194,10 +211,26 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
         requests.append(main_content)
         if starve and SENTINEL in main_content:
             return None
+        if degrade and SENTINEL in main_content and kwargs.get('has_placeholders'):
+            # Phase 1: a plausible translation that lost every placeholder, so
+            # validation fails. Phase 2 asks again without placeholders (and
+            # with has_placeholders=False), which this stub answers normally.
+            return "%s %s" % (TRANSLATED_MARKER,
+                              PlaceholderFormat.from_config().remove_all(main_content))
         return "%s %s" % (TRANSLATED_MARKER, main_content)
 
     monkeypatch.setattr(xhtml_translator, "generate_translation_request",
                         fake_generate_translation_request)
+
+    # Which repair phase a starved chunk goes through is a property of the
+    # scenario, not of the developer's .env: translate_chunk_with_fallback reads
+    # EPUB_TOKEN_ALIGNMENT_ENABLED from src.config at call time, so without
+    # pinning it here the same test measures Phase 2 on one machine and Phase 3
+    # on another. `degrade` needs Phase 2 (that is the whole scenario); every
+    # other pass in this file is about the Phase 3 fallback and must not have a
+    # Phase 2 attempt counted into its numbers. Same technique as
+    # tests/test_xhtml_chunk_interruption.py.
+    monkeypatch.setattr('src.config.EPUB_TOKEN_ALIGNMENT_ENABLED', bool(degrade))
 
     stats = {}
 
@@ -230,6 +263,7 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
         max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
         max_attempts=1,
         prompt_options={},
+        retry_token_aligned=retry_token_aligned,
     )
 
     return stats, requests, log_kinds
@@ -628,3 +662,189 @@ def test_pending_chunk_count_uses_the_partial_state_when_there_is_one(
     # Without a checkpoint manager there is nothing to read, so the pre-count
     # stands rather than silently collapsing to 0.
     assert _pending_chunk_count(None, translation_id, href, precounted) == precounted
+
+
+# ---------------------------------------------------------------------------
+# 6. Token-aligned chunks: translated, never automatic, retryable on demand
+# ---------------------------------------------------------------------------
+
+async def _degraded_first_pass(job, monkeypatch):
+    """Pass 1 where chapter 2's chunk is repaired by token alignment.
+
+    The chunk comes out TRANSLATED with approximate tag positions, which is a
+    'completed' book (D3): nothing is owed, nothing is in the source language.
+    """
+    stats, requests, kinds = await _run_pass(
+        job, monkeypatch, resume_from_index=0, starve=False, degrade=True)
+
+    # Phase 2 really is what happened: one alignment, no Phase 3 fallback.
+    assert stats['token_alignment_used'] == 1
+    assert stats['fallback_used'] == 0
+    return stats, requests, kinds
+
+
+@pytest.mark.asyncio
+async def test_token_aligned_chunk_is_kept_and_indexed_without_moving_the_verdict(
+        epub_job, monkeypatch):
+    """The payload a later repair needs survives, and the job stays completed.
+
+    Two things used to make this impossible: the verdict said 'completed', so
+    handlers.py destroyed the checkpoint, and `_save_checkpoint` deleted the
+    per-file XHTML state of every file that owed nothing. The state is now kept
+    for a degraded file too, and the job-level index records where those chunks
+    are - in its OWN map, so `unfinished_chunks` stays 0 and the verdict does
+    not move to 'partial' (which is what D3/D10 forbid).
+    """
+    manager = epub_job['manager']
+    translation_id = epub_job['translation_id']
+
+    stats, _requests, kinds = await _degraded_first_pass(epub_job, monkeypatch)
+
+    # The verdict does not move: an approximate tag placement is not unfinished
+    # work.
+    verdict = classify_completion(stats, str(epub_job['output']))
+    assert verdict.status == 'completed'
+    assert stats['unfinished_chunks'] == 0
+    assert stats['untranslated_chunks'] == 0
+    assert stats['unfinished_files'] == {}
+
+    # ... but the live degraded map knows exactly which chunk is approximate.
+    assert stats['degraded_chunks'] == 1
+    assert stats['degraded_files'] == {'chapter2.xhtml': [0]}
+
+    # Persisted, separately from the unfinished index.
+    progress = _job_progress(epub_job)
+    assert progress['epub_degraded_units'] == {'chapter2.xhtml': [0]}
+    assert progress['epub_unfinished_units'] == {}
+
+    # The retention that makes the retry possible at all (D7): only the degraded
+    # file keeps its partial state, and the log says why.
+    assert manager.list_xhtml_partial_states(translation_id) == ['chapter2.xhtml']
+    assert 'xhtml_partial_state_kept_degraded' in kinds
+
+    # The chunk IS translated - this is not a fallback left in English.
+    assert TRANSLATED_MARKER in _chapter_text(epub_job['output'],
+                                              "chapter2.xhtml")
+
+
+@pytest.mark.asyncio
+async def test_normal_resume_never_retries_a_token_aligned_chunk(
+        epub_job, monkeypatch):
+    """Design decision D3, pinned: the automatic work set ignores them.
+
+    A plain Resume of the same job must translate nothing at all - no ticket is
+    granted for a file whose only imperfection is tag placement - and it must
+    leave the degraded index and its payload untouched, so the explicit action
+    is still available afterwards.
+    """
+    manager = epub_job['manager']
+    translation_id = epub_job['translation_id']
+
+    await _degraded_first_pass(epub_job, monkeypatch)
+    resume_from_index = manager.load_checkpoint(translation_id)['resume_from_index']
+
+    stats2, requests2, kinds2 = await _run_pass(
+        epub_job, monkeypatch, resume_from_index=resume_from_index, starve=False)
+
+    assert requests2 == []
+    assert 'epub_retry_file' not in kinds2
+    assert 'epub_retry_token_aligned_requested' not in kinds2
+
+    # Nothing moved: same index, same payload, same verdict.
+    assert _job_progress(epub_job)['epub_degraded_units'] == {'chapter2.xhtml': [0]}
+    assert manager.list_xhtml_partial_states(translation_id) == ['chapter2.xhtml']
+    assert stats2['degraded_files'] == {'chapter2.xhtml': [0]}
+    assert stats2['unfinished_chunks'] == 0
+    assert classify_completion(stats2, str(epub_job['output'])).status == 'completed'
+
+
+@pytest.mark.asyncio
+async def test_retry_token_aligned_retries_exactly_that_chunk(
+        epub_job, monkeypatch):
+    """The opt-in pass: exactly the degraded chunk, and the map empties.
+
+    `token_alignment_used` stays positive afterwards - it is an accumulated
+    tally of Phase 2 events and must not be reset (D10) - which is precisely why
+    the button, the chip and the note are driven by the map instead.
+    """
+    manager = epub_job['manager']
+    translation_id = epub_job['translation_id']
+
+    await _degraded_first_pass(epub_job, monkeypatch)
+    resume_from_index = manager.load_checkpoint(translation_id)['resume_from_index']
+
+    stats2, requests2, kinds2 = await _run_pass(
+        epub_job, monkeypatch, resume_from_index=resume_from_index,
+        starve=False, retry_token_aligned=True)
+
+    # Exactly one chunk was retried, and it is the degraded one.
+    assert len(requests2) == 1
+    assert SENTINEL in requests2[0]
+    assert 'epub_retry_token_aligned_requested' in kinds2
+    assert 'epub_retry_file' in kinds2
+
+    # The repair pass is scoped to itself, like every other repair pass.
+    assert stats2['run_is_repair'] is True
+    assert stats2['run_total_chunks'] == 1
+    assert stats2['run_processed_chunks'] == 1
+
+    # The map empties while the accumulated counter keeps its memory: this is
+    # THE trap the frontend precedence rule exists for.
+    assert stats2['degraded_chunks'] == 0
+    assert stats2['degraded_files'] == {}
+    assert stats2['token_alignment_used'] > 0
+    assert stats2['unfinished_chunks'] == 0
+    assert classify_completion(stats2, str(epub_job['output'])).status == 'completed'
+
+    # Nothing is owed and nothing is degraded any more, so the payload goes
+    # away too - both the index and the per-file state.
+    assert _job_progress(epub_job)['epub_degraded_units'] == {}
+    assert manager.list_xhtml_partial_states(translation_id) == []
+
+    # The other chapters were neither re-translated nor lost.
+    assert len(_sentinel_requests(requests2)) == 1
+    for href in ("chapter1.xhtml", "chapter2.xhtml", "chapter3.xhtml"):
+        assert TRANSLATED_MARKER in _chapter_text(epub_job['output'], href)
+
+    # D4: the retried chunk sits below the file pointer, so the pointer must not
+    # rewind and the persisted state must keep validating (no hole, no pending
+    # below current_chunk_index).
+    assert manager.load_checkpoint(translation_id)['resume_from_index'] == 3
+
+
+@pytest.mark.asyncio
+async def test_retry_token_aligned_that_falls_back_keeps_the_translation(
+        epub_job, monkeypatch):
+    """A failed repair must never make the book worse than it was.
+
+    The chunk was translated (approximate tags only). If the retry ends in
+    Phase 3 - source text - overwriting the slot would replace a translation
+    with English AND move the verdict to 'partial'. The previous translation is
+    kept instead; only the accumulated fallback counter records the attempt.
+    """
+    manager = epub_job['manager']
+    translation_id = epub_job['translation_id']
+
+    await _degraded_first_pass(epub_job, monkeypatch)
+    resume_from_index = manager.load_checkpoint(translation_id)['resume_from_index']
+
+    stats2, requests2, kinds2 = await _run_pass(
+        epub_job, monkeypatch, resume_from_index=resume_from_index,
+        starve=True, retry_token_aligned=True)
+
+    assert len(requests2) >= 1
+    assert 'chunk_retry_kept_previous' in kinds2
+
+    # Verdict unchanged, nothing in the source language, chunk still degraded.
+    assert stats2['unfinished_chunks'] == 0
+    assert stats2['untranslated_chunks'] == 0
+    assert stats2['degraded_files'] == {'chapter2.xhtml': [0]}
+    assert classify_completion(stats2, str(epub_job['output'])).status == 'completed'
+    assert TRANSLATED_MARKER in _chapter_text(epub_job['output'],
+                                              "chapter2.xhtml")
+
+    # Still retryable: the index and the payload survive another round.
+    assert _job_progress(epub_job)['epub_degraded_units'] == {'chapter2.xhtml': [0]}
+    state = manager.load_xhtml_partial_state(translation_id, "chapter2.xhtml")
+    assert state is not None
+    assert state.validate() is True

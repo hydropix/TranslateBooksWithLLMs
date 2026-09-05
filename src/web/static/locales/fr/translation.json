@@ -124,7 +124,10 @@
   "completion_fix_toggle": "Corriger ces {{count}} chunk(s)",
   "completion_fix_toggle_title": "Retraduire uniquement les chunks inachevés avec un autre modèle",
   "completion_fix_apply_btn": "Retraduire ces chunks",
-  "completion_token_alignment_note": "Note pour experts : {{count}} chunk(s) ont été traduits avec un placement de balises approximatif. Mettre EPUB_TOKEN_ALIGNMENT_ENABLED à false les laisserait non traduits mais relançables, si le formatage exact compte plus pour vous que la couverture. Ces chunks peuvent alors être retraduits avec un autre modèle en un clic depuis cette carte.",
+  "completion_degraded_advice": "Ces {{count}} chunk(s) sont traduits, mais leurs balises inline n'ont été placées qu'approximativement : choisissez ci-dessous un modèle plus performant et seuls ces chunks seront retraduits, le reste du livre restant intact.",
+  "completion_degraded_toggle": "Relancer {{count}} chunk(s) au balisage approximatif",
+  "completion_degraded_toggle_title": "Retraduire uniquement les chunks au balisage approximatif avec un autre modèle",
+  "completion_token_alignment_note": "Note pour experts : {{count}} chunk(s) sont traduits mais leurs balises inline n'ont été placées qu'approximativement — vous pouvez les relancer ici avec un autre modèle tant que cette carte est affichée. Mettre EPUB_TOKEN_ALIGNMENT_ENABLED à false laisserait plutôt ces chunks non traduits, si le formatage exact compte plus pour vous que la couverture.",
 
   "session_restored_log": "🔄 Session de traduction précédente restaurée",
   "session_corrupted_log": "L'état de la session précédente était corrompu, nouveau démarrage",
@@ -202,6 +205,16 @@
   "paused_translations": "Traductions en pause",
   "refresh_list_title": "Actualiser la liste",
   "no_paused_translations": "Aucune traduction en pause",
+
+  "history_title": "Historique des traductions",
+  "history_empty": "Aucune traduction terminée pour l'instant",
+  "history_load_error": "Échec du chargement de l'historique : {{error}}",
+  "history_count_log": "📚 {{count}} traduction(s) terminée(s) dans l'historique",
+  "history_status_completed": "Terminée",
+  "history_completed_at": "Terminée le : {{date}}",
+  "history_chunks": "{{completed}} / {{total}} segments",
+  "history_output_missing": "Le fichier de sortie n'est plus disponible",
+  "history_type_line": "Type : {{type}}",
 
   "file_list_cleared": "Liste de fichiers vidée",
   "form_reset_log": "Formulaire et liste de fichiers réinitialisés.",

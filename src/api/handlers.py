@@ -304,6 +304,35 @@ async def _apply_auto_prep(config, log_callback, progress_callback=None):
         )
 
 
+def _degraded_chunk_count(stats):
+    """Chunks that are translated but carry only approximate tag positions.
+
+    Read from the LIVE map the EPUB pipeline emits (``degraded_files``, with
+    ``degraded_chunks`` as its total), never from ``token_alignment_used``: that
+    counter is an accumulated, cross-pass tally of Phase 2 *events*, so it stays
+    positive after those chunks have been repaired and would keep a checkpoint
+    alive for a book that has nothing left to fix.
+
+    Precedence, deliberately identical to what the completion card applies
+    (`_buildCompletionWarningBlock` in translation-tracker.js) so retention and
+    the button it enables can never disagree: the map wins when present, its
+    flat total is the fallback, and an absent pair means zero — not "unknown".
+
+    Args:
+        stats: The job stats payload.
+
+    Returns:
+        Number of approximately-tagged chunks currently in the output (>= 0).
+    """
+    files = stats.get('degraded_files')
+    if isinstance(files, dict):
+        return sum(len(indices or ()) for indices in files.values())
+    try:
+        return max(0, int(stats.get('degraded_chunks') or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _format_stats_summary(config, stats, verdict):
     """Build the ' | 8/10 chunks (1 failed) (1 untranslated)' log suffix.
 
@@ -775,7 +804,12 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
                 prompt_options=config.get('prompt_options', {}),
                 bilingual_output=config.get('bilingual_output', False),
-                parallel_workers=config.get('parallel_workers', 1)
+                parallel_workers=config.get('parallel_workers', 1),
+                # Opt-in repair of the EPUB chunks token alignment translated
+                # with approximate tag positions. Set only by the resume
+                # endpoint, from the completion card's explicit action; absent
+                # (hence False) on every normal run and every normal resume.
+                retry_token_aligned=bool(config.get('retry_token_aligned', False))
             )
 
             # Optional chained refinement pass on the translated output.
@@ -941,8 +975,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 await asyncio.to_thread(notify, EVENT_FAILURE,
                     _notification_context(config, translation_id, elapsed_time,
                                           error=verdict.error))
-                # No cleanup_completed_job — the checkpoint is deliberately kept,
-                # it is the only way back for this job.
+                # No pruning — the checkpoint is deliberately kept, it is the
+                # only way back for this job.
             elif verdict.status == 'partial':
                 # Chunks failed outright and/or fell back to their source text.
                 # Keep the job resumable instead of marking it 'completed' and
@@ -954,7 +988,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     f"in {elapsed_time:.2f}s{stats_summary} — checkpoint kept for retry")
                 final_status_payload['status'] = 'partial'
                 checkpoint_manager.mark_partial(translation_id)
-                # No cleanup_completed_job — the checkpoint is deliberately kept for retry.
+                # No pruning — the checkpoint is deliberately kept for retry.
             else:
                 state_manager.set_translation_field(translation_id, 'status', 'completed')
                 _log_message_callback("summary_completed", f"✅ Translation completed in {elapsed_time:.2f}s{stats_summary}")
@@ -962,8 +996,32 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 await asyncio.to_thread(notify, EVENT_SUCCESS,
                     _notification_context(config, translation_id, elapsed_time))
 
-                # Cleanup completed job checkpoint (automatic immediate cleanup)
-                checkpoint_manager.cleanup_completed_job(translation_id)
+                # The job is marked 'completed' in the database and the row is
+                # KEPT: it does NOT appear in get_resumable_jobs (a finished
+                # book must never show up in a list of unfinished work), a
+                # server restart's reset_running_jobs cannot turn it into
+                # 'interrupted', and it is what /api/history lists. The row is
+                # eventually swept by the existing cleanup_old_jobs(max_age_days=30),
+                # which already includes 'completed'.
+                #
+                # What is dropped is only the bulky resume data — the checkpoint
+                # chunks and uploads/<job>/ — via prune_job_data. That pruning is
+                # skipped when the book still holds chunks that token alignment
+                # translated with approximate tag positions. Those chunks are
+                # not a defect the verdict cares about (the job is and stays
+                # 'completed', design decision D3), but the completion card
+                # offers an explicit "retry them with another model" action, and
+                # that action needs the checkpoint plus the per-file XHTML
+                # states plus the preserved input file.
+                if _degraded_chunk_count(stats) > 0:
+                    checkpoint_manager.mark_completed(translation_id)
+                    _log_message_callback("checkpoint_kept_degraded",
+                        f"📌 Checkpoint kept: {_degraded_chunk_count(stats)} chunk(s) "
+                        f"have approximate tag placement and can be retried from "
+                        f"the completion card while it is on screen")
+                else:
+                    checkpoint_manager.mark_completed(translation_id)
+                    checkpoint_manager.prune_job_data(translation_id)
 
             # Clean up uploaded file if it exists and is in the uploads directory
             # On completion (or a partial run) we can safely delete the original

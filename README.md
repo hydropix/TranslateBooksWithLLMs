@@ -213,6 +213,12 @@ See [docs/DOCKER.md](docs/DOCKER.md) for more options.
 
 </details>
 
+### Using the web UI from several devices
+
+One server is one shared workspace - there are no user accounts, so every browser pointed at it sees the same state. A running job's progress panel, paused/interrupted jobs, the completed translation history, and the files in `translated_files/` are all shared: another device picks them up live (within a second or two) or on page load. A small set of preferences - source/target language, TTS, text cleanup, bilingual mode, plain-text mode, and the selected custom instruction - is synced too: the server wins at page load, the last change wins after that, and a tab that is already open picks up changes made elsewhere on its next reload.
+
+Two things stay local to the device: if you queue several files, other devices only see the one currently translating, not the rest of the queue (it's held in the browser that built it); and the UI language is per-browser. Provider, model, API keys, and endpoints are never synced - they always come from the server's `.env`.
+
 ---
 
 ## Documentation

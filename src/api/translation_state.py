@@ -234,18 +234,6 @@ class TranslationStateManager:
         # Delete from database
         return self.checkpoint_manager.delete_checkpoint(translation_id)
 
-    def cleanup_completed_job(self, translation_id: str) -> bool:
-        """
-        Clean up a completed job (automatic cleanup).
-
-        Args:
-            translation_id: Job identifier
-
-        Returns:
-            True if cleaned up successfully
-        """
-        return self.checkpoint_manager.cleanup_completed_job(translation_id)
-
     def get_checkpoint_manager(self) -> CheckpointManager:
         """Get the checkpoint manager instance"""
         return self.checkpoint_manager

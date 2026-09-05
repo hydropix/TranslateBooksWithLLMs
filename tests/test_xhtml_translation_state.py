@@ -10,6 +10,7 @@ from src.core.epub.xhtml_translation_state import (
     CHUNK_TRANSLATED,
     CHUNK_UNTRANSLATED,
     XHTMLTranslationState,
+    token_aligned_chunk_indices,
     unfinished_chunk_indices,
     untranslated_chunk_indices,
 )
@@ -534,3 +535,37 @@ def test_untranslated_chunk_indices_is_empty_for_a_pending_only_backlog():
 
     assert unfinished_chunk_indices(statuses) == [2, 3]
     assert untranslated_chunk_indices(statuses) == []
+
+
+def test_token_aligned_chunk_indices_on_none():
+    assert token_aligned_chunk_indices(None) == []
+    assert token_aligned_chunk_indices([]) == []
+
+
+def test_token_aligned_chunk_indices_is_disjoint_from_the_work_set():
+    """The third projection of the same statuses list.
+
+    Token-aligned chunks are translated, so they are the one status that must
+    appear in NEITHER of the other two projections: putting them in the
+    unfinished set would make every such job 'partial' (D3/D10), and putting
+    them in the untranslated set would claim source-language content the book
+    does not contain. They get their own list precisely so an explicit retry can
+    address them without any of that.
+    """
+    statuses = [
+        CHUNK_TOKEN_ALIGNED,  # 0 - translated, approximate tag positions
+        CHUNK_TRANSLATED,     # 1 - Phase 1
+        CHUNK_UNTRANSLATED,   # 2 - fell back to source text
+        CHUNK_PENDING,        # 3 - never attempted
+        CHUNK_TOKEN_ALIGNED,  # 4 - translated, approximate tag positions
+    ]
+
+    assert token_aligned_chunk_indices(statuses) == [0, 4]
+    assert unfinished_chunk_indices(statuses) == [2, 3]
+    assert untranslated_chunk_indices(statuses) == [2]
+
+
+def test_token_aligned_chunk_indices_is_empty_for_a_healthy_file():
+    statuses = [CHUNK_TRANSLATED, CHUNK_TRANSLATED, CHUNK_PENDING]
+
+    assert token_aligned_chunk_indices(statuses) == []

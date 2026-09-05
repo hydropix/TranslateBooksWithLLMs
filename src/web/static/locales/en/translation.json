@@ -124,7 +124,10 @@
   "completion_fix_toggle": "Fix these {{count}} chunk(s)",
   "completion_fix_toggle_title": "Retranslate only the unfinished chunks with another model",
   "completion_fix_apply_btn": "Retranslate these chunks",
-  "completion_token_alignment_note": "Expert note: {{count}} chunk(s) were translated with approximate tag placement. Setting EPUB_TOKEN_ALIGNMENT_ENABLED to false would leave them untranslated but retryable instead, if exact formatting matters more to you than coverage. Those chunks can then be retranslated with another model in one click from this card.",
+  "completion_degraded_advice": "Those {{count}} chunk(s) are translated, but their inline tags were only placed approximately: pick a more capable model below and only they will be retranslated, leaving the rest of the book untouched.",
+  "completion_degraded_toggle": "Retry {{count}} approximately-tagged chunk(s)",
+  "completion_degraded_toggle_title": "Retranslate only the approximately-tagged chunks with another model",
+  "completion_token_alignment_note": "Expert note: {{count}} chunk(s) are translated but their inline tags were only placed approximately — you can retry them here with another model while this card is on screen. Setting EPUB_TOKEN_ALIGNMENT_ENABLED to false would leave such chunks untranslated instead, if exact formatting matters more to you than coverage.",
 
   "session_restored_log": "🔄 Restored previous translation session",
   "session_corrupted_log": "Previous session state was corrupted, starting fresh",
@@ -202,6 +205,16 @@
   "paused_translations": "Paused Translations",
   "refresh_list_title": "Refresh list",
   "no_paused_translations": "No paused translations",
+
+  "history_title": "Translation History",
+  "history_empty": "No completed translations yet",
+  "history_load_error": "Failed to load history: {{error}}",
+  "history_count_log": "📚 {{count}} completed translation(s) in history",
+  "history_status_completed": "Completed",
+  "history_completed_at": "Completed: {{date}}",
+  "history_chunks": "{{completed}} / {{total}} chunks",
+  "history_output_missing": "Output file no longer available",
+  "history_type_line": "Type: {{type}}",
 
   "file_list_cleared": "File list cleared",
   "form_reset_log": "Form and file list reset.",

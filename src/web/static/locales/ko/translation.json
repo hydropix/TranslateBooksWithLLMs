@@ -124,7 +124,10 @@
   "completion_fix_toggle": "이 청크 {{count}}개 수정",
   "completion_fix_toggle_title": "완료되지 않은 청크만 다른 모델로 다시 번역",
   "completion_fix_apply_btn": "이 청크 다시 번역",
-  "completion_token_alignment_note": "전문가 참고: 청크 {{count}}개는 태그 위치가 근사적인 상태로 번역되었습니다. EPUB_TOKEN_ALIGNMENT_ENABLED를 false로 설정하면 해당 청크는 번역되지 않은 상태로 남지만 다시 시도할 수 있습니다. 정확한 서식이 번역 범위보다 중요한 경우에 유용합니다. 그런 다음 이 카드에서 클릭 한 번으로 다른 모델로 다시 번역할 수 있습니다.",
+  "completion_degraded_advice": "이 {{count}}개 청크는 번역되었지만 인라인 태그 위치가 근사적입니다. 아래에서 더 강력한 모델을 선택하면 해당 청크만 다시 번역되고 책의 나머지 부분은 그대로 유지됩니다.",
+  "completion_degraded_toggle": "태그 위치가 근사적인 청크 {{count}}개 다시 시도",
+  "completion_degraded_toggle_title": "태그 위치가 근사적인 청크만 다른 모델로 다시 번역",
+  "completion_token_alignment_note": "전문가 참고: 청크 {{count}}개는 번역되었지만 인라인 태그 위치가 근사적입니다. 이 카드가 화면에 있는 동안 여기서 다른 모델로 다시 시도할 수 있습니다. EPUB_TOKEN_ALIGNMENT_ENABLED를 false로 설정하면 그런 청크는 번역되지 않은 상태로 남습니다. 정확한 서식이 번역 범위보다 중요한 경우에 유용합니다.",
 
   "session_restored_log": "🔄 이전 번역 세션이 복원되었습니다",
   "session_corrupted_log": "이전 세션 상태가 손상되어 새로 시작합니다",
@@ -202,6 +205,16 @@
   "paused_translations": "일시 중지된 번역",
   "refresh_list_title": "목록 새로 고침",
   "no_paused_translations": "일시 중지된 번역이 없습니다",
+
+  "history_title": "번역 기록",
+  "history_empty": "완료된 번역이 아직 없습니다",
+  "history_load_error": "기록을 불러오지 못했습니다: {{error}}",
+  "history_count_log": "📚 기록에 완료된 번역 {{count}}개가 있습니다",
+  "history_status_completed": "완료됨",
+  "history_completed_at": "완료: {{date}}",
+  "history_chunks": "{{completed}} / {{total}} 청크",
+  "history_output_missing": "출력 파일을 더 이상 사용할 수 없습니다",
+  "history_type_line": "유형: {{type}}",
 
   "file_list_cleared": "파일 목록이 지워졌습니다",
   "form_reset_log": "양식 및 파일 목록이 초기화되었습니다.",

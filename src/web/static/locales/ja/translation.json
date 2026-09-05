@@ -124,7 +124,10 @@
   "completion_fix_toggle": "この {{count}} 件のチャンクを修正",
   "completion_fix_toggle_title": "未完了のチャンクだけを別のモデルで再翻訳する",
   "completion_fix_apply_btn": "これらのチャンクを再翻訳",
-  "completion_token_alignment_note": "上級者向けメモ: {{count}} 件のチャンクはタグ配置が近似的な状態で翻訳されました。EPUB_TOKEN_ALIGNMENT_ENABLED を false にすると、これらは未翻訳のまま（ただし再試行可能）になります。カバレッジよりも正確な書式を優先する場合に有効です。その後、このカードからワンクリックで別のモデルを使って再翻訳できます。",
+  "completion_degraded_advice": "これらの {{count}} 件のチャンクは翻訳済みですが、インラインタグの位置は近似的です。下でより高性能なモデルを選ぶと、そのチャンクだけが再翻訳され、本の残りの部分はそのまま維持されます。",
+  "completion_degraded_toggle": "タグ配置が近似的な {{count}} 件のチャンクを再試行",
+  "completion_degraded_toggle_title": "タグ配置が近似的なチャンクだけを別のモデルで再翻訳する",
+  "completion_token_alignment_note": "上級者向けメモ: {{count}} 件のチャンクは翻訳済みですが、インラインタグの位置は近似的です。このカードが表示されている間は、ここで別のモデルを使って再試行できます。EPUB_TOKEN_ALIGNMENT_ENABLED を false にすると、そうしたチャンクは未翻訳のままになります。カバレッジよりも正確な書式を優先する場合に有効です。",
 
   "session_restored_log": "🔄 前回の翻訳セッションを復元しました",
   "session_corrupted_log": "前回のセッション状態が破損していたため、新規に開始します",
@@ -202,6 +205,16 @@
   "paused_translations": "一時停止中の翻訳",
   "refresh_list_title": "リストを更新",
   "no_paused_translations": "一時停止中の翻訳はありません",
+
+  "history_title": "翻訳履歴",
+  "history_empty": "完了した翻訳はまだありません",
+  "history_load_error": "履歴の読み込みに失敗しました: {{error}}",
+  "history_count_log": "📚 履歴に完了した翻訳が {{count}} 件あります",
+  "history_status_completed": "完了",
+  "history_completed_at": "完了日時: {{date}}",
+  "history_chunks": "{{completed}} / {{total}} チャンク",
+  "history_output_missing": "出力ファイルは利用できません",
+  "history_type_line": "種別: {{type}}",
 
   "file_list_cleared": "ファイルリストをクリアしました",
   "form_reset_log": "フォームとファイルリストをリセットしました。",

@@ -149,3 +149,34 @@ def test_multi_key_string_is_preserved(app_ctx):
     })
     assert err is None
     assert config['openrouter_api_key'] == 'sk-or-1,sk-or-2,sk-or-3'
+
+
+def test_retry_token_aligned_defaults_to_off_on_every_resume(app_ctx, monkeypatch):
+    """A routine resume must never retranslate the approximately-tagged chunks.
+
+    Those chunks are translated; only an explicit request from the completion
+    card widens the work set to them (design decision D3). The flag is written
+    on every resume, including from an empty body, so a value left in a stored
+    config can never turn a plain Resume into a repair pass.
+    """
+    monkeypatch.setattr(translation_routes._config, 'DISABLE_AUTO_PAUSE', 'false')
+    config = _base_config()
+    config['retry_token_aligned'] = True  # stale value from an earlier pass
+
+    assert _apply_resume_overrides(config, {}) is None
+    assert config['retry_token_aligned'] is False
+
+
+def test_retry_token_aligned_opt_in_is_honoured(app_ctx, monkeypatch):
+    monkeypatch.setattr(translation_routes._config, 'DISABLE_AUTO_PAUSE', 'false')
+    config = _base_config()
+    assert _apply_resume_overrides(config, {'retry_token_aligned': True}) is None
+    assert config['retry_token_aligned'] is True
+
+
+def test_non_boolean_retry_token_aligned_is_rejected(app_ctx):
+    config = _base_config()
+    result = _apply_resume_overrides(config, {'retry_token_aligned': 'yes'})
+    assert result is not None
+    _response, status = result
+    assert status == 400

@@ -4,9 +4,12 @@ Configuration and health check routes
 import os
 import sys
 import asyncio
+import json
 import logging
 import requests
 import re
+import tempfile
+import threading
 import time
 from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, send_from_directory, render_template, make_response
@@ -57,6 +60,115 @@ from src.api.services.endpoint_validator import EndpointValidator
 logger = logging.getLogger('config_routes')
 if _config.DEBUG_MODE:
     logger.setLevel(logging.DEBUG)
+
+
+# --- UI preferences shared across devices ------------------------------------
+# A small JSON document holding the browser-side preferences the user wants to
+# follow them from one device to the next. It lives under `data/` because that
+# is the only directory (with translated_files/) mounted as a Docker volume, so
+# it survives a container restart.
+_PREFERENCES_LOCK = threading.Lock()
+
+# Write-path caps. They keep the document small enough to stay a preference
+# store and not become an arbitrary key/value service.
+_MAX_PREFERENCE_KEYS = 100
+_MAX_PREFERENCE_KEY_CHARS = 64
+_MAX_PREFERENCE_VALUE_CHARS = 2048
+
+
+def _preferences_path() -> Path:
+    """Resolve the preferences file at call time (not import time).
+
+    Tests monkeypatch `get_config_path`, so this must never be cached at
+    module load.
+    """
+    return Path(get_config_path()) / 'data' / 'preferences.json'
+
+
+def _read_preferences() -> dict:
+    """Return the stored preferences, or `{}` when unavailable.
+
+    Missing file, unreadable file, invalid JSON and a valid JSON document that
+    is not an object all degrade to an empty dict — a corrupt file must never
+    keep the UI from loading.
+    """
+    path = _preferences_path()
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        logger.warning(f"Could not read preferences from {path}: {e}")
+        return {}
+
+    if not isinstance(data, dict):
+        logger.warning(f"Ignoring preferences at {path}: not a JSON object")
+        return {}
+    return data
+
+
+def _validate_preferences(body):
+    """Validate a preferences document.
+
+    Returns an error message describing the first problem found, or None when
+    the document is acceptable. Values are restricted to scalars: no None and
+    no nested containers, which keeps the document flat, bounded, and unusable
+    as a hiding place for structured payloads.
+    """
+    if not isinstance(body, dict):
+        return "Preferences must be a JSON object"
+
+    if len(body) > _MAX_PREFERENCE_KEYS:
+        return f"Too many preference keys (max {_MAX_PREFERENCE_KEYS})"
+
+    for key, value in body.items():
+        if not isinstance(key, str):
+            return "Preference keys must be strings"
+        if not 1 <= len(key) <= _MAX_PREFERENCE_KEY_CHARS:
+            return f"Preference key length must be 1-{_MAX_PREFERENCE_KEY_CHARS} characters"
+        if isinstance(value, str):
+            if len(value) > _MAX_PREFERENCE_VALUE_CHARS:
+                return (
+                    f"Preference '{key}' exceeds the "
+                    f"{_MAX_PREFERENCE_VALUE_CHARS}-character limit"
+                )
+        elif not isinstance(value, (bool, int, float)):
+            return f"Preference '{key}' must be a string, number, or boolean"
+
+    return None
+
+
+def _write_preferences(prefs: dict) -> None:
+    """Persist the preferences document atomically.
+
+    Writes a temporary file next to the target and os.replace()s it in, so a
+    concurrent reader never observes a half-written document.
+    """
+    path = _preferences_path()
+    parent = path.parent
+    with _PREFERENCES_LOCK:
+        parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8',
+                dir=parent,
+                prefix='preferences-',
+                suffix='.tmp',
+                delete=False,
+            ) as tmp:
+                tmp_path = tmp.name
+                json.dump(prefs, tmp, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, path)
+            tmp_path = None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
 
 def create_config_blueprint(server_session_id=None):
@@ -1048,5 +1160,31 @@ def create_config_blueprint(server_session_id=None):
             "ollama_api_endpoint": _config.OLLAMA_API_ENDPOINT or "",
             "openai_api_endpoint": _config.OPENAI_API_ENDPOINT or ""
         })
+
+    @bp.route('/api/preferences', methods=['GET'])
+    def get_preferences():
+        """Return the shared UI preferences document (empty when unset)."""
+        return jsonify({"preferences": _read_preferences()})
+
+    @bp.route('/api/preferences', methods=['PUT'])
+    def put_preferences():
+        """Replace the shared UI preferences document.
+
+        The body is a full replacement, not a merge: the client owns the whole
+        synced subset, so a key it drops must disappear on every other device
+        too.
+        """
+        body = request.get_json(silent=True)
+        error = _validate_preferences(body)
+        if error:
+            return jsonify({"error": "Invalid preferences", "message": error}), 400
+
+        try:
+            _write_preferences(body)
+        except OSError as e:
+            logger.error(f"Error saving preferences: {e}")
+            return jsonify({"error": f"Failed to save preferences: {str(e)}"}), 500
+
+        return jsonify({"success": True, "preferences": body})
 
     return bp

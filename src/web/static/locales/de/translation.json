@@ -124,7 +124,10 @@
   "completion_fix_toggle": "Diese {{count}} Chunk(s) korrigieren",
   "completion_fix_toggle_title": "Nur die unfertigen Chunks mit einem anderen Modell neu übersetzen",
   "completion_fix_apply_btn": "Diese Chunks neu übersetzen",
-  "completion_token_alignment_note": "Hinweis für Fortgeschrittene: {{count}} Chunk(s) wurden mit ungefährer Tag-Platzierung übersetzt. Mit EPUB_TOKEN_ALIGNMENT_ENABLED auf false bleiben sie stattdessen unübersetzt, aber erneut versuchbar – falls exakte Formatierung wichtiger ist als Abdeckung. Diese Chunks können dann mit einem Klick auf dieser Karte mit einem anderen Modell neu übersetzt werden.",
+  "completion_degraded_advice": "Diese {{count}} Chunk(s) sind übersetzt, ihre Inline-Tags wurden aber nur ungefähr platziert: Wählen Sie unten ein leistungsfähigeres Modell aus, dann werden nur sie neu übersetzt und der Rest des Buches bleibt unangetastet.",
+  "completion_degraded_toggle": "{{count}} Chunk(s) mit ungefährer Tag-Platzierung erneut versuchen",
+  "completion_degraded_toggle_title": "Nur die Chunks mit ungefährer Tag-Platzierung mit einem anderen Modell neu übersetzen",
+  "completion_token_alignment_note": "Hinweis für Fortgeschrittene: {{count}} Chunk(s) sind übersetzt, ihre Inline-Tags wurden aber nur ungefähr platziert – Sie können sie hier mit einem anderen Modell erneut versuchen, solange diese Karte angezeigt wird. Mit EPUB_TOKEN_ALIGNMENT_ENABLED auf false bleiben solche Chunks stattdessen unübersetzt, falls exakte Formatierung wichtiger ist als Abdeckung.",
 
   "session_restored_log": "🔄 Vorherige Übersetzungssitzung wiederhergestellt",
   "session_corrupted_log": "Vorheriger Sitzungsstatus war beschädigt, Neustart",
@@ -202,6 +205,16 @@
   "paused_translations": "Pausierte Übersetzungen",
   "refresh_list_title": "Liste aktualisieren",
   "no_paused_translations": "Keine pausierten Übersetzungen",
+
+  "history_title": "Übersetzungsverlauf",
+  "history_empty": "Noch keine abgeschlossenen Übersetzungen",
+  "history_load_error": "Verlauf konnte nicht geladen werden: {{error}}",
+  "history_count_log": "📚 {{count}} abgeschlossene Übersetzung(en) im Verlauf",
+  "history_status_completed": "Abgeschlossen",
+  "history_completed_at": "Abgeschlossen: {{date}}",
+  "history_chunks": "{{completed}} / {{total}} Segmente",
+  "history_output_missing": "Ausgabedatei nicht mehr verfügbar",
+  "history_type_line": "Typ: {{type}}",
 
   "file_list_cleared": "Dateiliste geleert",
   "form_reset_log": "Formular und Dateiliste zurückgesetzt.",

@@ -72,6 +72,35 @@ def untranslated_chunk_indices(statuses: Optional[List[str]]) -> List[int]:
             if status == CHUNK_UNTRANSLATED]
 
 
+def token_aligned_chunk_indices(statuses: Optional[List[str]]) -> List[int]:
+    """Return the ascending indices of chunks repaired by token alignment.
+
+    These chunks ARE translated: Phase 2 retranslated their text without
+    placeholders and reinserted the inline tags proportionally, so only the tag
+    positions are approximate. They are therefore never part of the automatic
+    work set (design decision D3) - neither :func:`unfinished_chunk_indices` nor
+    the resume path ever lists them, and a job whose only imperfection is an
+    approximate tag placement stays 'completed'.
+
+    This projection exists so an explicit, user-initiated retry can widen its
+    work set to them, and so the UI can tell "3 chunks are still approximately
+    tagged" from the accumulated ``token_alignment_used`` counter, which keeps
+    counting every Phase 2 event of every pass even after those chunks have been
+    repaired.
+
+    Args:
+        statuses: Per-chunk statuses, or None when a state carries none.
+
+    Returns:
+        Ascending list of indices whose status is exactly CHUNK_TOKEN_ALIGNED.
+        An empty list when statuses is None (nothing known, nothing to report).
+    """
+    if not statuses:
+        return []
+    return [i for i, status in enumerate(statuses)
+            if status == CHUNK_TOKEN_ALIGNED]
+
+
 @dataclass
 class XHTMLTranslationState:
     """

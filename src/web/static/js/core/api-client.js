@@ -384,6 +384,19 @@ export const ApiClient = {
     },
 
     // ========================================
+    // Job History
+    // ========================================
+
+    /**
+     * Get the list of completed jobs kept for history
+     * @param {number} [limit] - Maximum number of entries to return
+     * @returns {Promise<Object>} Job history
+     */
+    async getJobHistory(limit) {
+        return await apiRequest('/api/history' + (limit ? '?limit=' + encodeURIComponent(limit) : ''));
+    },
+
+    // ========================================
     // Settings Management
     // ========================================
 
@@ -404,6 +417,27 @@ export const ApiClient = {
         return await apiRequest('/api/settings', {
             method: 'POST',
             body: JSON.stringify(settings)
+        });
+    },
+
+    /**
+     * Get the shared UI preferences document (synced across devices)
+     * @returns {Promise<Object>} Stored preferences ({} when nothing is stored)
+     */
+    async getPreferences() {
+        const data = await apiRequest('/api/preferences');
+        return data.preferences || {};
+    },
+
+    /**
+     * Replace the shared UI preferences document (PUT is a full replacement)
+     * @param {Object} prefs - Flat preferences object to store
+     * @returns {Promise<Object>} Save result with the stored preferences
+     */
+    async savePreferences(prefs) {
+        return await apiRequest('/api/preferences', {
+            method: 'PUT',
+            body: JSON.stringify(prefs)
         });
     },
 

@@ -307,8 +307,11 @@ class FakeCheckpointManager:
     def start_job(self, translation_id, file_type, config, input_file_path):
         self.started.append(dict(config.get('prompt_options', {})))
 
-    def cleanup_completed_job(self, translation_id):
-        pass
+    def mark_completed(self, translation_id):
+        return True
+
+    def prune_job_data(self, translation_id):
+        return True
 
     def mark_interrupted(self, translation_id):
         pass

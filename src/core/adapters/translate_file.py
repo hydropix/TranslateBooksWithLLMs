@@ -83,6 +83,7 @@ async def translate_file(
     prompt_options: Optional[Dict[str, Any]] = None,
     bilingual_output: bool = False,
     parallel_workers: int = 1,
+    retry_token_aligned: bool = False,
     **additional_config
 ) -> bool:
     """
@@ -118,6 +119,10 @@ async def translate_file(
         min_chunk_size: Minimum chunk size for text splitting
         prompt_options: Optional prompt customization options
         bilingual_output: If True, output will contain both original and translated text
+        retry_token_aligned: EPUB only. Explicit, user-initiated retry of the
+            chunks token alignment translated with approximate tag positions.
+            Off by default and ignored by every other format: those chunks are
+            translated, and no automatic pass ever revisits them (D3).
         **additional_config: Additional configuration passed to the adapter
 
     Returns:
@@ -242,6 +247,7 @@ async def translate_file(
             prompt_options=prompt_options,
             bilingual=bilingual_output,
             parallel_workers=parallel_workers,
+            retry_token_aligned=retry_token_aligned,
             **additional_config
         )
         return True  # Legacy function doesn't return success status

@@ -774,6 +774,22 @@
             </div>
         </div>
 
+        <!-- Translation History Section -->
+        <div class="main-card" id="historySection" style="margin-top: 30px; display: none;">
+            <div class="card-header">
+                <span class="material-symbols-outlined">history</span>
+                <h2 data-i18n="translation:history_title">Translation History</h2>
+                <button class="btn btn-secondary" onclick="loadHistory()" data-i18n-attr="title:translation:refresh_list_title" title="Refresh list" style="margin-left: auto; padding: 0.5rem 1rem;">
+                    <span class="material-symbols-outlined">refresh</span>
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="historyLoading" style="text-align: center; padding: 20px;"><p data-i18n="common:loading">Loading...</p></div>
+                <div id="historyList" style="display: none;"></div>
+                <div id="historyEmpty" style="text-align: center; padding: 40px; display: none;"><p data-i18n="translation:history_empty" style="color: var(--text-muted-light);">No completed translations yet</p></div>
+            </div>
+        </div>
+
         </div><!-- /#tab-translate -->
 
         <!-- Tab: Sample & Compare -->

@@ -3,6 +3,7 @@ Translation job management routes
 """
 import logging
 import os
+import re
 import time
 import copy
 from pathlib import Path
@@ -162,6 +163,51 @@ def _strip_api_keys(config):
     return config
 
 
+_UPLOAD_PREFIX_RE = re.compile(r'^[0-9a-f]{16}_')
+
+
+def _display_input_filename(requested: object, safe_path: Path | None) -> str | None:
+    """Derive a human-readable source filename for the job config.
+
+    Prefers the client-supplied `input_filename` (basename-only, truncated,
+    so a path or an oversized value cannot leak through); falls back to the
+    validated upload path with its random `_create_secure_filename` prefix
+    stripped, so a second device can show a meaningful name in the progress
+    panel (issue #271). Returns None when neither source is available.
+    """
+    if isinstance(requested, str) and requested.strip():
+        return os.path.basename(requested.strip())[:200]
+    if safe_path is not None:
+        name = safe_path.name
+        return _UPLOAD_PREFIX_RE.sub('', name, count=1)
+    return None
+
+
+_HISTORY_FIELDS = (
+    'translation_id',
+    'status',
+    'file_type',
+    'input_filename',
+    'output_filename',
+    'created_at',
+    'updated_at',
+    'completed_at',
+    'total_chunks',
+    'completed_chunks',
+)
+
+
+def _history_item(job):
+    """Project a completed job onto the fields the browser is allowed to see.
+
+    Built as an allowlist, never by deleting keys from a copy of the job: the
+    stored config carries the server's filesystem layout ('file_path'), the
+    provider endpoints and the API keys resolved from .env, and a denylist
+    would silently leak whatever field gets added to it next (issue #271).
+    """
+    return {field: job.get(field) for field in _HISTORY_FIELDS}
+
+
 def _validate_provider_credentials(config):
     """Check that the provider in `config` has what it needs to run.
 
@@ -215,6 +261,14 @@ def _apply_resume_overrides(config, overrides):
     persist API keys (issue #213), so every resume must find its key in .env
     or in the request.
 
+    `retry_token_aligned` is the completion card's explicit "retranslate the
+    approximately-tagged chunks" action (issue #261). It is set from the request
+    on every resume - including to False when the body says nothing - so a
+    stored value can never make a routine resume silently retranslate chunks
+    that are already translated. Those chunks are never in the automatic work
+    set (design decision D3); this flag is the one thing that widens it, and
+    only for the pass it travels with.
+
     auto_pause_on_rate_limit isn't a secret, but a job's config is otherwise a
     snapshot taken at creation time, so it has the same staleness problem as
     the credentials above: without refreshing it here, flipping "Disable
@@ -233,6 +287,12 @@ def _apply_resume_overrides(config, overrides):
     or None on success.
     """
     raw_key = None
+
+    retry_token_aligned = (overrides.get('retry_token_aligned')
+                           if isinstance(overrides, dict) else None)
+    if retry_token_aligned is not None and not isinstance(retry_token_aligned, bool):
+        return jsonify({"error": "retry_token_aligned must be a boolean"}), 400
+    config['retry_token_aligned'] = bool(retry_token_aligned)
 
     if isinstance(overrides, dict) and overrides.get('auto_pause_on_rate_limit') is not None:
         config['auto_pause_on_rate_limit'] = bool(overrides['auto_pause_on_rate_limit'])
@@ -352,6 +412,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         }
 
         # Add file-specific or text-specific configuration
+        safe_path = None
         if 'file_path' in data:
             # The client supplies this path, so it must be confined to the
             # uploads directory — otherwise any server-readable file (.env, SSH
@@ -367,6 +428,13 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         else:
             config['text'] = data['text']
             config['file_type'] = data.get('file_type', 'txt')
+
+        # Human-readable source filename so any device can restore the
+        # progress panel (issue #271). Omit the key entirely when it cannot
+        # be determined, so get_translation_summaries() keeps emitting null.
+        display_input_filename = _display_input_filename(data.get('input_filename'), safe_path)
+        if display_input_filename is not None:
+            config['input_filename'] = display_input_filename
 
         # A request-chosen endpoint must be allowlisted, and must carry its own
         # key: the server's .env key never travels to a host the client picked.
@@ -485,6 +553,23 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         for job in resumable_jobs:
             _strip_api_keys(job.get('config'))
         return jsonify({"resumable_jobs": resumable_jobs})
+
+    @bp.route('/api/history', methods=['GET'])
+    def list_job_history():
+        """List the most recently completed jobs, newest first.
+
+        Returns a compact projection only (see _history_item): the history is
+        a read-only display surface, so the browser gets no config, no server
+        paths and no API keys.
+        """
+        limit = request.args.get('limit', '50')
+        try:
+            limit = int(limit, 10)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid limit"}), 400
+
+        jobs = state_manager.checkpoint_manager.get_job_history(limit)
+        return jsonify({"history": [_history_item(job) for job in jobs]})
 
     @bp.route('/api/resume/<translation_id>', methods=['POST'])
     def resume_translation_job_endpoint(translation_id):

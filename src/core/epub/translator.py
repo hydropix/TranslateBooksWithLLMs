@@ -28,6 +28,7 @@ from src.config import (
 from ..common.translation_orchestrator import GenericTranslationOrchestrator
 from .epub_translation_adapter import EpubTranslationAdapter
 from .xhtml_translation_state import (
+    token_aligned_chunk_indices,
     unfinished_chunk_indices,
     untranslated_chunk_indices,
 )
@@ -70,6 +71,7 @@ async def translate_epub_file(
     max_attempts: int = None,
     bilingual: bool = False,
     parallel_workers: int = 1,
+    retry_token_aligned: bool = False,
 ) -> None:
     """
     Translate an EPUB file using LLM with generic orchestrator.
@@ -113,6 +115,9 @@ async def translate_epub_file(
         max_tokens_per_chunk: Maximum tokens per chunk
         max_attempts: Maximum translation attempts per chunk
         bilingual: Enable bilingual translation mode
+        retry_token_aligned: Explicit, user-initiated retry of the chunks token
+            alignment translated with approximate tag positions. Off by default;
+            it is the only thing that widens the work set to them (D3).
     """
     # Validate input file
     if not os.path.exists(input_filepath):
@@ -211,7 +216,8 @@ async def translate_epub_file(
                 check_interruption_callback=check_interruption_callback,
                 prompt_options=prompt_options,
                 restored_docs=restored_docs,
-                parallel_workers=parallel_workers
+                parallel_workers=parallel_workers,
+                retry_token_aligned=retry_token_aligned
             )
 
             # 4. Save translated files
@@ -716,6 +722,7 @@ async def _translate_single_xhtml_file(
     global_total_chunks: Optional[int] = None,
     global_completed_chunks: Optional[int] = None,
     parallel_workers: int = 1,
+    retry_token_aligned: bool = False,
 ) -> Tuple[Optional[etree._Element], bool, Any]:
     """
     Translate a single XHTML file using GenericTranslationOrchestrator.
@@ -737,6 +744,8 @@ async def _translate_single_xhtml_file(
         checkpoint_manager: Optional checkpoint manager for partial state
         translation_id: Optional translation ID for checkpointing
         check_interruption_callback: Optional interruption check callback
+        retry_token_aligned: Retry the chunks token alignment repaired
+            (translated, approximate tag positions). Off by default (D3).
 
     Returns:
         (doc_root, success, stats)
@@ -789,6 +798,7 @@ async def _translate_single_xhtml_file(
             file_href=content_href,
             check_interruption_callback=check_interruption_callback,
             resume_state=resume_state,
+            retry_token_aligned=retry_token_aligned,
             global_total_chunks=global_total_chunks,
             global_completed_chunks=global_completed_chunks,
             parallel_workers=parallel_workers,
@@ -924,8 +934,8 @@ _RUN_RATE_COUNTERS = (
 
 def _global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
                            unfinished_units=None, run_prior_counts=None,
-                           untranslated_units=None, run_total_chunks=None,
-                           run_is_repair=False):
+                           untranslated_units=None, degraded_units=None,
+                           run_total_chunks=None, run_is_repair=False):
     """Build the EPUB global-stats dict emitted to the progress callback.
 
     Single source of the cross-file payload shape, shared by the resume-initial
@@ -955,6 +965,17 @@ def _global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
     ``unfinished_chunks``: an interrupted job owes every chunk it never reached,
     and none of those is a fallback.
 
+    ``degraded_units`` is the job-level ``{file_href: [chunk_index, ...]}`` map
+    of chunks that ARE translated but whose inline tags were only
+    approximately repositioned by token alignment. Emitted unconditionally as
+    ``degraded_chunks`` (the flat count) and ``degraded_files`` (the map), for
+    the same key-by-key merge reason as the keys below. It is what the
+    completion card must read instead of ``token_alignment_used``: that counter
+    is an accumulated, cross-pass tally of Phase 2 *events* and stays positive
+    after those chunks have been repaired, so gating anything on it would
+    claim defects on a clean book. It never contributes to the verdict:
+    ``unfinished_chunks`` stays free of these chunks (D3/D10).
+
     ``run_total_chunks`` / ``run_is_repair`` describe the scope of *this pass*
     so the live panel can report a repair pass as its own little job ("1 TOTAL
     / 1 COMPLETED") instead of the book it is patching ("12 TOTAL / 10
@@ -978,6 +999,7 @@ def _global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
     fs = file_stats or {}
     uu = unfinished_units or {}
     ut = untranslated_units or {}
+    du = degraded_units or {}
     prior = run_prior_counts or {}
     combined = {
         name: getattr(acc, name) + fs.get(name, 0)
@@ -1017,6 +1039,13 @@ def _global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
         # trusts this key whenever it is present, so it must always be present
         # and always be fresh.
         'untranslated_chunks': sum(len(v) for v in ut.values()),
+        # Chunks translated with approximate tag positions, as they stand right
+        # now (not the accumulated Phase 2 event count). Emitted
+        # unconditionally, same merge reason as above: the completion card
+        # trusts these keys whenever they are present, so a repaired book must
+        # see them refreshed to 0 / {} rather than keeping a stale value.
+        'degraded_chunks': sum(len(v) for v in du.values()),
+        'degraded_files': dict(du),
         # Scope of this pass, for the live progress panel (see the docstring).
         # Emitted unconditionally for the same key-by-key merge reason as the
         # keys above: a key that appears only on repair passes would leave a
@@ -1051,7 +1080,8 @@ async def _process_all_content_files(
     check_interruption_callback: Optional[Callable] = None,
     prompt_options: Optional[Dict] = None,
     restored_docs: Optional[Dict[str, etree._Element]] = None,
-    parallel_workers: int = 1
+    parallel_workers: int = 1,
+    retry_token_aligned: bool = False
 ) -> Dict:
     """
     Process all XHTML content files using GenericTranslationOrchestrator.
@@ -1074,11 +1104,18 @@ async def _process_all_content_files(
         check_interruption_callback: Optional interruption check callback
         prompt_options: Optional prompt options
         restored_docs: Restored documents from checkpoint
+        retry_token_aligned: Explicit, user-initiated repair of the chunks token
+            alignment translated with approximate tag positions. Off by default:
+            those chunks are never in the automatic work set (D3). When on, the
+            re-entry tickets are widened to the files listed in
+            `epub_degraded_units` and to those files' degraded chunk indices.
 
     Returns:
         Dictionary with processing results, including 'unfinished_units':
         {file_href: [chunk_index, ...]} - the complete current picture of the
-        chunks this job still has to translate (issue #261).
+        chunks this job still has to translate (issue #261) - and
+        'degraded_units', the same shape for the chunks that are translated but
+        only approximately tagged.
     """
     from .translation_metrics import TranslationMetrics
 
@@ -1157,13 +1194,31 @@ async def _process_all_content_files(
     # (pending). It is deliberately NOT persisted: it is derivable from the
     # per-file partial states, and a second stored map would be a second truth.
     untranslated_units: Dict[str, List[int]] = {}
+    # Job-level index of the chunks that ARE translated but carry approximate
+    # tag positions (token alignment). Persisted next to `unfinished_units`, and
+    # deliberately never merged into it: those chunks must not make the job
+    # 'partial' (D3/D10). It is what keeps the completion card's affordance and
+    # its counters honest after a repair, where the accumulated
+    # `token_alignment_used` counter stays positive forever.
+    degraded_units: Dict[str, List[int]] = {}
     retry_tickets: Dict[str, List[int]] = {}
     if resume_from_index > 0:
         listed_units = job_progress.get('epub_unfinished_units')
         if isinstance(listed_units, dict):
             unfinished_units = {str(href): list(indices or [])
                                 for href, indices in listed_units.items()}
-        for href in unfinished_units:
+        listed_degraded = job_progress.get('epub_degraded_units')
+        if isinstance(listed_degraded, dict):
+            degraded_units = {str(href): list(indices or [])
+                              for href, indices in listed_degraded.items()}
+        # Both stored indices point at files whose partial state has to be read,
+        # so the loop walks their union once. A file listed only as degraded is
+        # loaded to refresh the map (and, in repair mode only, to grant it a
+        # ticket); in the normal mode it never earns one.
+        listed_hrefs = list(unfinished_units)
+        listed_hrefs += [href for href in degraded_units
+                         if href not in unfinished_units]
+        for href in listed_hrefs:
             state = None
             if checkpoint_manager and translation_id:
                 try:
@@ -1171,19 +1226,35 @@ async def _process_all_content_files(
                         translation_id, href)
                 except Exception:
                     state = None
-            # Two projections of one truth, not two sources of truth: both lists
-            # come from this single read of `state.chunk_statuses`, so they can
-            # never disagree. The stored `epub_unfinished_units` map merges
-            # pending with untranslated and cannot yield the narrow subset - the
-            # state can, and the loop has to load it anyway to grant the ticket.
+            # Three projections of one truth, not three sources of truth: every
+            # list below comes from this single read of `state.chunk_statuses`,
+            # so they can never disagree. The stored `epub_unfinished_units` map
+            # merges pending with untranslated and cannot yield the narrow
+            # subsets - the state can, and the loop has to load it anyway to
+            # grant the ticket.
             statuses = state.chunk_statuses if state else None
             indices = unfinished_chunk_indices(statuses)
             ticket_untranslated = untranslated_chunk_indices(statuses)
+            ticket_degraded = token_aligned_chunk_indices(statuses)
             if ticket_untranslated:
                 untranslated_units[href] = ticket_untranslated
-            if indices:
-                retry_tickets[href] = indices
-            elif log_callback:
+            if state is not None:
+                # The state is the payload, the map only the index: refresh the
+                # index from what the state actually says, so a file repaired by
+                # an earlier pass stops being listed.
+                if ticket_degraded:
+                    degraded_units[href] = ticket_degraded
+                else:
+                    degraded_units.pop(href, None)
+            ticket = sorted(set(indices) | set(ticket_degraded))                 if retry_token_aligned else list(indices)
+            if ticket:
+                retry_tickets[href] = ticket
+                if retry_token_aligned and ticket_degraded and log_callback:
+                    log_callback("epub_retry_token_aligned_requested",
+                                 f"🔁 Retrying {len(ticket_degraded)} "
+                                 f"approximately-tagged chunk(s) of {href} on "
+                                 f"explicit request: {ticket_degraded}")
+            elif state is None and log_callback:
                 log_callback("epub_retry_state_missing",
                              f"WARNING: {href} is listed as unfinished but has no "
                              f"usable partial state - skipped (re-entering it "
@@ -1259,6 +1330,7 @@ async def _process_all_content_files(
             unfinished_units=unfinished_units,
             run_prior_counts=run_prior_counts,
             untranslated_units=untranslated_units,
+            degraded_units=degraded_units,
             run_total_chunks=run_total_chunks,
             run_is_repair=run_is_repair))
 
@@ -1327,6 +1399,7 @@ async def _process_all_content_files(
                 unfinished_units=unfinished_units,
                 run_prior_counts=run_prior_counts,
                 untranslated_units=untranslated_units,
+                degraded_units=degraded_units,
                 run_total_chunks=run_total_chunks,
                 run_is_repair=run_is_repair))
 
@@ -1350,6 +1423,7 @@ async def _process_all_content_files(
             global_total_chunks=total_chunks,
             global_completed_chunks=completed_chunks_global,
             parallel_workers=parallel_workers,
+            retry_token_aligned=retry_token_aligned,
         )
 
         # Update global chunk counter. A fully-translated file contributes all
@@ -1374,6 +1448,7 @@ async def _process_all_content_files(
         # which deletes that state when the file comes back clean.
         file_unfinished: List[int] = []
         file_untranslated: List[int] = []
+        file_degraded: List[int] = []
         if checkpoint_manager and translation_id:
             try:
                 state_after = checkpoint_manager.load_xhtml_partial_state(
@@ -1381,13 +1456,15 @@ async def _process_all_content_files(
             except Exception:
                 state_after = None
             if state_after is not None:
-                # Two projections of one truth, not two sources of truth: the
-                # persisted `unfinished` set (pending + untranslated, D8) and the
-                # in-memory `untranslated`-only set are both derived from this
+                # Three projections of one truth, not three sources of truth:
+                # the persisted `unfinished` set (pending + untranslated, D8),
+                # the persisted `degraded` set (token-aligned only) and the
+                # in-memory `untranslated`-only set are all derived from this
                 # single read of `chunk_statuses`, so they cannot drift apart.
                 statuses_after = state_after.chunk_statuses
                 file_unfinished = unfinished_chunk_indices(statuses_after)
                 file_untranslated = untranslated_chunk_indices(statuses_after)
+                file_degraded = token_aligned_chunk_indices(statuses_after)
 
         if file_unfinished:
             unfinished_units[content_href] = file_unfinished
@@ -1399,6 +1476,11 @@ async def _process_all_content_files(
         else:
             untranslated_units.pop(content_href, None)
 
+        if file_degraded:
+            degraded_units[content_href] = file_degraded
+        else:
+            degraded_units.pop(content_href, None)
+
         # Report stats if callback provided
         if stats_callback and file_stats:
             stats_callback(_global_stats_payload(
@@ -1406,6 +1488,7 @@ async def _process_all_content_files(
                 unfinished_units=unfinished_units,
                 run_prior_counts=run_prior_counts,
                 untranslated_units=untranslated_units,
+                degraded_units=degraded_units,
                 run_total_chunks=run_total_chunks,
                 run_is_repair=run_is_repair))
 
@@ -1435,7 +1518,9 @@ async def _process_all_content_files(
                 failed_chunks=accumulated_stats.failed_chunks,
                 epub_accumulated_stats=_snapshot_accumulated_stats(accumulated_stats),
                 unfinished_units=unfinished_units,
-                file_unfinished=file_unfinished
+                file_unfinished=file_unfinished,
+                degraded_units=degraded_units,
+                file_degraded=file_degraded
             )
 
     # Final progress
@@ -1450,7 +1535,9 @@ async def _process_all_content_files(
         'was_interrupted': was_interrupted,
         # Complete current picture of the chunks still to translate, so callers
         # do not have to recompute it from disk (issue #261).
-        'unfinished_units': unfinished_units
+        'unfinished_units': unfinished_units,
+        # Same shape, for the translated-but-approximately-tagged chunks.
+        'degraded_units': degraded_units
     }
 
 
@@ -1580,7 +1667,9 @@ async def _save_checkpoint(
     failed_chunks: int = 0,
     epub_accumulated_stats: Optional[Dict] = None,
     unfinished_units: Optional[Dict[str, List[int]]] = None,
-    file_unfinished: Optional[List[int]] = None
+    file_unfinished: Optional[List[int]] = None,
+    degraded_units: Optional[Dict[str, List[int]]] = None,
+    file_degraded: Optional[List[int]] = None
 ) -> None:
     """Save checkpoint for a translated file.
 
@@ -1592,6 +1681,15 @@ async def _save_checkpoint(
             empty the per-file partial state is deleted (the file is done);
             when it is not, the state is KEPT, because it is the only place
             that records which chunk is still in the source language.
+        degraded_units: Job-level index of the chunks that are translated but
+            only approximately tagged ({file_href: [chunk_index, ...]}). Stored
+            verbatim next to `unfinished_units`, never merged into it.
+        file_degraded: The approximately-tagged chunk indices of this file. Like
+            `file_unfinished` it KEEPS the per-file partial state alive, because
+            re-entering a file without its state would re-chunk an
+            already-translated body (D7) - so the state is the only thing that
+            makes an explicit retry of those chunks possible at all. It does NOT
+            make the file unfinished: no automatic pass will ever look at it.
     """
     try:
         # Serialize document
@@ -1632,6 +1730,13 @@ async def _save_checkpoint(
                     log_callback("xhtml_partial_state_kept_unfinished",
                         f"📌 Partial state kept for {content_href}: "
                         f"chunk(s) {file_unfinished} still untranslated")
+            elif file_degraded:
+                if log_callback:
+                    log_callback("xhtml_partial_state_kept_degraded",
+                        f"📌 Partial state kept for {content_href}: "
+                        f"chunk(s) {file_degraded} are translated with "
+                        f"approximate tag positions and can be retried on "
+                        f"explicit request")
             else:
                 checkpoint_manager.delete_xhtml_partial_state(translation_id, content_href)
                 if log_callback:
@@ -1655,7 +1760,8 @@ async def _save_checkpoint(
                 completed_chunks=completed_chunks,
                 failed_chunks=failed_chunks,
                 epub_accumulated_stats=epub_accumulated_stats,
-                unfinished_units=unfinished_units
+                unfinished_units=unfinished_units,
+                degraded_units=degraded_units
             )
 
             if log_callback:

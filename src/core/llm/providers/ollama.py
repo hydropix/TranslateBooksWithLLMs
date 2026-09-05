@@ -40,6 +40,7 @@ class OllamaProvider(LLMProvider):
         self.api_endpoint = api_endpoint.replace('/api/generate', '/api/chat')
         self.context_window = context_window
         self.log_callback = log_callback
+        self._context_detector = ContextDetector()
         # Will be detected on first request via _detect_thinking_behavior()
         self._thinking_behavior: Optional[ThinkingBehavior] = None
         self._supports_think_param: bool = True
@@ -309,6 +310,13 @@ class OllamaProvider(LLMProvider):
                 max_completion_tokens = int(self.context_window * 0.85)
 
                 async with client.stream("POST", self.api_endpoint, json=payload, timeout=timeout) as response:
+                    if response.is_error:
+                        # The body of a streamed response is not fetched yet, so
+                        # reading it from the exception handler below would raise
+                        # httpx.ResponseNotRead. Pull it here, while the stream is
+                        # still open, so Ollama's error message (num_ctx overflow,
+                        # unknown model, ...) survives into the handler.
+                        await response.aread()
                     response.raise_for_status()
 
                     try:
@@ -533,12 +541,16 @@ class OllamaProvider(LLMProvider):
                 RESET = '\033[0m'
 
                 error_message = str(e)
-                if e.response:
+                if e.response is not None:
+                    # Ollama reports failures as {"error": "..."}; fall back to the
+                    # raw body when the server answers with plain text or HTML.
                     try:
-                        error_data = e.response.json()
-                        error_message = error_data.get("error", str(e))
+                        error_message = e.response.json().get("error") or str(e)
                     except Exception:
-                        pass
+                        try:
+                            error_message = e.response.text.strip() or str(e)
+                        except Exception:
+                            pass
 
                 # Handle context overflow errors
                 if any(keyword in error_message.lower()

@@ -150,6 +150,123 @@ def test_init_does_not_shadow_base_api_key_property():
     assert provider_with_key.api_key == "sk-test"
 
 
+# ---------------------------------------------------------------------------
+# Key rotation on 429 (item 6 of issue #231)
+#
+# The provider used to peek() a single key once, before the retry loop, and
+# never call acquire()/mark_throttled(), so a multi-key LiteLLM setup never
+# rotated on RateLimitError.
+# ---------------------------------------------------------------------------
+
+class FakeLiteLLMRateLimitError(Exception):
+    """Stand-in for litellm.exceptions.RateLimitError.
+
+    The provider classifies exceptions by qualname, so the module and class
+    names have to match the real ones. The message must stay free of the
+    context-overflow keywords or it would be re-raised as ContextOverflowError.
+    """
+    __module__ = "litellm.exceptions"
+
+
+FakeLiteLLMRateLimitError.__name__ = "RateLimitError"
+FakeLiteLLMRateLimitError.__qualname__ = "RateLimitError"
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Neutralise every backoff so the retry loops run instantly."""
+    async def _instant(_seconds):
+        return None
+
+    monkeypatch.setattr("asyncio.sleep", _instant)
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_rotates_to_the_next_key(litellm_stub, no_sleep):
+    """A 429 on the first key must retry on the second one, not give up."""
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = [
+        FakeLiteLLMRateLimitError("429 too many requests"),
+        _mock_response("translated"),
+    ]
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="key-a,key-b")
+    result = await provider.generate("Hello")
+
+    assert result.content == "translated"
+    used_keys = [c.kwargs["api_key"] for c in litellm_stub.acompletion.call_args_list]
+    assert used_keys == ["key-a", "key-b"]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_does_not_consume_a_retry_attempt(litellm_stub, no_sleep):
+    """Rotations have their own budget: a 3-key pool gets more than
+    MAX_TRANSLATION_ATTEMPTS calls before the transient retries even start."""
+    from src.config import MAX_TRANSLATION_ATTEMPTS
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = (
+        [FakeLiteLLMRateLimitError("429 too many requests")] * MAX_TRANSLATION_ATTEMPTS
+        + [_mock_response("translated")]
+    )
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k1,k2,k3")
+    result = await provider.generate("Hello")
+
+    assert result.content == "translated"
+    assert litellm_stub.acompletion.call_count == MAX_TRANSLATION_ATTEMPTS + 1
+
+
+@pytest.mark.asyncio
+async def test_persistent_rate_limit_raises_for_upstream_pause(litellm_stub, no_sleep):
+    """Once the rotation budget is spent, RateLimitError propagates so the
+    job can be auto-paused instead of silently returning None."""
+    from src.core.llm.exceptions import RateLimitError
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = FakeLiteLLMRateLimitError(
+        "429 too many requests"
+    )
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k1,k2")
+    with pytest.raises(RateLimitError):
+        await provider.generate("Hello")
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_without_pool_keeps_plain_backoff(litellm_stub, no_sleep):
+    """With credentials in env vars there is no pool and nothing to rotate:
+    the 429 stays an ordinary transient retry that ends in None."""
+    from src.config import MAX_TRANSLATION_ATTEMPTS
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = FakeLiteLLMRateLimitError(
+        "429 too many requests"
+    )
+
+    provider = LiteLLMProvider(model="openai/gpt-4o")
+    assert await provider.generate("Hello") is None
+    assert litellm_stub.acompletion.call_count == MAX_TRANSLATION_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_non_rate_limit_errors_still_retry_on_the_same_key(litellm_stub, no_sleep):
+    """A transient connection error is not a rate limit: no key is throttled."""
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = [
+        RuntimeError("connection reset"),
+        _mock_response("translated"),
+    ]
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="only-key")
+    result = await provider.generate("Hello")
+
+    assert result.content == "translated"
+    assert litellm_stub.acompletion.call_count == 2
+
+
 def test_factory_creates_litellm_provider():
     from src.core.llm.factory import create_llm_provider
     from src.core.llm.providers.litellm import LiteLLMProvider

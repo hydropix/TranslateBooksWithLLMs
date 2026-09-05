@@ -136,6 +136,11 @@ class TestIsRetryableHttpStatus:
     def test_rate_limit_is_retryable(self):
         assert is_retryable_http_status(429) is True
 
+    def test_request_timeout_is_retryable(self):
+        # Item 8 of issue #231: 408 means the server gave up waiting for the
+        # request, which is transient, not a malformed request.
+        assert is_retryable_http_status(408) is True
+
     def test_server_errors_are_retryable(self):
         for code in (500, 502, 503, 504):
             assert is_retryable_http_status(code) is True

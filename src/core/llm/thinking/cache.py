@@ -6,7 +6,7 @@ use thinking tokens and how they behave, avoiding repeated detection.
 """
 
 import json
-import asyncio
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .behavior import ThinkingBehavior
@@ -128,18 +128,12 @@ class ThinkingCache:
 
         cache_key = f"{model}@{endpoint}" if endpoint else model
 
-        # Get current time (works in both sync and async contexts)
-        try:
-            loop = asyncio.get_event_loop()
-            tested_at = loop.time() if loop.is_running() else 0
-        except RuntimeError:
-            # No event loop running
-            tested_at = 0
-
+        # Wall-clock seconds: the cache is persisted to disk and read back in a
+        # later process, where a monotonic clock (loop.time()) is meaningless.
         self._cache[cache_key] = {
             "behavior": behavior.value,
             "supports_think_param": supports_think_param,
-            "tested_at": tested_at
+            "tested_at": time.time()
         }
 
         self.save()

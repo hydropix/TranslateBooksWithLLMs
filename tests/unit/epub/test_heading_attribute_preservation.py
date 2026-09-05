@@ -13,8 +13,10 @@ assertions describe production behaviour:
   * Plain Text Mode (`prompt_options['plain_text_mode']`) PRESERVES the
     attribute. `plain_extractor.extract_plain_paragraphs` records each block's
     tag NAME *and* attributes, and `replace_body_with_paragraphs` carries the
-    attributes onto the rebuilt element (see plain_extractor.py). This is the
-    regression test below.
+    whitelisted ones (`plain_extractor.CARRIED_ATTRIBUTES`, `class` included)
+    onto the rebuilt element. This is the regression test below; which
+    attributes are carried and which are deliberately dropped is pinned by
+    test_plain_text_attribute_policy.py.
 
   * The placeholder path (the default) PRESERVES the attribute, both when the
     model echoes the placeholders and when it emits literal HTML tags instead

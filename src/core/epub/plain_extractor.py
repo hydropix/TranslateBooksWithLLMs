@@ -11,9 +11,10 @@ At rebuild time, the body is wiped and reconstructed as a flat sequence of
 block elements (<p>, <h1..h6>, <li>, <blockquote>, <pre>) plus, after each
 block that originally contained images, an extra <p class="plain-text-images"> wrapper
 with the original <img> elements unchanged. Each block element is rebuilt with
-its original tag *and its original attributes* (class, id, xml:lang, epub:type,
-title, ...) carried across, so semantic attributes survive translation even
-though the tag's inline children are flattened to text. Void blocks (<hr>)
+its original tag *and the source attributes that still apply to a flattened
+block* (class, id, style, dir, title, epub:type), so semantic attributes
+survive translation even though the tag's inline children are flattened to
+text — see CARRIED_ATTRIBUTES for what is copied and why. Void blocks (<hr>)
 carry no text and no images: they keep their own slot in the paragraph list and
 are re-emitted as a bare element at the same position, without ever reaching
 the LLM. The one case where the body is left alone is a page that yielded no
@@ -46,6 +47,17 @@ SPACED_TAGS = ("td", "th", "tr", "caption")
 TABLE_CELL_TAGS = ("td", "th", "caption")
 # List wrappers we descend into (the inner <li> items become individual blocks)
 LIST_WRAPPER_TAGS = ("ul", "ol")
+EPUB_TYPE_ATTR = "{http://www.idpf.org/2007/ops}type"
+# Source attributes copied onto a rebuilt block. The list is a whitelist rather
+# than "everything the source block had" for two reasons:
+#   * Plain Text Mode flattens <li>, <td>, <th> and unknown blocks into <p>, so
+#     a tag-specific attribute (colspan, rowspan, scope, headers, value) would
+#     land on an element that cannot legally carry it and epubcheck rejects it.
+#   * `lang` / `xml:lang` describe the SOURCE language. Copied onto translated
+#     text they would override the target language that lang_support writes on
+#     <html>, and a reading system would hand a French paragraph to an English
+#     speech engine. Dropping them lets the block inherit the correct root lang.
+CARRIED_ATTRIBUTES = ("class", "id", "style", "dir", "title", EPUB_TYPE_ATTR)
 
 
 def _local_name(elem: etree._Element) -> str:
@@ -111,10 +123,21 @@ def _clone_img(img: etree._Element) -> etree._Element:
     return new
 
 
-def _set_attributes(elem: etree._Element, attrib: Dict[str, str]) -> None:
-    """Copy recorded source attributes (including namespaced epub:type, xml:lang) onto a rebuilt element."""
-    for k, v in (attrib or {}).items():
-        elem.set(k, v)
+def _set_attributes(
+    elem: etree._Element, attrib: Dict[str, str], with_id: bool = True
+) -> None:
+    """Copy the carried source attributes (see CARRIED_ATTRIBUTES) onto a rebuilt element.
+
+    with_id=False leaves `id` behind: bilingual mode emits two elements for one
+    source block, and duplicating the id there would produce invalid XHTML and
+    an ambiguous target for every TOC anchor pointing at it.
+    """
+    for key in CARRIED_ATTRIBUTES:
+        if key == "id" and not with_id:
+            continue
+        value = (attrib or {}).get(key)
+        if value is not None:
+            elem.set(key, value)
 
 
 def _add_class(elem: etree._Element, cls: str) -> None:
@@ -304,9 +327,10 @@ def replace_body_with_paragraphs(
                    empty block rather than a deletion.
         paragraphs_attrib: attribute dict per paragraph, captured from the source
                    block at extraction time. When provided, each rebuilt block
-                   keeps its source attributes (class, id, xml:lang, epub:type,
-                   ...); marker classes are appended to, never replacing, a
-                   source class.
+                   keeps the subset of them that still applies once the block is
+                   flattened (CARRIED_ATTRIBUTES); marker classes are appended
+                   to, never replacing, a source class, and `id` is emitted once
+                   per source block even in bilingual mode.
     """
     count = len(translated_paragraphs)
 
@@ -385,7 +409,10 @@ def replace_body_with_paragraphs(
 
         if emit_target:
             block = etree.SubElement(body_element, tag)
-            _set_attributes(block, attrib)
+            # The bilingual source twin, when there is one, already claimed the
+            # source id: it comes first in reading order, so an anchor aimed at
+            # this block still lands at the top of the right section.
+            _set_attributes(block, attrib, with_id=not source_emitted)
             if untranslated:
                 # One marker per block, untranslated over bilingual-target when
                 # both apply; either is appended to the source class, which the
@@ -393,11 +420,6 @@ def replace_body_with_paragraphs(
                 _add_class(block, "plain-text-untranslated")
             elif bilingual:
                 _add_class(block, "plain-text-target")
-            # A model trained on markdown sometimes decorates a bare heading
-            # line with "# " prefixes in Plain Text Mode (e.g. "# Chapter 6").
-            # The heading tag already gives the structure, so drop the markers.
-            if raw_tag in ("h1", "h2", "h3", "h4", "h5", "h6") and text.startswith("#"):
-                text = text.lstrip("#").strip()
             block.text = text or source_text
 
         # Emit anchored images right after

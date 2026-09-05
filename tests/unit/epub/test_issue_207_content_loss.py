@@ -15,6 +15,7 @@ D. Plain Text Mode must not empty a body whose whole content sits inside a
    its §5.1: `replace_body_with_paragraphs` rebuilding the body from scratch.
 """
 import os
+import re
 import tempfile
 
 import pytest
@@ -396,27 +397,132 @@ class TestWeakLlmSafety:
 
     def test_markdown_marker_stripping_removes_heading_hashes(self):
         from src.core.common.plain_text_pipeline import (
-            strip_hallucinated_markdown_markers,
+            strip_hallucinated_markdown_markers as strip_markers,
         )
 
         # A heading line the model decorated with "# " in Plain Text Mode:
         # the marker goes away, the translation stays.
-        assert strip_hallucinated_markdown_markers(
-            "# บทที่ 6: การกำหนดความลับและเบาะแส"
-        ) == "บทที่ 6: การกำหนดความลับและเบาะแส"
-        assert strip_hallucinated_markdown_markers(
-            "## Chapter 6"
-        ) == "Chapter 6"
+        assert strip_markers(
+            "# บทที่ 6", "Chapter 6"
+        ) == "บทที่ 6"
+        assert strip_markers("## Chapter 6", "Chapter 6") == "Chapter 6"
         # Leading whitespace before the marker must still be caught.
-        assert strip_hallucinated_markdown_markers(
-            "   ### Chapitre 6"
-        ) == "Chapitre 6"
-        # A lone "#" with no following text is not a heading marker - keep it.
-        assert strip_hallucinated_markdown_markers("#") == "#"
+        assert strip_markers("   ### Chapitre 6", "Chapter 6") == "Chapitre 6"
         # Plain paragraphs with no marker are untouched.
-        assert strip_hallucinated_markdown_markers(
-            "Un paragraphe normal."
+        assert strip_markers(
+            "Un paragraphe normal.", "A normal paragraph."
         ) == "Un paragraphe normal."
+
+    def test_markdown_marker_stripping_spares_hashes_that_are_content(self):
+        from src.core.common.plain_text_pipeline import (
+            strip_hallucinated_markdown_markers as strip_markers,
+        )
+
+        # A marker is "#" x1-6 FOLLOWED BY A SPACE. Without the space the hash
+        # is part of the word and dropping it would eat real content.
+        assert strip_markers("#1 des ventes", "#1 bestseller") == "#1 des ventes"
+        assert strip_markers("#MeToo, la suite", "#MeToo, after") == "#MeToo, la suite"
+        # A lone "#" is not a heading marker - keep it.
+        assert strip_markers("#", "#") == "#"
+        # A source that uses the marker itself (a markdown sample in a <pre>)
+        # disarms the strip entirely, exactly like strip_hallucinated_markup.
+        assert strip_markers("# Titre", "# Heading") == "# Titre"
+
+    def test_markdown_marker_stripping_keeps_the_paragraph_count(self):
+        from src.core.common.plain_text_pipeline import (
+            _split_translated_back_to_paragraphs,
+            strip_hallucinated_markdown_markers as strip_markers,
+        )
+
+        sep = "\n\n"
+
+        # Every paragraph of a segment is checked, not just the first one.
+        translated = sep.join(["# Titre un", "Texte.", "## Titre deux"])
+        source = sep.join(["Heading one", "Text.", "Heading two"])
+        assert strip_markers(translated, source) == sep.join(
+            ["Titre un", "Texte.", "Titre deux"]
+        )
+
+        # A paragraph made of a lone "#" must not be swallowed together with
+        # the blank line that follows it: the segment still has 3 paragraphs,
+        # otherwise the count contract with the segment would break.
+        blob = sep.join(["#", "Deuxieme.", "Troisieme."])
+        out = strip_markers(blob, sep.join(["A", "B", "C"]))
+        assert len(_split_translated_back_to_paragraphs(out)) == len(
+            _split_translated_back_to_paragraphs(blob)
+        ) == 3
+
+    @pytest.mark.asyncio
+    async def test_markers_are_stripped_wherever_they_land_in_a_segment(
+        self, monkeypatch
+    ):
+        """A marker on any paragraph of a segment, not just the leading one."""
+        import src.core.common.plain_text_pipeline as plain_pipeline
+
+        async def decorating_llm(*, main_content, **kwargs):
+            paragraphs = re.split(r"\n{2,}", main_content)
+            # The model decorates the LAST paragraph: a strip anchored on the
+            # start of the blob would miss it.
+            return "\n\n".join(
+                f"# T::{p}" if i == len(paragraphs) - 1 else f"T::{p}"
+                for i, p in enumerate(paragraphs)
+            )
+
+        monkeypatch.setattr(
+            plain_pipeline, "generate_translation_request", decorating_llm
+        )
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+
+        translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
+            paragraphs=["Chapter One", "Intro paragraph.", "Closing paragraph."],
+            source_language="English",
+            target_language="French",
+            model_name="m",
+            llm_client=object(),
+            max_tokens_per_chunk=1000,
+        )
+
+        assert not interrupted
+        # The "T::" prefix is what tells a real translation apart from a chunk
+        # that failed and kept its source text.
+        assert stats.failed_chunks == 0
+        assert translated == [
+            "T::Chapter One", "T::Intro paragraph.", "T::Closing paragraph."
+        ]
+
+    @pytest.mark.asyncio
+    async def test_markers_are_stripped_on_the_repair_path_too(self, monkeypatch):
+        """The per-paragraph repair goes through the same cleaning as a first pass."""
+        import src.core.common.plain_text_pipeline as plain_pipeline
+
+        async def merging_then_decorating_llm(*, main_content, **kwargs):
+            paragraphs = [
+                p.strip() for p in re.split(r"\n{2,}", main_content) if p.strip()
+            ]
+            if len(paragraphs) > 1:
+                # Merges whatever it is asked, count hint included: the segment
+                # retry cannot recover, so the per-paragraph repair runs.
+                return " ".join(paragraphs)
+            return f"## T::{paragraphs[0]}"
+
+        monkeypatch.setattr(
+            plain_pipeline, "generate_translation_request", merging_then_decorating_llm
+        )
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+
+        translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
+            paragraphs=["Chapter One", "Intro paragraph."],
+            source_language="English",
+            target_language="French",
+            model_name="m",
+            llm_client=object(),
+            max_tokens_per_chunk=1000,
+        )
+
+        assert not interrupted
+        assert stats.paragraph_count_mismatches == 1, "precondition: the repair ran"
+        assert stats.failed_chunks == 0
+        assert translated == ["T::Chapter One", "T::Intro paragraph."]
 
 
 # === D. Plain Text Mode: the rebuild must never lose content ===

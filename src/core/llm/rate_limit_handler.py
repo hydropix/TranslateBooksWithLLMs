@@ -33,12 +33,13 @@ def is_retryable_http_status(status_code: int) -> bool:
 
     Client errors (4xx) are caused by the request itself and won't succeed on a
     retry: 404 (model retired/unknown), 400 (bad request), 401/403 (auth), 402
-    (billing). Retrying them only wastes time and floods the log. The one
-    exception is 429 (rate limit), handled separately via handle_rate_limit().
+    (billing). Retrying them only wastes time and floods the log. Two exceptions
+    are transient: 408 (request timeout, the server gave up waiting) and 429
+    (rate limit, handled separately via handle_rate_limit()).
 
     Server errors (5xx) and anything else are treated as transient and retryable.
     """
-    if status_code == 429:
+    if status_code in (408, 429):
         return True
     return not (400 <= status_code < 500)
 

@@ -4,6 +4,12 @@
  * Handles saving/loading user preferences via:
  * 1. localStorage for quick preferences (last model, provider, languages)
  * 2. Server API for sensitive data (API keys saved to .env)
+ * 3. Server API (`/api/preferences`) for the small subset of purely local
+ *    preferences that must follow the user across devices (SYNCED_PREF_KEYS).
+ *    The server wins at page load, later changes are pushed after the auto-save
+ *    debounce, and localStorage keeps acting as an offline cache. Provider,
+ *    model, endpoints, API keys and the output filename pattern are NOT synced:
+ *    they stay governed by .env so a single owner remains.
  */
 
 import { ApiClient } from './api-client.js';
@@ -15,6 +21,23 @@ import { t } from '../i18n/i18n.js';
 const STORAGE_VERSION = 1;
 const STORAGE_KEY_PREFIX = 'tbl_user_preferences';
 const STORAGE_KEY = `${STORAGE_KEY_PREFIX}_v${STORAGE_VERSION}`;
+
+/**
+ * Preference keys mirrored to the server so they follow the user across devices.
+ *
+ * This list is also a security whitelist: it must never be widened to provider,
+ * model, endpoint or API key fields — those belong to .env and are never sent
+ * to `/api/preferences`.
+ */
+const SYNCED_PREF_KEYS = [
+    'lastSourceLanguage',
+    'lastTargetLanguage',
+    'ttsEnabled',
+    'textCleanup',
+    'bilingualMode',
+    'plainTextMode',
+    'customInstructionFile'
+];
 
 /**
  * Validate user preferences structure
@@ -60,6 +83,10 @@ export const SettingsManager = {
         this.cleanupOldStorageVersions();
 
         this.loadLocalPreferences();
+
+        // Pull the server-synced subset (fire and forget: a slow or unreachable
+        // server must never block UI initialization).
+        this._syncPreferencesFromServer();
 
         // Listen for custom instructions loaded event
         window.addEventListener('customInstructionsLoaded', () => {
@@ -361,6 +388,131 @@ export const SettingsManager = {
     },
 
     /**
+     * Keep only the preference keys that are mirrored to the server
+     * @param {Object} prefs - Any preferences object
+     * @returns {Object} Subset limited to SYNCED_PREF_KEYS with defined values
+     * @private
+     */
+    _pickSynced(prefs) {
+        const picked = {};
+        if (!prefs || typeof prefs !== 'object') return picked;
+
+        SYNCED_PREF_KEYS.forEach((key) => {
+            if (prefs[key] !== undefined) {
+                picked[key] = prefs[key];
+            }
+        });
+
+        return picked;
+    },
+
+    /**
+     * Pull the shared preferences from the server and apply them (server wins
+     * at page load). When the server has nothing yet, the local subset is
+     * pushed once so an existing install migrates silently.
+     * @private
+     */
+    async _syncPreferencesFromServer() {
+        let server;
+        try {
+            server = await ApiClient.getPreferences();
+        } catch {
+            // Offline or server error: localStorage remains the source of truth
+            return;
+        }
+
+        const synced = this._pickSynced(server);
+
+        if (Object.keys(synced).length === 0) {
+            const local = this._pickSynced(this.getLocalPreferences());
+            if (Object.keys(local).length > 0) {
+                this._pushSyncedPreferences(local);
+            }
+            return;
+        }
+
+        // Refresh the offline cache (saveLocalPreferences merges, so the
+        // non-synced local keys survive) then apply to the form.
+        this.saveLocalPreferences(synced);
+        this._applySyncedPreferences(synced);
+    },
+
+    /**
+     * Apply the server-synced subset to the form without side effects
+     *
+     * Auto-save is suspended for the duration and no `change` event is
+     * dispatched, so applying server values cannot echo back a PUT nor trigger
+     * a model reload.
+     * @param {Object} prefs - Synced preferences subset
+     * @private
+     */
+    _applySyncedPreferences(prefs) {
+        const wasInit = isInitializing;
+        isInitializing = true;
+
+        try {
+            if (prefs.lastSourceLanguage) {
+                this._setLanguage('sourceLang', 'customSourceLang', prefs.lastSourceLanguage);
+            }
+            if (prefs.lastTargetLanguage) {
+                this._setLanguage('targetLang', 'customTargetLang', prefs.lastTargetLanguage);
+            }
+
+            if (prefs.ttsEnabled !== undefined) {
+                const ttsEnabledCheckbox = DomHelpers.getElement('ttsEnabled');
+                if (ttsEnabledCheckbox) {
+                    ttsEnabledCheckbox.checked = prefs.ttsEnabled;
+                    // Show/hide the TTS options panel based on checkbox state
+                    const ttsOptions = DomHelpers.getElement('ttsOptions');
+                    if (ttsOptions) {
+                        ttsOptions.style.display = prefs.ttsEnabled ? 'block' : 'none';
+                    }
+                }
+            }
+            if (prefs.textCleanup !== undefined) {
+                const cleanupCheckbox = DomHelpers.getElement('textCleanup');
+                if (cleanupCheckbox) {
+                    cleanupCheckbox.checked = prefs.textCleanup;
+                }
+            }
+            if (prefs.bilingualMode !== undefined) {
+                const bilingualCheckbox = DomHelpers.getElement('bilingualMode');
+                if (bilingualCheckbox) {
+                    bilingualCheckbox.checked = prefs.bilingualMode;
+                }
+            }
+            if (prefs.plainTextMode !== undefined) {
+                const plainTextCheckbox = DomHelpers.getElement('plainTextMode');
+                if (plainTextCheckbox) {
+                    plainTextCheckbox.checked = prefs.plainTextMode;
+                }
+            }
+
+            if (prefs.customInstructionFile) {
+                // No-op while the select is still empty; the
+                // 'customInstructionsLoaded' listener applies it later.
+                window.__pendingCustomInstructionSelection = prefs.customInstructionFile;
+                this.applyPendingCustomInstructionSelection();
+            }
+        } finally {
+            isInitializing = wasInit;
+        }
+    },
+
+    /**
+     * Push the synced subset to the server (fire and forget)
+     *
+     * PUT is a full replacement, so the complete subset is always sent.
+     * @param {Object} prefs - Preferences to mirror (filtered by _pickSynced)
+     * @private
+     */
+    _pushSyncedPreferences(prefs) {
+        ApiClient.savePreferences(this._pickSynced(prefs)).catch(() => {
+            // Best effort: the local cache already holds the value
+        });
+    },
+
+    /**
      * Set language in select/custom input
      * @private
      */
@@ -396,8 +548,11 @@ export const SettingsManager = {
 
     /**
      * Save current form state to local preferences
+     * @param {Object} [options] - Options
+     * @param {boolean} [options.remote=true] - Also mirror the synced subset to
+     *   the server. Disabled on `beforeunload`, where a fetch is unreliable.
      */
-    saveCurrentState() {
+    saveCurrentState({ remote = true } = {}) {
         const ttsEnabledCheckbox = DomHelpers.getElement('ttsEnabled');
         const textCleanupCheckbox = DomHelpers.getElement('textCleanup');
         const bilingualModeCheckbox = DomHelpers.getElement('bilingualMode');
@@ -419,6 +574,10 @@ export const SettingsManager = {
         };
 
         this.saveLocalPreferences(prefs);
+
+        if (remote) {
+            this._pushSyncedPreferences(prefs);
+        }
     },
 
     /**
@@ -749,9 +908,10 @@ export const SettingsManager = {
     }
 };
 
-// Auto-save preferences when leaving page
+// Auto-save preferences when leaving page (local only: a fetch fired during
+// unload is unreliable, and the debounced auto-save already pushed the change)
 if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', () => {
-        SettingsManager.saveCurrentState();
+        SettingsManager.saveCurrentState({ remote: false });
     });
 }

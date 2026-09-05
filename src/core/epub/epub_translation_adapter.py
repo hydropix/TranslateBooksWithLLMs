@@ -232,6 +232,11 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
         global_total_chunks = kwargs.get('global_total_chunks')
         global_completed_chunks = kwargs.get('global_completed_chunks')
         parallel_workers = kwargs.get('parallel_workers', 1)
+        # Explicit, user-initiated retry of the chunks token alignment
+        # translated with approximate tag positions (issue #261). Never set by
+        # the automatic path (design decision D3), and irrelevant to Plain Text
+        # Mode below, which has no placeholders to misplace in the first place.
+        retry_token_aligned = bool(kwargs.get('retry_token_aligned', False))
 
         # Extract bilingual flag from prompt_options (bug fix #109)
         bilingual_flag = prompt_options.get('bilingual', False) if prompt_options else False
@@ -277,6 +282,7 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
             file_href=file_href,
             check_interruption_callback=check_interruption_callback,
             resume_state=resume_state,
+            retry_token_aligned=retry_token_aligned,
             stats_callback=stats_callback,
             global_total_chunks=global_total_chunks,
             global_completed_chunks=global_completed_chunks,

@@ -47,6 +47,7 @@ import { TranslationTracker } from './translation/translation-tracker.js';
 import { BatchController } from './translation/batch-controller.js';
 import { ProgressManager } from './translation/progress-manager.js';
 import { ResumeManager } from './translation/resume-manager.js';
+import { HistoryManager } from './translation/history-manager.js';
 import { QuickTestManager } from './translation/quick-test.js';
 
 // ========================================
@@ -357,6 +358,9 @@ function wireModuleEvents() {
 
     WebSocketManager.on('translation_update', (data) => {
         TranslationTracker.handleTranslationUpdate(data);
+        // A job that just finished belongs in the history list, on this device
+        // as much as on the one that started it — refresh without a reload.
+        if (data.status === 'completed') HistoryManager.loadHistory();
     });
 
     WebSocketManager.on('file_list_changed', (data) => {
@@ -446,6 +450,7 @@ async function initializeModules() {
     FileManager.initialize();
     ProgressManager.reset();
     ResumeManager.initialize();
+    HistoryManager.initialize();
     LifecycleManager.initialize();
     UpdateChecker.initialize().catch((e) => console.warn('UpdateChecker init failed:', e));
 
@@ -534,6 +539,9 @@ window.interruptCurrentTranslation = async () => {
 window.resumeJob = ResumeManager.resumeJob.bind(ResumeManager);
 window.deleteCheckpoint = ResumeManager.deleteCheckpoint.bind(ResumeManager);
 window.loadResumableJobs = ResumeManager.loadResumableJobs.bind(ResumeManager);
+
+// History Manager
+window.loadHistory = HistoryManager.loadHistory.bind(HistoryManager);
 
 // Provider Manager
 window.refreshModels = ProviderManager.refreshModels.bind(ProviderManager);
@@ -991,6 +999,7 @@ export {
     BatchController,
     ProgressManager,
     ResumeManager,
+    HistoryManager,
     Validators,
     LifecycleManager,
     TTSManager,

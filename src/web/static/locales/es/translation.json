@@ -124,7 +124,10 @@
   "completion_fix_toggle": "Corregir estos {{count}} fragmento(s)",
   "completion_fix_toggle_title": "Volver a traducir solo los fragmentos sin terminar con otro modelo",
   "completion_fix_apply_btn": "Volver a traducir estos fragmentos",
-  "completion_token_alignment_note": "Nota para expertos: {{count}} fragmento(s) se tradujeron con colocación aproximada de etiquetas. Poner EPUB_TOKEN_ALIGNMENT_ENABLED en false los dejaría sin traducir pero reintentables, si el formato exacto le importa más que la cobertura. Esos fragmentos pueden entonces retraducirse con otro modelo con un solo clic desde esta tarjeta.",
+  "completion_degraded_advice": "Esos {{count}} fragmento(s) están traducidos, pero sus etiquetas inline solo se colocaron de forma aproximada: elija abajo un modelo más capaz y solo ellos se volverán a traducir, dejando intacto el resto del libro.",
+  "completion_degraded_toggle": "Reintentar {{count}} fragmento(s) con etiquetado aproximado",
+  "completion_degraded_toggle_title": "Volver a traducir solo los fragmentos con etiquetado aproximado con otro modelo",
+  "completion_token_alignment_note": "Nota para expertos: {{count}} fragmento(s) están traducidos pero sus etiquetas inline solo se colocaron de forma aproximada; puede reintentarlos aquí con otro modelo mientras esta tarjeta esté visible. Poner EPUB_TOKEN_ALIGNMENT_ENABLED en false dejaría esos fragmentos sin traducir, si el formato exacto le importa más que la cobertura.",
 
   "session_restored_log": "🔄 Sesión de traducción anterior restaurada",
   "session_corrupted_log": "El estado de la sesión anterior estaba corrupto, empezando de cero",
@@ -202,6 +205,16 @@
   "paused_translations": "Traducciones en pausa",
   "refresh_list_title": "Actualizar lista",
   "no_paused_translations": "No hay traducciones en pausa",
+
+  "history_title": "Historial de traducciones",
+  "history_empty": "Aún no hay traducciones completadas",
+  "history_load_error": "Error al cargar el historial: {{error}}",
+  "history_count_log": "📚 {{count}} traducción(es) completada(s) en el historial",
+  "history_status_completed": "Completada",
+  "history_completed_at": "Completada: {{date}}",
+  "history_chunks": "{{completed}} / {{total}} fragmentos",
+  "history_output_missing": "El archivo de salida ya no está disponible",
+  "history_type_line": "Tipo: {{type}}",
 
   "file_list_cleared": "Lista de archivos limpiada",
   "form_reset_log": "Formulario y lista de archivos restablecidos.",

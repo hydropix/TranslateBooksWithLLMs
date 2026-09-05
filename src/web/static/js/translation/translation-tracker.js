@@ -33,6 +33,10 @@ const TRANSLATION_STATE_STORAGE_KEY = `${STORAGE_KEY_PREFIX}_v${STORAGE_VERSION}
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'error', 'interrupted', 'rate_limited']);
 const MAX_OWNED_JOB_IDS = 50;
 
+// Debounce timer for discovering a job started on another device (issue #271).
+let foreignDiscoveryTimer = null;
+const FOREIGN_DISCOVERY_DELAY_MS = 1000;
+
 /**
  * Validate translation state structure
  * @param {any} data - Data to validate
@@ -100,6 +104,37 @@ function unfinishedChunkCount(stats) {
     return typeof s.unfinished_chunks === 'number'
         ? s.unfinished_chunks
         : (s.fallback_used || 0);
+}
+
+/**
+ * Number of chunks the delivered file carries with only approximate tag
+ * positions — translated by the token-alignment repair (Phase 2), tags
+ * reinserted proportionally.
+ *
+ * Read from the live map the EPUB pipeline emits (`degraded_files`, total
+ * `degraded_chunks`), NOT from `token_alignment_used`: that counter is an
+ * accumulated, cross-pass tally of Phase 2 *events*, so it stays positive after
+ * those chunks have been retranslated successfully and would make a clean book
+ * claim defects — the same class of bug as reading `fallback_used` for
+ * "still untranslated".
+ *
+ * Same presence-based precedence as `unfinishedChunkCount` above and
+ * `_unfinished()` in src/api/completion_status.py: a key that is present and 0
+ * is trusted, and only an absent pair falls back to the accumulated counter
+ * (legacy payloads, and formats that never emit the map).
+ *
+ * @param {Object} stats - Job stats payload
+ * @returns {number}
+ */
+function degradedChunkCount(stats) {
+    const s = stats || {};
+    if (typeof s.degraded_chunks === 'number') return s.degraded_chunks;
+    const files = s.degraded_files;
+    if (files && typeof files === 'object' && !Array.isArray(files)) {
+        return Object.values(files).reduce(
+            (sum, indices) => sum + (Array.isArray(indices) ? indices.length : 0), 0);
+    }
+    return s.token_alignment_used || 0;
 }
 
 export const TranslationTracker = {
@@ -456,6 +491,27 @@ export const TranslationTracker = {
         }
     },
 
+    /**
+     * Schedule a debounced discovery of a job started on another device.
+     * Only fires when this tab is genuinely idle, so it can never hijack
+     * a local batch (issue #271).
+     * @param {string} translationId
+     */
+    _scheduleForeignJobDiscovery(translationId) {
+        if (!this.isInitialized()) return;
+        if (StateManager.getState('translation.currentJob')) return;
+        if (StateManager.getState('translation.isBatchActive')) return;
+        if (this.ownsJob(translationId)) return;
+
+        if (foreignDiscoveryTimer) return;
+
+        foreignDiscoveryTimer = setTimeout(async () => {
+            foreignDiscoveryTimer = null;
+            if (StateManager.getState('translation.currentJob')) return;
+            await this.restoreActiveTranslation();
+        }, FOREIGN_DISCOVERY_DELAY_MS);
+    },
+
     setupEventListeners() {
         StateManager.subscribe('translation.currentJob', () => {
             this.saveTranslationState();
@@ -495,6 +551,13 @@ export const TranslationTracker = {
                 && TERMINAL_STATUSES.has(data.status)
                 && this.ownsJob(data.translation_id)) {
                 this.resetUIToIdle();
+            }
+
+            // A non-terminal event for a job we don't know about and don't own is a
+            // candidate for a job started on another device. Debounce a discovery
+            // attempt rather than acting immediately (issue #271).
+            if (!currentJob && data.translation_id && !TERMINAL_STATUSES.has(data.status)) {
+                this._scheduleForeignJobDiscovery(data.translation_id);
             }
             return;
         }
@@ -875,9 +938,12 @@ export const TranslationTracker = {
      *
      * The chips describe the state of the file that was just delivered, not
      * the accumulated history of the job (issue #261). Concretely:
-     *   - `token_alignment_used` is read accumulated on purpose: Phase 2 chunks
-     *     are never retried (design decision D3), so their tags are still
-     *     approximate in the book on disk however many retry passes ran.
+     *   - the approximate-tag chip counts the chunks that are STILL only
+     *     approximately tagged (`degraded_files` / `degraded_chunks`), not the
+     *     accumulated `token_alignment_used` tally of Phase 2 events: those
+     *     chunks are never retried automatically (design decision D3), but the
+     *     card now offers to retry them explicitly, and a book whose chunks
+     *     were all repaired that way must stop reporting them.
      *   - Phase 3 fallbacks are no longer merged into that number. A chunk left
      *     in the source language is not "approximately tagged", and once it has
      *     been retried successfully it is neither — it gets its own chip driven
@@ -895,7 +961,7 @@ export const TranslationTracker = {
         const failed = stats.failed_chunks || 0;
         const elapsed = stats.elapsed_time;
         const isSrt = !!(file && file.fileType === 'srt');
-        const fallbacks = isSrt ? 0 : (stats.token_alignment_used || 0);
+        const fallbacks = isSrt ? 0 : degradedChunkCount(stats);
         const placeholderErrors = isSrt
             ? 0
             : runCounter(stats, 'run_placeholder_errors', 'placeholder_errors');
@@ -984,13 +1050,24 @@ export const TranslationTracker = {
             return this._buildSrtCompletionWarningBlock(stats);
         }
 
-        // What is still true of the delivered file. `token_alignment_used` stays
-        // accumulated: those chunks are never retried (D3), so they are still
-        // approximately tagged in the book. `placeholder_errors` becomes
-        // per-run — an earlier pass's retry noise says nothing about the output.
+        // What is still true of the delivered file. The approximate-tag count
+        // comes from the live degraded map, never from the accumulated
+        // `token_alignment_used` tally (see `degradedChunkCount`): a book whose
+        // approximately-tagged chunks were all retranslated must stop claiming
+        // them. `placeholder_errors` becomes per-run — an earlier pass's retry
+        // noise says nothing about the output.
         const placeholderErrors = runCounter(stats, 'run_placeholder_errors', 'placeholder_errors');
         const failed = stats.failed_chunks || 0;
-        const tokenAlignment = stats.token_alignment_used || 0;
+        const tokenAlignment = degradedChunkCount(stats);
+        // The map itself: {file_href: [chunk_index, ...]}. Non-empty is the one
+        // gate for the explicit retry affordance below — it is exactly what
+        // handlers.py reads to decide to KEEP the checkpoint that retry needs,
+        // so the button can never be offered without something behind it.
+        const degradedFiles = stats.degraded_files;
+        const hasDegradedMap = !!degradedFiles
+            && typeof degradedFiles === 'object'
+            && !Array.isArray(degradedFiles)
+            && Object.keys(degradedFiles).length > 0;
 
         // What THIS pass struggled with. Only these may gate the rate-based
         // recommendation, whose percentages `deriveRateContext` already derives
@@ -1103,12 +1180,14 @@ export const TranslationTracker = {
         // Issue #261: those chunks are kept and retryable, so the card can offer
         // the fix instead of only advising "use a more capable LLM".
         //
-        // CRITICAL: gated on `partial`. A `completed` job had its checkpoint
-        // destroyed by checkpoint_manager.cleanup_completed_job (see
-        // src/api/handlers.py), so there is nothing left to resume and the
-        // button would only produce an error. Without a translation id there is
-        // nothing to act on either — in both cases the block stays exactly as
-        // it was before this feature (breakdown, file list, recommendations).
+        // CRITICAL: gated on `partial`. A `completed` job whose chunks are all
+        // finished has had its chunks and upload directory pruned by
+        // checkpoint_manager.prune_job_data (see src/api/handlers.py),
+        // so there is nothing left to resume and the button would only produce
+        // an error. Without a translation id there is nothing to act on either
+        // — in both cases the block stays exactly as it was before this feature
+        // (breakdown, file list, recommendations). The degraded affordance
+        // below has its own, narrower gate for the `completed` case.
         const unfinishedFromMap = hasUnfinishedFilesMap
             ? Object.values(unfinishedFiles)
                 .reduce((sum, indices) => sum + (Array.isArray(indices) ? indices.length : 0), 0)
@@ -1123,15 +1202,44 @@ export const TranslationTracker = {
             });
         }
 
+        // Second, separate affordance: retranslate the chunks that ARE
+        // translated but whose inline tags were only approximately
+        // repositioned. Opt-in and reachable ONLY from this card while it is on
+        // screen — the checkpoint behind it is kept for a `completed` job
+        // precisely because these chunks exist (src/api/handlers.py), and the
+        // job deliberately never appears in the resumable-jobs list: a finished
+        // book is not unfinished work.
+        //
+        // Gated on the degraded MAP, not on `token_alignment_used`: that
+        // counter never goes back down, so it would keep offering a repair for
+        // chunks that have already been repaired. Unlike the affordance above
+        // this one is not restricted to `partial` — its whole point is the
+        // `completed` job whose only imperfection is tag placement.
+        if (translationId && hasDegradedMap && tokenAlignment > 0) {
+            this._appendCompletionFixAffordance(block, {
+                translationId,
+                count: tokenAlignment,
+                resultData,
+                adviceKey: 'translation:completion_degraded_advice',
+                toggleKey: 'translation:completion_degraded_toggle',
+                toggleTitleKey: 'translation:completion_degraded_toggle_title',
+                // The apply button says "Retranslate these chunks" in both
+                // affordances, so its key is shared rather than duplicated.
+                extraOverrides: { retry_token_aligned: true },
+            });
+        }
+
         // Expert-level note about the Phase 2 trade-off
         // (EPUB_TOKEN_ALIGNMENT_ENABLED, src/config.py): these chunks were
         // salvaged with approximate tag placement. Turning the setting off
-        // would leave them untranslated instead — which is now a defensible
-        // choice, since untranslated chunks are retryable (issue #261).
-        // Only shown when it is actionable: EPUB, and at least one chunk
-        // actually went through token alignment. Built here rather than inside
-        // the recommendations sub-block so it survives a pass that earns no
-        // advice: it describes chunks still in the book, not this run.
+        // would leave them untranslated instead — a defensible choice, since
+        // untranslated chunks are retryable on any resume (issue #261).
+        // Only shown when it is actionable: EPUB, and at least one chunk that
+        // is STILL approximately tagged (the degraded map, not the accumulated
+        // Phase 2 counter — a repaired book has nothing left to explain).
+        // Built here rather than inside the recommendations sub-block so it
+        // survives a pass that earns no advice: it describes chunks still in
+        // the book, not this run.
         let tokenAlignmentNote = null;
         if (file && file.fileType === 'epub' && tokenAlignment > 0) {
             tokenAlignmentNote = document.createElement('p');
@@ -1163,9 +1271,15 @@ export const TranslationTracker = {
     },
 
     /**
-     * Append the inline "fix the unfinished chunks with a better model"
+     * Append an inline "retranslate these chunks with a better model"
      * affordance to a completion warning block: one advice sentence, a
      * disclosure button, and the shared model-override panel.
+     *
+     * Two callers, one wiring: the `partial` job's unfinished chunks (default
+     * keys) and the `completed` job's approximately-tagged chunks, which add
+     * `retry_token_aligned: true` to the overrides via `extraOverrides`. Only
+     * the copy and that extra field differ, so the panel, the active-job guard
+     * and the card teardown are shared rather than duplicated.
      *
      * Applying calls `window.resumeJob` (bound in index.js) rather than
      * importing ResumeManager: resume-manager.js already imports this module,
@@ -1176,9 +1290,25 @@ export const TranslationTracker = {
      * @param {string} opts.translationId - Job to resume
      * @param {number} opts.count - Number of retryable chunks
      * @param {Object} opts.resultData - Final payload (model/provider seed)
+     * @param {string} [opts.adviceKey] - i18n key for the advice sentence
+     * @param {string} [opts.toggleKey] - i18n key for the disclosure label
+     * @param {string} [opts.toggleTitleKey] - i18n key for its tooltip
+     * @param {string} [opts.applyLabelKey] - i18n key for the apply button
+     * @param {Object} [opts.extraOverrides] - Extra fields merged into the
+     *   resume body (the model overrides always win nothing here: these are
+     *   pass-scoped flags the endpoint validates on its own).
      * @private
      */
-    _appendCompletionFixAffordance(block, { translationId, count, resultData }) {
+    _appendCompletionFixAffordance(block, {
+        translationId,
+        count,
+        resultData,
+        adviceKey = 'translation:completion_fix_advice',
+        toggleKey = 'translation:completion_fix_toggle',
+        toggleTitleKey = 'translation:completion_fix_toggle_title',
+        applyLabelKey = 'translation:completion_fix_apply_btn',
+        extraOverrides = null,
+    }) {
         // Same source of truth as the resumable-job card: a resume is refused
         // server-side while another job runs, so the affordance is disabled
         // rather than failing on click. The card is re-rendered when this state
@@ -1187,7 +1317,7 @@ export const TranslationTracker = {
 
         const advice = document.createElement('div');
         advice.className = 'completion-card__warning-breakdown';
-        advice.textContent = t('translation:completion_fix_advice', { count });
+        advice.textContent = t(adviceKey, { count });
         block.appendChild(advice);
 
         const toggle = document.createElement('button');
@@ -1195,13 +1325,13 @@ export const TranslationTracker = {
         toggle.className = 'completion-card__fix-toggle';
         toggle.title = hasActiveTranslation
             ? t('translation:cannot_resume_in_progress_title')
-            : t('translation:completion_fix_toggle_title');
+            : t(toggleTitleKey);
         const toggleIcon = document.createElement('span');
         toggleIcon.className = 'material-symbols-outlined';
         toggleIcon.textContent = 'tune';
         toggle.appendChild(toggleIcon);
         const toggleLabel = document.createElement('span');
-        toggleLabel.textContent = t('translation:completion_fix_toggle', { count });
+        toggleLabel.textContent = t(toggleKey, { count });
         toggle.appendChild(toggleLabel);
         toggle.disabled = hasActiveTranslation;
         block.appendChild(toggle);
@@ -1212,7 +1342,7 @@ export const TranslationTracker = {
             provider: resultData.llm_provider,
             model: resultData.model,
             endpoint: resultData.llm_api_endpoint,
-            applyLabelKey: 'translation:completion_fix_apply_btn',
+            applyLabelKey,
             panelClass: 'completion-override',
         });
         const panel = holder.firstElementChild;
@@ -1232,10 +1362,17 @@ export const TranslationTracker = {
         }
         applyBtn.addEventListener('click', () => {
             if (applyBtn.disabled) return;
-            const overrides = readOverrideConfig(panel);
+            const picked = readOverrideConfig(panel);
             // `undefined` means the panel refused the input (no model picked)
             // and already told the user; `null` means "resume as configured".
-            if (overrides === undefined) return;
+            if (picked === undefined) return;
+            // A pass-scoped flag (retry_token_aligned) travels in the same body
+            // as the model overrides, so "resume as configured" still has to
+            // send one. ApiClient.resumeJob omits the body only for an empty
+            // object, which is exactly the no-flag no-override case.
+            const overrides = extraOverrides
+                ? Object.assign({}, picked || {}, extraOverrides)
+                : picked;
             if (typeof window.resumeJob !== 'function') {
                 console.error('window.resumeJob is not available; cannot retry unfinished chunks');
                 return;

@@ -124,7 +124,10 @@
   "completion_fix_toggle": "修复这 {{count}} 个分块",
   "completion_fix_toggle_title": "仅使用其他模型重新翻译未完成的分块",
   "completion_fix_apply_btn": "重新翻译这些分块",
-  "completion_token_alignment_note": "进阶说明：有 {{count}} 个分块的标签位置为近似放置。若将 EPUB_TOKEN_ALIGNMENT_ENABLED 设为 false，这些分块会保持未翻译但可重试的状态，适合更看重精确排版而非覆盖率的情况。然后可以在此卡片上一键使用其他模型重新翻译这些分块。",
+  "completion_degraded_advice": "这 {{count}} 个分块已翻译，但其内联标签只是近似放置：在下方选择能力更强的模型，只会重新翻译这些分块，本书其余内容保持不变。",
+  "completion_degraded_toggle": "重试这 {{count}} 个标签近似的分块",
+  "completion_degraded_toggle_title": "仅使用其他模型重新翻译标签位置近似的分块",
+  "completion_token_alignment_note": "进阶说明：有 {{count}} 个分块已翻译，但其内联标签只是近似放置 —— 只要此卡片仍在屏幕上，你就可以在这里使用其他模型重试它们。若将 EPUB_TOKEN_ALIGNMENT_ENABLED 设为 false，这类分块会保持未翻译状态，适合更看重精确排版而非覆盖率的情况。",
 
   "session_restored_log": "🔄 已恢复之前的翻译会话",
   "session_corrupted_log": "之前的会话状态已损坏，将重新开始",
@@ -202,6 +205,16 @@
   "paused_translations": "已暂停的翻译",
   "refresh_list_title": "刷新列表",
   "no_paused_translations": "没有已暂停的翻译",
+
+  "history_title": "翻译历史",
+  "history_empty": "暂无已完成的翻译",
+  "history_load_error": "加载历史记录失败：{{error}}",
+  "history_count_log": "📚 历史记录中有 {{count}} 个已完成的翻译",
+  "history_status_completed": "已完成",
+  "history_completed_at": "完成时间：{{date}}",
+  "history_chunks": "{{completed}} / {{total}} 分段",
+  "history_output_missing": "输出文件已不可用",
+  "history_type_line": "类型：{{type}}",
 
   "file_list_cleared": "文件列表已清空",
   "form_reset_log": "表单和文件列表已重置。",

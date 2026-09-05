@@ -367,7 +367,7 @@ def _finalize(cm, translation_id, verdict):
     elif verdict.status == "error":
         cm.mark_error(translation_id)
     else:
-        cm.cleanup_completed_job(translation_id)
+        cm.delete_checkpoint(translation_id)
 
 
 async def run(mode):
@@ -528,7 +528,7 @@ async def run(mode):
             after_cleanup = cm.load_checkpoint(translation_id)
             checks.check("the checkpoint is cleaned up after the healed run",
                          after_cleanup is None,
-                         "load_checkpoint after cleanup_completed_job -> %s"
+                         "load_checkpoint after delete_checkpoint -> %s"
                          % ("None" if after_cleanup is None
                             else "still present (status=%s)"
                                  % after_cleanup["job"]["status"]))

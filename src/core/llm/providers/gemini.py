@@ -229,8 +229,14 @@ class GeminiProvider(LLMProvider):
                     candidate = response_json["candidates"][0]
                     content = candidate.get("content", {})
                     parts = content.get("parts", [])
-                    if parts:
-                        response_text = parts[0].get("text", "")
+                    # Gemini can split one answer across several parts, and adds
+                    # a part flagged "thought" when thinking is enabled. Keep
+                    # every text part; taking parts[0] truncated long responses.
+                    response_text = "".join(
+                        part.get("text", "")
+                        for part in parts
+                        if not part.get("thought")
+                    )
                     # Detect finishReason: MAX_TOKENS = truncation; SAFETY/RECITATION
                     # = the model produced nothing because the response was blocked
                     # post-generation. We log SAFETY explicitly because a silent

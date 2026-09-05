@@ -68,7 +68,8 @@ def get_default_pricing(provider: str, model: str) -> dict | None:
     Return {input, output} prices per 1M tokens for the given provider/model.
 
     Returns None if no default pricing is known.
-    Lookup is case-insensitive and tolerates minor variants in model names.
+    Lookup is case-insensitive and tolerates minor variants in model names
+    (dated snapshots, preview suffixes); the most specific known name wins.
     """
     provider_data = DEFAULT_PRICING.get(provider.lower())
     if not provider_data:
@@ -82,9 +83,16 @@ def get_default_pricing(provider: str, model: str) -> dict | None:
         if known_model.lower() == model_lower:
             return _strip_note(pricing)
 
-    for known_model, pricing in provider_data.items():
-        if known_model.lower() in model_lower or model_lower in known_model.lower():
-            return _strip_note(pricing)
+    # Last resort: substring match. Prefer the most specific key, otherwise
+    # dict insertion order decides and "gpt-4.1-nano-2025-04-14" is priced as
+    # "gpt-4.1" (20x too high) simply because it is listed first.
+    contained = [k for k in provider_data if k.lower() in model_lower]
+    if contained:
+        return _strip_note(provider_data[max(contained, key=len)])
+
+    containing = [k for k in provider_data if model_lower in k.lower()]
+    if containing:
+        return _strip_note(provider_data[min(containing, key=len)])
 
     return None
 

@@ -52,6 +52,7 @@ from .xhtml_translation_state import (
     CHUNK_TRANSLATED,
     CHUNK_TOKEN_ALIGNED,
     CHUNK_UNTRANSLATED,
+    token_aligned_chunk_indices,
     unfinished_chunk_indices,
 )
 from .exceptions import (
@@ -712,6 +713,7 @@ async def _translate_all_chunks_with_checkpoint(
     start_chunk_index: int = 0,
     translated_chunks: Optional[List[str]] = None,
     chunk_statuses: Optional[List[str]] = None,
+    retry_token_aligned: bool = False,
     global_tag_map: Optional[Dict[str, str]] = None,
     stats: Optional[TranslationMetrics] = None,
     prompt_options: Optional[Dict] = None,
@@ -756,6 +758,11 @@ async def _translate_all_chunks_with_checkpoint(
             not match `chunks`) falls back to the legacy reading of
             start_chunk_index: everything below it is translated, the rest is
             pending.
+        retry_token_aligned: Opt-in widening of the work set to the chunks
+            marked CHUNK_TOKEN_ALIGNED. Those chunks are translated with
+            approximate tag positions and are NEVER retried automatically
+            (design decision D3), so this defaults to False; only an explicit
+            user-initiated repair pass turns it on.
         global_tag_map: Global tag map (for state serialization)
         stats: Pre-existing stats (for resume)
         prompt_options: Optional prompt options
@@ -952,8 +959,15 @@ async def _translate_all_chunks_with_checkpoint(
     # mid-file interruption resume and post-completion retry.
     # CHUNK_TOKEN_ALIGNED is deliberately absent: those chunks are translated
     # (D3), retrying them would re-translate healthy content.
-    pending = sorted(set(unfinished_chunk_indices(statuses))
-                     | set(range(start_chunk_index, len(chunks))))
+    #
+    # `retry_token_aligned` is the one, explicit exception: the user asked from
+    # the completion card to retranslate those chunks. It is opt-in per pass and
+    # never inferred, so the automatic path keeps ignoring them.
+    work_set = (set(unfinished_chunk_indices(statuses))
+                | set(range(start_chunk_index, len(chunks))))
+    if retry_token_aligned:
+        work_set |= set(token_aligned_chunk_indices(statuses))
+    pending = sorted(work_set)
     rate_limit_error = None
     delivered = 0
 
@@ -976,11 +990,27 @@ async def _translate_all_chunks_with_checkpoint(
                     _save_state()
                 raise result
 
-            slots[i] = result
             # A delivered result always reached a terminal outcome, so the
             # default only covers a caller that monkeypatches
             # translate_chunk_with_fallback with a fake recording nothing.
-            statuses[i] = stats.chunk_outcomes.get(i, CHUNK_TRANSLATED)
+            outcome = stats.chunk_outcomes.get(i, CHUNK_TRANSLATED)
+            if (statuses[i] == CHUNK_TOKEN_ALIGNED
+                    and outcome == CHUNK_UNTRANSLATED
+                    and slots[i] is not None):
+                # A repair pass asked to improve a chunk that was already
+                # translated (only its tag positions were approximate) and the
+                # retry came back with the source text (Phase 3). Overwriting
+                # would make the book WORSE than before the user pressed the
+                # button - and would move the verdict from 'completed' to
+                # 'partial'. Keep what we had; the accumulated fallback counter
+                # still records that the attempt happened (D10).
+                if log_callback:
+                    log_callback("chunk_retry_kept_previous",
+                        f"↩️ Chunk {i + 1}/{len(chunks)} retry fell back to the "
+                        f"source text - keeping the previous translation")
+            else:
+                slots[i] = result
+                statuses[i] = outcome
             delivered += 1
             i_done = i
 
@@ -1740,6 +1770,7 @@ async def translate_xhtml_simplified(
     file_href: Optional[str] = None,
     check_interruption_callback: Optional[Callable] = None,
     resume_state: Optional[Any] = None,
+    retry_token_aligned: bool = False,
     stats_callback: Optional[Callable] = None,
     # Global statistics (for EPUB with multiple XHTML files)
     global_total_chunks: Optional[int] = None,
@@ -1777,6 +1808,9 @@ async def translate_xhtml_simplified(
         file_href: Optional file path within EPUB for checkpoint tracking
         check_interruption_callback: Optional callback to check if translation should be interrupted
         resume_state: Optional XHTMLTranslationState to resume from partial progress
+        retry_token_aligned: Opt-in retry of the chunks token alignment repaired
+            (translated, approximate tag positions). Off by default: those
+            chunks are never part of the automatic work set (D3).
         stats_callback: Optional callback for stats updates during translation
 
     Returns:
@@ -1938,6 +1972,7 @@ async def translate_xhtml_simplified(
         start_chunk_index=start_chunk_index,
         translated_chunks=translated_chunks,
         chunk_statuses=chunk_statuses,
+        retry_token_aligned=retry_token_aligned,
         global_tag_map=global_tag_map,
         stats=stats,
         prompt_options=prompt_options,

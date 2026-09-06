@@ -10,10 +10,14 @@ its base: it is folded into base（reading） first (see ruby_annotations).
 At rebuild time, the body is wiped and reconstructed as a flat sequence of
 block elements (<p>, <h1..h6>, <li>, <blockquote>, <pre>) plus, after each
 block that originally contained images, an extra <p class="plain-text-images"> wrapper
-with the original <img> elements unchanged. Void blocks (<hr>) carry no text
-and no images: they keep their own slot in the paragraph list and are
-re-emitted as a bare element at the same position, without ever reaching the
-LLM. The one case where the body is left alone is a page that yielded no
+with the original <img> elements unchanged. Each block element is rebuilt with
+its original tag *and the source attributes that still apply to a flattened
+block* (class, id, style, dir, title, epub:type), so semantic attributes
+survive translation even though the tag's inline children are flattened to
+text — see CARRIED_ATTRIBUTES for what is copied and why. Void blocks (<hr>)
+carry no text and no images: they keep their own slot in the paragraph list and
+are re-emitted as a bare element at the same position, without ever reaching
+the LLM. The one case where the body is left alone is a page that yielded no
 block at all (everything inside a DROP_TAGS subtree, e.g. an SVG-wrapped
 cover): its source markup is kept verbatim.
 """
@@ -43,6 +47,17 @@ SPACED_TAGS = ("td", "th", "tr", "caption")
 TABLE_CELL_TAGS = ("td", "th", "caption")
 # List wrappers we descend into (the inner <li> items become individual blocks)
 LIST_WRAPPER_TAGS = ("ul", "ol")
+EPUB_TYPE_ATTR = "{http://www.idpf.org/2007/ops}type"
+# Source attributes copied onto a rebuilt block. The list is a whitelist rather
+# than "everything the source block had" for two reasons:
+#   * Plain Text Mode flattens <li>, <td>, <th> and unknown blocks into <p>, so
+#     a tag-specific attribute (colspan, rowspan, scope, headers, value) would
+#     land on an element that cannot legally carry it and epubcheck rejects it.
+#   * `lang` / `xml:lang` describe the SOURCE language. Copied onto translated
+#     text they would override the target language that lang_support writes on
+#     <html>, and a reading system would hand a French paragraph to an English
+#     speech engine. Dropping them lets the block inherit the correct root lang.
+CARRIED_ATTRIBUTES = ("class", "id", "style", "dir", "title", EPUB_TYPE_ATTR)
 
 
 def _local_name(elem: etree._Element) -> str:
@@ -108,6 +123,29 @@ def _clone_img(img: etree._Element) -> etree._Element:
     return new
 
 
+def _set_attributes(
+    elem: etree._Element, attrib: Dict[str, str], with_id: bool = True
+) -> None:
+    """Copy the carried source attributes (see CARRIED_ATTRIBUTES) onto a rebuilt element.
+
+    with_id=False leaves `id` behind: bilingual mode emits two elements for one
+    source block, and duplicating the id there would produce invalid XHTML and
+    an ambiguous target for every TOC anchor pointing at it.
+    """
+    for key in CARRIED_ATTRIBUTES:
+        if key == "id" and not with_id:
+            continue
+        value = (attrib or {}).get(key)
+        if value is not None:
+            elem.set(key, value)
+
+
+def _add_class(elem: etree._Element, cls: str) -> None:
+    """Append a plain-text marker class to an element, preserving any source class."""
+    existing = elem.get("class")
+    elem.set("class", f"{existing} {cls}".strip() if existing else cls)
+
+
 def _enclosing_table(elem: etree._Element) -> etree._Element:
     """Return the nearest <table> ancestor, or None."""
     parent = elem.getparent()
@@ -122,6 +160,7 @@ def _collect_table_blocks(
     table: etree._Element,
     paragraphs_text: List[str],
     paragraphs_tag: List[str],
+    paragraphs_attrib: List[Dict[str, str]],
     images_by_paragraph: Dict[int, List[etree._Element]],
 ) -> None:
     """
@@ -143,6 +182,7 @@ def _collect_table_blocks(
             idx = len(paragraphs_text)
             paragraphs_text.append(text)
             paragraphs_tag.append("p")
+            paragraphs_attrib.append(dict(elem.attrib))
             if images:
                 images_by_paragraph[idx] = images
 
@@ -151,6 +191,7 @@ def _collect_blocks(
     root: etree._Element,
     paragraphs_text: List[str],
     paragraphs_tag: List[str],
+    paragraphs_attrib: List[Dict[str, str]],
     images_by_paragraph: Dict[int, List[etree._Element]],
 ) -> None:
     """
@@ -168,18 +209,21 @@ def _collect_blocks(
         if name in VOID_BLOCK_TAGS:
             paragraphs_text.append("")
             paragraphs_tag.append(name)
+            paragraphs_attrib.append(dict(child.attrib))
             continue
 
         if name == "table":
-            _collect_table_blocks(child, paragraphs_text, paragraphs_tag, images_by_paragraph)
+            _collect_table_blocks(
+                child, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
+            )
             continue
 
         if name in LIST_WRAPPER_TAGS:
-            _collect_blocks(child, paragraphs_text, paragraphs_tag, images_by_paragraph)
+            _collect_blocks(child, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph)
             continue
 
         if name in CONTAINER_TAGS:
-            _collect_blocks(child, paragraphs_text, paragraphs_tag, images_by_paragraph)
+            _collect_blocks(child, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph)
             continue
 
         if name in BLOCK_TAGS:
@@ -193,6 +237,7 @@ def _collect_blocks(
             idx = len(paragraphs_text)
             paragraphs_text.append(text)
             paragraphs_tag.append(name)
+            paragraphs_attrib.append(dict(child.attrib))
             if images:
                 images_by_paragraph[idx] = images
             continue
@@ -207,6 +252,7 @@ def _collect_blocks(
             else:
                 paragraphs_text.append("")
                 paragraphs_tag.append("p")
+                paragraphs_attrib.append({})
                 images_by_paragraph[0] = [img_copy]
             continue
 
@@ -217,13 +263,14 @@ def _collect_blocks(
             idx = len(paragraphs_text)
             paragraphs_text.append(text)
             paragraphs_tag.append("p")
+            paragraphs_attrib.append(dict(child.attrib))
             if images:
                 images_by_paragraph[idx] = images
 
 
 def extract_plain_paragraphs(
     body_element: etree._Element,
-) -> Tuple[List[str], List[str], Dict[int, List[etree._Element]]]:
+) -> Tuple[List[str], List[str], Dict[int, List[etree._Element]], List[Dict[str, str]]]:
     """
     Extract the body as a flat list of (text, tag) pairs plus an image anchor map.
 
@@ -234,20 +281,24 @@ def extract_plain_paragraphs(
         paragraphs_text:        list of plain-text strings, one per block
         paragraphs_tag:         parallel list of tag names ("p", "h1", "li", ...)
         images_by_paragraph:    {paragraph_index: [<img> elements]}
+        paragraphs_attrib:      parallel list of attribute dicts, one per block
     """
     paragraphs_text: List[str] = []
     paragraphs_tag: List[str] = []
+    paragraphs_attrib: List[Dict[str, str]] = []
     images_by_paragraph: Dict[int, List[etree._Element]] = {}
 
     if body_element is None:
-        return paragraphs_text, paragraphs_tag, images_by_paragraph
+        return paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib
 
     # Fold <ruby> annotations first, otherwise flattening would glue the base
     # and its reading into a word that does not exist (issue #242).
     fold_ruby_annotations(body_element)
 
-    _collect_blocks(body_element, paragraphs_text, paragraphs_tag, images_by_paragraph)
-    return paragraphs_text, paragraphs_tag, images_by_paragraph
+    _collect_blocks(
+        body_element, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
+    )
+    return paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib
 
 
 def replace_body_with_paragraphs(
@@ -257,6 +308,7 @@ def replace_body_with_paragraphs(
     images_by_paragraph: Dict[int, List[etree._Element]],
     bilingual: bool = False,
     source_paragraphs: List[str] = None,
+    paragraphs_attrib: List[Dict[str, str]] = None,
 ) -> None:
     """
     Wipe body_element and refill it from the translated paragraphs.
@@ -273,6 +325,12 @@ def replace_body_with_paragraphs(
                    what an empty translation falls back to instead of the block
                    being dropped. Legacy callers that omit it still get an
                    empty block rather than a deletion.
+        paragraphs_attrib: attribute dict per paragraph, captured from the source
+                   block at extraction time. When provided, each rebuilt block
+                   keeps the subset of them that still applies once the block is
+                   flattened (CARRIED_ATTRIBUTES); marker classes are appended
+                   to, never replacing, a source class, and `id` is emitted once
+                   per source block even in bilingual mode.
     """
     count = len(translated_paragraphs)
 
@@ -301,16 +359,19 @@ def replace_body_with_paragraphs(
         raw_tag = paragraphs_tag[i] if i < len(paragraphs_tag) else "p"
         # <li> outside <ul>/<ol> is not valid XHTML — flatten to <p> in Plain Text Mode.
         tag = "p" if raw_tag == "li" else raw_tag
+        attrib = paragraphs_attrib[i] if paragraphs_attrib and i < len(paragraphs_attrib) else {}
 
         if raw_tag in VOID_BLOCK_TAGS:
-            etree.SubElement(body_element, raw_tag)
+            block = etree.SubElement(body_element, raw_tag)
+            _set_attributes(block, attrib)
             continue
 
         # Bilingual: emit source first when we have it
         source_emitted = False
         if bilingual and source_text:
             src_block = etree.SubElement(body_element, tag)
-            src_block.set("class", "plain-text-source")
+            _set_attributes(src_block, attrib)
+            _add_class(src_block, "plain-text-source")
             src_block.text = source_text
             source_emitted = True
 
@@ -348,13 +409,17 @@ def replace_body_with_paragraphs(
 
         if emit_target:
             block = etree.SubElement(body_element, tag)
+            # The bilingual source twin, when there is one, already claimed the
+            # source id: it comes first in reading order, so an anchor aimed at
+            # this block still lands at the top of the right section.
+            _set_attributes(block, attrib, with_id=not source_emitted)
             if untranslated:
-                # Replaces plain-text-target rather than adding to it: a block
-                # carries one class, and "this is still source text" is the more
-                # important of the two.
-                block.set("class", "plain-text-untranslated")
+                # One marker per block, untranslated over bilingual-target when
+                # both apply; either is appended to the source class, which the
+                # _set_attributes call above already restored.
+                _add_class(block, "plain-text-untranslated")
             elif bilingual:
-                block.set("class", "plain-text-target")
+                _add_class(block, "plain-text-target")
             block.text = text or source_text
 
         # Emit anchored images right after

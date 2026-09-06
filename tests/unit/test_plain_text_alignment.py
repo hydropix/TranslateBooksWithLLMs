@@ -146,7 +146,7 @@ async def test_epub_image_anchor_and_heading_stay_aligned(monkeypatch):
         "<p>Second body paragraph.</p>"
         "</body>"
     )
-    paragraphs, tags, images = extract_plain_paragraphs(body)
+    paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
     assert paragraphs[0] == ""  # synthetic anchor for the leading image
     assert 0 in images
 

@@ -124,7 +124,7 @@ def _extract_epub_text(file_path: str) -> str:
                      if isinstance(el.tag, str) and _local_name(el) == "body"),
                     root,
                 )
-                paragraphs, _tags, _images = extract_plain_paragraphs(body)
+                paragraphs, _tags, _images, _attrib = extract_plain_paragraphs(body)
                 for text in paragraphs:
                     text = (text or "").strip()
                     if text:

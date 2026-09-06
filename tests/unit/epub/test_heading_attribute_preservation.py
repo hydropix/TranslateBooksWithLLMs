@@ -4,25 +4,26 @@ Finding F3 of `plan/PLAN_CjkSourceRendering.md` measured
 `LOST ATTRS: {('h3','class'): 28}` over a real Chinese -> French EPUB: every
 translated `<h3 class="head">` came out as a bare `<h3>`.
 
-These tests localize the loss. Both translation paths of the EPUB pipeline are
-exercised on the same body HTML, with an LLM client stubbed at the transport
-level only (`generate` / `extract_translation`); every module under test is the
-real one, so the assertions describe production behaviour:
+These tests localize the loss (and its opposite, the preservation controls).
+Both translation paths of the EPUB pipeline are exercised on the same body
+HTML, with an LLM client stubbed at the transport level only (`generate` /
+`extract_translation`); every module under test is the real one, so the
+assertions describe production behaviour:
 
-  * Plain Text Mode (`prompt_options['plain_text_mode']`) LOSES the attribute.
-    `plain_extractor.extract_plain_paragraphs` records only a block's tag NAME,
-    and `replace_body_with_paragraphs` rebuilds each block with
-    `etree.SubElement(body, tag)` — no attribute is ever carried across. This
-    is the xfail below; see plan/PLAN_CjkSourceRendering.md section 5.1.
+  * Plain Text Mode (`prompt_options['plain_text_mode']`) PRESERVES the
+    attribute. `plain_extractor.extract_plain_paragraphs` records each block's
+    tag NAME *and* attributes, and `replace_body_with_paragraphs` carries the
+    whitelisted ones (`plain_extractor.CARRIED_ATTRIBUTES`, `class` included)
+    onto the rebuilt element. This is the regression test below; which
+    attributes are carried and which are deliberately dropped is pinned by
+    test_plain_text_attribute_policy.py.
 
   * The placeholder path (the default) PRESERVES the attribute, both when the
     model echoes the placeholders and when it emits literal HTML tags instead
     and the token-alignment fallback has to repair the chunk. Those two are
-    passing controls, and they pin the loss to Plain Text Mode rather than to
-    `TagPreserver`, `PlaceholderRenumberer`, `TokenAlignmentFallback` or the
-    entity-escaping step of `_reconstruct_html`.
-
-No production code is fixed here: Phase 2 of the plan is diagnosis only.
+    passing controls, and they pin any future loss to Plain Text Mode rather
+    than to `TagPreserver`, `PlaceholderRenumberer`, `TokenAlignmentFallback`
+    or the entity-escaping step of `_reconstruct_html`.
 """
 import re
 from typing import List
@@ -211,19 +212,9 @@ async def test_placeholder_path_preserves_heading_class_when_model_emits_literal
     assert _heading_open_tags(doc_root) == ['<h3 class="head">']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F3 (plan/PLAN_CjkSourceRendering.md section 5.1): Plain Text Mode "
-        "rebuilds every block with etree.SubElement(body, tag) at "
-        "plain_extractor.py:281, so no source attribute is carried over and "
-        "class=\"head\" is dropped from every heading. Diagnosis-only phase: "
-        "the fix is a maintainer decision, so this stays xfail until it lands."
-    ),
-)
 @pytest.mark.asyncio
 async def test_plain_text_mode_preserves_heading_class():
-    """Reproduces F3: Plain Text Mode drops `class="head"` from the heading."""
+    """Regression: Plain Text Mode keeps `class="head"` on the translated heading."""
     doc_root = _parse_doc()
     client = EchoPlaceholdersClient()
     adapter = EpubTranslationAdapter()

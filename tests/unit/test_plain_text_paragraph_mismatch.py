@@ -259,7 +259,7 @@ def test_untranslated_block_is_marked():
     body = etree.fromstring(
         "<body>" + "".join(f"<p>{p}</p>" for p in MERGED) + "</body>"
     )
-    paragraphs, tags, images = extract_plain_paragraphs(body)
+    paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
 
     replace_body_with_paragraphs(
         body, ["T::Alpha paragraph. Beta paragraph.", ""], tags, images,
@@ -276,7 +276,7 @@ def test_untranslated_block_is_marked():
 def test_translated_blocks_keep_their_classes():
     """Only the source-carrying block is marked; bilingual mode is unchanged."""
     body = etree.fromstring("<body><p>Source one.</p><p>Source two.</p></body>")
-    paragraphs, tags, images = extract_plain_paragraphs(body)
+    paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
     replace_body_with_paragraphs(
         body, ["Traduction une.", ""], tags, images,
         bilingual=True, source_paragraphs=paragraphs,
@@ -317,7 +317,7 @@ async def test_merged_segment_is_repaired_paragraph_by_paragraph(monkeypatch):
     body = etree.fromstring(
         "<body>" + "".join(f"<p>{p}</p>" for p in THREE) + "</body>"
     )
-    paragraphs, tags, images = extract_plain_paragraphs(body)
+    paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
 
     out, stats, logs = await _run(paragraphs)
 
@@ -354,7 +354,7 @@ async def test_repair_failure_falls_back_to_source_and_is_counted(monkeypatch):
     body = etree.fromstring(
         "<body>" + "".join(f"<p>{p}</p>" for p in THREE) + "</body>"
     )
-    paragraphs, tags, images = extract_plain_paragraphs(body)
+    paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
 
     out, stats, logs = await _run(paragraphs)
 

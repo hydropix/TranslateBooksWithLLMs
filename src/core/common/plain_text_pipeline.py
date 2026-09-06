@@ -27,6 +27,12 @@ from src.prompts.prompts import PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION
 PARAGRAPH_SEPARATOR = "\n\n"
 _RESPLIT_REGEX = re.compile(r"\n{2,}")
 _MARKUP_TAG_REGEX = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*?)?/?>")
+# A markdown heading marker at the START OF A PARAGRAPH: the blob is split on
+# blank lines, so \A or a blank-line separator is what anchors the match, and
+# the separator is put back by the replacement. Requiring at least one space
+# followed by a non-space keeps "#1 bestseller", "#MeToo" and a lone "#" out
+# of it, and keeps the paragraph count of the segment unchanged.
+_MARKDOWN_HEADING_MARKER_REGEX = re.compile(r"(\A|\n{2,})[ \t]*#{1,6}[ \t]+(?=\S)")
 
 
 def strip_hallucinated_markup(translated: str, source: str) -> str:
@@ -41,6 +47,27 @@ def strip_hallucinated_markup(translated: str, source: str) -> str:
     if "<" not in translated or "<" in source:
         return translated
     return _MARKUP_TAG_REGEX.sub("", translated)
+
+
+def strip_hallucinated_markdown_markers(translated: str, source: str) -> str:
+    """Remove markdown heading markers the model invented in Plain Text Mode.
+
+    Plain Text Mode sends the LLM a bare heading line like "Chapter 6: Define
+    Secrets and Clues" with no structure, and models conditioned on markdown
+    titles tend to echo a "# " prefix back. The heading tag already carries the
+    structure, so the marker is content-adding noise.
+
+    Every paragraph of the blob is checked, not just the first: a segment holds
+    many paragraphs and the decorated one is rarely the leading one. Like
+    strip_hallucinated_markup, a source that legitimately uses the marker (a
+    markdown sample inside a <pre> block) disarms the whole thing rather than
+    risk damaging real content.
+    """
+    if not translated or "#" not in translated:
+        return translated
+    if _MARKDOWN_HEADING_MARKER_REGEX.search(source or ""):
+        return translated
+    return _MARKDOWN_HEADING_MARKER_REGEX.sub(r"\1", translated)
 
 
 def _split_translated_back_to_paragraphs(translated_text: str) -> List[str]:
@@ -121,6 +148,7 @@ async def _retry_segment_with_paragraph_count(
 
     cleaned = clean_translated_text(answer)
     cleaned = strip_hallucinated_markup(cleaned, main_content)
+    cleaned = strip_hallucinated_markdown_markers(cleaned, main_content)
     if not cleaned.strip():
         return None
     if _paragraph_count_mismatch(cleaned, expected_count) is not None:
@@ -169,6 +197,7 @@ async def _repair_segment_by_paragraph(
         if translated:
             cleaned = clean_translated_text(translated)
             cleaned = strip_hallucinated_markup(cleaned, text)
+            cleaned = strip_hallucinated_markdown_markers(cleaned, text)
             # One paragraph in, one paragraph out, always: a model that split
             # this single paragraph would otherwise re-introduce the very
             # misalignment the repair exists to remove. Never recurse.
@@ -518,6 +547,8 @@ async def translate_paragraphs_plain(
                 else:
                     cleaned = clean_translated_text(value)
                     cleaned = strip_hallucinated_markup(
+                        cleaned, chunks[i].get('main_content', ''))
+                    cleaned = strip_hallucinated_markdown_markers(
                         cleaned, chunks[i].get('main_content', ''))
                     translated_parts[i] = cleaned
                     stats.successful_first_try += 1

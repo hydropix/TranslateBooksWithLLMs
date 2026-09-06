@@ -15,6 +15,7 @@ D. Plain Text Mode must not empty a body whose whole content sits inside a
    its §5.1: `replace_body_with_paragraphs` rebuilding the body from scratch.
 """
 import os
+import re
 import tempfile
 
 import pytest
@@ -171,7 +172,7 @@ class TestPlainModeTables:
             "<tr><td>Paris</td><td>2.1 million</td></tr>"
             "</table>"
         )
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         joined = " ".join(paragraphs)
 
         assert "Paris" in joined, "table cell text was deleted"
@@ -183,7 +184,7 @@ class TestPlainModeTables:
             "<p>Intro.</p>"
             "<table><tr><td>Cell text</td></tr></table>"
         )
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, paragraphs, tags, images)
 
         rebuilt_text = " ".join("".join(body.itertext()).split())
@@ -197,7 +198,7 @@ class TestPlainModeFigures:
             '<figure><img src="images/map.png" alt="Map"/>'
             "<figcaption>A map of the region</figcaption></figure>"
         )
-        paragraphs, tags, images_by_paragraph = extract_plain_paragraphs(body)
+        paragraphs, tags, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(
@@ -208,7 +209,7 @@ class TestPlainModeFigures:
         body = _parse_body(
             '<figure><img src="x.png"/><figcaption>The caption</figcaption></figure>'
         )
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         assert "The caption" in " ".join(paragraphs)
 
     def test_picture_wrapped_image_is_anchored(self):
@@ -216,7 +217,7 @@ class TestPlainModeFigures:
             "<p>Some text.</p>"
             '<picture><source srcset="big.webp"/><img src="fallback.jpg"/></picture>'
         )
-        _, _, images_by_paragraph = extract_plain_paragraphs(body)
+        _, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(img.get("src") == "fallback.jpg" for img in anchored)
@@ -225,7 +226,7 @@ class TestPlainModeFigures:
         body = _parse_body(
             '<p>Text around <figure><img src="inline.png"/></figure> an inline figure.</p>'
         )
-        _, _, images_by_paragraph = extract_plain_paragraphs(body)
+        _, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(img.get("src") == "inline.png" for img in anchored)
@@ -235,7 +236,7 @@ class TestPlainModeFigures:
             "<p>Para.</p>"
             '<figure><img src="kept.png"/><figcaption>Cap</figcaption></figure>'
         )
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, paragraphs, tags, images)
 
         srcs = [img.get("src") for img in _all_imgs(body)]
@@ -244,7 +245,7 @@ class TestPlainModeFigures:
     def test_standalone_image_still_anchored(self):
         # Pre-existing behavior that must not regress.
         body = _parse_body('<p>Hello.</p><img src="standalone.png"/>')
-        _, _, images_by_paragraph = extract_plain_paragraphs(body)
+        _, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
 
         anchored = [img for imgs in images_by_paragraph.values() for img in imgs]
         assert any(img.get("src") == "standalone.png" for img in anchored)
@@ -254,7 +255,7 @@ class TestPlainModeFigures:
         body = _parse_body(
             "<p>Text.</p><svg xmlns='http://www.w3.org/2000/svg'><text>chart</text></svg>"
         )
-        paragraphs, _, images_by_paragraph = extract_plain_paragraphs(body)
+        paragraphs, _, images_by_paragraph, _attrib = extract_plain_paragraphs(body)
         assert "chart" not in " ".join(paragraphs)
         assert not images_by_paragraph
 
@@ -292,7 +293,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
 
         body = _parse_body(self.BODY_INNER)
-        paragraphs, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body)
         await plain_pipeline.translate_paragraphs_plain(
             paragraphs=paragraphs,
             source_language="English",
@@ -327,7 +328,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
 
         body = _parse_body(self.BODY_INNER)
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         translated, _, interrupted = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=paragraphs,
             source_language="English",
@@ -394,6 +395,135 @@ class TestWeakLlmSafety:
             "Le 1<sup>er</sup> chapitre<br/>", "The 1st chapter"
         ) == "Le 1er chapitre"
 
+    def test_markdown_marker_stripping_removes_heading_hashes(self):
+        from src.core.common.plain_text_pipeline import (
+            strip_hallucinated_markdown_markers as strip_markers,
+        )
+
+        # A heading line the model decorated with "# " in Plain Text Mode:
+        # the marker goes away, the translation stays.
+        assert strip_markers(
+            "# บทที่ 6", "Chapter 6"
+        ) == "บทที่ 6"
+        assert strip_markers("## Chapter 6", "Chapter 6") == "Chapter 6"
+        # Leading whitespace before the marker must still be caught.
+        assert strip_markers("   ### Chapitre 6", "Chapter 6") == "Chapitre 6"
+        # Plain paragraphs with no marker are untouched.
+        assert strip_markers(
+            "Un paragraphe normal.", "A normal paragraph."
+        ) == "Un paragraphe normal."
+
+    def test_markdown_marker_stripping_spares_hashes_that_are_content(self):
+        from src.core.common.plain_text_pipeline import (
+            strip_hallucinated_markdown_markers as strip_markers,
+        )
+
+        # A marker is "#" x1-6 FOLLOWED BY A SPACE. Without the space the hash
+        # is part of the word and dropping it would eat real content.
+        assert strip_markers("#1 des ventes", "#1 bestseller") == "#1 des ventes"
+        assert strip_markers("#MeToo, la suite", "#MeToo, after") == "#MeToo, la suite"
+        # A lone "#" is not a heading marker - keep it.
+        assert strip_markers("#", "#") == "#"
+        # A source that uses the marker itself (a markdown sample in a <pre>)
+        # disarms the strip entirely, exactly like strip_hallucinated_markup.
+        assert strip_markers("# Titre", "# Heading") == "# Titre"
+
+    def test_markdown_marker_stripping_keeps_the_paragraph_count(self):
+        from src.core.common.plain_text_pipeline import (
+            _split_translated_back_to_paragraphs,
+            strip_hallucinated_markdown_markers as strip_markers,
+        )
+
+        sep = "\n\n"
+
+        # Every paragraph of a segment is checked, not just the first one.
+        translated = sep.join(["# Titre un", "Texte.", "## Titre deux"])
+        source = sep.join(["Heading one", "Text.", "Heading two"])
+        assert strip_markers(translated, source) == sep.join(
+            ["Titre un", "Texte.", "Titre deux"]
+        )
+
+        # A paragraph made of a lone "#" must not be swallowed together with
+        # the blank line that follows it: the segment still has 3 paragraphs,
+        # otherwise the count contract with the segment would break.
+        blob = sep.join(["#", "Deuxieme.", "Troisieme."])
+        out = strip_markers(blob, sep.join(["A", "B", "C"]))
+        assert len(_split_translated_back_to_paragraphs(out)) == len(
+            _split_translated_back_to_paragraphs(blob)
+        ) == 3
+
+    @pytest.mark.asyncio
+    async def test_markers_are_stripped_wherever_they_land_in_a_segment(
+        self, monkeypatch
+    ):
+        """A marker on any paragraph of a segment, not just the leading one."""
+        import src.core.common.plain_text_pipeline as plain_pipeline
+
+        async def decorating_llm(*, main_content, **kwargs):
+            paragraphs = re.split(r"\n{2,}", main_content)
+            # The model decorates the LAST paragraph: a strip anchored on the
+            # start of the blob would miss it.
+            return "\n\n".join(
+                f"# T::{p}" if i == len(paragraphs) - 1 else f"T::{p}"
+                for i, p in enumerate(paragraphs)
+            )
+
+        monkeypatch.setattr(
+            plain_pipeline, "generate_translation_request", decorating_llm
+        )
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+
+        translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
+            paragraphs=["Chapter One", "Intro paragraph.", "Closing paragraph."],
+            source_language="English",
+            target_language="French",
+            model_name="m",
+            llm_client=object(),
+            max_tokens_per_chunk=1000,
+        )
+
+        assert not interrupted
+        # The "T::" prefix is what tells a real translation apart from a chunk
+        # that failed and kept its source text.
+        assert stats.failed_chunks == 0
+        assert translated == [
+            "T::Chapter One", "T::Intro paragraph.", "T::Closing paragraph."
+        ]
+
+    @pytest.mark.asyncio
+    async def test_markers_are_stripped_on_the_repair_path_too(self, monkeypatch):
+        """The per-paragraph repair goes through the same cleaning as a first pass."""
+        import src.core.common.plain_text_pipeline as plain_pipeline
+
+        async def merging_then_decorating_llm(*, main_content, **kwargs):
+            paragraphs = [
+                p.strip() for p in re.split(r"\n{2,}", main_content) if p.strip()
+            ]
+            if len(paragraphs) > 1:
+                # Merges whatever it is asked, count hint included: the segment
+                # retry cannot recover, so the per-paragraph repair runs.
+                return " ".join(paragraphs)
+            return f"## T::{paragraphs[0]}"
+
+        monkeypatch.setattr(
+            plain_pipeline, "generate_translation_request", merging_then_decorating_llm
+        )
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+
+        translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
+            paragraphs=["Chapter One", "Intro paragraph."],
+            source_language="English",
+            target_language="French",
+            model_name="m",
+            llm_client=object(),
+            max_tokens_per_chunk=1000,
+        )
+
+        assert not interrupted
+        assert stats.paragraph_count_mismatches == 1, "precondition: the repair ran"
+        assert stats.failed_chunks == 0
+        assert translated == ["T::Chapter One", "T::Intro paragraph."]
+
 
 # === D. Plain Text Mode: the rebuild must never lose content ===
 
@@ -429,7 +559,7 @@ class TestPlainModeCoverPage:
         body = _parse_body(SVG_COVER_BODY)
         before = etree.tostring(body, encoding="unicode")
 
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         assert paragraphs == [] and images == {}, (
             "precondition: the SVG subtree yields no translatable paragraph"
         )
@@ -445,7 +575,7 @@ class TestPlainModeCoverPage:
 
     def test_already_empty_body_stays_a_no_op(self):
         body = _parse_body("")
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, paragraphs, tags, images)
 
         assert len(body) == 0
@@ -488,7 +618,7 @@ class TestPlainModeEmptyTranslation:
 
     def test_empty_translation_falls_back_to_the_source_text(self):
         body = _parse_body("<p>A paragraph the model returned nothing for.</p>")
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, [""], tags, images, source_paragraphs=paragraphs
         )
@@ -502,7 +632,7 @@ class TestPlainModeEmptyTranslation:
         body = _parse_body("<p>First.</p><p></p><p>Second.</p>")
         input_p_count = _count_p(body)
 
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, list(paragraphs), tags, images, source_paragraphs=paragraphs
         )
@@ -511,7 +641,7 @@ class TestPlainModeEmptyTranslation:
 
     def test_bilingual_empty_translation_emits_the_source_once(self):
         body = _parse_body("<p>Le texte source.</p>")
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, [""], tags, images, bilingual=True, source_paragraphs=paragraphs
         )
@@ -526,7 +656,7 @@ class TestPlainModeEmptyTranslation:
         # Callers predating the source-text fallback pass no source_paragraphs.
         # An empty translation must still emit an (empty) block, not nothing.
         body = _parse_body("<p>Original.</p>")
-        _, tags, images = extract_plain_paragraphs(body)
+        _, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(body, [""], tags, images)
 
         assert _count_p(body) == 1
@@ -537,7 +667,7 @@ class TestPlainModeEmptyTranslation:
         # stands in for the block, so a source <p><img/></p> comes out as one
         # <p>, not two.
         body = _parse_body('<p><img src="x.jpg"/></p>')
-        paragraphs, tags, images = extract_plain_paragraphs(body)
+        paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
         replace_body_with_paragraphs(
             body, list(paragraphs), tags, images, source_paragraphs=paragraphs
         )

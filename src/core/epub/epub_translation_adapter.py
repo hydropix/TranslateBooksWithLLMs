@@ -342,7 +342,7 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
                 log_callback("plain_text_no_body", f"⚠️ {file_href or 'document'}: no <body> found, skipping")
             return False, TranslationMetrics()
 
-        paragraphs_text, paragraphs_tag, images_by_paragraph = extract_plain_paragraphs(body)
+        paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib = extract_plain_paragraphs(body)
 
         if log_callback:
             log_callback(
@@ -401,6 +401,9 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
             # empty translation falls back to, so the paragraph survives instead
             # of being dropped. The bilingual flag only drives the interleaving.
             source_paragraphs=paragraphs_text,
+            # Carry each source block's attributes (class, id, xml:lang, ...)
+            # onto the rebuilt element instead of emitting a bare tag.
+            paragraphs_attrib=paragraphs_attrib,
         )
 
         return True, stats

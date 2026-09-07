@@ -269,7 +269,8 @@ async def translate_file(
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key
+            poe_api_key=poe_api_key,
+            nim_api_key=nim_api_key
         )
 
         result = await translate_docx_file(
@@ -340,6 +341,7 @@ async def translate_file(
         'mistral_api_key': mistral_api_key,
         'deepseek_api_key': deepseek_api_key,
         'poe_api_key': poe_api_key,
+        'nim_api_key': nim_api_key,
         'prompt_options': prompt_options,
     }
 

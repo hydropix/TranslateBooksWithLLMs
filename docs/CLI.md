@@ -157,6 +157,12 @@ python translate.py -i book.txt -o book_fr.txt \
     --nim_api_key xxx \
     -m meta/llama-3.1-8b-instruct
 
+# Opencode (OpenAI-compatible gateway)
+python translate.py -i book.txt -o book_fr.txt \
+    --provider opencode \
+    --opencode_api_key xxx \
+    -m opencode-go/deepseek-v4.1-flash
+
 # OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 python translate.py -i book.txt -o book_fr.txt \
     --provider openai \

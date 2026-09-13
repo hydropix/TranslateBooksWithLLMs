@@ -448,7 +448,7 @@ def create_config_blueprint(server_session_id=None):
         """Shared listing for cloud providers exposing `get_available_models()`.
 
         Factors out the 5 nearly-identical model-listing flows (openrouter,
-        mistral, deepseek, poe, gemini). Each wrapper supplies its provider
+        mistral, deepseek, poe, gemini; opencode reuses it too). Each wrapper supplies its provider
         class, config values, and a few small quirks (Gemini reads model 'name'
         instead of 'id' and historically omits model_names from error bodies;
         OpenRouter passes text_only=True).

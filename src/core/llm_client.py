@@ -211,7 +211,8 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
     if llm_provider == "nim":
         return LLMClient(provider_type="nim", model=model_name, api_key=nim_api_key)
     if llm_provider == "opencode":
-        return LLMClient(provider_type="opencode", model=model_name, api_key=opencode_api_key)
+        return LLMClient(provider_type="opencode", model=model_name, api_key=opencode_api_key,
+                         context_window=context_window, log_callback=log_callback)
     if llm_provider == "ollama":
         # Always create a new client for Ollama to ensure proper configuration
         return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,

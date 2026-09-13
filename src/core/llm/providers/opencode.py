@@ -28,7 +28,7 @@ class OpencodeProvider(OpenAICompatibleProvider):
         >>> provider = OpencodeProvider(
         ...     api_endpoint="https://opencode.ai/zen/go/v1/chat/completions",
         ...     model="opencode-go/deepseek-v4.1-flash",
-        ...     api_key="your-api-key",
+        ...     api_key="YOUR_API_KEY_HERE",
         ... )
         >>> response = await provider.generate("Translate: Hello")
     """

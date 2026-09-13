@@ -182,9 +182,17 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             or os.getenv("OPENCODE_API_KEY", OPENCODE_API_KEY),
             "Opencode provider requires an API key. Set OPENCODE_API_KEY environment variable or pass api_key parameter."
         )
+        model = kwargs.get("model") or OPENCODE_MODEL
+        if not model:
+            # OPENCODE_MODEL has no hardcoded default; without one the API call
+            # would fail with an opaque 400, so fail fast here instead.
+            raise ValueError(
+                "Opencode provider requires a model. Set OPENCODE_MODEL "
+                "environment variable or pass model parameter."
+            )
         return OpencodeProvider(
             api_key=api_key,
-            model=kwargs.get("model") or OPENCODE_MODEL,
+            model=model,
             api_endpoint=OPENCODE_API_ENDPOINT,
             context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
             log_callback=kwargs.get("log_callback"),

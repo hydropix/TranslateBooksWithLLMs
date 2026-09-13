@@ -124,10 +124,13 @@ class OpenAICompatibleProvider(LLMProvider):
         rate_limit_events = 0
         while attempt < MAX_TRANSLATION_ATTEMPTS:
             current_key = await self._key_pool.acquire() if self._key_pool else None
-            headers = {"Content-Type": "application/json"}
+            # Provider-mandated extra headers first, then the base headers, so a
+            # caller-supplied dict can never clobber Content-Type or the
+            # Authorization derived from the active API key.
+            headers = dict(self.extra_headers)
+            headers["Content-Type"] = "application/json"
             if current_key:
                 headers["Authorization"] = f"Bearer {current_key}"
-            headers.update(self.extra_headers)
             try:
                 response = await client.post(
                     self.api_endpoint,

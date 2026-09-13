@@ -305,16 +305,19 @@ OPENCODE_MODEL=
 # OPENCODE_API_ENDPOINT=https://opencode.ai/zen/go/v1/chat/completions
 ```
 
-`OPENCODE_API_ENDPOINT` overrides the built-in endpoint. Unlike `ollama`/`openai`,
-the Opencode provider ignores the per-request `llm_api_endpoint` field: it always
-uses the `.env`/built-in endpoint, like the other cloud providers.
+`OPENCODE_API_ENDPOINT` overrides the built-in endpoint. It is read at server
+startup, so changing it requires a restart (unlike the UI-editable Ollama/OpenAI
+endpoints). Unlike `ollama`/`openai`, the Opencode provider ignores the
+per-request `llm_api_endpoint` field: it always uses the `.env`/built-in
+endpoint, like most other cloud providers (NVIDIA NIM is the exception and does
+read the per-request endpoint).
 
 ### CLI Example
 
 ```bash
 python translate.py -i book.txt -o book_fr.txt \
     --provider opencode \
-    --opencode_api_key your-key \
+    --opencode_api_key YOUR_API_KEY_HERE \
     -m opencode-go/deepseek-v4.1-flash
 ```
 

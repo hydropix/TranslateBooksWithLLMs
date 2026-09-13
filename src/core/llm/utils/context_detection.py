@@ -58,11 +58,12 @@ class ContextDetector:
             3. Try model list endpoints
             4. Fall back to model family defaults
         """
-        headers = {"Content-Type": "application/json"}
+        # Provider-mandated extras first, then the base headers, so a caller
+        # cannot clobber Content-Type or the Authorization derived from the key.
+        headers = dict(extra_headers or {})
+        headers["Content-Type"] = "application/json"
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        if extra_headers:
-            headers.update(extra_headers)
 
         base_url = endpoint.replace("/v1/chat/completions", "").replace("/chat/completions", "")
 

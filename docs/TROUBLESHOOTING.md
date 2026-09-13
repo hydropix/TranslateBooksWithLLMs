@@ -52,8 +52,8 @@ Solutions to common problems with TranslateBookWithLLM.
    - Mistral: `MISTRAL_API_KEY`
    - DeepSeek: `DEEPSEEK_API_KEY`
    - Poe: `POE_API_KEY`
-    - NVIDIA NIM: `NIM_API_KEY`
-    - Opencode: `OPENCODE_API_KEY`
+   - NVIDIA NIM: `NIM_API_KEY`
+   - Opencode: `OPENCODE_API_KEY`
 
 ### "Rate limit exceeded"
 

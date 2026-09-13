@@ -144,7 +144,7 @@ python translate.py -i book.txt --provider nim \
 
 # With Opencode
 python translate.py -i book.txt --provider opencode \
-    --opencode_api_key YOUR_KEY -m opencode-go/deepseek-v4.1-flash -tl French
+    --opencode_api_key YOUR_API_KEY_HERE -m opencode-go/deepseek-v4.1-flash -tl French
 
 # With local OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 python translate.py -i book.txt --provider openai \

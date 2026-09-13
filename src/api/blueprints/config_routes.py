@@ -22,6 +22,43 @@ SUPPORTED_UI_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko']
 UI_LOCALE_COOKIE = 'ui_locale'
 UI_LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
+# .env keys the settings endpoint is allowed to persist. Module-level so a
+# regression test can assert every provider's key/model was added: a missing
+# entry makes the web UI silently drop that field (the OpenCode blocker).
+SETTINGS_ALLOWED_KEYS = frozenset({
+    'GEMINI_API_KEY',
+    'GEMINI_MODEL',
+    'OPENAI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'OPENROUTER_MODEL',
+    'MISTRAL_API_KEY',
+    'MISTRAL_MODEL',
+    'DEEPSEEK_API_KEY',
+    'DEEPSEEK_MODEL',
+    'POE_API_KEY',
+    'POE_MODEL',
+    'NIM_API_KEY',
+    'NIM_MODEL',
+    'OPENCODE_API_KEY',
+    'OPENCODE_MODEL',
+    'DEFAULT_MODEL',
+    'LLM_PROVIDER',
+    'OLLAMA_API_ENDPOINT',
+    'OPENAI_API_ENDPOINT',
+    'OUTPUT_FILENAME_PATTERN',
+    'MAX_TOKENS_PER_CHUNK',
+    'PARALLEL_TRANSLATIONS',
+    'DISABLE_AUTO_PAUSE',
+    'NOTIFY_WEBHOOK_URL',
+    'NOTIFY_WEBHOOK_METHOD',
+    'NOTIFY_WEBHOOK_HEADERS',
+    'NOTIFY_WEBHOOK_PAYLOAD',
+    'NOTIFY_ON_SUCCESS',
+    'NOTIFY_ON_FAILURE',
+    'NOTIFY_ON_INTERRUPTION',
+    'NOTIFY_TIMEOUT_SECONDS',
+})
+
 
 def resolve_ui_locale(req):
     """Pick the UI locale to render the page with.
@@ -1013,37 +1050,7 @@ def create_config_blueprint(server_session_id=None):
         Accepts JSON with settings to save. Only specific keys are allowed
         for security reasons.
         """
-        allowed_keys = {
-            'GEMINI_API_KEY',
-            'GEMINI_MODEL',
-            'OPENAI_API_KEY',
-            'OPENROUTER_API_KEY',
-            'OPENROUTER_MODEL',
-            'MISTRAL_API_KEY',
-            'MISTRAL_MODEL',
-            'DEEPSEEK_API_KEY',
-            'DEEPSEEK_MODEL',
-            'POE_API_KEY',
-            'POE_MODEL',
-            'NIM_API_KEY',
-            'NIM_MODEL',
-            'DEFAULT_MODEL',
-            'LLM_PROVIDER',
-            'OLLAMA_API_ENDPOINT',
-            'OPENAI_API_ENDPOINT',
-            'OUTPUT_FILENAME_PATTERN',
-            'MAX_TOKENS_PER_CHUNK',
-            'PARALLEL_TRANSLATIONS',
-            'DISABLE_AUTO_PAUSE',
-            'NOTIFY_WEBHOOK_URL',
-            'NOTIFY_WEBHOOK_METHOD',
-            'NOTIFY_WEBHOOK_HEADERS',
-            'NOTIFY_WEBHOOK_PAYLOAD',
-            'NOTIFY_ON_SUCCESS',
-            'NOTIFY_ON_FAILURE',
-            'NOTIFY_ON_INTERRUPTION',
-            'NOTIFY_TIMEOUT_SECONDS'
-        }
+        allowed_keys = SETTINGS_ALLOWED_KEYS
 
         try:
             data = request.get_json()

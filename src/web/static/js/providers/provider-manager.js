@@ -1048,11 +1048,11 @@ export const ProviderManager = {
                 StatusManager.setConnected('opencode', data.count);
             } else {
                 const errorMessage = data.error || t('settings:opencode_default_error');
-                MessageLogger.showMessage(t('settings:deepseek_fallback_msg', { message: errorMessage }), 'warning');
+                MessageLogger.showMessage(errorMessage, 'warning');
                 setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
             }
         } catch (error) {
-            MessageLogger.showMessage(t('settings:deepseek_error_fallback_msg', { error: error.message }), 'warning');
+            MessageLogger.showMessage(error.message, 'warning');
             MessageLogger.addLog(t('settings:opencode_error_fallback_log', { error: error.message }));
             setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
         }

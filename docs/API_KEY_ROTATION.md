@@ -2,7 +2,7 @@
 
 Translate longer documents on free-tier APIs by chaining multiple keys. When one key hits a rate limit, the system automatically switches to another — no manual intervention, no lost progress.
 
-> Available for all cloud providers: Gemini, OpenRouter, OpenAI, Mistral, DeepSeek, Poe, NVIDIA NIM.
+> Available for all cloud providers: Gemini, OpenRouter, OpenAI, Mistral, DeepSeek, Poe, NVIDIA NIM, Opencode.
 
 ---
 

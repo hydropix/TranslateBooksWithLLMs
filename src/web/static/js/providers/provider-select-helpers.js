@@ -20,6 +20,7 @@ export const PROVIDER_LOGOS = {
     openai: '/static/img/providers/openai.png',
     openrouter: '/static/img/providers/openrouter.png',
     nim: '/static/img/providers/nvidia.png',
+    opencode: '/static/img/providers/opencode.svg',
 };
 
 export const PROVIDER_META = {
@@ -31,10 +32,11 @@ export const PROVIDER_META = {
     openai: { name: 'OpenAI', description: 'Compatible' },
     openrouter: { name: 'OpenRouter', description: '200+ models' },
     nim: { name: 'NVIDIA NIM', description: 'Cloud API' },
+    opencode: { name: 'Opencode', description: 'Compatible' },
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
-export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
+export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'opencode', 'openrouter', 'poe'];
 
 /**
  * Replace the dropdown content with a single placeholder option whose text
@@ -138,7 +140,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             if (modelId === defaultModel) { opt.selected = true; defaultFound = true; }
             (optgroup || selectEl).appendChild(opt);
         });
-    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim') {
+    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim' || provider === 'opencode') {
         list.forEach((m) => {
             // Same dual-shape tolerance as the openai branch: Settings sends
             // `{value, label}`, the Sample tab forwards the raw `{id, name}`.

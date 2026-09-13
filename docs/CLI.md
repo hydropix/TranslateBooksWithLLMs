@@ -38,7 +38,7 @@ python translate.py -i input_file -o output_file
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-m, --model` | Model name | qwen3:14b |
-| `--provider` | ollama / openrouter / openai / gemini / mistral / deepseek / poe / nim | ollama |
+| `--provider` | ollama / openrouter / openai / gemini / mistral / deepseek / poe / nim / opencode | ollama |
 | `--api_endpoint` | API URL | http://localhost:11434/api/generate |
 | `--parallel` | Chunks translated concurrently. Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context | 1 |
 
@@ -57,6 +57,7 @@ python translate.py -i input_file -o output_file
 | `--deepseek_api_key` | DeepSeek API key |
 | `--poe_api_key` | Poe API key — get one at [poe.com/api_key](https://poe.com/api_key) |
 | `--nim_api_key` | NVIDIA NIM API key — get one at [build.nvidia.com](https://build.nvidia.com/) |
+| `--opencode_api_key` | Opencode API key |
 
 ### Prompt Options
 

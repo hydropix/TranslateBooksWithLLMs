@@ -21,5 +21,6 @@
   "api_key_required_mistral": "使用 Mistral 服务商时需要 Mistral API 密钥。",
   "api_key_required_deepseek": "使用 DeepSeek 服务商时需要 DeepSeek API 密钥。",
   "api_key_required_poe": "需要 Poe API 密钥。请在 poe.com/api_key 获取您的密钥",
-  "api_key_required_nim": "使用 NIM 服务商时需要 NVIDIA NIM API 密钥。"
+  "api_key_required_nim": "使用 NIM 服务商时需要 NVIDIA NIM API 密钥。",
+  "api_key_required_opencode": "使用 Opencode 服务商时需要 Opencode API 密钥。"
 }

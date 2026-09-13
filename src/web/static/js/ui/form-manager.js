@@ -460,6 +460,7 @@ export const FormManager = {
             ApiKeyUtils.setupField('deepseekApiKey', config.deepseek_api_key_configured, config.deepseek_api_key, config.deepseek_api_key_count);
             ApiKeyUtils.setupField('poeApiKey', config.poe_api_key_configured, config.poe_api_key, config.poe_api_key_count);
             ApiKeyUtils.setupField('nimApiKey', config.nim_api_key_configured, config.nim_api_key, config.nim_api_key_count);
+            ApiKeyUtils.setupField('opencodeApiKey', config.opencode_api_key_configured, config.opencode_api_key, config.opencode_api_key_count);
 
             // After loading defaults, dispatch event to notify other modules
             console.log('[FormManager] Default config loaded, dispatching event');
@@ -663,6 +664,7 @@ export const FormManager = {
         const geminiApiKey = provider === 'gemini' ? ApiKeyUtils.getValue('geminiApiKey') : '';
         const openaiApiKey = provider === 'openai' ? ApiKeyUtils.getValue('openaiApiKey') : '';
         const openrouterApiKey = provider === 'openrouter' ? ApiKeyUtils.getValue('openrouterApiKey') : '';
+        const opencodeApiKey = provider === 'opencode' ? ApiKeyUtils.getValue('opencodeApiKey') : '';
 
         // Get TTS configuration
         const ttsEnabled = DomHelpers.getElement('ttsEnabled')?.checked || false;
@@ -685,6 +687,7 @@ export const FormManager = {
             gemini_api_key: geminiApiKey,
             openai_api_key: openaiApiKey,
             openrouter_api_key: openrouterApiKey,
+            opencode_api_key: opencodeApiKey,
             // Prompt options (optional system prompt instructions)
             // Technical content protection is always enabled
             prompt_options: promptOptions,

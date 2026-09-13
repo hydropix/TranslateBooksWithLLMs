@@ -284,6 +284,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_poe_models(api_key)
         elif provider == 'nim':
             return _get_nim_models(api_key)
+        elif provider == 'opencode':
+            return _get_opencode_models(api_key)
         elif provider == 'openai':
             # Get endpoint from request for LM Studio support
             if request.method == 'POST':
@@ -315,6 +317,7 @@ def create_config_blueprint(server_session_id=None):
         deepseek_mask, deepseek_count = mask_api_key(_config.DEEPSEEK_API_KEY)
         poe_mask, poe_count = mask_api_key(_config.POE_API_KEY)
         nim_mask, nim_count = mask_api_key(_config.NIM_API_KEY)
+        opencode_mask, opencode_count = mask_api_key(_config.OPENCODE_API_KEY)
 
         config_response = {
             "api_endpoint": _config.API_ENDPOINT,
@@ -335,6 +338,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key": deepseek_mask,
             "poe_api_key": poe_mask,
             "nim_api_key": nim_mask,
+            "opencode_api_key": opencode_mask,
             "gemini_api_key_count": gemini_count,
             "openai_api_key_count": openai_count,
             "openrouter_api_key_count": openrouter_count,
@@ -342,6 +346,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key_count": deepseek_count,
             "poe_api_key_count": poe_count,
             "nim_api_key_count": nim_count,
+            "opencode_api_key_count": opencode_count,
             "gemini_api_key_configured": gemini_count > 0,
             "openai_api_key_configured": openai_count > 0,
             "openrouter_api_key_configured": openrouter_count > 0,
@@ -349,6 +354,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key_configured": deepseek_count > 0,
             "poe_api_key_configured": poe_count > 0,
             "nim_api_key_configured": nim_count > 0,
+            "opencode_api_key_configured": opencode_count > 0,
             "output_filename_pattern": _config.OUTPUT_FILENAME_PATTERN,
             "max_tokens_per_chunk": int(_config.MAX_TOKENS_PER_CHUNK),
             "parallel_translations": int(_config.PARALLEL_TRANSLATIONS),
@@ -641,6 +647,24 @@ def create_config_blueprint(server_session_id=None):
                 "count": 0,
                 "error": f"Error connecting to NVIDIA NIM API: {str(e)}"
             })
+
+    def _get_opencode_models(provided_api_key=None):
+        """Get available models from the Opencode API"""
+        from src.core.llm import OpencodeProvider
+        return _fetch_provider_models(
+            provided_api_key=provided_api_key,
+            env_var='OPENCODE_API_KEY',
+            config_api_key=_config.OPENCODE_API_KEY,
+            config_default_model=_config.OPENCODE_MODEL,
+            provider_class=OpencodeProvider,
+            fallback_model="",
+            status_prefix="opencode",
+            display_name="Opencode",
+            api_key_missing_message=(
+                "Opencode API key is required. Set OPENCODE_API_KEY "
+                "environment variable or pass api_key parameter."
+            ),
+        )
 
     def _get_openai_models(provided_api_key=None, api_endpoint=None):
         """Get available models from OpenAI-compatible API.
@@ -1154,6 +1178,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
             "poe_api_key_configured": bool(_config.POE_API_KEY),
             "nim_api_key_configured": bool(_config.NIM_API_KEY),
+            "opencode_api_key_configured": bool(_config.OPENCODE_API_KEY),
             "default_model": _config.DEFAULT_MODEL or "",
             "llm_provider": _config.LLM_PROVIDER,
             "api_endpoint": _config.API_ENDPOINT or "",

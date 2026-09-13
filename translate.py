@@ -14,7 +14,7 @@ ensure_utf8_stdio()
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
+from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, OPENCODE_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
 from src.utils.file_utils import get_unique_output_path, generate_tts_for_translation
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.tts.tts_config import TTSConfig, TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
@@ -97,6 +97,7 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
                 deepseek_api_key=args.deepseek_api_key,
                 poe_api_key=args.poe_api_key,
                 nim_api_key=args.nim_api_key,
+                opencode_api_key=getattr(args, 'opencode_api_key', OPENCODE_API_KEY),
                 context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
             )
             if client is None:
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
-    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
+    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "opencode", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
     parser.add_argument("--openrouter_api_key", default=OPENROUTER_API_KEY, help="OpenRouter API key (required if using openrouter provider).")
@@ -149,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--deepseek_api_key", default=DEEPSEEK_API_KEY, help="DeepSeek API key (required if using deepseek provider).")
     parser.add_argument("--poe_api_key", default=POE_API_KEY, help="Poe API key (required if using poe provider). Get your key at https://poe.com/api_key")
     parser.add_argument("--nim_api_key", default=NIM_API_KEY, help="NVIDIA NIM API key (required if using nim provider). Get your key at https://build.nvidia.com/")
+    parser.add_argument("--opencode_api_key", default=OPENCODE_API_KEY, help="Opencode API key (required if using opencode provider).")
     parser.add_argument("--parallel", type=int, default=PARALLEL_TRANSLATIONS, metavar="N", help=f"Number of chunks translated concurrently (default: {PARALLEL_TRANSLATIONS}). Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context chaining.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
 
@@ -179,10 +181,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Auto-select default model based on provider if not explicitly set
-    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL, LITELLM_MODEL
+    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL, LITELLM_MODEL, OPENCODE_MODEL
     if args.model == DEFAULT_MODEL:
         if args.provider == "nim" and NIM_MODEL:
             args.model = NIM_MODEL
+        elif args.provider == "opencode" and OPENCODE_MODEL:
+            args.model = OPENCODE_MODEL
         elif args.provider == "litellm" and LITELLM_MODEL:
             args.model = LITELLM_MODEL
         elif args.provider == "mistral" and MISTRAL_MODEL:
@@ -248,6 +252,11 @@ if __name__ == "__main__":
         parser.error("--poe_api_key is required when using poe provider. Get your key at https://poe.com/api_key")
     if args.provider == "nim" and not args.nim_api_key:
         parser.error("--nim_api_key is required when using nim provider. Get your key at https://build.nvidia.com/")
+    if args.provider == "opencode" and not args.opencode_api_key:
+        parser.error("--opencode_api_key is required when using opencode provider")
+    if args.provider == "opencode" and args.model == DEFAULT_MODEL:
+        parser.error("opencode provider requires a model. Set OPENCODE_MODEL in .env "
+                     "or pass -m, e.g. -m opencode-go/deepseek-v4.1-flash")
     # LiteLLM needs a provider-prefixed model name; the default Ollama model
     # won't route. Keys come from each provider's native env var, so we only
     # guard the model here rather than an API key.
@@ -356,6 +365,7 @@ if __name__ == "__main__":
                 deepseek_api_key=args.deepseek_api_key,
                 poe_api_key=args.poe_api_key,
                 nim_api_key=args.nim_api_key,
+                opencode_api_key=args.opencode_api_key,
                 prompt_options=prompt_options,
             ))
             logger.info("Refine-Only Completed Successfully", LogType.TRANSLATION_END, {
@@ -383,6 +393,7 @@ if __name__ == "__main__":
                 deepseek_api_key=args.deepseek_api_key,
                 poe_api_key=args.poe_api_key,
                 nim_api_key=args.nim_api_key,
+                opencode_api_key=args.opencode_api_key,
                 prompt_options=prompt_options,
                 parallel_workers=args.parallel
             ))

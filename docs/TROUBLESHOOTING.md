@@ -52,7 +52,8 @@ Solutions to common problems with TranslateBookWithLLM.
    - Mistral: `MISTRAL_API_KEY`
    - DeepSeek: `DEEPSEEK_API_KEY`
    - Poe: `POE_API_KEY`
-   - NVIDIA NIM: `NIM_API_KEY`
+    - NVIDIA NIM: `NIM_API_KEY`
+    - Opencode: `OPENCODE_API_KEY`
 
 ### "Rate limit exceeded"
 
@@ -362,7 +363,7 @@ See [docs/STYLE_EXTRACTION.md](STYLE_EXTRACTION.md) for the full guide.
 
 **Cause**: Invalid provider name in configuration.
 
-**Valid providers**: `ollama`, `gemini`, `openai`, `openrouter`, `mistral`, `deepseek`, `poe`, `nim`
+**Valid providers**: `ollama`, `gemini`, `openai`, `openrouter`, `mistral`, `deepseek`, `poe`, `nim`, `opencode`
 
 **Solutions**:
 1. Check spelling in `.env`: `LLM_PROVIDER=ollama`

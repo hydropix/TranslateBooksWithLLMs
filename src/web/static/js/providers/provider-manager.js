@@ -346,6 +346,7 @@ export const ProviderManager = {
         const deepseekSettings = DomHelpers.getElement('deepseekSettings');
         const poeSettings = DomHelpers.getElement('poeSettings');
         const nimSettings = DomHelpers.getElement('nimSettings');
+        const opencodeSettings = DomHelpers.getElement('opencodeSettings');
 
         // Show/hide provider-specific settings (use inline style for elements with inline display:none)
         if (provider === 'ollama') {
@@ -358,6 +359,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadOllamaModels();
         } else if (provider === 'poe') {
             DomHelpers.hide('ollamaSettings');
@@ -369,6 +371,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'block';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadPoeModels();
         } else if (provider === 'gemini') {
             DomHelpers.hide('ollamaSettings');
@@ -380,6 +383,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadGeminiModels();
         } else if (provider === 'openai') {
             DomHelpers.hide('ollamaSettings');
@@ -391,6 +395,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadOpenAIModels();
         } else if (provider === 'openrouter') {
             DomHelpers.hide('ollamaSettings');
@@ -402,6 +407,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadOpenRouterModels();
         } else if (provider === 'mistral') {
             DomHelpers.hide('ollamaSettings');
@@ -413,6 +419,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadMistralModels();
         } else if (provider === 'deepseek') {
             DomHelpers.hide('ollamaSettings');
@@ -424,6 +431,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'block';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadDeepSeekModels();
         } else if (provider === 'nim') {
             DomHelpers.hide('ollamaSettings');
@@ -435,7 +443,20 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'block';
+            if (opencodeSettings) opencodeSettings.style.display = 'none';
             if (loadModels) this.loadNimModels();
+        } else if (provider === 'opencode') {
+            DomHelpers.hide('ollamaSettings');
+            if (geminiSettings) geminiSettings.style.display = 'none';
+            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
+            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
+            if (openrouterSettings) openrouterSettings.style.display = 'none';
+            if (mistralSettings) mistralSettings.style.display = 'none';
+            if (deepseekSettings) deepseekSettings.style.display = 'none';
+            if (poeSettings) poeSettings.style.display = 'none';
+            if (nimSettings) nimSettings.style.display = 'none';
+            if (opencodeSettings) opencodeSettings.style.display = 'block';
+            if (loadModels) this.loadOpencodeModels();
         }
 
         // Parallel translation is only useful for cloud providers; a single
@@ -470,6 +491,8 @@ export const ProviderManager = {
             this.loadDeepSeekModels();
         } else if (provider === 'nim') {
             this.loadNimModels();
+        } else if (provider === 'opencode') {
+            this.loadOpencodeModels();
         }
     },
 
@@ -982,6 +1005,56 @@ export const ProviderManager = {
 
             StateManager.setState('models.availableModels', NIM_FALLBACK_MODELS.map(m => m.value));
             StatusManager.setConnected('nim', NIM_FALLBACK_MODELS.length);
+        }
+    },
+
+    /**
+     * Load Opencode models dynamically from API
+     */
+    async loadOpencodeModels() {
+        const modelSelect = DomHelpers.getElement('model');
+        if (!modelSelect) return;
+
+        setPlaceholderOption(modelSelect, 'settings:search_models_loading_opencode');
+        StatusManager.setChecking();
+
+        try {
+            const apiKey = ApiKeyUtils.getValue('opencodeApiKey');
+            if (!apiKey) {
+                MessageLogger.showMessage(t('settings:opencode_key_required'), 'warning');
+                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
+                StatusManager.setError(t('settings:status_no_api_key'));
+                return;
+            }
+
+            const data = await ApiClient.getModels('opencode', { apiKey });
+
+            if (data.models && data.models.length > 0) {
+                MessageLogger.showMessage('', '');
+
+                const formattedModels = data.models.map(m => ({
+                    value: m.id,
+                    label: m.name || m.id,
+                    context_length: m.context_length
+                }));
+
+                populateModelSelect(formattedModels, data.default, 'opencode');
+                MessageLogger.addLog(t('settings:opencode_models_loaded_log', { count: data.count }));
+
+                SettingsManager.applyPendingModelSelection();
+                ModelDetector.checkAndShowRecommendation();
+
+                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
+                StatusManager.setConnected('opencode', data.count);
+            } else {
+                const errorMessage = data.error || t('settings:opencode_default_error');
+                MessageLogger.showMessage(t('settings:deepseek_fallback_msg', { message: errorMessage }), 'warning');
+                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
+            }
+        } catch (error) {
+            MessageLogger.showMessage(t('settings:deepseek_error_fallback_msg', { error: error.message }), 'warning');
+            MessageLogger.addLog(t('settings:opencode_error_fallback_log', { error: error.message }));
+            setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
         }
     },
 

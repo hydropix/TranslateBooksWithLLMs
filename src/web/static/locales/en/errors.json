@@ -21,5 +21,6 @@
   "api_key_required_mistral": "Mistral API key is required when using Mistral provider.",
   "api_key_required_deepseek": "DeepSeek API key is required when using DeepSeek provider.",
   "api_key_required_poe": "Poe API key is required. Get your key at poe.com/api_key",
-  "api_key_required_nim": "NVIDIA NIM API key is required when using NIM provider."
+  "api_key_required_nim": "NVIDIA NIM API key is required when using NIM provider.",
+  "api_key_required_opencode": "Opencode API key is required when using Opencode provider."
 }

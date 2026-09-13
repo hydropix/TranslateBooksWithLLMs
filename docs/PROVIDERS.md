@@ -282,6 +282,44 @@ Browse models: [build.nvidia.com](https://build.nvidia.com/)
 
 ---
 
+## Opencode (Cloud)
+
+An OpenAI-compatible gateway. It behaves exactly like any other OpenAI-compatible
+endpoint, with one requirement: every request must carry an `x-opencode-session`
+header holding a stable identifier for the conversation. TBL generates one id per
+translation job (the provider instance lives for the whole job) and sends it on
+every call, including the model-list probe. It is random per job, never derived
+from the machine or the install.
+
+### Setup
+
+1. Get an API key from your Opencode account.
+2. In TBL: select "Opencode", enter your key.
+3. Optionally set `OPENCODE_MODEL` in `.env` (or pick a model in the UI).
+
+### Configuration
+
+```bash
+OPENCODE_API_KEY=
+OPENCODE_MODEL=
+# OPENCODE_API_ENDPOINT=https://opencode.ai/zen/go/v1/chat/completions
+```
+
+`OPENCODE_API_ENDPOINT` overrides the built-in endpoint. Unlike `ollama`/`openai`,
+the Opencode provider ignores the per-request `llm_api_endpoint` field: it always
+uses the `.env`/built-in endpoint, like the other cloud providers.
+
+### CLI Example
+
+```bash
+python translate.py -i book.txt -o book_fr.txt \
+    --provider opencode \
+    --opencode_api_key your-key \
+    -m opencode-go/deepseek-v4.1-flash
+```
+
+---
+
 ## Endpoint Allowlist
 
 The web API lets a request choose the endpoint the server calls, so the server checks that endpoint against an allowlist before using it. Accepted out of the box:

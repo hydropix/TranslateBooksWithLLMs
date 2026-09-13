@@ -34,7 +34,8 @@ class ContextDetector:
         model: str,
         endpoint: str,
         api_key: Optional[str] = None,
-        log_callback: Optional[Callable[[str, str], None]] = None
+        log_callback: Optional[Callable[[str, str], None]] = None,
+        extra_headers: Optional[dict] = None
     ) -> int:
         """
         Detect context size for a model.
@@ -45,6 +46,8 @@ class ContextDetector:
             endpoint: API endpoint URL
             api_key: Optional API key for authenticated endpoints
             log_callback: Optional callback for logging (log_type, message)
+            extra_headers: Optional headers merged into every probe request
+                (e.g. a provider-mandated session header)
 
         Returns:
             Context window size in tokens
@@ -58,6 +61,8 @@ class ContextDetector:
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        if extra_headers:
+            headers.update(extra_headers)
 
         base_url = endpoint.replace("/v1/chat/completions", "").replace("/chat/completions", "")
 

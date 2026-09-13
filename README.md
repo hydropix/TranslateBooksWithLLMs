@@ -65,6 +65,7 @@ That's it. On first launch, you choose a translation provider:
 | **Ollama** | Local | [ollama.com](https://ollama.com/) |
 | **OpenAI** | Cloud | [platform.openai.com](https://platform.openai.com/api-keys) |
 | **OpenAI-Compatible** | Local (llama.cpp, LM Studio, vLLM, LocalAI...) | Point to your server's endpoint |
+| **Opencode** | Cloud (OpenAI-compatible) | [opencode.ai](https://opencode.ai/) |
 | **OpenRouter** | Cloud (200+ models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | **Poe** | Cloud (multi-model) | [poe.com/api_key](https://poe.com/api_key) |
 
@@ -141,6 +142,10 @@ python translate.py -i book.txt --provider poe \
 python translate.py -i book.txt --provider nim \
     --nim_api_key YOUR_KEY -m meta/llama-3.1-8b-instruct -tl French
 
+# With Opencode
+python translate.py -i book.txt --provider opencode \
+    --opencode_api_key YOUR_KEY -m opencode-go/deepseek-v4.1-flash -tl French
+
 # With local OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 python translate.py -i book.txt --provider openai \
     --api_endpoint http://localhost:8080/v1/chat/completions -m your-model -tl French
@@ -155,7 +160,7 @@ python translate.py -i book.txt --provider openai \
 | `-sl, --source_lang` | Source language | English |
 | `-tl, --target_lang` | Target language | Chinese |
 | `-m, --model` | Model name | qwen3:14b |
-| `--provider` | ollama/openrouter/openai/gemini/mistral/deepseek/poe/nim | ollama |
+| `--provider` | ollama/openrouter/openai/gemini/mistral/deepseek/poe/nim/opencode | ollama |
 | `--parallel` | Chunks translated concurrently (cloud only; Ollama stays at 1) | 1 |
 | `--text-cleanup` | OCR/typographic cleanup | disabled |
 | `--refine` | Second pass for literary polish | disabled |
@@ -186,6 +191,7 @@ MISTRAL_API_KEY=...
 DEEPSEEK_API_KEY=...
 POE_API_KEY=...
 NIM_API_KEY=...
+OPENCODE_API_KEY=...
 
 # Performance
 REQUEST_TIMEOUT=900

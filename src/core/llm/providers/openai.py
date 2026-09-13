@@ -28,12 +28,19 @@ class OpenAICompatibleProvider(LLMProvider):
     def __init__(self, api_endpoint: str, model: str,
                  api_key: Optional[Union[str, List[str]]] = None,
                  context_window: int = OLLAMA_NUM_CTX, log_callback: Optional[Callable] = None,
-                 provider_name: str = "openai-compatible"):
+                 provider_name: str = "openai-compatible",
+                 extra_headers: Optional[dict] = None):
         # Skip pool creation if no key (local servers like llama.cpp don't need one)
         super().__init__(model, api_keys=api_key, provider_name=provider_name)
         self.api_endpoint = self._normalize_endpoint(api_endpoint)
         self.context_window = context_window
         self.log_callback = log_callback
+        # Extra headers merged into every request this provider makes. Used by
+        # subclasses (e.g. OpencodeProvider) that need a mandatory header on
+        # every call. Never sent on the shared client, so the install-
+        # fingerprint guard (tests/unit/test_no_install_fingerprint.py) keeps
+        # asserting the client default headers are the four constant ones.
+        self.extra_headers = dict(extra_headers or {})
         self._detected_context_size: Optional[int] = None
         self._context_detector = ContextDetector()
 
@@ -120,6 +127,7 @@ class OpenAICompatibleProvider(LLMProvider):
             headers = {"Content-Type": "application/json"}
             if current_key:
                 headers["Authorization"] = f"Bearer {current_key}"
+            headers.update(self.extra_headers)
             try:
                 response = await client.post(
                     self.api_endpoint,
@@ -371,7 +379,8 @@ class OpenAICompatibleProvider(LLMProvider):
             model=self.model,
             endpoint=self.api_endpoint,
             api_key=self.api_key,
-            log_callback=self.log_callback
+            log_callback=self.log_callback,
+            extra_headers=self.extra_headers,
         )
 
         self._detected_context_size = ctx

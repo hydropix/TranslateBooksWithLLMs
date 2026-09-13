@@ -341,7 +341,7 @@ export const ProviderManager = {
         const openaiEndpointRow = DomHelpers.getElement('openaiEndpointRow');
         const openrouterSettings = DomHelpers.getElement('openrouterSettings');
 
-        // Get mistral, deepseek, poe and nim settings elements once
+        // Get mistral, deepseek, poe, nim and opencode settings elements once
         const mistralSettings = DomHelpers.getElement('mistralSettings');
         const deepseekSettings = DomHelpers.getElement('deepseekSettings');
         const poeSettings = DomHelpers.getElement('poeSettings');

@@ -54,7 +54,8 @@ That's it (就这么简单 · これだけ · 이게 다예요). On first launch
 <a href="https://mistral.ai/"><img src="src/web/static/img/providers/mistral.png" alt="Mistral" height="32"></a>&nbsp;&nbsp;
 <a href="https://www.deepseek.com/"><img src="src/web/static/img/providers/deepseek.png" alt="DeepSeek" height="32"></a>&nbsp;&nbsp;
 <a href="https://deepmind.google/technologies/gemini/"><img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32"></a>&nbsp;&nbsp;
-<a href="https://build.nvidia.com/"><img src="src/web/static/img/providers/nvidia.png" alt="NVIDIA NIM" height="32"></a>
+<a href="https://build.nvidia.com/"><img src="src/web/static/img/providers/nvidia.png" alt="NVIDIA NIM" height="32"></a>&nbsp;&nbsp;
+<a href="https://opencode.ai/"><img src="src/web/static/img/providers/opencode.svg" alt="Opencode" height="32"></a>
 </p>
 
 | Provider | Type | Get started |

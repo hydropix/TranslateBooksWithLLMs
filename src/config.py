@@ -365,8 +365,9 @@ MIN_CHUNK_SIZE_TOKENS = 50
 
 # LLM Provider configuration
 # LLM_PROVIDER, GEMINI_*, OPENAI_*, OPENROUTER_API_KEY/MODEL, MISTRAL_API_KEY/MODEL,
-# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL are loaded via
-# _apply_reloadable_env_settings() so reload_config() can refresh them at runtime.
+# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL, OPENCODE_API_KEY/MODEL
+# are loaded via _apply_reloadable_env_settings() so reload_config() can refresh
+# them at runtime.
 OPENROUTER_API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 # Many OpenRouter models reason by default (DeepSeek V4.x, Qwen 3.x), and the
 # reasoning tokens are billed as output. The provider sends OpenRouter's unified

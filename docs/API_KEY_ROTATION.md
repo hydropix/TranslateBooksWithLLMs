@@ -44,7 +44,7 @@ GEMINI_API_KEY=AIza...key1
                 AIza...key3
 ```
 
-> Same syntax works for `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `POE_API_KEY`, `NIM_API_KEY`.
+> Same syntax works for `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `POE_API_KEY`, `NIM_API_KEY`, `OPENCODE_API_KEY`.
 
 ### 2. Via the Web UI
 

@@ -23,6 +23,7 @@ const PROVIDER_LABELS = {
     deepseek: 'DeepSeek',
     poe: 'Poe',
     nim: 'NVIDIA NIM',
+    opencode: 'Opencode',
 };
 
 // Every active option renders the same way: the chips all say "this run uses

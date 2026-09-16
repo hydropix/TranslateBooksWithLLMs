@@ -251,6 +251,7 @@ async def _apply_auto_prep(config, log_callback, progress_callback=None):
                 deepseek_api_key=config.get('deepseek_api_key', ''),
                 poe_api_key=config.get('poe_api_key', ''),
                 nim_api_key=config.get('nim_api_key', ''),
+                opencode_api_key=config.get('opencode_api_key', ''),
                 context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
             )
             if client is None:
@@ -768,6 +769,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 deepseek_api_key=config.get('deepseek_api_key', ''),
                 poe_api_key=config.get('poe_api_key', ''),
                 nim_api_key=config.get('nim_api_key', ''),
+                opencode_api_key=config.get('opencode_api_key', ''),
                 context_window=config.get('context_window', 2048),
                 auto_adjust_context=config.get('auto_adjust_context', True),
                 max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
@@ -798,6 +800,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 deepseek_api_key=config.get('deepseek_api_key', ''),
                 poe_api_key=config.get('poe_api_key', ''),
                 nim_api_key=config.get('nim_api_key', ''),
+                opencode_api_key=config.get('opencode_api_key', ''),
                 context_window=config.get('context_window', 2048),
                 auto_adjust_context=config.get('auto_adjust_context', True),
                 min_chunk_size=config.get('min_chunk_size', 5),
@@ -851,6 +854,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     deepseek_api_key=config.get('deepseek_api_key', ''),
                     poe_api_key=config.get('poe_api_key', ''),
                     nim_api_key=config.get('nim_api_key', ''),
+                    opencode_api_key=config.get('opencode_api_key', ''),
                     context_window=config.get('context_window', 2048),
                     auto_adjust_context=config.get('auto_adjust_context', True),
                     max_tokens_per_chunk=config.get('max_tokens_per_chunk'),

@@ -17,6 +17,7 @@ from src.config import (
     POE_API_KEY, POE_MODEL, POE_API_ENDPOINT,
     POE_DISABLE_THINKING, POE_DISABLE_WEB_SEARCH,
     NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT,
+    OPENCODE_API_KEY, OPENCODE_MODEL, OPENCODE_API_ENDPOINT,
     LITELLM_MODEL
 )
 from .base import LLMProvider, normalize_api_keys
@@ -27,6 +28,7 @@ from .providers.openrouter import OpenRouterProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
+from .providers.opencode import OpencodeProvider
 from .providers.litellm import LiteLLMProvider
 
 
@@ -50,7 +52,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
     automatically switches to Gemini provider.
 
     Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm")
+        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "opencode", "litellm")
         **kwargs: Provider-specific parameters:
             - api_endpoint: API endpoint URL (Ollama, OpenAI)
             - model: Model name/identifier
@@ -172,6 +174,29 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
             model=kwargs.get("model", NIM_MODEL),
             api_endpoint=kwargs.get("api_endpoint", NIM_API_ENDPOINT),
             provider_name="nim",
+        )
+
+    elif provider_type.lower() == "opencode":
+        api_key = _require_key(
+            kwargs.get("api_key") or kwargs.get("opencode_api_key")
+            or os.getenv("OPENCODE_API_KEY", OPENCODE_API_KEY),
+            "Opencode provider requires an API key. Set OPENCODE_API_KEY environment variable or pass api_key parameter."
+        )
+        model = kwargs.get("model") or OPENCODE_MODEL
+        if not model:
+            # OPENCODE_MODEL has no hardcoded default; without one the API call
+            # would fail with an opaque 400, so fail fast here instead.
+            raise ValueError(
+                "Opencode provider requires a model. Set OPENCODE_MODEL "
+                "environment variable or pass model parameter."
+            )
+        return OpencodeProvider(
+            api_key=api_key,
+            model=model,
+            api_endpoint=OPENCODE_API_ENDPOINT,
+            context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
+            log_callback=kwargs.get("log_callback"),
+            session_id=kwargs.get("session_id") or kwargs.get("conversation_id"),
         )
 
     elif provider_type.lower() == "litellm":

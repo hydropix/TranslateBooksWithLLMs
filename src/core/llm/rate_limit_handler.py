@@ -3,7 +3,7 @@ Centralized HTTP 429 handling with API key rotation support.
 
 Used by cloud LLM providers to deduplicate the rate-limit retry/backoff logic
 that was previously copy-pasted across all providers (gemini, openai-compatible,
-openrouter, mistral, deepseek, poe).
+openrouter, mistral, deepseek, poe, opencode).
 
 Behavior on 429:
     1. Compute wait time from response headers (Retry-After or X-RateLimit-Reset)

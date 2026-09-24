@@ -34,6 +34,7 @@ const PROVIDER_LABELS = {
     deepseek: 'DeepSeek',
     poe: 'Poe',
     nim: 'NVIDIA NIM',
+    opencode: 'Opencode',
 };
 
 const escapeHtml = DomHelpers.escapeHtml;

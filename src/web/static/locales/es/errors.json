@@ -21,5 +21,6 @@
   "api_key_required_mistral": "Se requiere la clave de API de Mistral al usar el proveedor Mistral.",
   "api_key_required_deepseek": "Se requiere la clave de API de DeepSeek al usar el proveedor DeepSeek.",
   "api_key_required_poe": "Se requiere la clave de API de Poe. Obtén tu clave en poe.com/api_key",
-  "api_key_required_nim": "Se requiere la clave de API de NVIDIA NIM al usar el proveedor NIM."
+  "api_key_required_nim": "Se requiere la clave de API de NVIDIA NIM al usar el proveedor NIM.",
+  "api_key_required_opencode": "Se requiere la clave de API de Opencode al usar el proveedor Opencode."
 }

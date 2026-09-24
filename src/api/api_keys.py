@@ -26,6 +26,7 @@ PROVIDER_ENV_VARS = {
     'deepseek': 'DEEPSEEK_API_KEY',
     'poe': 'POE_API_KEY',
     'nim': 'NIM_API_KEY',
+    'opencode': 'OPENCODE_API_KEY',
 }
 
 

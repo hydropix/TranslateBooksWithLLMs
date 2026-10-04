@@ -88,7 +88,7 @@ Access to 200+ models from multiple providers through a single API.
 
 1. Get API key at [openrouter.ai/keys](https://openrouter.ai/keys)
 2. In TBL: Select "OpenRouter", enter your key
-3. Choose a model from the list
+3. Choose a model from the list (your [presets](#presets) appear first)
 
 ### CLI Example
 
@@ -101,12 +101,43 @@ python translate.py -i book.txt -o book_fr.txt \
 
 Browse models and pricing: [openrouter.ai/models](https://openrouter.ai/models)
 
+### Presets
+
+An OpenRouter [preset](https://openrouter.ai/docs/guides/features/presets) is a named configuration
+saved on [openrouter.ai/settings/presets](https://openrouter.ai/settings/presets): a system prompt,
+a model with fallback models, provider routing (preferred or excluded providers, data policy,
+quantization), sampling parameters and reasoning settings. You use one by sending
+`@preset/<slug>` as the model.
+
+Presets are worth using with TBL because they expose OpenRouter options that TBL has no UI or CLI
+flag for. Provider routing and model fallbacks are configured only there. A preset is also edited
+on OpenRouter's site, so you can tune it without touching TBL, and the same configuration works in
+every tool that uses your OpenRouter account.
+
+When TBL loads the OpenRouter model list, it also calls `GET /api/v1/presets` with the same API key
+and lists your active presets first, as `@preset/<slug>` (the preset description is the tooltip).
+Type `preset` or part of the slug in the model search to find them. On the CLI, pass the preset as
+the model:
+
+```bash
+python translate.py -i book.txt -o book_fr.txt \
+    --provider openrouter \
+    -m @preset/my-translation-preset
+```
+
+Notes:
+- TBL does not send its reasoning override for a preset, so the preset's own reasoning setting
+  applies (see [Reasoning](#reasoning)).
+- Presets have no fixed price, so the cost estimate shows pricing as unknown. You can enter a
+  price by hand in the cost panel.
+- If the preset list cannot be fetched, the regular model list still loads and a warning is logged.
+
 ### Reasoning
 
 Many OpenRouter models reason by default (DeepSeek V4.x at effort `high`, Qwen 3.x), and reasoning
 tokens are billed as output: DeepSeek V4.1 Flash was seen producing 4,700 to 31,000 output tokens
 for translation chunks of about 3,000 input tokens. TBL reads each model's reasoning metadata from
-`/api/v1/models` and sends OpenRouter's unified `reasoning` parameter: `{"enabled": false}` when
+`/api/v1/models` and sends OpenRouter's unified `reasoning` parameter (except for presets): `{"enabled": false}` when
 reasoning can be turned off, or the lowest supported effort on models where it is mandatory (a
 warning is logged for those). The per-request log line shows the reasoning token count whenever
 the model reports one. `OPENROUTER_DISABLE_THINKING=false` keeps each model's default.

@@ -60,6 +60,12 @@ class OpenRouterProvider(LLMProvider):
     # OpenRouter API endpoints
     API_URL = "https://openrouter.ai/api/v1/chat/completions"
     MODELS_URL = "https://openrouter.ai/api/v1/models"
+    PRESETS_URL = "https://openrouter.ai/api/v1/presets"
+
+    # Presets are referenced as a model string: "@preset/<slug>"
+    PRESET_PREFIX = "@preset/"
+    PRESETS_PAGE_SIZE = 100  # API maximum
+    PRESETS_MAX_PAGES = 10
 
     # Session cost tracking (class-level)
     _session_cost = 0.0
@@ -185,6 +191,10 @@ class OpenRouterProvider(LLMProvider):
     async def _get_reasoning_override(self) -> Dict[str, Any]:
         """Return the `reasoning` request value for this model ({} = send none)."""
         if not self.disable_thinking:
+            return {}
+
+        # A preset carries its own model and reasoning config; don't override it.
+        if self.model.startswith(self.PRESET_PREFIX):
             return {}
 
         cached = OpenRouterProvider._reasoning_overrides.get(self.model)
@@ -316,11 +326,66 @@ class OpenRouterProvider(LLMProvider):
             if len(filtered_models) < 5:
                 return self._get_fallback_models()
 
-            return filtered_models
+            # The key's presets go first: they are the user's own configurations
+            return await self.get_presets() + filtered_models
 
         except Exception as e:
             print(f"[OpenRouter] WARN: Failed to fetch models: {e}")
             return self._get_fallback_models()
+
+    async def get_presets(self) -> list:
+        """
+        Fetch the active presets visible to this API key.
+
+        Each preset is returned in the same shape as a model entry, with
+        id "@preset/<slug>", so it can be selected and sent as the model.
+        Failures are non-fatal: the model list is still usable without presets.
+
+        Returns:
+            List of preset dicts sorted by id (empty on error or when none)
+        """
+        if not self.api_key:
+            return []
+
+        presets = []
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            client = await self._get_client()
+
+            for page in range(self.PRESETS_MAX_PAGES):
+                response = await client.get(
+                    self.PRESETS_URL,
+                    headers=headers,
+                    params={"limit": self.PRESETS_PAGE_SIZE,
+                            "offset": page * self.PRESETS_PAGE_SIZE},
+                    timeout=15
+                )
+                response.raise_for_status()
+                body = response.json()
+                page_data = body.get("data", [])
+
+                for preset in page_data:
+                    slug = preset.get("slug")
+                    if not slug or preset.get("status", "active") != "active":
+                        continue
+                    preset_id = f"{self.PRESET_PREFIX}{slug}"
+                    presets.append({
+                        "id": preset_id,
+                        "name": preset_id,
+                        "description": preset.get("description") or "",
+                        "is_preset": True,
+                    })
+
+                total = body.get("total_count", 0)
+                if len(page_data) < self.PRESETS_PAGE_SIZE or \
+                        (page + 1) * self.PRESETS_PAGE_SIZE >= total:
+                    break
+
+        except Exception as e:
+            print(f"[OpenRouter] WARN: Failed to fetch presets: {e}")
+
+        presets.sort(key=lambda p: p["id"])
+        return presets
 
     def _get_fallback_models(self) -> list:
         """Return fallback models list when API fetch fails."""

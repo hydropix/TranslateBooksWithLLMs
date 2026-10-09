@@ -26,8 +26,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+    # Docker Hub is sometimes unreachable from GitHub runners (auth.docker.io
+    # timeouts). Pull Docker Hub images through Google's mirror instead; the
+    # daemon falls back to Docker Hub if the mirror misses. The default builder
+    # is used, so no moby/buildkit image has to be pulled for Buildx either.
+    - name: Use a Docker Hub mirror
+      run: |
+        cfg=/etc/docker/daemon.json
+        [ -f "$cfg" ] || echo '{}' | sudo tee "$cfg" > /dev/null
+        sudo jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' "$cfg" | sudo tee "$cfg.new" > /dev/null
+        sudo mv "$cfg.new" "$cfg"
+        sudo systemctl restart docker
+        docker info | grep -A1 "Registry Mirrors"
 
     - name: Build Docker image
       working-directory: ./deployment

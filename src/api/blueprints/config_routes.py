@@ -22,6 +22,43 @@ SUPPORTED_UI_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko']
 UI_LOCALE_COOKIE = 'ui_locale'
 UI_LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
+# .env keys the settings endpoint is allowed to persist. Module-level so a
+# regression test can assert every provider's key/model was added: a missing
+# entry makes the web UI silently drop that field (the OpenCode blocker).
+SETTINGS_ALLOWED_KEYS = frozenset({
+    'GEMINI_API_KEY',
+    'GEMINI_MODEL',
+    'OPENAI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'OPENROUTER_MODEL',
+    'MISTRAL_API_KEY',
+    'MISTRAL_MODEL',
+    'DEEPSEEK_API_KEY',
+    'DEEPSEEK_MODEL',
+    'POE_API_KEY',
+    'POE_MODEL',
+    'NIM_API_KEY',
+    'NIM_MODEL',
+    'OPENCODE_API_KEY',
+    'OPENCODE_MODEL',
+    'DEFAULT_MODEL',
+    'LLM_PROVIDER',
+    'OLLAMA_API_ENDPOINT',
+    'OPENAI_API_ENDPOINT',
+    'OUTPUT_FILENAME_PATTERN',
+    'MAX_TOKENS_PER_CHUNK',
+    'PARALLEL_TRANSLATIONS',
+    'DISABLE_AUTO_PAUSE',
+    'NOTIFY_WEBHOOK_URL',
+    'NOTIFY_WEBHOOK_METHOD',
+    'NOTIFY_WEBHOOK_HEADERS',
+    'NOTIFY_WEBHOOK_PAYLOAD',
+    'NOTIFY_ON_SUCCESS',
+    'NOTIFY_ON_FAILURE',
+    'NOTIFY_ON_INTERRUPTION',
+    'NOTIFY_TIMEOUT_SECONDS',
+})
+
 
 def resolve_ui_locale(req):
     """Pick the UI locale to render the page with.
@@ -284,6 +321,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_poe_models(api_key)
         elif provider == 'nim':
             return _get_nim_models(api_key)
+        elif provider == 'opencode':
+            return _get_opencode_models(api_key)
         elif provider == 'openai':
             # Get endpoint from request for LM Studio support
             if request.method == 'POST':
@@ -315,6 +354,7 @@ def create_config_blueprint(server_session_id=None):
         deepseek_mask, deepseek_count = mask_api_key(_config.DEEPSEEK_API_KEY)
         poe_mask, poe_count = mask_api_key(_config.POE_API_KEY)
         nim_mask, nim_count = mask_api_key(_config.NIM_API_KEY)
+        opencode_mask, opencode_count = mask_api_key(_config.OPENCODE_API_KEY)
 
         config_response = {
             "api_endpoint": _config.API_ENDPOINT,
@@ -335,6 +375,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key": deepseek_mask,
             "poe_api_key": poe_mask,
             "nim_api_key": nim_mask,
+            "opencode_api_key": opencode_mask,
             "gemini_api_key_count": gemini_count,
             "openai_api_key_count": openai_count,
             "openrouter_api_key_count": openrouter_count,
@@ -342,6 +383,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key_count": deepseek_count,
             "poe_api_key_count": poe_count,
             "nim_api_key_count": nim_count,
+            "opencode_api_key_count": opencode_count,
             "gemini_api_key_configured": gemini_count > 0,
             "openai_api_key_configured": openai_count > 0,
             "openrouter_api_key_configured": openrouter_count > 0,
@@ -349,6 +391,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key_configured": deepseek_count > 0,
             "poe_api_key_configured": poe_count > 0,
             "nim_api_key_configured": nim_count > 0,
+            "opencode_api_key_configured": opencode_count > 0,
             "output_filename_pattern": _config.OUTPUT_FILENAME_PATTERN,
             "max_tokens_per_chunk": int(_config.MAX_TOKENS_PER_CHUNK),
             "parallel_translations": int(_config.PARALLEL_TRANSLATIONS),
@@ -405,7 +448,7 @@ def create_config_blueprint(server_session_id=None):
         """Shared listing for cloud providers exposing `get_available_models()`.
 
         Factors out the 5 nearly-identical model-listing flows (openrouter,
-        mistral, deepseek, poe, gemini). Each wrapper supplies its provider
+        mistral, deepseek, poe, gemini; opencode reuses it too). Each wrapper supplies its provider
         class, config values, and a few small quirks (Gemini reads model 'name'
         instead of 'id' and historically omits model_names from error bodies;
         OpenRouter passes text_only=True).
@@ -641,6 +684,24 @@ def create_config_blueprint(server_session_id=None):
                 "count": 0,
                 "error": f"Error connecting to NVIDIA NIM API: {str(e)}"
             })
+
+    def _get_opencode_models(provided_api_key=None):
+        """Get available models from the Opencode API"""
+        from src.core.llm import OpencodeProvider
+        return _fetch_provider_models(
+            provided_api_key=provided_api_key,
+            env_var='OPENCODE_API_KEY',
+            config_api_key=_config.OPENCODE_API_KEY,
+            config_default_model=_config.OPENCODE_MODEL,
+            provider_class=OpencodeProvider,
+            fallback_model="",
+            status_prefix="opencode",
+            display_name="Opencode",
+            api_key_missing_message=(
+                "Opencode API key is required. Set OPENCODE_API_KEY "
+                "environment variable or pass api_key parameter."
+            ),
+        )
 
     def _get_openai_models(provided_api_key=None, api_endpoint=None):
         """Get available models from OpenAI-compatible API.
@@ -989,37 +1050,7 @@ def create_config_blueprint(server_session_id=None):
         Accepts JSON with settings to save. Only specific keys are allowed
         for security reasons.
         """
-        allowed_keys = {
-            'GEMINI_API_KEY',
-            'GEMINI_MODEL',
-            'OPENAI_API_KEY',
-            'OPENROUTER_API_KEY',
-            'OPENROUTER_MODEL',
-            'MISTRAL_API_KEY',
-            'MISTRAL_MODEL',
-            'DEEPSEEK_API_KEY',
-            'DEEPSEEK_MODEL',
-            'POE_API_KEY',
-            'POE_MODEL',
-            'NIM_API_KEY',
-            'NIM_MODEL',
-            'DEFAULT_MODEL',
-            'LLM_PROVIDER',
-            'OLLAMA_API_ENDPOINT',
-            'OPENAI_API_ENDPOINT',
-            'OUTPUT_FILENAME_PATTERN',
-            'MAX_TOKENS_PER_CHUNK',
-            'PARALLEL_TRANSLATIONS',
-            'DISABLE_AUTO_PAUSE',
-            'NOTIFY_WEBHOOK_URL',
-            'NOTIFY_WEBHOOK_METHOD',
-            'NOTIFY_WEBHOOK_HEADERS',
-            'NOTIFY_WEBHOOK_PAYLOAD',
-            'NOTIFY_ON_SUCCESS',
-            'NOTIFY_ON_FAILURE',
-            'NOTIFY_ON_INTERRUPTION',
-            'NOTIFY_TIMEOUT_SECONDS'
-        }
+        allowed_keys = SETTINGS_ALLOWED_KEYS
 
         try:
             data = request.get_json()
@@ -1154,6 +1185,7 @@ def create_config_blueprint(server_session_id=None):
             "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
             "poe_api_key_configured": bool(_config.POE_API_KEY),
             "nim_api_key_configured": bool(_config.NIM_API_KEY),
+            "opencode_api_key_configured": bool(_config.OPENCODE_API_KEY),
             "default_model": _config.DEFAULT_MODEL or "",
             "llm_provider": _config.LLM_PROVIDER,
             "api_endpoint": _config.API_ENDPOINT or "",

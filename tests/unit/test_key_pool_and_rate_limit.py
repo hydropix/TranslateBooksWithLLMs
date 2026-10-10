@@ -226,6 +226,29 @@ class TestHandleRateLimit:
         assert exc_info.value.provider == "prov"
 
 
+    @pytest.mark.asyncio
+    async def test_long_retry_after_raises_instead_of_sleeping(self):
+        """A quota reset hours away must pause the job, not stall it."""
+        pool = KeyPool(["only"], provider_name="prov")
+        start = time.monotonic()
+        with pytest.raises(RateLimitError) as exc_info:
+            await handle_rate_limit(
+                pool, "only", {"Retry-After": "86400"},
+                rate_limit_events=1, max_attempts=3,
+            )
+        assert time.monotonic() - start < 0.1, "must not sleep"
+        assert exc_info.value.retry_after > 86000
+
+    @pytest.mark.asyncio
+    async def test_long_retry_after_still_rotates_to_spare_key(self):
+        pool = KeyPool(["k1", "k2"], provider_name="prov")
+        await handle_rate_limit(
+            pool, "k1", {"Retry-After": "86400"},
+            rate_limit_events=1, max_attempts=3,
+        )
+        assert await pool.acquire() == "k2"
+
+
 # ---------------------------------------------------------------------------
 # Provider retry loop x key rotation (issue #217)
 # ---------------------------------------------------------------------------

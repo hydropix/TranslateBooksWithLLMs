@@ -20,6 +20,7 @@ export const PROVIDER_LOGOS = {
     openai: '/static/img/providers/openai.png',
     openrouter: '/static/img/providers/openrouter.png',
     nim: '/static/img/providers/nvidia.png',
+    opencode: '/static/img/providers/opencode.svg',
 };
 
 export const PROVIDER_META = {
@@ -31,10 +32,11 @@ export const PROVIDER_META = {
     openai: { name: 'OpenAI', description: 'Compatible' },
     openrouter: { name: 'OpenRouter', description: '200+ models' },
     nim: { name: 'NVIDIA NIM', description: 'Cloud API' },
+    opencode: { name: 'Opencode', description: 'Go / Zen' },
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
-export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
+export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'opencode', 'openrouter', 'poe'];
 
 /**
  * Replace the dropdown content with a single placeholder option whose text
@@ -58,7 +60,8 @@ function formatPrice(price) {
  *   - Gemini  → displayName + token-limit tooltip
  *   - OpenAI  → curated label list
  *   - OpenRouter / Poe → optgroups (Poe) + pricing in the label
- *   - Mistral / DeepSeek / NIM → label + context-length tooltip
+ *   - Mistral / DeepSeek / NIM / Opencode → label + context-length tooltip
+ *     (+ optgroups when models carry a `group`, e.g. Opencode's catalogs)
  *   - Ollama  → plain model names (strings)
  *
  * Returns true iff `defaultModel` was found among the options and selected.
@@ -138,8 +141,18 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             if (modelId === defaultModel) { opt.selected = true; defaultFound = true; }
             (optgroup || selectEl).appendChild(opt);
         });
-    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim') {
+    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim' || provider === 'opencode') {
+        // Opencode tags each model with its catalog (OpenCode Go / OpenCode
+        // Zen); the backend sends them grouped, so render one optgroup per run.
+        let currentGroup = null;
+        let optgroup = null;
         list.forEach((m) => {
+            if (m.group && m.group !== currentGroup) {
+                currentGroup = m.group;
+                optgroup = document.createElement('optgroup');
+                optgroup.label = currentGroup;
+                selectEl.appendChild(optgroup);
+            }
             // Same dual-shape tolerance as the openai branch: Settings sends
             // `{value, label}`, the Sample tab forwards the raw `{id, name}`.
             const value = m.value ?? m.id ?? '';
@@ -149,7 +162,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             opt.textContent = label;
             if (m.context_length) opt.title = `Context: ${m.context_length} tokens`;
             if (value === defaultModel) { opt.selected = true; defaultFound = true; }
-            selectEl.appendChild(opt);
+            (optgroup || selectEl).appendChild(opt);
         });
     } else {
         // Ollama: plain strings

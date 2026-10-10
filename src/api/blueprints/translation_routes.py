@@ -47,7 +47,7 @@ def _clamp_parallel_workers(value):
 # '<PROVIDER>_API_KEY'. The mapping is mechanical, so supporting a new provider
 # in the resume-override path requires only adding it here (and nowhere else in
 # this file).
-_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim')
+_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'opencode')
 
 # Providers that talk to a user-supplied endpoint; the others use a built-in one.
 _ENDPOINT_PROVIDERS = ('ollama', 'openai')
@@ -396,6 +396,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'gemini_api_key': _resolve_api_key(data.get('gemini_api_key'), 'GEMINI_API_KEY'),
             'openai_api_key': _resolve_api_key(data.get('openai_api_key'), 'OPENAI_API_KEY'),
             'openrouter_api_key': _resolve_api_key(data.get('openrouter_api_key'), 'OPENROUTER_API_KEY'),
+            'opencode_api_key': _resolve_api_key(data.get('opencode_api_key'), 'OPENCODE_API_KEY'),
             # Prompt options (optional instructions to include in the system prompt)
             'prompt_options': data.get('prompt_options', {}),
             # Auto-pause on rate limit toggle (request overrides .env default)

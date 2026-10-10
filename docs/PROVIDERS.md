@@ -327,6 +327,89 @@ Browse models: [build.nvidia.com](https://build.nvidia.com/)
 
 ---
 
+## Opencode (Cloud)
+
+One [OpenCode](https://opencode.ai) API key reaches two catalogs:
+
+| Catalog | Model id | Billed against |
+|---|---|---|
+| [OpenCode Go](https://opencode.ai/docs/go/) | `opencode-go/<model>` | Your Go subscription's usage limits |
+| OpenCode Zen | `opencode/<model>` | Your workspace balance (pay-as-you-go) |
+
+The ids are the ones `opencode models` prints, and the prefix decides where the
+request goes. A bare `<model>` goes to Go, so a missing prefix never spends
+balance. The model list shows both catalogs, grouped.
+
+Whether a model actually works depends on your workspace, not on the key: Zen
+models need a balance (or "use balance" enabled), and individual models can be
+disabled in the OpenCode console. The model list cannot know this in advance,
+so such refusals show up as clear errors when the translation starts.
+
+### Session header
+
+Every request carries an `x-opencode-session` header holding a stable id for the
+conversation; without it Go answers `400 MissingSessionID`. TBL generates one id
+per translation job (the provider instance lives for the whole job, so every
+chunk and parallel worker shares it and the gateway's prompt cache stays warm)
+and sends it on every call, including the model-list probe. It is random per
+job, never derived from the machine or the install.
+
+### Supported models
+
+The gateway serves each model through one API family, and TBL picks it from
+the model id, the same way opencode and hermes-agent do:
+
+| Models | API | Endpoint |
+|---|---|---|
+| `gpt-*`, `grok-*`, `muse-spark*` | OpenAI Responses | `.../v1/responses` |
+| `claude-*`, `qwen*`, `union-alpha*`, and on Go `minimax-*` | Anthropic Messages | `.../v1/messages` |
+| `gemini-*` (Zen only) | Google generateContent | `.../v1/models/<model>:generateContent` |
+| everything else (DeepSeek, GLM, Kimi, MiMo, LongCat, ...) | chat/completions | `.../v1/chat/completions` |
+
+- New models that rotate into the catalogs go to chat/completions unless their
+  id matches a prefix above. If the gateway refuses one
+  (`ModelProtocolUnsupported`), the log says so.
+- **Not supported yet:** `jev-*` on Zen (OpenCode's System One API). These
+  models are hidden from the model list and rejected with a clear error if
+  configured by hand.
+- **Free Zen models** (`opencode/*-free`, `opencode/big-pickle`, ...) are listed,
+  but OpenCode currently restricts them to its own app and refuses other
+  clients with `FreeTierError`. TBL does not impersonate the OpenCode client.
+
+When a Go usage limit is reached, the gateway answers 429 with a reset time that
+can be hours or days away; the job auto-pauses with a checkpoint instead of
+waiting, and can be resumed later.
+
+### Setup
+
+1. Get an API key from the [OpenCode console](https://opencode.ai).
+2. In TBL: select "Opencode", enter your key.
+3. Pick a model in the UI, or set `OPENCODE_MODEL` in `.env`.
+
+### Configuration
+
+```bash
+OPENCODE_API_KEY=
+OPENCODE_MODEL=opencode-go/deepseek-v4.1-flash
+# OPENCODE_API_BASE=https://opencode.ai/zen
+```
+
+`OPENCODE_API_BASE` overrides the gateway root; the catalog path (`/go/v1` or
+`/v1`) is appended to it. It is read at server startup, so changing it requires
+a restart. Like most other cloud providers, the Opencode provider ignores the
+per-request `llm_api_endpoint` field.
+
+### CLI Example
+
+```bash
+python translate.py -i book.txt -o book_fr.txt \
+    --provider opencode \
+    --opencode_api_key YOUR_API_KEY_HERE \
+    -m opencode-go/deepseek-v4.1-flash
+```
+
+---
+
 ## Endpoint Allowlist
 
 The web API lets a request choose the endpoint the server calls, so the server checks that endpoint against an allowlist before using it. Accepted out of the box:

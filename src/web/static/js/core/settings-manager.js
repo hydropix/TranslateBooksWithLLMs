@@ -74,6 +74,11 @@ const AUTO_SAVE_DELAY = 1000; // 1 second debounce
  */
 let isInitializing = true;
 
+/**
+ * Whether the custom instruction dropdown has finished loading its options
+ */
+let customInstructionsLoaded = false;
+
 export const SettingsManager = {
     /**
      * Initialize settings manager - load saved preferences and setup auto-save
@@ -90,6 +95,7 @@ export const SettingsManager = {
 
         // Listen for custom instructions loaded event
         window.addEventListener('customInstructionsLoaded', () => {
+            customInstructionsLoaded = true;
             this.applyPendingCustomInstructionSelection();
         });
 
@@ -489,8 +495,8 @@ export const SettingsManager = {
             }
 
             if (prefs.customInstructionFile) {
-                // No-op while the select is still empty; the
-                // 'customInstructionsLoaded' listener applies it later.
+                // The select has built-in options before custom instructions load,
+                // so keep this selection pending until the loaded event fires.
                 window.__pendingCustomInstructionSelection = prefs.customInstructionFile;
                 this.applyPendingCustomInstructionSelection();
             }
@@ -760,13 +766,13 @@ export const SettingsManager = {
     },
 
     /**
-     * Apply pending custom instruction selection after custom instructions are loaded
-     * Called when 'customInstructionsLoaded' event is fired
+     * Apply a pending custom instruction selection when its option is available.
+     * Keep it pending until the custom instruction list has finished loading.
      */
     applyPendingCustomInstructionSelection() {
         if (window.__pendingCustomInstructionSelection) {
             const select = DomHelpers.getElement('customInstructionSelect');
-            if (select && select.options.length > 0) {
+            if (select) {
                 // Check if the value exists in options
                 let found = false;
                 for (let option of select.options) {
@@ -777,10 +783,13 @@ export const SettingsManager = {
                         break;
                     }
                 }
-                if (!found) {
+
+                if (found) {
+                    delete window.__pendingCustomInstructionSelection;
+                } else if (customInstructionsLoaded) {
                     console.warn('[SettingsManager] Custom instruction not found:', window.__pendingCustomInstructionSelection);
+                    delete window.__pendingCustomInstructionSelection;
                 }
-                delete window.__pendingCustomInstructionSelection;
             }
         }
     },

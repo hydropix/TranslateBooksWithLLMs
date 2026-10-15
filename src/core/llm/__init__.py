@@ -40,6 +40,7 @@ from .providers.gemini import GeminiProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
+from .providers.opencode import OpencodeProvider
 
 # Factory
 from .factory import create_llm_provider
@@ -74,6 +75,7 @@ __all__ = [
     'MistralProvider',
     'DeepSeekProvider',
     'PoeProvider',
+    'OpencodeProvider',
 
     # Factory
     'create_llm_provider',

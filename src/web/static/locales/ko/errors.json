@@ -21,5 +21,6 @@
   "api_key_required_mistral": "Mistral 제공자를 사용하려면 Mistral API 키가 필요합니다.",
   "api_key_required_deepseek": "DeepSeek 제공자를 사용하려면 DeepSeek API 키가 필요합니다.",
   "api_key_required_poe": "Poe API 키가 필요합니다. poe.com/api_key에서 키를 받으세요",
-  "api_key_required_nim": "NIM 제공자를 사용하려면 NVIDIA NIM API 키가 필요합니다."
+  "api_key_required_nim": "NIM 제공자를 사용하려면 NVIDIA NIM API 키가 필요합니다.",
+  "api_key_required_opencode": "Opencode 제공자를 사용하려면 Opencode API 키가 필요합니다."
 }

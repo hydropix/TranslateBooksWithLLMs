@@ -243,3 +243,13 @@ TTS_OUTPUT_FORMAT=opus
 |------|---------|
 | 0 | Success |
 | 1 | Error (check console output) |
+
+## Ask the Book
+
+Ask questions about a book from the terminal. Answers come only from the book's text, with citations; questions it does not cover are reported as out of scope.
+
+```bash
+python -m src.core.ask book.epub -m qwen3:14b --embedding-model bge-m3
+```
+
+See [ASK_THE_BOOK.md](ASK_THE_BOOK.md#cli) for all options.

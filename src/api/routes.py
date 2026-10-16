@@ -24,6 +24,7 @@ from .blueprints import (
     create_cost_blueprint,
     create_version_blueprint,
     create_sample_blueprint,
+    create_ask_blueprint,
 )
 from .sample_state import SampleStateManager
 
@@ -87,6 +88,10 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     sample_state_manager = SampleStateManager()
     sample_bp = create_sample_blueprint(sample_state_manager, socketio, output_dir)
     app.register_blueprint(sample_bp)
+
+    # Register Ask the Book routes (question answering grounded in an uploaded book)
+    ask_bp = create_ask_blueprint(output_dir)
+    app.register_blueprint(ask_bp)
 
     # Register error handlers
     _register_error_handlers(app)

@@ -54,7 +54,7 @@ function $(id) {
  * form. Same DOM ids the Settings Summary reads — this IS the config the big
  * translation would use, which is the whole point of the test.
  */
-function readGlobalLlmConfig() {
+export function readGlobalLlmConfig() {
     const provider = (DomHelpers.getValue('llmProvider') || 'ollama').trim().toLowerCase();
     const model = (DomHelpers.getValue('model') || '').trim();
 

@@ -18,6 +18,7 @@ from src.config import (
 # Disable the char cap when grouping: block sizing is purely fixed-count
 # (every block holds exactly SRT_LINES_PER_BLOCK subtitles).
 _NO_CHAR_CAP = 10 ** 12
+from src.core.llm.exceptions import RateLimitError
 from src.core.llm_client import create_llm_client
 from src.core.srt_processor import SRTProcessor
 from src.core.subtitle_translator import refine_subtitle_translations
@@ -124,6 +125,18 @@ async def refine_srt_file(
             subtitle_blocks=refine_blocks,
             subtitle_positions=subtitle_positions,
         )
+    except RateLimitError as e:
+        # Persist the cues refined before the 429, then let the error
+        # propagate: handlers.py drives the pause / auto-resume.
+        partial = e.partial_result
+        if not isinstance(partial, dict) or len(partial) != len(subtitles):
+            raise
+        if await _write_refined_srt(
+                srt_processor, subtitles, partial, output_filepath, log_callback):
+            if log_callback:
+                log_callback("refine_partial_saved",
+                             f"💾 Partial refined SRT saved before rate-limit pause: '{output_filepath}'")
+        raise
     finally:
         if llm_client:
             try:
@@ -137,15 +150,22 @@ async def refine_srt_file(
                          "Refinement interrupted before save")
         return False
 
+    if not await _write_refined_srt(
+            srt_processor, subtitles, refined, output_filepath, log_callback):
+        return False
+    if log_callback:
+        log_callback("srt_refine_done",
+                     f"✅ Refined SRT saved: {output_filepath}")
+    return True
+
+
+async def _write_refined_srt(srt_processor, subtitles, refined, output_filepath, log_callback) -> bool:
     refined_subs = srt_processor.update_translated_subtitles(subtitles, refined)
     refined_srt = srt_processor.reconstruct_srt(refined_subs)
 
     try:
         async with aiofiles.open(output_filepath, 'w', encoding='utf-8') as f:
             await f.write(refined_srt)
-        if log_callback:
-            log_callback("srt_refine_done",
-                         f"✅ Refined SRT saved: {output_filepath}")
         return True
     except Exception as e:
         if log_callback:

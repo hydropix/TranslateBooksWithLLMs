@@ -24,6 +24,7 @@ from src.config import (
     MAX_TOKENS_PER_CHUNK, OLLAMA_NUM_CTX,
     REQUEST_TIMEOUT, SRT_LINES_PER_BLOCK,
 )
+from src.core.document_text import extract_plain_text as _extract_plain_text
 from src.core.glossary import build_cast_block, build_glossary_block, filter_glossary
 from src.core.glossary.models import GlossaryConfig
 from src.core.llm.factory import create_llm_provider
@@ -72,86 +73,6 @@ def _small_document_warning(total: int, count: int, requested: int) -> Dict[str,
         "code": "warning_small_document",
         "params": {"total": total, "count": count, "requested": requested},
     }
-
-
-def _extract_plain_text(file_path: str, file_type: str) -> str:
-    """
-    Extract the textual content of a file for chunking + sampling.
-
-    For TXT we read directly. For EPUB/DOCX we reuse the plain extractors used
-    by Plain Text Mode in the main translate flow, and for PDF the shared
-    text-layer extractor. SRT is handled by the
-    caller (sampled at the cue-group level, not via this helper).
-    """
-    ft = file_type.lower()
-    if ft == "txt":
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            return f.read()
-    if ft == "epub":
-        return _extract_epub_text(file_path)
-    if ft == "docx":
-        return _extract_docx_text(file_path)
-    if ft == "pdf":
-        return _extract_pdf_text(file_path)
-    raise ValueError(f"Unsupported file type for sampling: {file_type}")
-
-
-def _extract_epub_text(file_path: str) -> str:
-    """Concatenate the block-level text of every XHTML body in the EPUB.
-
-    Reuses the main translate flow's `extract_plain_paragraphs`, which walks
-    block elements once and returns one string per paragraph. (An earlier
-    version iterated *every* element and joined `itertext()` per element, which
-    re-emitted each paragraph once per ancestor — heavily duplicating content
-    and corrupting the sampled extracts.)
-    """
-    import zipfile
-    from lxml import etree
-
-    from src.core.epub.plain_extractor import _local_name, extract_plain_paragraphs
-
-    parts: List[str] = []
-    try:
-        with zipfile.ZipFile(file_path, "r") as zf:
-            for name in zf.namelist():
-                lower = name.lower()
-                if not (lower.endswith(".xhtml") or lower.endswith(".html") or lower.endswith(".htm")):
-                    continue
-                try:
-                    raw = zf.read(name)
-                    root = etree.fromstring(raw)
-                except Exception:
-                    continue
-                body = next(
-                    (el for el in root.iter()
-                     if isinstance(el.tag, str) and _local_name(el) == "body"),
-                    root,
-                )
-                paragraphs, _tags, _images, _attrib = extract_plain_paragraphs(body)
-                for text in paragraphs:
-                    text = (text or "").strip()
-                    if text:
-                        parts.append(text)
-                        parts.append("\n\n")
-    except zipfile.BadZipFile:
-        raise ValueError("Invalid EPUB file (not a zip archive)")
-    return "".join(parts).strip()
-
-
-def _extract_docx_text(file_path: str) -> str:
-    """Concatenate paragraph text from a DOCX using the plain extractor."""
-    from docx import Document
-
-    doc = Document(file_path)
-    parts = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
-    return "\n\n".join(parts)
-
-
-def _extract_pdf_text(file_path: str) -> str:
-    """Return the PDF's text layer ('' when unreadable or scanned)."""
-    from src.core.pdf import extract_pdf_text
-
-    return extract_pdf_text(file_path)
 
 
 def _load_source_units(file_path: str, file_type: str) -> List[Dict[str, str]]:

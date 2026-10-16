@@ -377,6 +377,12 @@ async def refine_subtitle_translations(
                 # Re-raise RateLimitError to trigger auto-pause
                 from src.core.llm.exceptions import RateLimitError
                 if isinstance(e, RateLimitError):
+                    # Hand back every subtitle refined so far, with the rest
+                    # kept as drafts, so the caller can save before pausing.
+                    partial = dict(refined_translations)
+                    for g_idx, text in translations.items():
+                        partial.setdefault(g_idx, text)
+                    e.partial_result = partial
                     raise
                 if log_callback:
                     log_callback("srt_refinement_error",

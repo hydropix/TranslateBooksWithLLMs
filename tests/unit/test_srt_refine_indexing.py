@@ -167,3 +167,54 @@ def test_update_translated_subtitles_ignores_negative_index():
     updated = processor.update_translated_subtitles(subtitles, {-1: "INTRUDER"})
 
     assert updated[-1]["text"] == "last"
+
+
+class RateLimitedLLMClient(FakeLLMClient):
+    """Refines the first block, then answers every later call with a 429."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def make_request(self, prompt, model_name, system_prompt=None):
+        from src.core.llm.exceptions import RateLimitError
+
+        self.calls += 1
+        if self.calls > 1:
+            raise RateLimitError("429 Too Many Requests", provider="test")
+        return await super().make_request(prompt, model_name, system_prompt)
+
+
+@pytest.mark.asyncio
+async def test_refine_srt_rate_limit_saves_refined_cues(tmp_path, monkeypatch):
+    """Issue #302: a 429 mid-pass must write the cues already refined (the rest
+    unchanged) and still re-raise so auto-pause triggers."""
+    import src.core.refine.srt_refiner as srt_refiner
+    from src.core.llm.exceptions import RateLimitError
+
+    monkeypatch.setattr(srt_refiner, "SRT_LINES_PER_BLOCK", 1)
+    monkeypatch.setattr(
+        srt_refiner, "create_llm_client", lambda *args, **kwargs: RateLimitedLLMClient()
+    )
+
+    srt = _build_srt([
+        ("1", "00:00:01,000", "00:00:02,000", "alpha one"),
+        ("2", "00:00:03,000", "00:00:04,000", "bravo two"),
+        ("3", "00:00:05,000", "00:00:06,000", "charlie three"),
+    ])
+    input_file = tmp_path / "input.srt"
+    output_file = tmp_path / "output.srt"
+    input_file.write_text(srt, encoding="utf-8")
+
+    with pytest.raises(RateLimitError):
+        await srt_refiner.refine_srt_file(
+            input_filepath=str(input_file),
+            output_filepath=str(output_file),
+            target_language="French",
+        )
+
+    by_start = _parse_output(output_file.read_text(encoding="utf-8"))
+    assert by_start == {
+        "00:00:01,000": "ALPHA ONE",
+        "00:00:03,000": "bravo two",
+        "00:00:05,000": "charlie three",
+    }

@@ -98,6 +98,7 @@ function getTranslationConfig(file) {
         deepseek_api_key: provider === 'deepseek' ? ApiKeyUtils.getValue('deepseekApiKey') : '',
         poe_api_key: provider === 'poe' ? ApiKeyUtils.getValue('poeApiKey') : '',
         nim_api_key: provider === 'nim' ? ApiKeyUtils.getValue('nimApiKey') : '',
+        opencode_api_key: provider === 'opencode' ? ApiKeyUtils.getValue('opencodeApiKey') : '',
         input_filename: file.name,
         output_filename: resolvedOutputFilename,
         file_type: file.fileType,

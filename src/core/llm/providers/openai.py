@@ -5,7 +5,7 @@ This module provides the OpenAICompatibleProvider class for interacting with
 OpenAI API and compatible endpoints (llama.cpp, LM Studio, vLLM, OpenAI, etc.).
 """
 
-from typing import List, Optional, Callable, Union
+from typing import List, Optional, Callable, Tuple, Union
 import asyncio
 import json
 import httpx
@@ -28,12 +28,19 @@ class OpenAICompatibleProvider(LLMProvider):
     def __init__(self, api_endpoint: str, model: str,
                  api_key: Optional[Union[str, List[str]]] = None,
                  context_window: int = OLLAMA_NUM_CTX, log_callback: Optional[Callable] = None,
-                 provider_name: str = "openai-compatible"):
+                 provider_name: str = "openai-compatible",
+                 extra_headers: Optional[dict] = None):
         # Skip pool creation if no key (local servers like llama.cpp don't need one)
         super().__init__(model, api_keys=api_key, provider_name=provider_name)
         self.api_endpoint = self._normalize_endpoint(api_endpoint)
         self.context_window = context_window
         self.log_callback = log_callback
+        # Extra headers merged into every request this provider makes. Used by
+        # subclasses (e.g. OpencodeProvider) that need a mandatory header on
+        # every call. Never sent on the shared client, so the install-
+        # fingerprint guard (tests/unit/test_no_install_fingerprint.py) keeps
+        # asserting the client default headers are the four constant ones.
+        self.extra_headers = dict(extra_headers or {})
         self._detected_context_size: Optional[int] = None
         self._context_detector = ContextDetector()
 
@@ -78,20 +85,20 @@ class OpenAICompatibleProvider(LLMProvider):
         # Otherwise return as-is (user provided custom path)
         return endpoint
 
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
-                      system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
-        """
-        Generate text using an OpenAI compatible API.
+    def _describe_http_error(self, response: Optional[httpx.Response], error_message: str) -> str:
+        """Hook for subclasses to make a provider-specific HTTP error actionable."""
+        return error_message
 
-        Args:
-            prompt: The user prompt (content to translate)
-            timeout: Request timeout in seconds
-            system_prompt: Optional system prompt (role/instructions)
+    def _request_url(self) -> str:
+        """URL generate() posts to; subclasses with several APIs override it."""
+        return self.api_endpoint
 
-        Returns:
-            LLMResponse with content and token usage info, or None if failed
-        """
-        # Build messages array with optional system prompt
+    def _auth_headers(self, api_key: str) -> dict:
+        """Headers that authenticate one request with the active key."""
+        return {"Authorization": f"Bearer {api_key}"}
+
+    def _build_payload(self, prompt: str, system_prompt: Optional[str]) -> dict:
+        """chat/completions request body."""
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -109,6 +116,33 @@ class OpenAICompatibleProvider(LLMProvider):
             payload["thinking"] = False
             payload["enable_thinking"] = False
             payload["chat_template_kwargs"] = {"enable_thinking": False}
+        return payload
+
+    def _parse_response(self, response_json: dict) -> Tuple[str, Optional[str], int, int]:
+        """chat/completions body -> (text, finish_reason, prompt_tokens, completion_tokens)."""
+        choice = response_json.get("choices", [{}])[0]
+        usage = response_json.get("usage", {})
+        return (
+            choice.get("message", {}).get("content", ""),
+            choice.get("finish_reason"),
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+        )
+
+    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
+                      system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
+        """
+        Generate text using an OpenAI compatible API.
+
+        Args:
+            prompt: The user prompt (content to translate)
+            timeout: Request timeout in seconds
+            system_prompt: Optional system prompt (role/instructions)
+
+        Returns:
+            LLMResponse with content and token usage info, or None if failed
+        """
+        payload = self._build_payload(prompt, system_prompt)
 
         client = await self._get_client()
         # 429s have their own budget (rate_limit_events): rotating to a spare
@@ -117,26 +151,25 @@ class OpenAICompatibleProvider(LLMProvider):
         rate_limit_events = 0
         while attempt < MAX_TRANSLATION_ATTEMPTS:
             current_key = await self._key_pool.acquire() if self._key_pool else None
-            headers = {"Content-Type": "application/json"}
+            # Provider-mandated extra headers first, then the base headers, so a
+            # caller-supplied dict can never clobber Content-Type or the
+            # Authorization derived from the active API key.
+            headers = dict(self.extra_headers)
+            headers["Content-Type"] = "application/json"
             if current_key:
-                headers["Authorization"] = f"Bearer {current_key}"
+                headers.update(self._auth_headers(current_key))
             try:
                 response = await client.post(
-                    self.api_endpoint,
+                    self._request_url(),
                     json=payload,
                     headers=headers,
                     timeout=timeout
                 )
                 response.raise_for_status()
 
-                response_json = response.json()
-                response_text = response_json.get("choices", [{}])[0].get("message", {}).get("content", "")
-                finish_reason = response_json.get("choices", [{}])[0].get("finish_reason")
-
-                # Extract token usage if available
-                usage = response_json.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
+                response_text, finish_reason, prompt_tokens, completion_tokens = (
+                    self._parse_response(response.json())
+                )
                 context_used = prompt_tokens + completion_tokens
 
                 if self.log_callback and (prompt_tokens or completion_tokens):
@@ -163,7 +196,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 if self.log_callback:
                     self.log_callback("llm_timeout",
                         f"{YELLOW}⚠️ LLM request timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
-                        f"{YELLOW}   Endpoint: {self.api_endpoint}{RESET}\n"
+                        f"{YELLOW}   Endpoint: {self._request_url()}{RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Possible causes:{RESET}\n"
                         f"{YELLOW}   - llama.cpp/LM Studio server crashed or became unresponsive{RESET}\n"
@@ -249,6 +282,10 @@ class OpenAICompatibleProvider(LLMProvider):
                         print(f"{RED}Context size exceeded: {error_message}{RESET}")
                     raise ContextOverflowError(error_message)
 
+                # After the overflow check, so a subclass hint can never be
+                # mistaken for a context-size error by the keyword match above.
+                error_message = self._describe_http_error(e.response, error_message)
+
                 # Handle other HTTP errors with detailed information
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
@@ -258,7 +295,7 @@ class OpenAICompatibleProvider(LLMProvider):
                     status_code = e.response.status_code if e.response else 'unknown'
                     self.log_callback("llm_http_error",
                         f"{YELLOW}⚠️ HTTP error from LLM server (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
-                        f"{YELLOW}   Endpoint: {self.api_endpoint}{RESET}\n"
+                        f"{YELLOW}   Endpoint: {self._request_url()}{RESET}\n"
                         f"{YELLOW}   Status: {e.response.status_code if e.response else 'unknown'}{RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Error: {error_message}{RESET}")
@@ -302,7 +339,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 if self.log_callback:
                     self.log_callback("llm_json_error",
                         f"{YELLOW}⚠️ Invalid JSON response from LLM (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
-                        f"{YELLOW}   Endpoint: {self.api_endpoint}{RESET}\n"
+                        f"{YELLOW}   Endpoint: {self._request_url()}{RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Error: {str(e)}{RESET}\n"
                         f"{YELLOW}   This may indicate:{RESET}\n"
@@ -337,7 +374,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 if self.log_callback:
                     self.log_callback("llm_unexpected_error",
                         f"{YELLOW}⚠️ Unexpected error during LLM request (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
-                        f"{YELLOW}   Endpoint: {self.api_endpoint}{RESET}\n"
+                        f"{YELLOW}   Endpoint: {self._request_url()}{RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Error type: {type(e).__name__}{RESET}\n"
                         f"{YELLOW}   Error: {str(e)}{RESET}")
@@ -374,7 +411,8 @@ class OpenAICompatibleProvider(LLMProvider):
             model=self.model,
             endpoint=self.api_endpoint,
             api_key=self.api_key,
-            log_callback=self.log_callback
+            log_callback=self.log_callback,
+            extra_headers=self.extra_headers,
         )
 
         self._detected_context_size = ctx

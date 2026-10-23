@@ -122,7 +122,7 @@ Docker automatically pulls the correct architecture for your system.
 |----------|-------------|---------|
 | `API_ENDPOINT` | LLM API endpoint | `http://localhost:11434/api/generate` |
 | `DEFAULT_MODEL` | Default LLM model | `qwen3:14b` |
-| `LLM_PROVIDER` | Provider (ollama/gemini/openai) | `ollama` |
+| `LLM_PROVIDER` | Provider (ollama/gemini/openai/openrouter/mistral/deepseek/poe/nim/opencode) | `ollama` |
 | `GEMINI_API_KEY` | Gemini API key | - |
 | `OPENAI_API_KEY` | OpenAI API key | - |
 | `PORT` | Web server port | `5000` |

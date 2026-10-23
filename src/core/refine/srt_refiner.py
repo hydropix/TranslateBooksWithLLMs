@@ -110,6 +110,7 @@ async def refine_srt_file(
     deepseek_api_key: Optional[str] = None,
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
+    opencode_api_key: Optional[str] = None,
     prompt_options: Optional[Dict[str, Any]] = None,
     checkpoint_manager: Any = None,
     translation_id: Optional[str] = None,
@@ -195,6 +196,7 @@ async def refine_srt_file(
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
+        opencode_api_key=opencode_api_key,
         log_callback=log_callback,
     )
 

@@ -231,6 +231,7 @@ Two things stay local to the device: if you queue several files, other devices o
 | [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Webhook notifications on completion (ntfy, gotify, Discord, Slack, custom) |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Force consistent term translations across a book (Web UI + CLI, auto-extract via NER) |
 | [docs/STYLE_EXTRACTION.md](docs/STYLE_EXTRACTION.md) | Extract a reusable writing-style preset from sample books and apply it to every chunk (Web UI) |
+| [docs/ASK_THE_BOOK.md](docs/ASK_THE_BOOK.md) | Ask questions about a book and get answers grounded in its text, with citations; off-topic questions are reported as out of scope (Web UI + CLI) |
 | [docs/CLI.md](docs/CLI.md) | Complete CLI reference |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problem solutions |
 | [docs/DOCKER.md](docs/DOCKER.md) | Docker deployment guide |

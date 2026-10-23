@@ -218,6 +218,7 @@ function switchTopTab(name) {
     const filesTab = $('tab-files');
     const sampleTab = $('tab-sample');
     const stylesTab = $('tab-styles');
+    const askTab = $('tab-ask');
 
     if (translateTab) translateTab.classList.toggle('hidden', name !== 'translate');
     if (settingsTab) settingsTab.classList.toggle('hidden', name !== 'settings');
@@ -225,6 +226,7 @@ function switchTopTab(name) {
     if (filesTab) filesTab.classList.toggle('hidden', name !== 'files');
     if (sampleTab) sampleTab.classList.toggle('hidden', name !== 'sample');
     if (stylesTab) stylesTab.classList.toggle('hidden', name !== 'styles');
+    if (askTab) askTab.classList.toggle('hidden', name !== 'ask');
 
     const buttons = document.querySelectorAll('#topTabNav .tab-btn');
     buttons.forEach((btn) => {

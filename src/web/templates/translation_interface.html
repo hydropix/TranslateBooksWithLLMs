@@ -303,6 +303,10 @@
                 <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">science</span>
                 <span data-i18n="common:tab_sample">Sample</span>
             </button>
+            <button type="button" class="tab-btn" data-tab="ask" onclick="switchTopTab('ask')">
+                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">forum</span>
+                <span data-i18n="common:tab_ask">Ask</span>
+            </button>
             <button type="button" class="tab-btn" data-tab="settings" onclick="switchTopTab('settings')">
                 <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">tune</span>
                 <span data-i18n="common:tab_settings">Settings</span>
@@ -952,6 +956,85 @@
         </div>
 
         <!-- Tab: Settings -->
+        <!-- Tab: Ask the Book -->
+        <div id="tab-ask" class="hidden">
+            <div class="main-card">
+                <div class="card-body">
+                    <h2 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <span class="material-symbols-outlined">forum</span>
+                        <span data-i18n="ask:title">Ask the Book</span>
+                    </h2>
+                    <p style="color: var(--text-muted-light); font-size: 0.875rem; margin-bottom: 1.25rem;" data-i18n="ask:subtitle">
+                        Ask questions about a book. Answers come only from the book's text; anything it doesn't cover is reported as out of scope.
+                    </p>
+
+                    <div class="file-upload" id="askFileUpload" onclick="document.getElementById('askFileInput').click()">
+                        <div class="upload-icon">
+                            <span class="material-symbols-outlined" style="font-size: 2.5rem;">menu_book</span>
+                        </div>
+                        <h3 data-i18n="ask:drop_file_title">Drop a book to ask about</h3>
+                        <p data-i18n="ask:drop_file_support">Support for TXT, EPUB, DOCX, and PDF</p>
+                        <div class="browse-btn" data-i18n="translation:browse_files">Browse Files</div>
+                        <input type="file" id="askFileInput" accept=".txt,.md,.epub,.docx,.pdf" style="display: none;">
+                    </div>
+
+                    <div id="askFileInfo" class="hidden sample-file-card">
+                        <div class="sample-file-cover">
+                            <span class="material-symbols-outlined">menu_book</span>
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="sample-file-label" data-i18n="ask:selected_file">Selected book</div>
+                            <div class="sample-file-name" id="askFileName"></div>
+                            <div class="sample-file-details" id="askFileDetails"></div>
+                        </div>
+                        <button type="button" class="sample-file-remove" id="askFileRemoveBtn"
+                                data-i18n-attr="title:ask:remove_file;aria-label:ask:remove_file">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    <div id="askStatus" class="ask-status hidden" role="status"></div>
+
+                    <div id="askConversation" class="ask-conversation">
+                        <p id="askEmptyState" class="ask-empty" data-i18n="ask:empty_state">Upload a book, then ask your first question.</p>
+                    </div>
+
+                    <div class="ask-input-row">
+                        <div class="neu-inset-light" style="flex: 1;">
+                            <textarea id="askQuestionInput" class="form-control" rows="2" disabled
+                                      data-i18n-attr="placeholder:ask:question_placeholder;aria-label:ask:question_placeholder"></textarea>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="askSendBtn" disabled>
+                            <span class="material-symbols-outlined">send</span>
+                            <span data-i18n="ask:send">Ask</span>
+                        </button>
+                    </div>
+
+                    <div class="ask-options-row">
+                        <label for="askAnswerLanguage" data-i18n="ask:answer_language">Answer language</label>
+                        <div class="neu-inset-light">
+                            <select class="form-control" id="askAnswerLanguage">
+                                <option value="auto" selected data-i18n="ask:answer_language_auto">Same as my question</option>
+                                <option value="English">English</option>
+                                <option value="Hinglish (Hindi written in Roman script, mixed with English)" data-i18n="ask:answer_language_hinglish">Hinglish</option>
+                                <option value="Hindi">Hindi</option>
+                                <option value="French">French</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="German">German</option>
+                                <option value="Chinese">Chinese</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Korean">Korean</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="askClearBtn" disabled>
+                            <span class="material-symbols-outlined">restart_alt</span>
+                            <span data-i18n="ask:clear_conversation">New conversation</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="tab-settings" class="hidden">
         <div class="main-card">
             <div class="card-body">

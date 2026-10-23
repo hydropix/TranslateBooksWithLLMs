@@ -48,7 +48,7 @@ JS_DIR = ROOT / "src" / "web" / "static" / "js"
 # src/web/static/js/i18n/i18n.js — the test will fail loudly if a locale
 # directory or namespace file is missing.
 SUPPORTED_LOCALES = ["en", "fr", "es", "de", "zh-CN", "ja", "ko"]
-NAMESPACES = ["common", "translation", "settings", "glossary", "files", "tts", "errors", "sample", "style"]
+NAMESPACES = ["common", "translation", "settings", "glossary", "files", "tts", "errors", "sample", "style", "ask"]
 REFERENCE_LOCALE = "en"
 
 
@@ -120,6 +120,7 @@ _EXEMPT_OPTION_SELECT_IDS = {
     "sampleTargetLang",
     "glossaryEditorSourceLang",
     "glossaryEditorTargetLang",
+    "askAnswerLanguage",
     # UI locale picker — option text is the locale autonym ("English", "简体中文", ...)
     "uiLocaleSelect",
     # AI provider picker — product / brand names with English technical hints

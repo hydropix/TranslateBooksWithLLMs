@@ -872,3 +872,22 @@ def detect_existing_placeholder_format(text: str) -> tuple:
         ("[id", "]", r'\\[id(\\d+)\\]')
     """
     return (PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX, PLACEHOLDER_PATTERN)
+
+# =============================================================================
+# ASK THE BOOK CONFIGURATION
+# =============================================================================
+# Question answering over an uploaded book, restricted to the book's own text.
+
+ASK_EMBEDDING_MODEL = os.getenv('ASK_EMBEDDING_MODEL', '').strip()
+"""Ollama embedding model used to index books for Ask the Book (e.g. bge-m3,
+nomic-embed-text). Empty = lexical (BM25) retrieval only, no extra model."""
+
+ASK_MIN_SIMILARITY = float(os.getenv('ASK_MIN_SIMILARITY', '0.50'))
+"""With embeddings enabled: if no passage reaches this cosine similarity to the
+question, the question is reported as out of the book's scope without asking
+the LLM. Calibrated for bge-m3; other embedding models may need a different
+value. Raise it to refuse more readily, lower it if in-book questions are
+being refused."""
+
+ASK_TOP_K = int(os.getenv('ASK_TOP_K', '5'))
+"""Number of book passages given to the LLM for each question."""

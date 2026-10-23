@@ -68,6 +68,7 @@ import { TTSManager } from './tts/tts-manager.js';
 // Sample & Compare
 // ========================================
 import { SampleManager } from './sample/sample-manager.js';
+import { AskManager } from './ask/ask-manager.js';
 
 // ========================================
 // i18n
@@ -465,6 +466,7 @@ async function initializeModules() {
     //    network calls; failures are logged and the UI stays usable.
     TTSManager.initialize();
     SampleManager.init();
+    AskManager.init();
     QuickTestManager.init();
     TranslationTracker.initialize().catch((error) => {
         console.error('TranslationTracker initialization failed:', error);

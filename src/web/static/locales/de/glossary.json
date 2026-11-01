@@ -150,7 +150,7 @@
   "dropdown_term_plural": "Begriffe",
 
   "ner_modal_title": "Kandidaten automatisch extrahieren",
-  "ner_intro": "Wählen Sie eine Quelldatei (TXT, SRT, EPUB, DOCX, PDF). Das LLM durchsucht <strong id=\"ner-budget-label\">6000</strong> Zeichen, die aus <strong id=\"ner-samples-label\">10</strong> gleichmäßig verteilten Auszügen des Dokuments stammen, und schlägt wiederkehrende benannte Entitäten vor. Sie können jeden Kandidaten prüfen und bearbeiten, bevor er dem Glossar hinzugefügt wird.",
+  "ner_intro": "Wählen Sie eine Quelldatei (TXT, SRT, EPUB, DOCX, PDF). Das LLM liest <strong id=\"ner-budget-label\">6000</strong> Zeichen: bis zu <strong id=\"ner-samples-label\">10</strong> gleichmäßig verteilte Auszüge sowie kurze Passagen rund um die wiederkehrenden Namen, die ein Durchlauf durch das gesamte Dokument findet. Es schlägt wiederkehrende benannte Entitäten vor, und Sie können jeden Kandidaten prüfen und bearbeiten, bevor er dem Glossar hinzugefügt wird.",
   "ner_choose_file": "Datei wählen",
   "ner_or_drop_here": "oder Datei hier ablegen",
   "ner_clear_file_aria": "Datei entfernen",

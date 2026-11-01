@@ -21,6 +21,7 @@ from src.core.glossary import Glossary, GlossaryStore, GlossaryTerm
 from src.core.glossary import build_cast_block, build_glossary_block, filter_glossary
 from src.core.glossary import suggest_terms as ner_suggest_terms
 from src.core.glossary.models import GlossaryConfig
+from src.core.glossary.name_scan import take_glossary_samples
 from src.core.llm.exceptions import RateLimitError
 from src.api.api_keys import provider_env_var, resolve_api_key
 from src.api.services.endpoint_validator import EndpointValidator
@@ -643,9 +644,19 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                         "error": f"File too large (max {_NER_UPLOAD_MAX_BYTES // (1024 * 1024)} MB)"
                     }), 413
 
-                sampled, effective_sample_count, full_text_chars = extract_samples_from_upload(
-                    raw, upload.filename, max_chars, sample_count
-                )
+                names_targeted = 0
+                if sample_count == 1:
+                    sampled, effective_sample_count, full_text_chars = extract_samples_from_upload(
+                        raw, upload.filename, max_chars, sample_count
+                    )
+                else:
+                    full_text = document_sampler.extract_full_text(
+                        raw, upload.filename, _NER_FULL_TEXT_CAP
+                    ) or ''
+                    full_text_chars = len(full_text)
+                    sampled, effective_sample_count, names_targeted = take_glossary_samples(
+                        full_text, max_chars, sample_count, min_sample_size=_NER_MIN_SAMPLE_SIZE
+                    ) if full_text else (None, 0, 0)
                 if not sampled:
                     return jsonify({
                         "error": "Could not extract any text from the uploaded file."
@@ -654,7 +665,12 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                 sample_source = 'uploaded_file'
                 sample_filename = upload.filename
 
-                if sample_count > 1 and effective_sample_count < sample_count:
+                if names_targeted:
+                    logger.info(
+                        "NER sample targets %d recurring names found across %d chars",
+                        names_targeted, full_text_chars,
+                    )
+                elif sample_count > 1 and effective_sample_count < sample_count:
                     if effective_sample_count == 1 and full_text_chars <= max_chars:
                         pre_warnings.append(
                             f"Document is short ({full_text_chars} chars) — sent in full instead of {sample_count} excerpts."

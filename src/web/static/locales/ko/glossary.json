@@ -150,7 +150,7 @@
   "dropdown_term_plural": "용어",
 
   "ner_modal_title": "후보 자동 추출",
-  "ner_intro": "원본 파일 (TXT, SRT, EPUB, DOCX, PDF)을 선택하세요. LLM이 문서 전체에 균등하게 분포된 <strong id=\"ner-samples-label\">10</strong>개 발췌에서 추출된 <strong id=\"ner-budget-label\">6000</strong>자를 스캔하고 반복되는 명명된 엔티티를 제안합니다. 각 후보가 용어집에 추가되기 전에 검토하고 편집할 수 있습니다.",
+  "ner_intro": "원본 파일 (TXT, SRT, EPUB, DOCX, PDF)을 선택하세요. LLM은 총 <strong id=\"ner-budget-label\">6000</strong>자를 읽습니다. 문서 전체에 균등하게 분포된 최대 <strong id=\"ner-samples-label\">10</strong>개 발췌와 함께, 문서 전체를 스캔해 찾은 반복되는 이름 주변의 짧은 구절입니다. 반복되는 명명된 엔티티를 제안하며, 각 후보가 용어집에 추가되기 전에 검토하고 편집할 수 있습니다.",
   "ner_choose_file": "파일 선택",
   "ner_or_drop_here": "또는 여기에 파일을 놓으세요",
   "ner_clear_file_aria": "파일 지우기",

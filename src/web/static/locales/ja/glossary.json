@@ -150,7 +150,7 @@
   "dropdown_term_plural": "件",
 
   "ner_modal_title": "候補を自動抽出",
-  "ner_intro": "翻訳元のファイル (TXT、SRT、EPUB、DOCX、PDF) を選択してください。LLM がドキュメント全体から均等に分散された <strong id=\"ner-samples-label\">10</strong> 件の抜粋から <strong id=\"ner-budget-label\">6000</strong> 文字をスキャンし、繰り返し登場する固有名詞を提案します。各候補は用語集に追加される前に確認・編集できます。",
+  "ner_intro": "翻訳元のファイル (TXT、SRT、EPUB、DOCX、PDF) を選択してください。LLM は合計 <strong id=\"ner-budget-label\">6000</strong> 文字を読み取ります。ドキュメント全体から均等に分散された最大 <strong id=\"ner-samples-label\">10</strong> 件の抜粋に加え、文書全体のスキャンで見つかった繰り返し登場する名前の周辺の短い文章です。繰り返し登場する固有名詞を提案し、各候補は用語集に追加される前に確認・編集できます。",
   "ner_choose_file": "ファイルを選択",
   "ner_or_drop_here": "またはここにファイルをドロップ",
   "ner_clear_file_aria": "ファイルをクリア",

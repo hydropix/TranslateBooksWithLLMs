@@ -88,7 +88,8 @@ You have `wuxia_novel.epub`, 600 pages, Chinese to English. You want consistent 
 ```text
 1. Web UI -> Glossaries tab -> New -> "Wuxia novel", Chinese -> English
 2. Auto-extract: drop the EPUB, click Extract
-   -> 10 excerpts of 600 chars each, distributed across the book
+   -> a few excerpts spread across the book, plus a short window around each
+      recurring name found by a scan of the whole text
    -> ~40-60 candidates (typical for the first chapters of a wuxia)
 3. Review the candidates table:
    - Fix mistransliterations: 李凡青 -> "Li Fanqing" (not "Li Fan-qing")
@@ -97,13 +98,13 @@ You have `wuxia_novel.epub`, 600 pages, Chinese to English. You want consistent 
    - Uncheck noise (common nouns, action verbs)
 4. Click "Add selected"
 5. Run Auto-extract a SECOND time on the same file
-   -> picks up entities the first pass missed (the model sees different excerpts)
+   -> picks up entities the first pass missed (the model's answer varies run to run)
    -> rows already in the glossary are tagged "(already in glossary)" and unchecked
 6. Add the new ones, repeat until extracts return mostly already-known terms
 7. Translate tab -> select the glossary -> drop the EPUB -> Translate
 ```
 
-The auto-extract is non-destructive, so running it 2-3 times on the same book is the recommended flow. Each run samples different parts of the document and surfaces different recurring entities.
+The auto-extract is non-destructive, so running it 2-3 times on the same book is the recommended flow. The excerpts are the same each run, but the model does not list the same entities every time.
 
 ### Workflow B: building the glossary in the UI, running the translation in the CLI
 
@@ -533,18 +534,21 @@ The Web UI's **Auto-extract** button asks the configured LLM to scan a source fi
 | ------------- | ------- | ----- | ------------------------------------------------------------------------ |
 | File          |         | 100MB | `.txt`, `.srt`, `.epub`, `.docx`, `.pdf`                                 |
 | Total chars   | 6000    | 6000  | How much text the LLM sees, in characters.                               |
-| Samples       | 10      | 50    | Number of evenly-spaced excerpts. `1` means "first N chars".             |
+| Samples       | 10      | 50    | Number of evenly-spaced excerpts (see below). `1` means "first N chars". |
 
 ### How sampling works
 
 For long files, sending the full text would blow past the model's context. Instead:
 
 1. Read up to 5M chars from the file (cap on memory).
-2. Divide into `Samples` evenly-spaced excerpts whose total length equals `Total chars`.
-3. Snap each excerpt's edges to nearby whitespace to avoid cutting mid-word.
-4. Join with a `[...]` separator so the model sees a discontinuity hint.
+2. Scan the whole text, without the LLM, for recurring names: capitalized words that appear at least 3 times, mostly in mid-sentence position (so `But` or `Then` at sentence starts don't count), and that are not common words capitalized in titles (`The`, `How`).
+3. Spend a quarter of `Total chars` on evenly-spaced excerpts (at most `Samples` of them). They carry general context and the uncapitalized terms the scan cannot see.
+4. Spend the rest on short windows (~400 chars, a few sentences) around the recurring names those excerpts missed, most frequent name first. Each window is placed where it also catches the most other missing names.
+5. Snap each excerpt's edges to nearby whitespace to avoid cutting mid-word, and join with a `[...]` separator so the model sees a discontinuity hint.
 
-Each excerpt must be at least 500 chars; if the budget cannot afford that many samples, the count is reduced and a warning is shown above the candidates table.
+Evenly-spaced excerpts alone see about 1% of a novel: they catch the main cast but rarely a secondary character who only appears in a few chapters. On two real books, the targeted windows raised how many of the 60 most frequent names appear in the sample from 29 to 44 and from 14 to 36, for the same `Total chars`. Shorter windows fit more names but read like a list, and models then tend to copy the names untranslated.
+
+The scan only works for scripts with letter case. For Chinese, Japanese, Korean, Thai, Arabic and other uncased sources, and for German (which capitalizes every noun, so capitals say nothing about names), it finds nothing and the sample falls back to `Samples` evenly-spaced excerpts covering the whole budget. Each excerpt must then be at least 500 chars; if the budget cannot afford that many samples, the count is reduced and a warning is shown above the candidates table.
 
 ### How extraction works
 
@@ -563,7 +567,7 @@ The parser is permissive: if the tags are missing it falls back to markdown-fenc
 
 ### Re-running on the same file
 
-Each run samples different excerpts (the LLM sees different parts of the document each time), so running auto-extract 2-3 times on a long book is the recommended flow. The second run typically surfaces 30-50% new entities. Stop when the table is mostly `(already in glossary)`.
+The excerpts are deterministic, but the LLM does not list the same entities every run, so running auto-extract 2-3 times on a long book is the recommended flow. The second run typically surfaces 30-50% new entities. Stop when the table is mostly `(already in glossary)`.
 
 ---
 
@@ -579,7 +583,7 @@ Auto mode skips the whole build-review-select workflow above. Pick **Auto — bu
 - **Not available in Quick Test or Sample & Compare.** Both are meant to stay instant; an `Auto` selection there is treated as `None`.
 - **On failure or timeout,** the job proceeds with no glossary injected, and a `⚠️` line appears in the log so you know why nothing was applied.
 
-**The quality tradeoff.** This is the same NER pass as [Auto-extract reference](#auto-extract-reference), minus the review step. Unreviewed candidates go straight into the prompt, so a wrong or garbled term translation lands in *every* chunk that contains it, not just one. Two guards limit the damage: identity pairs (source equals target) are dropped, and the injected list is capped at 60 terms — but nothing caps how wrong a kept term can be. If the log shows the `⚠️` "no usable terms" line often, or you spot a wrong name propagating across the book, turn Auto off and build a reviewed glossary instead.
+**The quality tradeoff.** This is the same NER pass as [Auto-extract reference](#auto-extract-reference), with the same name-targeted sampling ([How sampling works](#how-sampling-works)), minus the review step. Unreviewed candidates go straight into the prompt, so a wrong or garbled term translation lands in *every* chunk that contains it, not just one. Two guards limit the damage: identity pairs (source equals target) are dropped, and the injected list is capped at 60 terms — but nothing caps how wrong a kept term can be. If the log shows the `⚠️` "no usable terms" line often, or you spot a wrong name propagating across the book, turn Auto off and build a reviewed glossary instead.
 
 ---
 

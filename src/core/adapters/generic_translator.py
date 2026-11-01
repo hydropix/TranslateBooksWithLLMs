@@ -300,9 +300,9 @@ class GenericTranslator:
                 if log_callback:
                     log_callback("translation_interrupted",
                         f"Translation interrupted at unit {at_index+1}/{total_units}")
-                # Try to save partial output for TXT/SRT (fast reconstruction).
+                # Try to save partial output for TXT/SRT/PGN (fast reconstruction).
                 # For EPUB, partial output may not be valid, so we skip it.
-                if self.adapter.format_name in ['txt', 'srt']:
+                if self.adapter.format_name in ['txt', 'srt', 'pgn']:
                     try:
                         if log_callback:
                             log_callback("reconstruct_partial", "Saving partial output before interruption")

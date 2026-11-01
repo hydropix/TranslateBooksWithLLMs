@@ -15,7 +15,7 @@ import zipfile
 from typing import Literal, Optional, Tuple
 from pathlib import Path
 
-FileType = Literal["txt", "epub", "srt", "docx", "pdf"]
+FileType = Literal["txt", "epub", "srt", "pgn", "docx", "pdf"]
 
 # Known text file extensions that should be treated as plain text
 KNOWN_TEXT_EXTENSIONS = {
@@ -28,6 +28,7 @@ KNOWN_TEXT_EXTENSIONS = {
 PROCESSOR_EXTENSIONS = {
     '.epub': 'epub',
     '.srt': 'srt',
+    '.pgn': 'pgn',
     '.docx': 'docx',
     '.pdf': 'pdf'
 }
@@ -44,7 +45,7 @@ def detect_file_type(file_path: str) -> FileType:
         file_path: Path to the file
 
     Returns:
-        File type as string ('txt', 'epub', 'srt', 'docx', 'pdf')
+        File type as string ('txt', 'epub', 'srt', 'pgn', 'docx', 'pdf')
 
     Raises:
         ValueError: If file type cannot be determined or is not supported
@@ -71,7 +72,7 @@ def detect_file_type(file_path: str) -> FileType:
     # Could not determine type
     raise ValueError(
         f"Cannot determine file type for: {ext}. "
-        f"Supported types: .txt, .epub, .srt, .docx, .pdf, "
+        f"Supported types: .txt, .epub, .srt, .pgn, .docx, .pdf, "
         f"or plain text files with any extension."
     )
 

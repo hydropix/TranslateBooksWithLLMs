@@ -153,7 +153,7 @@ class SecureFileHandler:
     # The system will detect the actual content type for unknown extensions
     ALLOWED_EXTENSIONS: Set[str] = {
         # Primary supported formats (with dedicated processors)
-        '.txt', '.epub', '.srt', '.docx', '.pdf',
+        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf',
         # Common text file extensions (will be processed as plain text)
         '.text', '.log', '.md', '.markdown', '.rst', '.asc',
         # Configuration/data files (text-based, can be translated)
@@ -401,6 +401,7 @@ class SecureFileHandler:
                 '.yml': self._validate_text_file,
                 '.epub': self._validate_epub_file,
                 '.srt': self._validate_srt_file,
+                '.pgn': self._validate_text_file,
                 '.docx': self._validate_docx_file,
                 '.pdf': self._validate_pdf_file,
             }

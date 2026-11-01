@@ -130,12 +130,12 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Translate a text, EPUB, SRT, DOCX or PDF file using an LLM.",
+        description="Translate a text, EPUB, SRT, PGN, DOCX or PDF file using an LLM.",
         epilog="Tip: any --*_api_key flag also accepts comma-separated keys "
                "(e.g. --gemini_api_key key1,key2,key3) for automatic rotation "
                "on HTTP 429 — useful to chain free-tier accounts.",
     )
-    parser.add_argument("-i", "--input", required=True, help="Path to the input file (text, EPUB, SRT, DOCX or PDF).")
+    parser.add_argument("-i", "--input", required=True, help="Path to the input file (text, EPUB, SRT, PGN, DOCX or PDF).")
     parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
@@ -214,6 +214,8 @@ if __name__ == "__main__":
             output_ext = '.epub'
         elif args.input.lower().endswith('.srt'):
             output_ext = '.srt'
+        elif args.input.lower().endswith('.pgn'):
+            output_ext = '.pgn'
         if args.refine_only:
             args.output = f"{base} (refined){output_ext}"
         else:
@@ -227,6 +229,8 @@ if __name__ == "__main__":
         file_type = "EPUB"
     elif args.input.lower().endswith('.srt'):
         file_type = "SRT"
+    elif args.input.lower().endswith('.pgn'):
+        file_type = "PGN"
     elif args.input.lower().endswith('.docx'):
         file_type = "DOCX"
     elif args.input.lower().endswith('.pdf'):
@@ -260,12 +264,14 @@ if __name__ == "__main__":
                      "Set LITELLM_MODEL in .env or pass -m, e.g. "
                      "-m anthropic/claude-sonnet-4-6")
 
-    # PDF output is a rebuilt, reflowed document with no refine path yet.
-    if args.input.lower().endswith('.pdf'):
+    # PDF output is a rebuilt, reflowed document and PGN translates comments
+    # only; neither has a refine path yet.
+    if args.input.lower().endswith(('.pdf', '.pgn')):
+        input_format = os.path.splitext(args.input)[1][1:].upper()
         if args.refine_only:
-            parser.error("--refine-only does not support PDF input yet.")
+            parser.error(f"--refine-only does not support {input_format} input yet.")
         if args.refine:
-            logger.warning("⚠️ --refine is ignored for PDF input (not supported yet).")
+            logger.warning(f"⚠️ --refine is ignored for {input_format} input (not supported yet).")
             args.refine = False
 
     # Refinement is monolingual: mismatched source/target almost always

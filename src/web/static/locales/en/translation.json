@@ -12,7 +12,7 @@
   "custom_target_lang_placeholder": "Enter custom target language",
 
   "drop_files_title": "Drop files to translate",
-  "drop_files_support": "Support for TXT, EPUB, SRT, DOCX, and PDF",
+  "drop_files_support": "Support for TXT, EPUB, SRT, PGN, DOCX, and PDF",
   "drop_files_refine_title": "Drop files to refine (already translated)",
   "drop_files_refine_support": "Polish an existing translation — same language in, same language out",
   "browse_files": "Browse Files",

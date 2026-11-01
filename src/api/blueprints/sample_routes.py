@@ -84,7 +84,7 @@ def _extract_plain_text(file_path: str, file_type: str) -> str:
     caller (sampled at the cue-group level, not via this helper).
     """
     ft = file_type.lower()
-    if ft == "txt":
+    if ft in ("txt", "pgn"):
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
     if ft == "epub":

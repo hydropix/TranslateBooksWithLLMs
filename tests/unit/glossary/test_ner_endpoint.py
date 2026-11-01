@@ -4,6 +4,7 @@ Unit tests for the /api/glossaries/<gid>/suggest-terms endpoint.
 Verifies that provider RateLimitError surfaces as HTTP 429 with a
 Retry-After header instead of being swallowed as a generic 500.
 """
+import io
 import os
 import sys
 import tempfile
@@ -174,6 +175,61 @@ class TestSuggestTermsApiKeyResolution:
 
         assert response.status_code == 200, response.get_json()
         assert captured.get("api_key") == "real-env-key"
+
+
+class TestSuggestTermsUploadSampling:
+    """An uploaded book is sampled around its recurring names, so a secondary
+    character confined to one stretch still reaches the LLM."""
+
+    FILLER = "The road went on through the quiet hills under a grey sky. "
+    BOOK = (
+        FILLER * 1200
+        + "Then the guide spoke with Ignatius by the fire. " * 4
+        + FILLER * 3000
+    )
+
+    def _post(self, client, store, sample_count):
+        glossary = store.create_glossary(
+            name="sampling-test", source_language="English", target_language="French",
+        )
+        sent = {}
+
+        async def _fake_suggest(*args, **kwargs):
+            sent["text"] = kwargs["text"]
+            return [], []
+
+        with patch(
+            "src.core.llm.factory.create_llm_provider",
+            side_effect=lambda **kw: _CapturingProvider(**kw),
+        ), patch(
+            "src.api.blueprints.glossary_routes.ner_suggest_terms",
+            side_effect=_fake_suggest,
+        ):
+            response = client.post(
+                f"/api/glossaries/{glossary.id}/suggest-terms",
+                data={
+                    "file": (io.BytesIO(self.BOOK.encode("utf-8")), "book.txt"),
+                    "sample_count": str(sample_count),
+                    "provider": "ollama",
+                },
+                content_type="multipart/form-data",
+            )
+        assert response.status_code == 200, response.get_json()
+        return response.get_json(), sent["text"]
+
+    def test_secondary_name_reaches_the_llm(self, client, store):
+        body, text = self._post(client, store, sample_count=10)
+        assert "Ignatius" in text
+        assert len(text) <= 6000
+        assert body["sample_count"] > 1
+        assert body["full_text_chars"] == len(self.BOOK)
+        assert body["warnings"] == []
+
+    def test_single_sample_still_means_first_chars(self, client, store):
+        body, text = self._post(client, store, sample_count=1)
+        assert "Ignatius" not in text
+        assert self.BOOK.startswith(text)
+        assert body["sample_count"] == 1
 
 
 if __name__ == "__main__":

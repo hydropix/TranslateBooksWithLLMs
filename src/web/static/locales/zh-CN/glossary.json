@@ -150,7 +150,7 @@
   "dropdown_term_plural": "术语",
 
   "ner_modal_title": "自动提取候选项",
-  "ner_intro": "选择一个源文件（TXT、SRT、EPUB、DOCX、PDF）。LLM 会扫描从文档中均匀抽取的 <strong id=\"ner-samples-label\">10</strong> 段共 <strong id=\"ner-budget-label\">6000</strong> 个字符，并提出反复出现的命名实体。在加入术语表之前，您将逐一审阅并编辑候选项。",
+  "ner_intro": "选择一个源文件（TXT、SRT、EPUB、DOCX、PDF）。LLM 会读取共 <strong id=\"ner-budget-label\">6000</strong> 个字符：最多 <strong id=\"ner-samples-label\">10</strong> 段从文档中均匀抽取的片段，外加扫描全文后找到的反复出现的名字周围的短段落，并提出反复出现的命名实体。在加入术语表之前，您将逐一审阅并编辑候选项。",
   "ner_choose_file": "选择文件",
   "ner_or_drop_here": "或将文件拖放到此处",
   "ner_clear_file_aria": "清除文件",

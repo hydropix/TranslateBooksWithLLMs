@@ -150,7 +150,7 @@
   "dropdown_term_plural": "términos",
 
   "ner_modal_title": "Extraer candidatos automáticamente",
-  "ner_intro": "Elige un archivo de origen (TXT, SRT, EPUB, DOCX, PDF). El LLM analizará <strong id=\"ner-budget-label\">6000</strong> caracteres tomados de <strong id=\"ner-samples-label\">10</strong> extractos espaciados uniformemente a lo largo del documento y propondrá entidades nombradas recurrentes. Podrás revisar y editar cada candidato antes de que se incorpore al glosario.",
+  "ner_intro": "Elige un archivo de origen (TXT, SRT, EPUB, DOCX, PDF). El LLM leerá <strong id=\"ner-budget-label\">6000</strong> caracteres: hasta <strong id=\"ner-samples-label\">10</strong> extractos espaciados uniformemente, más pasajes breves en torno a los nombres recurrentes detectados al recorrer todo el documento. Propondrá entidades nombradas recurrentes, y podrás revisar y editar cada candidato antes de que se incorpore al glosario.",
   "ner_choose_file": "Elegir archivo",
   "ner_or_drop_here": "o suelta un archivo aquí",
   "ner_clear_file_aria": "Limpiar archivo",

@@ -150,7 +150,7 @@
   "dropdown_term_plural": "terms",
 
   "ner_modal_title": "Auto-extract candidates",
-  "ner_intro": "Pick a source file (TXT, SRT, EPUB, DOCX, PDF). The LLM will scan <strong id=\"ner-budget-label\">6000</strong> characters drawn from <strong id=\"ner-samples-label\">10</strong> evenly-spaced excerpts across the document, and propose recurring named entities. You'll review and edit each candidate before it joins the glossary.",
+  "ner_intro": "Pick a source file (TXT, SRT, EPUB, DOCX, PDF). The LLM will read <strong id=\"ner-budget-label\">6000</strong> characters: up to <strong id=\"ner-samples-label\">10</strong> evenly-spaced excerpts, plus short passages around the recurring names found by a scan of the whole document. It proposes recurring named entities, and you'll review and edit each candidate before it joins the glossary.",
   "ner_choose_file": "Choose file",
   "ner_or_drop_here": "or drop a file here",
   "ner_clear_file_aria": "Clear file",

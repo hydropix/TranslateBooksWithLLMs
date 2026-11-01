@@ -150,7 +150,7 @@
   "dropdown_term_plural": "termes",
 
   "ner_modal_title": "Extraire automatiquement des candidats",
-  "ner_intro": "Choisissez un fichier source (TXT, SRT, EPUB, DOCX, PDF). Le LLM scannera <strong id=\"ner-budget-label\">6000</strong> caractères tirés de <strong id=\"ner-samples-label\">10</strong> extraits espacés uniformément dans le document, et proposera les entités nommées récurrentes. Vous pourrez vérifier et modifier chaque candidat avant qu'il ne rejoigne le glossaire.",
+  "ner_intro": "Choisissez un fichier source (TXT, SRT, EPUB, DOCX, PDF). Le LLM lira <strong id=\"ner-budget-label\">6000</strong> caractères : jusqu'à <strong id=\"ner-samples-label\">10</strong> extraits espacés uniformément, plus de courts passages autour des noms récurrents repérés en parcourant tout le document. Il proposera les entités nommées récurrentes, et vous pourrez vérifier et modifier chaque candidat avant qu'il ne rejoigne le glossaire.",
   "ner_choose_file": "Choisir un fichier",
   "ner_or_drop_here": "ou déposez un fichier ici",
   "ner_clear_file_aria": "Effacer le fichier",

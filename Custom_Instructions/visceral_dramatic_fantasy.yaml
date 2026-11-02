@@ -1,0 +1,67 @@
+description: Urgent first-person fantasy narration combining visceral sensory focus, breathless sentence cadence, and dramatic emotional stakes.
+mode: source
+context: |-
+  A high-stakes fantasy world characterized by elemental magic, mythic beasts, violent conflict, and intense romantic drama.
+source_files:
+- Zodiac Academy 9 Restless Stars (Caroline Peckham  Susanne Valenti) (z-library.sk, 1lib.sk, z-lib.sk).epub
+- Heartless Sky (Zodiac Academy 7) (Caroline Peckham, Susanne Valenti) (z-library.sk, 1lib.sk, z-lib.sk).epub
+- Zodiac Academy 8 Sorrow and Starlight (Caroline Peckham  Susanne Valenti) (z-library.sk, 1lib.sk, z-lib.sk).epub
+rules:
+- dimension: register
+  instruction: Balance dramatic, life-or-death high stakes with immediate emotional vulnerability and intimate personal focus.
+- dimension: narrative_voice
+  instruction: Maintain an immediate, highly emotional first-person narrative perspective in the past tense that foregrounds the narrator's internal bodily sensations and urgent perceptions.
+- dimension: sentence_rhythm
+  instruction: Structure action sequences with long, compound sentences that build tension through trailing participial phrases before abruptly halting.
+- dimension: lexicon
+  instruction: Emphasize concrete somatic vocabulary that highlights physical impact, body temperature, scent, and intense visual contact.
+- dimension: imagery
+  instruction: Construct metaphors around visceral physical sensations and elemental forces to convey sudden peril and romantic intensity simultaneously.
+- dimension: dialogue
+  instruction: Limit dialogue during high-stress scenes to brief single-word imperative exclamations that interrupt narrative prose.
+- dimension: punctuation
+  instruction: Use em-dashes to signify abrupt physical interruptions, sudden transitions, or suspended climactic moments.
+- dimension: formatting
+  instruction: Break paragraphs at moments of sudden physical shift or shift in sensory focus to heighten dramatic impact.
+translation: |-
+  Match the following writing style in the translation. These rules describe how the text must read; they never authorize adding, removing, or altering content.
+
+  ## Setting
+
+  A high-stakes fantasy world characterized by elemental magic, mythic beasts, violent conflict, and intense romantic drama.
+
+  Do not use words that belong to a later era or a different technological level than this setting, even when they are the most direct equivalent.
+
+  ## Style
+
+  - Balance dramatic, life-or-death high stakes with immediate emotional vulnerability and intimate personal focus.
+  - Maintain an immediate, highly emotional first-person narrative perspective in the past tense that foregrounds the narrator's internal bodily sensations and urgent perceptions.
+  - Structure action sequences with long, compound sentences that build tension through trailing participial phrases before abruptly halting.
+  - Emphasize concrete somatic vocabulary that highlights physical impact, body temperature, scent, and intense visual contact.
+  - Construct metaphors around visceral physical sensations and elemental forces to convey sudden peril and romantic intensity simultaneously.
+  - Limit dialogue during high-stress scenes to brief single-word imperative exclamations that interrupt narrative prose.
+  - Use em-dashes to signify abrupt physical interruptions, sudden transitions, or suspended climactic moments.
+  - Break paragraphs at moments of sudden physical shift or shift in sensory focus to heighten dramatic impact.
+
+  Treat these rules as tendencies of the writing, not as a vocabulary. Never reuse a fixed set of words, phrases, or images across passages: vary the wording naturally and let each sentence follow from its own content. Whenever a rule and the natural phrasing of a passage conflict, favour the natural phrasing.
+refinement: |-
+  Polish the already-translated text so that it matches the following writing style. Rewrite phrasing, rhythm and register as needed. Do not re-translate, do not add information, and do not change the meaning.
+
+  ## Setting
+
+  A high-stakes fantasy world characterized by elemental magic, mythic beasts, violent conflict, and intense romantic drama.
+
+  Do not use words that belong to a later era or a different technological level than this setting, even when they are the most direct equivalent.
+
+  ## Style
+
+  - Balance dramatic, life-or-death high stakes with immediate emotional vulnerability and intimate personal focus.
+  - Maintain an immediate, highly emotional first-person narrative perspective in the past tense that foregrounds the narrator's internal bodily sensations and urgent perceptions.
+  - Structure action sequences with long, compound sentences that build tension through trailing participial phrases before abruptly halting.
+  - Emphasize concrete somatic vocabulary that highlights physical impact, body temperature, scent, and intense visual contact.
+  - Construct metaphors around visceral physical sensations and elemental forces to convey sudden peril and romantic intensity simultaneously.
+  - Limit dialogue during high-stress scenes to brief single-word imperative exclamations that interrupt narrative prose.
+  - Use em-dashes to signify abrupt physical interruptions, sudden transitions, or suspended climactic moments.
+  - Break paragraphs at moments of sudden physical shift or shift in sensory focus to heighten dramatic impact.
+
+  Treat these rules as tendencies of the writing, not as a vocabulary. Never reuse a fixed set of words, phrases, or images across passages: vary the wording naturally and let each sentence follow from its own content. Whenever a rule and the natural phrasing of a passage conflict, favour the natural phrasing.

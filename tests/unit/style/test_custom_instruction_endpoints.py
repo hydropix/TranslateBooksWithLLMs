@@ -428,3 +428,108 @@ class TestAssemble:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestStylesRegressions:
+    """Regressions reported against the 1.5.15 Styles tab (#293, #296)."""
+
+    def test_create_with_chinese_name_succeeds(self, client, presets_dir):
+        """#296: the zh-CN default name '新建空白风格' used to slugify to empty."""
+        response = _create(client, name="新建空白风格")
+        assert response.status_code == 201
+        assert response.get_json()["filename"] == "新建空白风格.yaml"
+        assert (presets_dir / "新建空白风格.yaml").exists()
+
+    def test_hand_renamed_file_is_listed_and_readable(self, client, presets_dir):
+        """#293: a preset renamed by hand with spaces must still be listed."""
+        presets_dir.mkdir(parents=True)
+        (presets_dir / "Romance Novel (v2).txt").write_text("Be lyrical.", encoding="utf-8")
+
+        listing = client.get("/api/custom-instructions").get_json()
+        assert [f["filename"] for f in listing["files"]] == ["Romance Novel (v2).txt"]
+        preset = client.get("/api/custom-instructions/Romance Novel (v2).txt").get_json()
+        assert preset["translation"] == "Be lyrical."
+
+    def test_put_with_unchanged_name_keeps_hand_named_file(self, client, presets_dir):
+        presets_dir.mkdir(parents=True)
+        (presets_dir / "My Style.yaml").write_text("translation: old\n", encoding="utf-8")
+
+        response = client.put(
+            "/api/custom-instructions/My Style.yaml",
+            json={"name": "My Style", "translation": "new", "manual": True},
+        )
+        assert response.status_code == 200
+        assert response.get_json()["filename"] == "My Style.yaml"
+        assert yaml.safe_load((presets_dir / "My Style.yaml").read_text(encoding="utf-8"))["translation"] == "new"
+
+    def test_put_with_new_name_renames_and_keeps_content(self, client, presets_dir):
+        assert _create(client).status_code == 201
+
+        response = client.put(
+            "/api/custom-instructions/Noir_Style.yaml",
+            json={"name": "Hardboiled", "translation": "Short sentences.", "manual": True},
+        )
+        assert response.status_code == 200
+        assert response.get_json() == {"filename": "Hardboiled.yaml", "display_name": "Hardboiled"}
+        assert not (presets_dir / "Noir_Style.yaml").exists()
+        data = yaml.safe_load((presets_dir / "Hardboiled.yaml").read_text(encoding="utf-8"))
+        assert data["translation"] == "Short sentences."
+
+    def test_rename_onto_existing_preset_conflicts_and_changes_nothing(self, client, presets_dir):
+        """#293: saving must never silently overwrite another preset."""
+        assert _create(client, name="First", translation="one").status_code == 201
+        assert _create(client, name="Second", translation="two").status_code == 201
+
+        response = client.put(
+            "/api/custom-instructions/Second.yaml",
+            json={"name": "First", "translation": "changed", "manual": True},
+        )
+        assert response.status_code == 409
+        first = yaml.safe_load((presets_dir / "First.yaml").read_text(encoding="utf-8"))
+        second = yaml.safe_load((presets_dir / "Second.yaml").read_text(encoding="utf-8"))
+        assert first["translation"] == "one"
+        assert second["translation"] == "two"
+
+    def test_put_on_txt_preset_saves_plain_text_in_place(self, client, presets_dir):
+        """Saving a legacy .txt used to fail with a 400 (write_preset is YAML-only)."""
+        presets_dir.mkdir(parents=True)
+        (presets_dir / "legacy.txt").write_text("old text", encoding="utf-8")
+
+        response = client.put(
+            "/api/custom-instructions/legacy.txt",
+            json={"name": "legacy", "translation": "new text", "refinement": "new text", "manual": True},
+        )
+        assert response.status_code == 200
+        assert response.get_json()["filename"] == "legacy.txt"
+        assert (presets_dir / "legacy.txt").read_text(encoding="utf-8").strip() == "new text"
+
+    def test_put_on_txt_with_distinct_phases_converts_to_yaml(self, client, presets_dir):
+        presets_dir.mkdir(parents=True)
+        (presets_dir / "legacy.txt").write_text("old text", encoding="utf-8")
+
+        response = client.put(
+            "/api/custom-instructions/legacy.txt",
+            json={"translation": "translate this way", "refinement": "refine that way", "manual": True},
+        )
+        assert response.status_code == 200
+        assert response.get_json()["filename"] == "legacy.yaml"
+        assert not (presets_dir / "legacy.txt").exists()
+        data = yaml.safe_load((presets_dir / "legacy.yaml").read_text(encoding="utf-8"))
+        assert data["translation"] == "translate this way"
+        assert data["refinement"] == "refine that way"
+
+    def test_delete_txt_preset(self, client, presets_dir):
+        presets_dir.mkdir(parents=True)
+        (presets_dir / "legacy.txt").write_text("text", encoding="utf-8")
+
+        response = client.delete("/api/custom-instructions/legacy.txt")
+        assert response.status_code == 200
+        assert not (presets_dir / "legacy.txt").exists()
+
+    def test_export_non_ascii_name_sets_rfc5987_filename(self, client):
+        assert _create(client, name="武侠").status_code == 201
+
+        response = client.get("/api/custom-instructions/武侠.yaml/export")
+        assert response.status_code == 200
+        disposition = response.headers["Content-Disposition"]
+        assert "filename*=UTF-8''%E6%AD%A6%E4%BE%A0.yaml" in disposition

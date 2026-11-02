@@ -64,7 +64,7 @@ def resolve_custom_instructions(prompt_options, custom_instructions_dir, log_cal
             log_callback(
                 "custom_instructions_invalid",
                 f"⚠️ Custom instructions file name '{custom_instruction_file}' is invalid "
-                f"(allowed: alphanumeric, underscore, hyphen, dot; must end in .txt, .yaml, or .yml). "
+                f"(allowed: letters, digits, spaces, underscore, hyphen, dot, parentheses; must end in .txt, .yaml, or .yml). "
                 f"Translation will proceed without it."
             )
         else:

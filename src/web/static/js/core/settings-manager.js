@@ -93,6 +93,14 @@ export const SettingsManager = {
             this.applyPendingCustomInstructionSelection();
         });
 
+        // An explicit user choice wins over a saved value still waiting for the list
+        const customInstructionSelect = DomHelpers.getElement('customInstructionSelect');
+        if (customInstructionSelect) {
+            customInstructionSelect.addEventListener('change', () => {
+                delete window.__pendingCustomInstructionSelection;
+            });
+        }
+
         // Setup auto-save listeners after a short delay to avoid triggering during initial load
         setTimeout(() => {
             this._setupAutoSaveListeners();
@@ -489,8 +497,8 @@ export const SettingsManager = {
             }
 
             if (prefs.customInstructionFile) {
-                // No-op while the select is still empty; the
-                // 'customInstructionsLoaded' listener applies it later.
+                // Stays pending until the instruction list has loaded; the
+                // 'customInstructionsLoaded' listener applies it then.
                 window.__pendingCustomInstructionSelection = prefs.customInstructionFile;
                 this.applyPendingCustomInstructionSelection();
             }
@@ -570,7 +578,11 @@ export const SettingsManager = {
             textCleanup: textCleanupCheckbox ? textCleanupCheckbox.checked : false,
             bilingualMode: bilingualModeCheckbox ? bilingualModeCheckbox.checked : false,
             plainTextMode: plainTextModeCheckbox ? plainTextModeCheckbox.checked : false,
-            customInstructionFile: DomHelpers.getValue('customInstructionSelect') || ''
+            // While the saved preset waits for the list to load, the select still
+            // shows a default option: keep the pending value so it is not synced away.
+            customInstructionFile: window.__pendingCustomInstructionSelection
+                || DomHelpers.getValue('customInstructionSelect')
+                || ''
         };
 
         this.saveLocalPreferences(prefs);
@@ -766,6 +778,8 @@ export const SettingsManager = {
     applyPendingCustomInstructionSelection() {
         if (window.__pendingCustomInstructionSelection) {
             const select = DomHelpers.getElement('customInstructionSelect');
+            // The template ships with "None" and "Auto" options, so a non-empty
+            // select does not mean the instruction list has arrived yet.
             if (select && select.options.length > 0) {
                 // Check if the value exists in options
                 let found = false;
@@ -777,10 +791,13 @@ export const SettingsManager = {
                         break;
                     }
                 }
-                if (!found) {
+                if (found) {
+                    delete window.__pendingCustomInstructionSelection;
+                } else if (window.__customInstructionsLoaded) {
                     console.warn('[SettingsManager] Custom instruction not found:', window.__pendingCustomInstructionSelection);
+                    delete window.__pendingCustomInstructionSelection;
                 }
-                delete window.__pendingCustomInstructionSelection;
+                // Otherwise keep it pending until the list has loaded
             }
         }
     },

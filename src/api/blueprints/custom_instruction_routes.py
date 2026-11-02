@@ -20,9 +20,11 @@ import asyncio
 import logging
 import os
 import platform
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 import yaml
 from flask import Blueprint, Response, jsonify, request
@@ -41,9 +43,11 @@ from src.utils.custom_instructions import (
     filename_for_name,
     list_custom_instructions,
     read_preset,
+    rename_preset,
     resolve_inside,
     slugify_preset_name,
     write_preset,
+    write_txt_preset,
 )
 
 logger = logging.getLogger('custom_instruction_routes')
@@ -187,7 +191,33 @@ def create_custom_instruction_blueprint():
         if error:
             return jsonify(error[0]), error[1]
 
-        return _write_preset_and_respond(filename, payload, directory, overwrite=True, created=False)
+        # An optional 'name' renames the preset. It is compared with the
+        # current stem first, so re-sending the displayed name unchanged
+        # never renames a hand-named file such as "Romance (v2).yaml".
+        new_stem = Path(filename).stem
+        name = body.get('name')
+        if name is not None:
+            if not isinstance(name, str) or not name.strip():
+                return jsonify({"error": "'name' cannot be empty"}), 400
+            if name.strip() != new_stem:
+                try:
+                    new_stem = slugify_preset_name(name)
+                except ValueError as e:
+                    return jsonify({"error": str(e)}), 400
+
+        if existing['format'] == 'txt':
+            return _update_txt_preset(filename, new_stem, existing, payload, directory)
+
+        target_filename = f"{new_stem}{Path(filename).suffix}"
+        if target_filename != filename:
+            conflict = _rename_conflict(filename, target_filename, directory)
+            if conflict:
+                return conflict
+
+        response = _write_preset_and_respond(filename, payload, directory, overwrite=True, created=False)
+        if target_filename == filename or response[1] != 200:
+            return response
+        return _rename_and_respond(filename, target_filename, directory)
 
     @bp.route('/api/custom-instructions/<filename>', methods=['DELETE'])
     def delete_custom_instruction(filename):
@@ -282,8 +312,14 @@ def create_custom_instruction_blueprint():
             export_data, allow_unicode=True, sort_keys=False, default_flow_style=False, width=100000
         )
         export_filename = f"{preset['display_name']}.yaml"
+        # HTTP headers are latin-1: a CJK or accented preset name goes in the
+        # RFC 5987 `filename*` parameter, with an ASCII-only fallback.
+        ascii_filename = re.sub(r'[^A-Za-z0-9_.() -]', '_', export_filename)
         response = Response(body_yaml, mimetype='application/x-yaml')
-        response.headers['Content-Disposition'] = f'attachment; filename="{export_filename}"'
+        response.headers['Content-Disposition'] = (
+            f'attachment; filename="{ascii_filename}"; '
+            f"filename*=UTF-8''{quote(export_filename)}"
+        )
         return response
 
     @bp.route('/api/custom-instructions/assemble', methods=['POST'])
@@ -689,3 +725,67 @@ def _write_preset_and_respond(
     display_name = Path(filename).stem
     status = 201 if created else 200
     return jsonify({"filename": filename, "display_name": display_name}), status
+
+
+def _rename_conflict(filename: str, target_filename: str, directory: Path):
+    """Return a 409 response if `target_filename` belongs to another preset."""
+    target = resolve_inside(directory, target_filename)
+    source = resolve_inside(directory, filename)
+    if target is not None and target.exists() and not (
+        source is not None and source.exists() and os.path.samefile(source, target)
+    ):
+        return jsonify({"error": f"Preset '{target_filename}' already exists."}), 409
+    return None
+
+
+def _rename_and_respond(filename: str, target_filename: str, directory: Path):
+    try:
+        rename_preset(filename, target_filename, directory)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except FileExistsError as e:
+        return jsonify({"error": str(e)}), 409
+    return jsonify({"filename": target_filename, "display_name": Path(target_filename).stem}), 200
+
+
+def _update_txt_preset(
+    filename: str, new_stem: str, existing: Dict[str, Any], payload: Dict[str, Any], directory: Path
+):
+    """Save an edit made in the Styles editor to a legacy `.txt` preset.
+
+    A `.txt` preset holds one text applied to both phases. As long as the
+    edit still fits that shape (same text for both phases, no metadata), it
+    is written back as plain text, so a user who also edits the file in an
+    external editor keeps a `.txt`. Otherwise it is converted to a `.yaml`
+    preset of the same name and the `.txt` is removed; nothing the user
+    typed is dropped.
+    """
+    translation = payload.get('translation', existing.get('translation')) or ''
+    refinement = payload.get('refinement', existing.get('refinement')) or ''
+    has_metadata = any(payload.get(key) for key in ('description', 'context', 'source_files', 'rules'))
+
+    if not has_metadata and translation.strip() == refinement.strip():
+        target_filename = f"{new_stem}.txt"
+        if target_filename != filename:
+            conflict = _rename_conflict(filename, target_filename, directory)
+            if conflict:
+                return conflict
+        try:
+            write_txt_preset(filename, translation, directory)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        if target_filename == filename:
+            return jsonify({"filename": filename, "display_name": new_stem}), 200
+        return _rename_and_respond(filename, target_filename, directory)
+
+    target_filename = f"{new_stem}.yaml"
+    conflict = _rename_conflict(filename, target_filename, directory)
+    if conflict:
+        return conflict
+    full_payload = {**payload, 'translation': translation, 'refinement': refinement}
+    response = _write_preset_and_respond(target_filename, full_payload, directory, overwrite=False, created=False)
+    if response[1] == 200:
+        delete_preset(filename, directory)
+    return response

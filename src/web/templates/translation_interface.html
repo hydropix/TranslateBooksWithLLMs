@@ -1745,7 +1745,7 @@
                         <span class="material-symbols-outlined">arrow_back</span>
                     </button>
                     <h2 data-i18n="style:editor_title">Edit style</h2>
-                    <span id="styleEditorFilename" class="style-editor-filename"></span>
+                    <input type="text" id="styleEditorName" class="form-control style-editor-name" maxlength="64" autocomplete="off" data-i18n-attr="placeholder:style:preset_name_label;aria-label:style:preset_name_label;title:style:preset_name_label">
                     <select id="styleEditorMode" class="form-control style-editor-mode">
                         <option value="source" data-i18n="style:mode_source">From the source text</option>
                         <option value="model" data-i18n="style:mode_model">From a reference author</option>
@@ -1979,7 +1979,7 @@
             <div class="modal-body" id="ner-modal-body">
                 <div id="ner-input-step">
                     <p class="ner-modal-intro" data-i18n-html="glossary:ner_intro">
-                        Pick a source file (TXT, SRT, EPUB, DOCX, PDF). The LLM will scan <strong id="ner-budget-label">6000</strong> characters drawn from <strong id="ner-samples-label">10</strong> evenly-spaced excerpts across the document, and propose recurring named entities. You'll review and edit each candidate before it joins the glossary.
+                        Pick a source file (TXT, SRT, EPUB, DOCX, PDF). The LLM will read <strong id="ner-budget-label">6000</strong> characters: up to <strong id="ner-samples-label">10</strong> evenly-spaced excerpts, plus short passages around the recurring names found by a scan of the whole document. It proposes recurring named entities, and you'll review and edit each candidate before it joins the glossary.
                     </p>
                     <input type="file" id="ner-file-input" accept=".txt,.srt,.epub,.docx,.pdf" style="display: none;">
                     <div id="ner-drop-zone" class="glossary-ner-dropzone">

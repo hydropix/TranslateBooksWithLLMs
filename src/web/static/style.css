@@ -619,6 +619,19 @@ select.form-control {
     border-radius: 1rem;
 }
 
+/* The single-line geometry of .form-control (fixed 2.75rem height and
+   line-height) must not apply to multi-line fields: it pinned every
+   textarea to one line and made it impossible to enlarge. `rows` sets the
+   initial height; the user can drag it taller. */
+textarea.form-control {
+    height: auto;
+    min-height: 4.5rem;
+    max-height: none;
+    line-height: 1.5;
+    padding: 0.75rem 1.25rem;
+    resize: vertical;
+}
+
 .form-control:focus {
     outline: none;
     background: #ffffff;
@@ -3465,14 +3478,17 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 0.5rem;
 }
 
-.style-editor-filename {
-    flex: 1 1 6rem;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-muted-light);
-    font-size: 0.9rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.style-editor-header .style-editor-name {
+    flex: 1 1 10rem;
+    width: auto;
+    min-width: 8rem;
+    height: 2.25rem;
+    min-height: 2.25rem;
+    max-height: 2.25rem;
+    line-height: 2.25rem;
+    padding: 0 0.75rem;
+    font-size: 0.95rem;
+    border: 1px solid var(--border-light);
 }
 
 .style-editor-header .style-editor-mode {

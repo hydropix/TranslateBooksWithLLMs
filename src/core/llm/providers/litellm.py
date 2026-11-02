@@ -24,7 +24,7 @@ from typing import Optional, Union, List
 from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError
-from ..rate_limit_handler import handle_rate_limit
+from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
 # Substrings that mark a provider-side context/length overflow, surfaced as
@@ -45,6 +45,23 @@ _TRANSIENT_EXCEPTIONS = (
     "litellm.exceptions.Timeout",
     "litellm.exceptions.InternalServerError",
     "litellm.exceptions.ServiceUnavailableError",
+)
+
+# Raised by LiteLLM when the input does not fit the model; always surfaced as
+# ContextOverflowError, even when its message misses every keyword above.
+_CONTEXT_WINDOW_EXCEPTION = "litellm.exceptions.ContextWindowExceededError"
+
+# LiteLLM exception qualnames caused by the request or the credentials: a retry
+# sends the same thing and fails the same way, so give up on the first one.
+# Matched against the whole MRO, so subclasses (ContentPolicyViolationError,
+# UnsupportedParamsError, ... all derive from BadRequestError) are covered.
+_NON_TRANSIENT_EXCEPTIONS = (
+    "litellm.exceptions.AuthenticationError",
+    "litellm.exceptions.PermissionDeniedError",
+    "litellm.exceptions.NotFoundError",
+    "litellm.exceptions.BadRequestError",
+    "litellm.exceptions.UnprocessableEntityError",
+    "litellm.exceptions.BudgetExceededError",
 )
 
 
@@ -170,11 +187,13 @@ class LiteLLMProvider(LLMProvider):
                 )
 
             except Exception as e:
+                qualnames = _qualnames(e)
                 error_str = str(e).lower()
-                if any(kw in error_str for kw in _CONTEXT_OVERFLOW_KEYWORDS):
+                if (_CONTEXT_WINDOW_EXCEPTION in qualnames
+                        or any(kw in error_str for kw in _CONTEXT_OVERFLOW_KEYWORDS)):
                     raise ContextOverflowError(f"LiteLLM context overflow: {e}") from e
 
-                qualname = f"{type(e).__module__}.{type(e).__name__}"
+                qualname = qualnames[0]
 
                 # With a multi-key pool, a 429 rotates to the next key instead of
                 # burning an attempt. handle_rate_limit() sleeps when every key is
@@ -191,6 +210,12 @@ class LiteLLMProvider(LLMProvider):
                     )
                     continue
 
+                # Auth, bad request, unknown model, ... won't recover on retry:
+                # fail fast, same as the HTTP providers do for non-retryable 4xx.
+                if _is_non_transient(e, qualnames):
+                    print(f"[LiteLLM] Non-retryable error, giving up: {e}")
+                    return None
+
                 attempt += 1
                 print(
                     f"[LiteLLM] Error (attempt {attempt}/"
@@ -205,6 +230,32 @@ class LiteLLMProvider(LLMProvider):
                     await asyncio.sleep(2)
 
         return None
+
+
+def _qualnames(exc: Exception) -> List[str]:
+    """Qualified names of the exception's class and its bases, most specific first.
+
+    Exceptions are classified by name rather than isinstance() because litellm
+    is an optional lazy import: its classes cannot be referenced at module load.
+    """
+    return [f"{cls.__module__}.{cls.__name__}" for cls in type(exc).__mro__]
+
+
+def _is_non_transient(exc: Exception, qualnames: List[str]) -> bool:
+    """Whether retrying the same request is pointless.
+
+    Known transient classes win over everything else. Otherwise a known
+    non-transient class, or a non-retryable HTTP status on an exception that
+    carries one (LiteLLM sets `status_code` on its errors, including the
+    generic APIError), means the request itself is at fault. Anything
+    unclassified stays retryable, as before.
+    """
+    if any(name in _TRANSIENT_EXCEPTIONS for name in qualnames):
+        return False
+    if any(name in _NON_TRANSIENT_EXCEPTIONS for name in qualnames):
+        return True
+    status = getattr(exc, "status_code", None)
+    return isinstance(status, int) and not is_retryable_http_status(status)
 
 
 def _response_headers(exc: Exception) -> Mapping:

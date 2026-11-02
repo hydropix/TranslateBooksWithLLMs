@@ -298,6 +298,13 @@ def test_slugify_preset_name_collapses_and_strips() -> None:
     assert slugify_preset_name("Mon style — noir!") == "Mon_style_noir"
 
 
+def test_slugify_preset_name_keeps_non_latin_scripts() -> None:
+    """A Chinese/Japanese/Korean name must not slugify to empty (#296)."""
+    assert slugify_preset_name("新建空白风格") == "新建空白风格"
+    assert slugify_preset_name("空のスタイル 2") == "空のスタイル_2"
+    assert slugify_preset_name("Nuevo estilo ñandú") == "Nuevo_estilo_ñandú"
+
+
 def test_slugify_preset_name_empty_raises() -> None:
     with pytest.raises(ValueError):
         slugify_preset_name("!!!")

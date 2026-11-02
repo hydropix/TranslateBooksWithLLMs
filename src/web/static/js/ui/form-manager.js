@@ -529,11 +529,13 @@ export const FormManager = {
 
             // Dispatch event to notify that custom instructions are loaded
             // This allows SettingsManager to restore the saved value
+            window.__customInstructionsLoaded = true;
             window.dispatchEvent(new CustomEvent('customInstructionsLoaded'));
         } catch (error) {
             console.error('[CustomInstructions] Error loading custom instructions:', error);
             // Graceful degradation - dropdown will only show "None" option
             // Still dispatch event even on error
+            window.__customInstructionsLoaded = true;
             window.dispatchEvent(new CustomEvent('customInstructionsLoaded'));
         }
     },

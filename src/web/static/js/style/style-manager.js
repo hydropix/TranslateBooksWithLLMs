@@ -39,7 +39,6 @@ const ASSEMBLE_DEBOUNCE_MS = 300;
 let currentEditorFilename = null;
 let currentEditorIsTxt = false;
 let manualDirty = false;
-let pendingNewPresetName = '';
 let _editorAssembleTimer = null;
 let _editorAssembleReqId = 0;
 
@@ -462,19 +461,32 @@ function handleReassemble() {
     _runEditorAssemble();
 }
 
+/**
+ * Mirror of the server's `slugify_preset_name`, lowercased: two names that
+ * map to the same file compare equal. Comparing raw display names instead
+ * misses that "New blank style" is saved as "New_blank_style.yaml".
+ */
+function _presetSlugKey(name) {
+    return (name || '')
+        .replace(/[^\p{L}\p{N}_-]+/gu, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 64)
+        .toLowerCase();
+}
+
 async function _generateDefaultPresetName() {
     let existing = [];
     try {
         const resp = await ApiClient.getCustomInstructions();
-        existing = ((resp && resp.files) || []).map((f) => (f.display_name || '').toLowerCase());
+        existing = ((resp && resp.files) || []).map((f) => _presetSlugKey(f.display_name));
     } catch (_) {
         existing = [];
     }
     const base = t('style:new_blank');
-    if (!existing.includes(base.toLowerCase())) return base;
+    if (!existing.includes(_presetSlugKey(base))) return base;
     for (let i = 2; i < 1000; i++) {
         const candidate = `${base} ${i}`;
-        if (!existing.includes(candidate.toLowerCase())) return candidate;
+        if (!existing.includes(_presetSlugKey(candidate))) return candidate;
     }
     return `${base} ${Date.now()}`;
 }
@@ -490,7 +502,7 @@ async function openEditor(filename) {
     if (listView) listView.classList.add('hidden');
     if (editorView) editorView.classList.remove('hidden');
 
-    const filenameSpan = $('styleEditorFilename');
+    const nameInput = $('styleEditorName');
     const descTextarea = $('styleEditorDescription');
     const contextTextarea = $('styleEditorContext');
     const modeSelect = $('styleEditorMode');
@@ -510,7 +522,7 @@ async function openEditor(filename) {
         }
 
         currentEditorIsTxt = preset.format === 'txt';
-        if (filenameSpan) filenameSpan.textContent = preset.display_name || filename;
+        if (nameInput) nameInput.value = preset.display_name || filename;
         if (descTextarea) descTextarea.value = preset.description || '';
         if (contextTextarea) contextTextarea.value = preset.context || '';
         if (modeSelect) modeSelect.value = preset.mode || 'source';
@@ -524,11 +536,10 @@ async function openEditor(filename) {
         if (refTextarea) refTextarea.value = preset.refinement || '';
     } else {
         // New unsaved preset: no server round-trip until the first Save
-        // (POST). The candidate name is pre-computed so it can be shown and
-        // reused verbatim as the create payload's 'name'.
+        // (POST). A free default name is pre-filled; the user can change it
+        // before saving.
         currentEditorIsTxt = false;
-        pendingNewPresetName = await _generateDefaultPresetName();
-        if (filenameSpan) filenameSpan.textContent = pendingNewPresetName;
+        if (nameInput) nameInput.value = await _generateDefaultPresetName();
         if (descTextarea) descTextarea.value = '';
         if (contextTextarea) contextTextarea.value = '';
         if (modeSelect) modeSelect.value = 'source';
@@ -551,6 +562,14 @@ async function handleEditorSave() {
     const transTextarea = $('styleTranslationText');
     const refTextarea = $('styleRefinementText');
     const saveBtn = $('styleEditorSaveBtn');
+    const nameInput = $('styleEditorName');
+
+    const name = (nameInput ? nameInput.value : '').trim();
+    if (!name) {
+        toast.warn(t('errors:field_required', { field: t('style:preset_name_label') }));
+        if (nameInput) nameInput.focus();
+        return;
+    }
 
     const payload = {
         description: descTextarea ? descTextarea.value : '',
@@ -564,14 +583,36 @@ async function handleEditorSave() {
 
     if (saveBtn) saveBtn.disabled = true;
     try {
+        let saved;
         if (currentEditorFilename) {
-            await ApiClient.updateCustomInstruction(currentEditorFilename, payload);
+            // The server only renames when 'name' differs from the current
+            // file stem, and may also turn a .txt into a .yaml: always adopt
+            // the filename it returns.
+            const wasAssigned = currentEditorFilename === _assignedFilename();
+            saved = await ApiClient.updateCustomInstruction(currentEditorFilename, { ...payload, name });
+            if (saved.filename !== currentEditorFilename && wasAssigned) {
+                await FormManager.loadCustomInstructions();
+                await _setAssignment(saved.filename);
+            }
         } else {
-            const created = await ApiClient.createCustomInstruction({ ...payload, name: pendingNewPresetName });
-            currentEditorFilename = created.filename;
-            const filenameSpan = $('styleEditorFilename');
-            if (filenameSpan) filenameSpan.textContent = created.display_name;
+            try {
+                saved = await ApiClient.createCustomInstruction({ ...payload, name, overwrite: false });
+            } catch (err) {
+                // Never overwrite another preset silently: a taken name
+                // needs an explicit confirmation, otherwise the user picks
+                // another name.
+                if (!_isConflictError(err)) throw err;
+                if (!confirm(t('style:confirm_overwrite', { name }))) {
+                    if (nameInput) nameInput.focus();
+                    return;
+                }
+                saved = await ApiClient.createCustomInstruction({ ...payload, name, overwrite: true });
+            }
         }
+        currentEditorFilename = saved.filename;
+        currentEditorIsTxt = _fileExt(saved.filename) === 'txt';
+        _applyTxtModeVisibility();
+        if (nameInput) nameInput.value = saved.display_name;
         toast.success(t('style:saved'));
         window.dispatchEvent(new CustomEvent('customInstructionsChanged'));
         await loadList();
@@ -591,8 +632,7 @@ function handleEditorExport() {
 
 async function handleEditorDelete() {
     if (!currentEditorFilename) return;
-    const filenameSpan = $('styleEditorFilename');
-    const name = filenameSpan ? filenameSpan.textContent : currentEditorFilename;
+    const name = currentEditorFilename.slice(0, currentEditorFilename.lastIndexOf('.'));
     if (!confirm(t('style:confirm_delete', { name }))) return;
     try {
         await ApiClient.deleteCustomInstruction(currentEditorFilename);

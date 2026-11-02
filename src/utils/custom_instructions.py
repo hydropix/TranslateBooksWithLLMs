@@ -27,7 +27,13 @@ from typing import Optional, TypedDict
 import yaml
 
 
-SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_\-\.]+\.(?:txt|ya?ml)$")
+# Letters and digits from any script (`\w` is Unicode-aware), plus `_-.`,
+# spaces and parentheses, so a preset renamed by hand to "Romance (v2).yaml"
+# or "武侠.yaml" is still listed. Path separators and every character Windows
+# forbids in a filename stay excluded, and a leading dot or space is refused
+# so hidden files and `..` never match. `resolve_inside` remains the
+# authoritative containment check.
+SAFE_FILENAME_RE = re.compile(r"^(?![.\s])[\w\-. ()]+\.(?:txt|ya?ml)$", re.IGNORECASE)
 SUPPORTED_EXTENSIONS = (".txt", ".yaml", ".yml")
 
 # Key order enforced when write_preset serializes a preset. Unknown keys
@@ -82,7 +88,7 @@ yaml.add_representer(LiteralStr, _represent_literal_str, Dumper=yaml.SafeDumper)
 
 
 def is_safe_filename(filename: str) -> bool:
-    """Whitelist filenames to alphanumerics + `_-.` with a supported extension."""
+    """Whitelist filenames to letters/digits (any script), `_-. ()` and a supported extension."""
     return bool(SAFE_FILENAME_RE.match(filename or ""))
 
 
@@ -103,11 +109,12 @@ _resolve_inside = resolve_inside
 def slugify_preset_name(name: str) -> str:
     """Turn a free-form preset name into a filesystem-safe slug.
 
-    e.g. "Mon style — noir!" -> "Mon_style_noir". Case is preserved; runs of
-    characters outside [A-Za-z0-9_-] collapse to a single underscore, and the
-    result is truncated to 64 characters.
+    e.g. "Mon style — noir!" -> "Mon_style_noir", "新建空白风格" -> "新建空白风格".
+    Case is preserved and letters/digits from any script are kept; runs of
+    any other character collapse to a single underscore, and the result is
+    truncated to 64 characters.
     """
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", name or "").strip("_")[:64]
+    slug = re.sub(r"[^\w-]+", "_", name or "").strip("_")[:64]
     if not slug:
         raise ValueError("Preset name cannot be empty")
     return slug
@@ -167,8 +174,8 @@ def load_custom_instructions(
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: alphanumerics, "
-            f"`_`, `-`, `.`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Allowed: letters, digits, "
+            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
         )
 
     file_path = resolve_inside(custom_instructions_dir, filename)
@@ -228,8 +235,8 @@ def read_preset(filename: str, custom_instructions_dir: Path) -> dict:
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: alphanumerics, "
-            f"`_`, `-`, `.`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Allowed: letters, digits, "
+            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
         )
 
     file_path = resolve_inside(custom_instructions_dir, filename)
@@ -324,8 +331,8 @@ def write_preset(
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: alphanumerics, "
-            f"`_`, `-`, `.`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Allowed: letters, digits, "
+            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
         )
 
     target = resolve_inside(custom_instructions_dir, filename)
@@ -406,31 +413,88 @@ def write_preset(
     return target
 
 
+def write_txt_preset(filename: str, text: str, custom_instructions_dir: Path) -> Path:
+    """Atomically overwrite a legacy `.txt` preset with plain text.
+
+    Lets the Styles editor save a `.txt` preset in place, so users who also
+    edit their prompts in an external editor keep a plain text file.
+
+    Raises:
+        ValueError: filename is unsafe, escapes the directory, or isn't `.txt`.
+    """
+    target = _checked_target(filename, custom_instructions_dir)
+    if target.suffix.lower() != ".txt":
+        raise ValueError(f"write_txt_preset only supports .txt files, got '{filename}'.")
+
+    tmp_path = target.with_name(target.name + ".tmp")
+    try:
+        tmp_path.write_text(text.rstrip("\n") + "\n", encoding="utf-8")
+        os.replace(tmp_path, target)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+    return target
+
+
+def rename_preset(old_filename: str, new_filename: str, custom_instructions_dir: Path) -> Path:
+    """Rename a preset file without ever clobbering another preset.
+
+    A case-only rename ("noir.yaml" -> "Noir.yaml") is allowed even on a
+    case-insensitive filesystem, where the target already "exists" as the
+    source file itself.
+
+    Raises:
+        ValueError: either filename is unsafe or escapes the directory.
+        FileNotFoundError: the source does not exist.
+        FileExistsError: another preset already uses the target name.
+    """
+    source = _checked_target(old_filename, custom_instructions_dir)
+    target = _checked_target(new_filename, custom_instructions_dir)
+
+    if not source.is_file():
+        raise FileNotFoundError(f"Custom instructions file not found: {old_filename}")
+    if target.exists() and not os.path.samefile(source, target):
+        raise FileExistsError(f"Preset '{new_filename}' already exists.")
+
+    os.replace(source, target)
+    return target
+
+
+def _checked_target(filename: str, custom_instructions_dir: Path) -> Path:
+    """Validate `filename` and return its path inside the directory."""
+    if not is_safe_filename(filename):
+        raise ValueError(
+            f"Invalid filename '{filename}'. Allowed: letters, digits, "
+            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
+        )
+    target = resolve_inside(custom_instructions_dir, filename)
+    if target is None:
+        raise ValueError(
+            f"Filename '{filename}' resolves outside Custom_Instructions directory."
+        )
+    return target
+
+
 def delete_preset(filename: str, custom_instructions_dir: Path) -> bool:
-    """Delete a preset file.
+    """Delete a preset file (`.yaml`, `.yml` or legacy `.txt`).
 
     Returns:
         True if a file was deleted, False if it did not exist.
 
     Raises:
-        ValueError: filename is unsafe, escapes the directory, or isn't
-            `.yaml`/`.yml`.
+        ValueError: filename is unsafe or escapes the directory.
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: alphanumerics, "
-            f"`_`, `-`, `.`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Allowed: letters, digits, "
+            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
         )
 
     target = resolve_inside(custom_instructions_dir, filename)
     if target is None:
         raise ValueError(
             f"Filename '{filename}' resolves outside Custom_Instructions directory."
-        )
-
-    if target.suffix.lower() not in (".yaml", ".yml"):
-        raise ValueError(
-            f"delete_preset only supports .yaml/.yml files, got '{filename}'."
         )
 
     if not target.exists():

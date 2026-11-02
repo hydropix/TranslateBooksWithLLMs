@@ -203,8 +203,8 @@ async def test_rate_limit_rotates_to_the_next_key(litellm_stub, no_sleep):
 async def test_rate_limit_does_not_consume_a_retry_attempt(litellm_stub, no_sleep):
     """Rotations have their own budget: a 3-key pool gets more than
     MAX_TRANSLATION_ATTEMPTS calls before the transient retries even start."""
-    from src.config import MAX_TRANSLATION_ATTEMPTS
-    from src.core.llm.providers.litellm import LiteLLMProvider
+    # The provider's own binding: another test may reload src.config.
+    from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
 
     litellm_stub.acompletion.side_effect = (
         [FakeLiteLLMRateLimitError("429 too many requests")] * MAX_TRANSLATION_ATTEMPTS
@@ -238,8 +238,8 @@ async def test_persistent_rate_limit_raises_for_upstream_pause(litellm_stub, no_
 async def test_rate_limit_without_pool_keeps_plain_backoff(litellm_stub, no_sleep):
     """With credentials in env vars there is no pool and nothing to rotate:
     the 429 stays an ordinary transient retry that ends in None."""
-    from src.config import MAX_TRANSLATION_ATTEMPTS
-    from src.core.llm.providers.litellm import LiteLLMProvider
+    # The provider's own binding: another test may reload src.config.
+    from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
 
     litellm_stub.acompletion.side_effect = FakeLiteLLMRateLimitError(
         "429 too many requests"
@@ -289,3 +289,139 @@ def test_factory_ignores_generic_endpoint_for_api_base():
         endpoint="http://localhost:11434/api/generate",
     )
     assert provider.api_base is None
+
+
+# ---------------------------------------------------------------------------
+# Fail fast on non-transient errors
+#
+# Auth, bad-request and unknown-model errors used to be retried
+# MAX_TRANSLATION_ATTEMPTS times with a 2s sleep each, like the HTTP providers
+# before they started failing fast on non-retryable 4xx.
+# ---------------------------------------------------------------------------
+
+def _fake_litellm_exception(name, base=Exception, status_code=None):
+    """Build a stand-in for litellm.exceptions.<name>.
+
+    The provider classifies exceptions by the qualnames of their MRO, so the
+    module and class names have to match the real ones; `base` reproduces the
+    real hierarchy where it matters (e.g. ContextWindowExceededError derives
+    from BadRequestError).
+    """
+    attrs = {"__module__": "litellm.exceptions"}
+    if status_code is not None:
+        attrs["status_code"] = status_code
+    return type(name, (base,), attrs)
+
+
+FakeAuthenticationError = _fake_litellm_exception("AuthenticationError", status_code=401)
+FakePermissionDeniedError = _fake_litellm_exception("PermissionDeniedError", status_code=403)
+FakeNotFoundError = _fake_litellm_exception("NotFoundError", status_code=404)
+FakeBadRequestError = _fake_litellm_exception("BadRequestError", status_code=400)
+FakeContentPolicyViolationError = _fake_litellm_exception(
+    "ContentPolicyViolationError", base=FakeBadRequestError
+)
+FakeContextWindowExceededError = _fake_litellm_exception(
+    "ContextWindowExceededError", base=FakeBadRequestError
+)
+FakeAPIError = _fake_litellm_exception("APIError")
+FakeAPIConnectionError = _fake_litellm_exception("APIConnectionError", status_code=500)
+FakeTimeout = _fake_litellm_exception("Timeout", status_code=408)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        FakeAuthenticationError("Incorrect API key provided"),
+        FakePermissionDeniedError("Key lacks access to this model"),
+        FakeNotFoundError("Model gpt-nope does not exist"),
+        FakeBadRequestError("Invalid value for 'temperature'"),
+        FakeContentPolicyViolationError("Flagged by the content filter"),
+    ],
+    ids=lambda e: type(e).__name__,
+)
+async def test_non_transient_errors_fail_fast(litellm_stub, no_sleep, exc):
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = exc
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k")
+    assert await provider.generate("Hello") is None
+    assert litellm_stub.acompletion.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_non_transient_error_does_not_rotate_keys(litellm_stub, no_sleep):
+    """A bad key in a pool is not a rate limit: no rotation, no retry."""
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = FakeAuthenticationError("invalid x-api-key")
+
+    provider = LiteLLMProvider(model="anthropic/claude-haiku-4-5", api_key="k1,k2")
+    assert await provider.generate("Hello") is None
+    assert litellm_stub.acompletion.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generic_api_error_with_client_status_fails_fast(litellm_stub, no_sleep):
+    """LiteLLM's catch-all APIError carries the provider status: a 4xx on it
+    is the request's fault and is not retried either."""
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    exc = FakeAPIError("Payment required")
+    exc.status_code = 402
+    litellm_stub.acompletion.side_effect = exc
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k")
+    assert await provider.generate("Hello") is None
+    assert litellm_stub.acompletion.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generic_api_error_with_server_status_is_retried(litellm_stub, no_sleep):
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    exc = FakeAPIError("Bad gateway")
+    exc.status_code = 502
+    litellm_stub.acompletion.side_effect = [exc, _mock_response("translated")]
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k")
+    result = await provider.generate("Hello")
+
+    assert result.content == "translated"
+    assert litellm_stub.acompletion.call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [FakeAPIConnectionError("Connection reset by peer"), FakeTimeout("Request timed out")],
+    ids=lambda e: type(e).__name__,
+)
+async def test_transient_errors_are_still_retried(litellm_stub, no_sleep, exc):
+    # The provider's own binding: another test may reload src.config.
+    from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
+
+    litellm_stub.acompletion.side_effect = exc
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k")
+    assert await provider.generate("Hello") is None
+    assert litellm_stub.acompletion.call_count == MAX_TRANSLATION_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_context_window_exceeded_error_raises_overflow(litellm_stub, no_sleep):
+    """ContextWindowExceededError derives from BadRequestError but must reach
+    the chunking layer as ContextOverflowError, not be dropped as a fail-fast
+    None, even when its message matches none of the overflow keywords."""
+    from src.core.llm.exceptions import ContextOverflowError
+    from src.core.llm.providers.litellm import LiteLLMProvider
+
+    litellm_stub.acompletion.side_effect = FakeContextWindowExceededError(
+        "Prompt is 9000 tokens, model supports 8192"
+    )
+
+    provider = LiteLLMProvider(model="openai/gpt-4o", api_key="k")
+    with pytest.raises(ContextOverflowError):
+        await provider.generate("way too long")
+    assert litellm_stub.acompletion.call_count == 1

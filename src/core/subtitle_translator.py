@@ -377,6 +377,17 @@ async def refine_subtitle_translations(
                 # Re-raise RateLimitError to trigger auto-pause
                 from src.core.llm.exceptions import RateLimitError
                 if isinstance(e, RateLimitError):
+                    # Hand the caller a complete map (refined for finished
+                    # blocks, the draft for this block onward) plus the first
+                    # position still to refine, so the partial pass can be
+                    # saved and a resume can skip what is already done.
+                    for remaining_group in index_groups[block_idx:]:
+                        for g_idx in remaining_group:
+                            refined_translations.setdefault(g_idx, translations[g_idx])
+                    e.partial_result = {
+                        'translations': dict(refined_translations),
+                        'next_index': group[0],
+                    }
                     raise
                 if log_callback:
                     log_callback("srt_refinement_error",

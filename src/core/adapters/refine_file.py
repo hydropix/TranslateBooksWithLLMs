@@ -165,6 +165,9 @@ async def refine_file(
             poe_api_key=poe_api_key,
             nim_api_key=nim_api_key,
             prompt_options=prompt_options,
+            checkpoint_manager=checkpoint_manager,
+            translation_id=translation_id,
+            resume_from_index=resume_from_index,
         )
 
     supported = ', '.join(['txt', 'epub', 'srt', 'docx'])

@@ -1,6 +1,6 @@
 # Design: term-fix pass on already-translated books
 
-Status: phase 1 implemented (`src/core/term_fix/`, `src/core/adapters/term_fix_file.py`, `translate.py --fix-terms`). Phases 2 to 5 pending.
+Status: implemented (phases 1 to 5). See "Decisions taken during implementation" at the end for where the result differs from this proposal.
 Origin: discussion hydropix/TranslateBooksWithLLMs#321 ("Third run for replacing words that was missed in glossary").
 
 ## Problem
@@ -141,8 +141,18 @@ src/api/blueprints/term_fix_routes.py   /api/term-fix/scan
 4. Scan endpoint, web UI and i18n.
 5. Docs: a new section in `docs/GLOSSARY.md` replacing the search-and-replace advice, then a reply on discussion #321.
 
-## Open questions
+## Decisions taken during implementation
 
-1. Is a mode inside the refine drop zone better than a third drop zone or operation? The proposal is the mode, because the input is the same (an already-translated file).
-2. Snippet size: sentence plus nothing, or sentence plus one neighbor sentence for context? The neighbor can be sent as read-only context without being editable.
-3. DOCX: is the HTML round trip lossy enough to justify run-level editing?
+The sections above are the original proposal. Where the implementation differs, this section wins. User documentation: `docs/TERM_FIX.md`.
+
+1. **Third drop zone instead of a mode in the refine zone.** A term fix needs its own inputs (rules, mode, scan), so mixing them with the refine options would have made both harder to read. The zone queues files with the `term_fix` operation, and a rules panel appears while such files are queued. The job reuses the refine-only plumbing (single language, single-phase progress), with a `term_fix` stats flag so the label reads "Fixing terms".
+2. **No refiner refactor.** The refiners all go through tag preservation and an HTML round trip, which would rewrite untouched bytes. The pass edits each format directly instead (`src/core/adapters/term_fix_file.py`):
+   - TXT and SRT: the raw file is a single unit. Cue numbers and timings cannot match a term, so SRT needs no parsing.
+   - EPUB: text segments between tags in the raw XHTML/NCX entries (`src/core/term_fix/formats.py`). Untouched zip entries are copied with their original `ZipInfo`.
+   - DOCX: python-docx paragraphs, with edits distributed over the runs. This answers open question 3: the HTML round trip is avoided entirely.
+3. **Snippet only, no neighbor sentence.** Testing on `gemma3:12b` showed the sentence alone is enough for inflection and article agreement. A neighbor would add cost and give the model more text it might rewrite.
+4. **Minimal edits.** An accepted snippet is turned into token-level edits (`src/core/term_fix/diffing.py`), so only the changed words are spliced back. This is what keeps DOCX runs and untouched words byte-identical.
+5. **Item tag `<snippet>`, not `<s>`.** `</s>` is an end-of-sequence token for many models, and Ollama stopped generating at the first one. The parser also tolerates a missing closing tag, strips leftover markers, and restores the snippet's own edge whitespace.
+6. **CLI default is smart.** `--fix-terms-mode literal` gives the free, no-LLM path. The scan never calls the LLM.
+
+Known limits: a sentence in an EPUB is cut at inline tags; entity-encoded characters inside a term are not matched; OPF metadata is not edited; PDF is unsupported.

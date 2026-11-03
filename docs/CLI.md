@@ -73,8 +73,9 @@ python translate.py -i input_file -o output_file
 
 | Option | Description |
 |--------|-------------|
-| `--fix-terms RULES` | Correct a term in an already-translated file without retranslating it. `RULES` is a `.txt` file with one `wrong\|other -> correct` rule per line (or a `.json` file). Only the matched occurrences change; a `.term-fix.md` report listing every change is written next to the output. TXT input and literal replacement only for now (no LLM call). |
-| `--fix-terms-scan` | With `--fix-terms`: count the matches per rule and print sample sentences, without writing anything. A trailing `*` on an alternative (e.g. `Drakbrand*`) matches every word starting with it, which helps find the forms to list. |
+| `--fix-terms RULES` | Correct a term in an already-translated file (TXT, SRT, EPUB, DOCX) without retranslating it. `RULES` is a `.txt` file with one `wrong\|other -> correct` rule per line (or a `.json` file). Only the sentences holding a match change; a `.term-fix.md` report listing every change is written next to the output. `-tl` names the language the file is written in. See [TERM_FIX.md](TERM_FIX.md). |
+| `--fix-terms-mode` | `smart` (default): the LLM rewrites only the sentences holding a match, so the correct term is inflected and agreement fixed. `literal`: case-preserving replacement with no LLM call; `*` wildcards are refused. |
+| `--fix-terms-scan` | With `--fix-terms`: count the matches per rule and print sample sentences, without writing anything or calling the LLM. A trailing `*` on a form (e.g. `Drakbrand*`) matches every word starting with it. |
 
 ### TTS (Text-to-Speech)
 
@@ -195,15 +196,18 @@ python translate.py -i novel.epub -sl Chinese -tl English --auto-glossary --auto
 ### Fixing a Term After Translation
 
 ```bash
-# rules.txt:  Drakbrännaren|Drakbrännarens -> Eldsdraken
-# 1. Check what matches (nothing is written)
-python translate.py -i "book (Swedish).txt" --fix-terms rules.txt --fix-terms-scan
+# rules.txt:  Drakbrännaren|Drakbrand* -> Eldsdraken
+# 1. Check what matches (nothing is written, no LLM call)
+python translate.py -i "book (Swedish).epub" -tl Swedish --fix-terms rules.txt --fix-terms-scan
 
-# 2. Apply (auto-generates "book (Swedish) (term-fix).txt" and its .term-fix.md report)
-python translate.py -i "book (Swedish).txt" --fix-terms rules.txt
+# 2. Apply with the LLM (auto-generates "book (Swedish) (term-fix).epub" and its .term-fix.md report)
+python translate.py -i "book (Swedish).epub" -tl Swedish --fix-terms rules.txt
+
+# Literal replacement, no LLM call (list each inflected form, no '*')
+python translate.py -i "book (Swedish).txt" --fix-terms exact_rules.txt --fix-terms-mode literal
 ```
 
-Literal replacement keeps the casing of each occurrence (`DRAKBRÄNNAREN` becomes `ELDSDRAKEN`) but cannot inflect the new term or fix agreement, so rules using a `*` wildcard are refused outside `--fix-terms-scan`. List each inflected form explicitly instead.
+Literal replacement keeps the casing of each occurrence (`DRAKBRÄNNAREN` becomes `ELDSDRAKEN`) but cannot inflect the new term or fix agreement. Smart mode sends only the sentences holding a match, so a small, cheap model is usually enough.
 
 ### With TTS (Text-to-Speech)
 

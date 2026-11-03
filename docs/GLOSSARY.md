@@ -370,7 +370,9 @@ Example: the glossary has `李凡青 -> Li Fan-qing` but you want `Li Fanqing` (
 4. Done. The next chunk that contains 李凡青 will use the corrected target.
 ```
 
-Note that already-translated chunks keep the old target; the fix only applies to chunks that have not been processed yet. If you need to fix already-translated chunks, do a search/replace on the output file after the run completes, or restart the translation from a checkpoint.
+Note that already-translated chunks keep the old target; the fix only applies to chunks that have not been processed yet. To fix already-translated chunks, run a [term fix](TERM_FIX.md) on the output once the run completes: it rewrites only the sentences holding the wrong rendering and inflects the corrected term. You can also restart the translation from a checkpoint.
+
+The same tool covers a term the glossary missed entirely, even across books already translated: see [TERM_FIX.md](TERM_FIX.md).
 
 ### Case 2: the source term is too greedy or not greedy enough
 

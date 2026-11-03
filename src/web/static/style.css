@@ -882,6 +882,97 @@ select.form-control {
     color: #7e22ce;
 }
 
+.file-item-controls .file-op-badge.op-term_fix {
+    background: rgba(16, 150, 120, 0.12);
+    color: #0f7a62;
+}
+
+/* Term fix rules panel (shown while the queue holds term-fix files) */
+.term-fix-panel {
+    margin: 0 0 1rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--border-light);
+    border-radius: 1.25rem;
+}
+
+.term-fix-panel h4 {
+    color: var(--text-dark);
+    font-size: 1rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+}
+
+.term-fix-panel .term-fix-help {
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
+    margin-bottom: 0.5rem;
+}
+
+.term-fix-panel .term-fix-rules {
+    width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.875rem;
+    resize: vertical;
+}
+
+.term-fix-panel .term-fix-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.term-fix-panel .term-fix-row label {
+    font-weight: 700;
+    color: var(--text-dark);
+}
+
+.term-fix-panel .term-fix-mode {
+    flex: 1 1 16rem;
+    min-width: 0;
+}
+
+.term-fix-panel .term-fix-scan-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.term-fix-results:empty {
+    display: none;
+}
+
+.term-fix-results {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-dark);
+}
+
+.term-fix-results .term-fix-file {
+    margin-top: 0.5rem;
+    font-weight: 700;
+}
+
+.term-fix-results .term-fix-rule {
+    margin: 0.25rem 0 0 0.75rem;
+}
+
+.term-fix-results .term-fix-zero {
+    color: #b45309;
+}
+
+.term-fix-results .term-fix-sample {
+    margin: 0.15rem 0 0 1.5rem;
+    color: var(--text-muted-light);
+    font-style: italic;
+    overflow-wrap: anywhere;
+}
+
+.term-fix-results .term-fix-error {
+    color: #b91c1c;
+}
+
 /* ========================================
    Progress Section
    ======================================== */

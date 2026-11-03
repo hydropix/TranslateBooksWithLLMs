@@ -128,6 +128,61 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
         logger.warning(f"⚠️ Auto mode failed: {exc} — translating without it.")
 
 
+def _run_term_fix(args, parser, logger) -> int:
+    """Run `--fix-terms` (or `--fix-terms-scan`) and return the exit code."""
+    from src.core.adapters import term_fix_file, scan_file
+    from src.core.adapters.exceptions import UnsupportedFormatError
+    from src.core.term_fix import RuleParseError, check_literal_rules, format_scan, load_rules_file
+
+    try:
+        rules = load_rules_file(args.fix_terms)
+    except FileNotFoundError:
+        parser.error(f"Rules file not found: {args.fix_terms}")
+    except RuleParseError as e:
+        parser.error(f"Invalid rules in {args.fix_terms}: {e}")
+    logger.info(f"Term fix: {len(rules)} rule(s) loaded from {args.fix_terms}")
+
+    try:
+        if args.fix_terms_scan:
+            for line in format_scan(asyncio.run(scan_file(args.input, rules))):
+                logger.info(line)
+            return 0
+
+        if args.fix_terms_mode == "literal":
+            check_literal_rules(rules)
+
+        def stats_callback(stats: dict):
+            if stats.get('total_chunks', 0) > 0:
+                logger.update_progress(stats.get('completed_chunks', 0), stats['total_chunks'])
+
+        result = asyncio.run(term_fix_file(
+            input_filepath=args.input,
+            output_filepath=args.output,
+            rules=rules,
+            mode=args.fix_terms_mode,
+            target_language=args.target_lang,
+            model_name=args.model,
+            llm_provider=args.provider,
+            llm_api_endpoint=args.api_endpoint,
+            gemini_api_key=args.gemini_api_key,
+            openai_api_key=args.openai_api_key,
+            openrouter_api_key=args.openrouter_api_key,
+            mistral_api_key=args.mistral_api_key,
+            deepseek_api_key=args.deepseek_api_key,
+            poe_api_key=args.poe_api_key,
+            nim_api_key=args.nim_api_key,
+            parallel_workers=args.parallel,
+            log_callback=logger.create_legacy_callback(),
+            stats_callback=stats_callback,
+        ))
+    except (UnsupportedFormatError, ValueError, FileNotFoundError, RuntimeError) as e:
+        logger.error(f"Term fix failed: {e}", LogType.ERROR_DETAIL)
+        return 1
+    if not result.changed:
+        logger.warning("⚠️ Term fix: no occurrence matched; the output is identical to the input.")
+    return 0
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Translate a text, EPUB, SRT, DOCX or PDF file using an LLM.",
@@ -167,6 +222,25 @@ if __name__ == "__main__":
         "--auto-style", action="store_true", dest="auto_style",
         help="Derive style instructions from the input document with one extra LLM call "
              "before translating (no preset file, nothing saved).")
+
+    # Term fix: correct terms in an already-translated file, no retranslation
+    term_fix_group = parser.add_argument_group(
+        'Term Fix', 'Replace wrong renderings of a term in an already-translated file')
+    term_fix_group.add_argument(
+        "--fix-terms", default=None, dest="fix_terms", metavar="RULES",
+        help="Path to correction rules (.txt: one 'wrong|other -> correct' per line, "
+             "or .json). Rewrites only the matched occurrences of the input file "
+             "(TXT, SRT, EPUB, DOCX) and writes a '.term-fix.md' change report next to "
+             "the output. -tl names the language the file is written in.")
+    term_fix_group.add_argument(
+        "--fix-terms-mode", choices=["smart", "literal"], default="smart", dest="fix_terms_mode",
+        help="smart (default): the LLM rewrites only the sentences holding a match, so the "
+             "correct term is inflected and agreement fixed. literal: plain case-preserving "
+             "replacement, no LLM call ('*' wildcards are refused).")
+    term_fix_group.add_argument(
+        "--fix-terms-scan", action="store_true", dest="fix_terms_scan",
+        help="With --fix-terms: only count the matches per rule and show sample "
+             "sentences. Nothing is written, no LLM call.")
 
     # TTS (Text-to-Speech) arguments
     tts_group = parser.add_argument_group('TTS Options', 'Text-to-Speech audio generation')
@@ -214,7 +288,9 @@ if __name__ == "__main__":
             output_ext = '.epub'
         elif args.input.lower().endswith('.srt'):
             output_ext = '.srt'
-        if args.refine_only:
+        if args.fix_terms:
+            args.output = f"{base} (term-fix){output_ext}"
+        elif args.refine_only:
             args.output = f"{base} (refined){output_ext}"
         else:
             args.output = f"{base} ({args.target_lang}){output_ext}"
@@ -236,7 +312,17 @@ if __name__ == "__main__":
     
     # Setup unified logger
     logger = setup_cli_logger(enable_colors=not args.no_color)
-    
+
+    # The scan and literal term fix need no LLM, so they run before any
+    # provider/API-key validation and exit. Smart mode runs after it.
+    if args.fix_terms_scan and not args.fix_terms:
+        parser.error("--fix-terms-scan requires --fix-terms RULES")
+    if args.fix_terms:
+        if args.refine or args.refine_only:
+            parser.error("--fix-terms cannot be combined with --refine or --refine-only")
+        if args.fix_terms_scan or args.fix_terms_mode == "literal":
+            raise SystemExit(_run_term_fix(args, parser, logger))
+
     # Validate API keys for providers
     if args.provider == "gemini" and not args.gemini_api_key:
         parser.error("--gemini_api_key is required when using gemini provider")
@@ -259,6 +345,9 @@ if __name__ == "__main__":
         parser.error("litellm provider requires a provider-prefixed model. "
                      "Set LITELLM_MODEL in .env or pass -m, e.g. "
                      "-m anthropic/claude-sonnet-4-6")
+
+    if args.fix_terms:
+        raise SystemExit(_run_term_fix(args, parser, logger))
 
     # PDF output is a rebuilt, reflowed document with no refine path yet.
     if args.input.lower().endswith('.pdf'):

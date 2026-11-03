@@ -1232,3 +1232,53 @@ def generate_post_processing_prompt(
         additional_instructions=additional_instructions,
         glossary_block=glossary_block,
     )
+
+
+def generate_term_fix_prompt(
+    snippets: List[str],
+    rules: List[Any],
+    target_language: str,
+) -> PromptPair:
+    """
+    Prompt for the term-fix pass: swap a wrongly translated term for the
+    correct one inside short snippets of an already-translated text.
+
+    Args:
+        snippets: Snippets with each wrong rendering wrapped in ⟦ ⟧ markers.
+        rules: The TermRule objects relevant to these snippets.
+        target_language: Language the text is written in.
+
+    Returns:
+        PromptPair: A named tuple with 'system' and 'user' prompts
+    """
+    rule_lines = "\n".join(
+        f"- wrong: {' / '.join(str(a) for a in rule.alternatives)}"
+        f"  ->  correct: {rule.replacement}"
+        for rule in rules
+    )
+    system_prompt = f"""You are a meticulous {target_language} copy editor fixing terminology in a book that is already translated.
+
+# TERMS TO FIX
+
+{rule_lines}
+
+('*' at the end of a wrong form means any word starting with it.)
+
+# RULES
+
+1. In each snippet, the words between ⟦ and ⟧ use a wrong rendering. Replace each of them with the correct term.
+2. Put the correct term in the grammatical form this sentence needs: case, number, definiteness, possessive, capitalization at the start of a sentence.
+3. If the new term requires it, adjust only the words that must agree with it in the same clause (articles, adjectives, pronouns, verb agreement).
+4. Change NOTHING else: keep every other word, the punctuation, the spelling, the word order and the spacing exactly as they are. Do not improve the style.
+5. Keep every placeholder such as [id0] or [[0]] exactly where it is.
+6. Remove the ⟦ ⟧ markers. Write each snippet on its own, closed by </snippet>.
+
+# OUTPUT FORMAT
+
+Return every snippet, in the same order, each wrapped as <snippet id="N">corrected snippet</snippet> with the same id. Output nothing else: no explanation, no notes."""
+
+    items = "\n".join(f'<snippet id="{i}">{text}</snippet>' for i, text in enumerate(snippets, start=1))
+    user_prompt = f"""# SNIPPETS TO FIX
+
+{items}"""
+    return PromptPair(system=system_prompt, user=user_prompt)

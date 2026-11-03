@@ -307,6 +307,19 @@ export const ApiClient = {
         });
     },
 
+    /**
+     * Count the matches of term-fix rules in an uploaded file (no LLM call)
+     * @param {string} filePath - Path to the uploaded file
+     * @param {string} rulesText - Rules, one 'wrong|other -> correct' per line
+     * @returns {Promise<Object>} { rules: [{ rule, total, alternatives, samples }] }
+     */
+    async scanTermFix(filePath, rulesText) {
+        return await apiRequest('/api/term-fix/scan', {
+            method: 'POST',
+            body: JSON.stringify({ file_path: filePath, rules_text: rulesText })
+        });
+    },
+
     // ========================================
     // Model Management
     // ========================================

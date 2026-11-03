@@ -148,14 +148,34 @@ def _run_term_fix(args, parser, logger) -> int:
                 logger.info(line)
             return 0
 
-        check_literal_rules(rules)
+        if args.fix_terms_mode == "literal":
+            check_literal_rules(rules)
+
+        def stats_callback(stats: dict):
+            if stats.get('total_chunks', 0) > 0:
+                logger.update_progress(stats.get('completed_chunks', 0), stats['total_chunks'])
+
         result = asyncio.run(term_fix_file(
             input_filepath=args.input,
             output_filepath=args.output,
             rules=rules,
+            mode=args.fix_terms_mode,
+            target_language=args.target_lang,
+            model_name=args.model,
+            llm_provider=args.provider,
+            llm_api_endpoint=args.api_endpoint,
+            gemini_api_key=args.gemini_api_key,
+            openai_api_key=args.openai_api_key,
+            openrouter_api_key=args.openrouter_api_key,
+            mistral_api_key=args.mistral_api_key,
+            deepseek_api_key=args.deepseek_api_key,
+            poe_api_key=args.poe_api_key,
+            nim_api_key=args.nim_api_key,
+            parallel_workers=args.parallel,
             log_callback=logger.create_legacy_callback(),
+            stats_callback=stats_callback,
         ))
-    except (UnsupportedFormatError, ValueError, FileNotFoundError) as e:
+    except (UnsupportedFormatError, ValueError, FileNotFoundError, RuntimeError) as e:
         logger.error(f"Term fix failed: {e}", LogType.ERROR_DETAIL)
         return 1
     if not result.changed:
@@ -209,13 +229,18 @@ if __name__ == "__main__":
     term_fix_group.add_argument(
         "--fix-terms", default=None, dest="fix_terms", metavar="RULES",
         help="Path to correction rules (.txt: one 'wrong|other -> correct' per line, "
-             "or .json). Rewrites only the matched occurrences of the input file and "
-             "writes a '.term-fix.md' change report next to the output. TXT input, "
-             "literal replacement only for now (no LLM call).")
+             "or .json). Rewrites only the matched occurrences of the input file "
+             "(TXT, SRT, EPUB, DOCX) and writes a '.term-fix.md' change report next to "
+             "the output. -tl names the language the file is written in.")
+    term_fix_group.add_argument(
+        "--fix-terms-mode", choices=["smart", "literal"], default="smart", dest="fix_terms_mode",
+        help="smart (default): the LLM rewrites only the sentences holding a match, so the "
+             "correct term is inflected and agreement fixed. literal: plain case-preserving "
+             "replacement, no LLM call ('*' wildcards are refused).")
     term_fix_group.add_argument(
         "--fix-terms-scan", action="store_true", dest="fix_terms_scan",
         help="With --fix-terms: only count the matches per rule and show sample "
-             "sentences. Nothing is written.")
+             "sentences. Nothing is written, no LLM call.")
 
     # TTS (Text-to-Speech) arguments
     tts_group = parser.add_argument_group('TTS Options', 'Text-to-Speech audio generation')
@@ -288,14 +313,15 @@ if __name__ == "__main__":
     # Setup unified logger
     logger = setup_cli_logger(enable_colors=not args.no_color)
 
-    # Term fix needs no LLM in its current (literal) form, so it runs before
-    # any provider/API-key validation and exits.
+    # The scan and literal term fix need no LLM, so they run before any
+    # provider/API-key validation and exit. Smart mode runs after it.
     if args.fix_terms_scan and not args.fix_terms:
         parser.error("--fix-terms-scan requires --fix-terms RULES")
     if args.fix_terms:
         if args.refine or args.refine_only:
             parser.error("--fix-terms cannot be combined with --refine or --refine-only")
-        raise SystemExit(_run_term_fix(args, parser, logger))
+        if args.fix_terms_scan or args.fix_terms_mode == "literal":
+            raise SystemExit(_run_term_fix(args, parser, logger))
 
     # Validate API keys for providers
     if args.provider == "gemini" and not args.gemini_api_key:
@@ -319,6 +345,9 @@ if __name__ == "__main__":
         parser.error("litellm provider requires a provider-prefixed model. "
                      "Set LITELLM_MODEL in .env or pass -m, e.g. "
                      "-m anthropic/claude-sonnet-4-6")
+
+    if args.fix_terms:
+        raise SystemExit(_run_term_fix(args, parser, logger))
 
     # PDF output is a rebuilt, reflowed document with no refine path yet.
     if args.input.lower().endswith('.pdf'):

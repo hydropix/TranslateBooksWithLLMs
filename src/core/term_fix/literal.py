@@ -5,38 +5,11 @@ Literal mode cannot inflect the replacement or fix agreement, so it refuses
 rules with a prefix wildcard: "Drakbrand*" would match "Drakbrandens" and the
 genitive ending would be lost.
 """
-import bisect
-from dataclasses import dataclass, field
 from typing import List, Sequence
 
-from src.core.term_fix.matcher import Span, find_spans
+from src.core.term_fix.models import STATUS_LITERAL, Correction, SnippetItem
 from src.core.term_fix.rules import TermRule
-from src.core.term_fix.snippets import build_snippets, splice
-
-STATUS_LITERAL = "literal"
-
-
-@dataclass(frozen=True)
-class Occurrence:
-    """One replaced occurrence, with its sentence before and after the change."""
-    rule_index: int
-    alternative_index: int
-    line: int
-    matched: str
-    replacement: str
-    before: str
-    after: str
-    status: str
-
-
-@dataclass
-class TermFixResult:
-    text: str
-    occurrences: List[Occurrence] = field(default_factory=list)
-
-    @property
-    def changed(self) -> bool:
-        return bool(self.occurrences)
+from src.core.term_fix.snippets import splice
 
 
 def match_case(matched: str, replacement: str) -> str:
@@ -62,49 +35,27 @@ def check_literal_rules(rules: Sequence[TermRule]) -> None:
             raise ValueError(
                 f"Rule '{rule}' uses a '*' prefix wildcard, which literal "
                 f"replacement cannot inflect. List the exact forms instead "
-                f"(e.g. 'Drakbrand|Drakbranden|Drakbrandens -> ...')."
+                f"(e.g. 'Drakbrand|Drakbranden|Drakbrandens -> ...'), or use "
+                f"the smart (LLM) mode."
             )
 
 
-def _line_of(pos: int, line_starts: List[int]) -> int:
-    """1-based line number of offset `pos`."""
-    return bisect.bisect_right(line_starts, pos)
+class LiteralCorrector:
+    """Corrector that swaps each match for the rule's replacement."""
 
+    def __init__(self, rules: Sequence[TermRule]):
+        check_literal_rules(rules)
+        self.rules = list(rules)
 
-def apply_literal_fix(
-    text: str,
-    rules: Sequence[TermRule],
-    case_sensitive: bool = False,
-) -> TermFixResult:
-    """Replace every occurrence of every rule in `text`. Bytes outside the
-    matches are left exactly as they were."""
-    check_literal_rules(rules)
-    spans = find_spans(text, rules, case_sensitive=case_sensitive)
-    if not spans:
-        return TermFixResult(text=text)
+    def correct_sync(self, items: Sequence[SnippetItem]) -> List[Correction]:
+        out: List[Correction] = []
+        for item in items:
+            edits = [
+                (s, e, match_case(item.text[s:e], self.rules[r].replacement))
+                for s, e, r in item.spans
+            ]
+            out.append(Correction(text=splice(item.text, edits), status=STATUS_LITERAL))
+        return out
 
-    def replacement_for(span: Span) -> str:
-        return match_case(span.matched, rules[span.rule_index].replacement)
-
-    line_starts = [0] + [i + 1 for i, c in enumerate(text) if c == "\n"]
-    occurrences: List[Occurrence] = []
-    for snippet in build_snippets(text, spans):
-        before = text[snippet.start:snippet.end]
-        after = splice(before, [
-            (s.start - snippet.start, s.end - snippet.start, replacement_for(s))
-            for s in snippet.spans
-        ])
-        for span in snippet.spans:
-            occurrences.append(Occurrence(
-                rule_index=span.rule_index,
-                alternative_index=span.alternative_index,
-                line=_line_of(span.start, line_starts),
-                matched=span.matched,
-                replacement=replacement_for(span),
-                before=before,
-                after=after,
-                status=STATUS_LITERAL,
-            ))
-
-    new_text = splice(text, [(s.start, s.end, replacement_for(s)) for s in spans])
-    return TermFixResult(text=new_text, occurrences=occurrences)
+    async def correct(self, items: Sequence[SnippetItem]) -> List[Correction]:
+        return self.correct_sync(items)

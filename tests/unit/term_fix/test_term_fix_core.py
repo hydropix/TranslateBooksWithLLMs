@@ -168,7 +168,7 @@ class TestApplyLiteralFix:
         text = "Ashe came.\r\nTHE ASHE ROSE!\r\n  ashe   spacing kept  \r\n"
         result = apply_literal_fix(text, parse_rules_text("Ashe -> Askan"))
         assert result.text == "Askan came.\r\nTHE ASKAN ROSE!\r\n  Askan   spacing kept  \r\n"
-        assert [o.line for o in result.occurrences] == [1, 2, 3]
+        assert [o.location for o in result.occurrences] == ["line 1", "line 2", "line 3"]
         assert result.occurrences[0].before == "Ashe came."
         assert result.occurrences[0].after == "Askan came."
 

@@ -88,6 +88,22 @@ def _build_rule(finds: List[str], replacement: str, where: str) -> TermRule:
     return rule
 
 
+def _check_rule_set(rules: List[TermRule]) -> List[TermRule]:
+    """Reject an empty set, and a replacement that another rule would match
+    (applying the set twice would then rewrite already-fixed text)."""
+    if not rules:
+        raise RuleParseError("No correction rule found.")
+    from src.core.term_fix.matcher import find_spans
+    for idx, rule in enumerate(rules):
+        for span in find_spans(rule.replacement, rules):
+            if span.rule_index != idx:
+                raise RuleParseError(
+                    f"The replacement '{rule.replacement}' is matched by rule "
+                    f"'{rules[span.rule_index]}'. Make the alternatives more specific."
+                )
+    return rules
+
+
 def parse_rules_text(text: str) -> List[TermRule]:
     """Parse the one-rule-per-line text form. Raises RuleParseError."""
     rules: List[TermRule] = []
@@ -104,9 +120,7 @@ def parse_rules_text(text: str) -> List[TermRule]:
         if RULE_SEPARATOR in right:
             raise RuleParseError(f"{where}: more than one '{RULE_SEPARATOR}'.")
         rules.append(_build_rule(left.split(ALTERNATIVE_SEPARATOR), right, where))
-    if not rules:
-        raise RuleParseError("No correction rule found.")
-    return rules
+    return _check_rule_set(rules)
 
 
 def parse_rules_json(data: Any) -> List[TermRule]:
@@ -125,9 +139,7 @@ def parse_rules_json(data: Any) -> List[TermRule]:
         if not isinstance(finds, list) or not all(isinstance(f, str) for f in finds):
             raise RuleParseError(f"{where}: 'find' must be a string or a list of strings.")
         rules.append(_build_rule(finds, entry.get("replace") or "", where))
-    if not rules:
-        raise RuleParseError("No correction rule found.")
-    return rules
+    return _check_rule_set(rules)
 
 
 def load_rules_file(path: str) -> List[TermRule]:

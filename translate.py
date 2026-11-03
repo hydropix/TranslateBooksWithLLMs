@@ -128,6 +128,41 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
         logger.warning(f"⚠️ Auto mode failed: {exc} — translating without it.")
 
 
+def _run_term_fix(args, parser, logger) -> int:
+    """Run `--fix-terms` (or `--fix-terms-scan`) and return the exit code."""
+    from src.core.adapters import term_fix_file, scan_file
+    from src.core.adapters.exceptions import UnsupportedFormatError
+    from src.core.term_fix import RuleParseError, check_literal_rules, format_scan, load_rules_file
+
+    try:
+        rules = load_rules_file(args.fix_terms)
+    except FileNotFoundError:
+        parser.error(f"Rules file not found: {args.fix_terms}")
+    except RuleParseError as e:
+        parser.error(f"Invalid rules in {args.fix_terms}: {e}")
+    logger.info(f"Term fix: {len(rules)} rule(s) loaded from {args.fix_terms}")
+
+    try:
+        if args.fix_terms_scan:
+            for line in format_scan(asyncio.run(scan_file(args.input, rules))):
+                logger.info(line)
+            return 0
+
+        check_literal_rules(rules)
+        result = asyncio.run(term_fix_file(
+            input_filepath=args.input,
+            output_filepath=args.output,
+            rules=rules,
+            log_callback=logger.create_legacy_callback(),
+        ))
+    except (UnsupportedFormatError, ValueError, FileNotFoundError) as e:
+        logger.error(f"Term fix failed: {e}", LogType.ERROR_DETAIL)
+        return 1
+    if not result.changed:
+        logger.warning("⚠️ Term fix: no occurrence matched; the output is identical to the input.")
+    return 0
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Translate a text, EPUB, SRT, DOCX or PDF file using an LLM.",
@@ -167,6 +202,20 @@ if __name__ == "__main__":
         "--auto-style", action="store_true", dest="auto_style",
         help="Derive style instructions from the input document with one extra LLM call "
              "before translating (no preset file, nothing saved).")
+
+    # Term fix: correct terms in an already-translated file, no retranslation
+    term_fix_group = parser.add_argument_group(
+        'Term Fix', 'Replace wrong renderings of a term in an already-translated file')
+    term_fix_group.add_argument(
+        "--fix-terms", default=None, dest="fix_terms", metavar="RULES",
+        help="Path to correction rules (.txt: one 'wrong|other -> correct' per line, "
+             "or .json). Rewrites only the matched occurrences of the input file and "
+             "writes a '.term-fix.md' change report next to the output. TXT input, "
+             "literal replacement only for now (no LLM call).")
+    term_fix_group.add_argument(
+        "--fix-terms-scan", action="store_true", dest="fix_terms_scan",
+        help="With --fix-terms: only count the matches per rule and show sample "
+             "sentences. Nothing is written.")
 
     # TTS (Text-to-Speech) arguments
     tts_group = parser.add_argument_group('TTS Options', 'Text-to-Speech audio generation')
@@ -214,7 +263,9 @@ if __name__ == "__main__":
             output_ext = '.epub'
         elif args.input.lower().endswith('.srt'):
             output_ext = '.srt'
-        if args.refine_only:
+        if args.fix_terms:
+            args.output = f"{base} (term-fix){output_ext}"
+        elif args.refine_only:
             args.output = f"{base} (refined){output_ext}"
         else:
             args.output = f"{base} ({args.target_lang}){output_ext}"
@@ -236,7 +287,16 @@ if __name__ == "__main__":
     
     # Setup unified logger
     logger = setup_cli_logger(enable_colors=not args.no_color)
-    
+
+    # Term fix needs no LLM in its current (literal) form, so it runs before
+    # any provider/API-key validation and exits.
+    if args.fix_terms_scan and not args.fix_terms:
+        parser.error("--fix-terms-scan requires --fix-terms RULES")
+    if args.fix_terms:
+        if args.refine or args.refine_only:
+            parser.error("--fix-terms cannot be combined with --refine or --refine-only")
+        raise SystemExit(_run_term_fix(args, parser, logger))
+
     # Validate API keys for providers
     if args.provider == "gemini" and not args.gemini_api_key:
         parser.error("--gemini_api_key is required when using gemini provider")

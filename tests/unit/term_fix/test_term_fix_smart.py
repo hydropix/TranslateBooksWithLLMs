@@ -94,14 +94,25 @@ class TestPromptAndParsing:
         assert mark_snippet(_item("Se Drakbranden nu", "Drakbranden")) == "Se ⟦Drakbranden⟧ nu"
 
     def test_parse_response_ignores_noise(self):
-        content = 'Sure!\n<s id="2">two</s>\n<s id="1">one\nline</s>\n<s id="1">dup</s>'
+        content = 'Sure!\n<snippet id="2">two</snippet>\n<snippet id="1">one\nline</snippet>\n<snippet id="1">dup</snippet>'
         assert parse_response(content) == {1: "one\nline", 2: "two"}
+
+    def test_parse_response_tolerates_missing_closing_tags(self):
+        # Seen with gemma3 on Ollama: the last item is never closed, and an
+        # inner item can lose its closing tag too.
+        content = '<snippet id="1">Eldsdraken vaknade.\n<snippet id="2">Alla fruktade Eldsdrakens eld.\n'
+        assert parse_response(content) == {
+            1: "Eldsdraken vaknade.", 2: "Alla fruktade Eldsdrakens eld."}
+
+    def test_parse_response_strips_leftover_markers(self):
+        content = '<snippet id="1">Alla fruktade ⟦Eldsdrakens⟧ eld.</snippet>'
+        assert parse_response(content) == {1: "Alla fruktade Eldsdrakens eld."}
 
     def test_prompt_lists_rules_and_ids(self):
         prompt = generate_term_fix_prompt(["a ⟦Drakbranden⟧", "b"], RULES, "Swedish")
         assert "Drakbrand*  ->  correct: Eldsdraken" in prompt.system
         assert "Swedish" in prompt.system
-        assert '<s id="1">a ⟦Drakbranden⟧</s>\n<s id="2">b</s>' in prompt.user
+        assert '<snippet id="1">a ⟦Drakbranden⟧</snippet>\n<snippet id="2">b</snippet>' in prompt.user
 
 
 class _Response:
@@ -120,13 +131,13 @@ class ScriptedLLM:
 
     async def make_request(self, prompt, model=None, system_prompt=None):
         self.prompts.append(prompt)
-        items = re.findall(r'<s id="(\d+)">(.*?)</s>', prompt, re.DOTALL)
+        items = re.findall(r'<snippet id="(\d+)">(.*?)</snippet>', prompt, re.DOTALL)
         builder = self.builders.pop(0) if self.builders else (lambda i, t: None)
         out = []
         for ident, text in items:
             answer = builder(int(ident), text)
             if answer is not None:
-                out.append(f'<s id="{ident}">{answer}</s>')
+                out.append(f'<snippet id="{ident}">{answer}</snippet>')
         return _Response("\n".join(out))
 
 

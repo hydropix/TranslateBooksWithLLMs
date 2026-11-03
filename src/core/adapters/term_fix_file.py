@@ -222,11 +222,12 @@ async def term_fix_file(
     stats_callback: Optional[Callable] = None,
     check_interruption_callback: Optional[Callable] = None,
     report_filepath: Optional[str] = None,
+    source_name: Optional[str] = None,
 ) -> TermFixResult:
     """Apply `rules` to `input_filepath`, write the result and a change report.
 
     The report goes to `report_filepath`, or `<output stem>.term-fix.md` by
-    default. Raises UnsupportedFormatError for unsupported formats, ValueError
+    default; its title names `source_name` (the input's base name by default). Raises UnsupportedFormatError for unsupported formats, ValueError
     for an unknown mode or a rule literal mode cannot apply, and RuntimeError
     when the smart-mode LLM client cannot be created.
     """
@@ -282,6 +283,9 @@ async def term_fix_file(
                 check_interruption_callback=check_interruption_callback,
             )
         result = await fix_units(document.units, rules, document.locate, corrector=corrector)
+        if corrector is None and stats_callback:
+            # Literal mode is a single instant step; report it as done.
+            stats_callback({'total_chunks': 1, 'completed_chunks': 1, 'failed_chunks': 0})
     finally:
         if llm_client is not None and hasattr(llm_client, "close"):
             try:
@@ -305,6 +309,7 @@ async def term_fix_file(
 
     report_filepath = report_filepath or report_path_for(output_filepath)
     with open(report_filepath, "w", encoding="utf-8") as f:
-        f.write(render_report(os.path.basename(input_filepath), rules, result.occurrences))
+        f.write(render_report(source_name or os.path.basename(input_filepath),
+                              rules, result.occurrences))
     log("term_fix_report", f"Term fix report: '{report_filepath}'")
     return result

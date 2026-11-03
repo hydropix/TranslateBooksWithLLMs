@@ -160,6 +160,8 @@ export const FileUpload = {
         this.restoreFileQueueSync();
         // Reflect any restored operation in the drop-zone locking state.
         this.refreshZoneLocking();
+        // The queue rows are built with t(): rebuild them on a UI language switch.
+        window.addEventListener('localeChanged', () => this.updateFileDisplay());
         // Then verify files exist on server after a delay
         setTimeout(() => this.verifyAndCleanupFileQueue(), 1000);
     },
@@ -676,7 +678,8 @@ export const FileUpload = {
     setupDragDrop() {
         const zones = [
             { id: 'fileUpload', operation: 'translate' },
-            { id: 'fileUploadRefine', operation: 'refine' }
+            { id: 'fileUploadRefine', operation: 'refine' },
+            { id: 'fileUploadTermFix', operation: 'term_fix' }
         ];
         zones.forEach(({ id, operation }) => {
             const uploadArea = DomHelpers.getElement(id);
@@ -724,6 +727,12 @@ export const FileUpload = {
                 this.handleFileSelectRefine(e);
             });
         }
+        const fileInputTermFix = DomHelpers.getElement('fileInputTermFix');
+        if (fileInputTermFix) {
+            fileInputTermFix.addEventListener('change', (e) => {
+                this.handleFileSelectTermFix(e);
+            });
+        }
     },
 
     /**
@@ -751,6 +760,18 @@ export const FileUpload = {
     },
 
     /**
+     * Handle file selection from input (Term fix zone)
+     * @param {Event} event - Change event from file input
+     */
+    handleFileSelectTermFix(event) {
+        const files = event.target.files;
+        if (files.length > 0) {
+            this.handleFiles(Array.from(files), 'term_fix');
+            DomHelpers.setValue('fileInputTermFix', '');
+        }
+    },
+
+    /**
      * Resolve the current queue's operation, or null if the queue is empty.
      * @returns {string|null}
      */
@@ -762,16 +783,18 @@ export const FileUpload = {
 
     /**
      * Apply the zone locking rule: once the queue has a chosen operation,
-     * the opposite drop zone is disabled until the queue empties.
+     * the other drop zones are disabled until the queue empties.
      */
     refreshZoneLocking() {
         const op = this.getQueueOperation();
-        const translateZone = DomHelpers.getElement('fileUpload');
-        const refineZone = DomHelpers.getElement('fileUploadRefine');
-        if (!translateZone || !refineZone) return;
-
-        translateZone.classList.toggle('zone-disabled', op === 'refine');
-        refineZone.classList.toggle('zone-disabled', op === 'translate');
+        const zones = {
+            translate: DomHelpers.getElement('fileUpload'),
+            refine: DomHelpers.getElement('fileUploadRefine'),
+            term_fix: DomHelpers.getElement('fileUploadTermFix'),
+        };
+        for (const [zoneOp, zone] of Object.entries(zones)) {
+            if (zone) zone.classList.toggle('zone-disabled', !!op && op !== zoneOp);
+        }
     },
 
     /**
@@ -830,8 +853,8 @@ export const FileUpload = {
             let initialSourceLanguage;
             let initialTargetLanguage;
 
-            if (operation === 'refine') {
-                // Monolingual refinement: a single language. Prefer detected, else current target.
+            if (operation === 'refine' || operation === 'term_fix') {
+                // Monolingual refinement / term fix: a single language. Prefer detected, else current target.
                 if (uploadResult.detected_language && uploadResult.language_confidence >= 0.7) {
                     initialTargetLanguage = uploadResult.detected_language;
                 } else {
@@ -981,7 +1004,7 @@ export const FileUpload = {
 
                 // Add language pair display (read-only summary)
                 const op = file.operation || 'translate';
-                if (op === 'refine' && file.targetLanguage) {
+                if ((op === 'refine' || op === 'term_fix') && file.targetLanguage) {
                     const langSpan = document.createElement('span');
                     langSpan.className = 'file-languages';
                     langSpan.style.fontSize = '0.85em';
@@ -1016,7 +1039,8 @@ export const FileUpload = {
                 // Quick LLM test button — grabs 5 segments from this file and
                 // translates them once with the currently-selected LLM/options,
                 // so the user can eyeball quality before a big run. Queued only.
-                if (file.status === 'Queued') {
+                // A term fix has its own preview ("Check matches" in its panel).
+                if (file.status === 'Queued' && op !== 'term_fix') {
                     const testBtn = document.createElement('button');
                     testBtn.className = 'file-test-btn';
                     testBtn.title = t('translation:quicktest_button_title');
@@ -1104,9 +1128,11 @@ export const FileUpload = {
         // Operation badge
         const badge = document.createElement('span');
         badge.className = `file-op-badge op-${op}`;
-        badge.textContent = op === 'refine'
-            ? t('translation:op_badge_refine')
-            : t('translation:op_badge_translate');
+        const badgeKeys = {
+            refine: 'translation:op_badge_refine',
+            term_fix: 'translation:op_badge_term_fix',
+        };
+        badge.textContent = t(badgeKeys[op] || 'translation:op_badge_translate');
         wrap.appendChild(badge);
 
         // Build a small language <select> reusing options from the matching
@@ -1198,14 +1224,14 @@ export const FileUpload = {
             );
             wrap.appendChild(refineLabel);
         } else {
-            // Refine: single language dropdown (the file's own language)
+            // Refine / term fix: single language dropdown (the file's own language)
             const langLabel = document.createElement('label');
             langLabel.textContent = t('translation:per_file_language');
             const langSelect = buildLangSelect(
                 file.targetLanguage,
                 t('translation:per_file_language'),
                 (val) => {
-                    // For refine, source == target (monolingual)
+                    // For refine and term fix, source == target (monolingual)
                     this._updateFileField(file.name, 'targetLanguage', val);
                     this._updateFileField(file.name, 'sourceLanguage', val);
                 },

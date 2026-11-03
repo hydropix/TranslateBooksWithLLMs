@@ -142,6 +142,10 @@ def _auto_prep_wants(config):
             config['prompt_options'] = prompt_options
 
         glossary_requested, style_requested = auto_prep.normalize_auto_flags(prompt_options)
+        if config.get('term_fix'):
+            # A term fix sends no translation or refinement prompt, so neither
+            # an auto glossary nor an auto style would ever be used.
+            return False, False
 
         want_glossary = bool(
             glossary_requested
@@ -564,6 +568,14 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             'enable_refinement': False, 'refine_only': True, 'current_phase': 1,
         })
 
+    def _term_fix_stats_callback(new_stats_dict):
+        # Single-phase like refine-only (same progress mapping); the extra flag
+        # lets the UI name the work "Fixing terms" instead of "Refining".
+        _emit_progress(new_stats_dict, {
+            'enable_refinement': False, 'refine_only': True, 'term_fix': True,
+            'current_phase': 1,
+        })
+
     def _finalize_stats_callback(new_stats_dict):
         # Finalization pushes (e.g. final elapsed_time) must not re-assert a
         # phase; the stored stats already carry the terminal phase/percent.
@@ -735,7 +747,41 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 f"⚠️ Could not load glossary: {glossary_load_error}"
             )
 
-        if config.get('refine_only'):
+        if config.get('term_fix'):
+            from src.core.adapters import term_fix_file
+            from src.core.term_fix import parse_rules_text
+            term_fix = config['term_fix']
+            _log_message_callback(
+                "term_fix_mode",
+                f"🔤 Term-fix mode ({term_fix.get('mode', 'smart')}): only the listed "
+                f"wrong renderings are changed, the rest of the file is kept as is."
+            )
+            await term_fix_file(
+                input_filepath=input_path_for_translate_module,
+                output_filepath=output_filepath_on_server,
+                rules=parse_rules_text(term_fix['rules_text']),
+                mode=term_fix.get('mode', 'smart'),
+                target_language=config['target_language'],
+                model_name=config['model'],
+                llm_provider=config.get('llm_provider', 'ollama'),
+                llm_api_endpoint=config['llm_api_endpoint'],
+                gemini_api_key=config.get('gemini_api_key', ''),
+                openai_api_key=config.get('openai_api_key', ''),
+                openrouter_api_key=config.get('openrouter_api_key', ''),
+                mistral_api_key=config.get('mistral_api_key', ''),
+                deepseek_api_key=config.get('deepseek_api_key', ''),
+                poe_api_key=config.get('poe_api_key', ''),
+                nim_api_key=config.get('nim_api_key', ''),
+                context_window=config.get('context_window', 2048),
+                auto_adjust_context=config.get('auto_adjust_context', True),
+                parallel_workers=config.get('parallel_workers', 1),
+                log_callback=_log_message_callback,
+                stats_callback=_term_fix_stats_callback,
+                check_interruption_callback=should_interrupt_current_task,
+                # Uploads carry a random prefix; the report names the user's file.
+                source_name=config.get('input_filename'),
+            )
+        elif config.get('refine_only'):
             _log_message_callback(
                 "refine_only_mode",
                 "✨ Refine-only mode: skipping translation, polishing the input file as-is."

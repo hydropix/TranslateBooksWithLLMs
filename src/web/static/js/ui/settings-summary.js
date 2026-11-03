@@ -61,6 +61,7 @@ const TARGETS = {
     glossary:     { tab: 'translate', section: null, focus: 'glossarySelect',          panel: 'preflight' },
     instructions: { tab: 'translate', section: null, focus: 'customInstructionSelect', panel: 'preflight' },
     refineOnly:   { tab: 'files',    section: null,       focus: null },
+    termFix:      { tab: 'translate', section: null,      focus: 'termFixRules' },
     // Not a summary chip: reached only through navigateToSetting(), by the
     // pre-flight zone's "Parallel requests" advice.
     parallelWorkers: { tab: 'settings', section: 'settings', focus: 'parallelWorkers' },
@@ -125,6 +126,13 @@ function buildLlmLine() {
             { key: 'languages', label: t('translation:summary_refining_in', { lang: targetLang }) },
         ];
     }
+    if (queueOperation() === 'term_fix') {
+        return [
+            { key: 'provider',  label: providerLabel },
+            { key: 'model',     label: modelLabel },
+            { key: 'languages', label: t('translation:summary_term_fix_in', { lang: targetLang }) },
+        ];
+    }
     return [
         { key: 'provider',  label: providerLabel },
         { key: 'model',     label: modelLabel },
@@ -137,6 +145,13 @@ function buildChips() {
 
     const hasGlossary = !!(DomHelpers.getValue('glossarySelect') || '').trim();
     const hasInstructions = !!(DomHelpers.getValue('customInstructionSelect') || '').trim();
+
+    if (queueOperation() === 'term_fix') {
+        // Only the rules and the mode matter: glossary, instructions and the
+        // translation options are not used by a term fix.
+        chips.push({ key: 'termFix', label: t('translation:summary_term_fix'), prominent: true });
+        return chips;
+    }
 
     if (queueOperation() === 'refine') {
         chips.push({ key: 'refineOnly', label: t('translation:summary_refine_only'), prominent: true });

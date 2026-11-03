@@ -1271,13 +1271,13 @@ def generate_term_fix_prompt(
 3. If the new term requires it, adjust only the words that must agree with it in the same clause (articles, adjectives, pronouns, verb agreement).
 4. Change NOTHING else: keep every other word, the punctuation, the spelling, the word order and the spacing exactly as they are. Do not improve the style.
 5. Keep every placeholder such as [id0] or [[0]] exactly where it is.
-6. Remove the ⟦ ⟧ markers.
+6. Remove the ⟦ ⟧ markers. Write each snippet on its own, closed by </snippet>.
 
 # OUTPUT FORMAT
 
-Return every snippet, in the same order, each wrapped as <s id="N">corrected snippet</s> with the same id. Output nothing else: no explanation, no notes."""
+Return every snippet, in the same order, each wrapped as <snippet id="N">corrected snippet</snippet> with the same id. Output nothing else: no explanation, no notes."""
 
-    items = "\n".join(f'<s id="{i}">{text}</s>' for i, text in enumerate(snippets, start=1))
+    items = "\n".join(f'<snippet id="{i}">{text}</snippet>' for i, text in enumerate(snippets, start=1))
     user_prompt = f"""# SNIPPETS TO FIX
 
 {items}"""

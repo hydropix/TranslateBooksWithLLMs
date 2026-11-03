@@ -143,6 +143,10 @@ export function resolveOperationLabel(stats) {
             : t('translation:translating_step', { step: 1, total: 2, defaultValue: 'Translating (1/2)' });
     }
 
+    if (stats.term_fix) {
+        return t('translation:fixing_terms');
+    }
+
     if (stats.refine_only) {
         return t('translation:refining');
     }

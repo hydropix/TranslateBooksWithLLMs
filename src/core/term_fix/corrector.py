@@ -30,7 +30,13 @@ DEFAULT_BATCH_SIZE = 12
 #: Words on each side of a match the model may touch (articles, adjectives).
 GUARD_WINDOW_WORDS = 4
 
-_ITEM_RE = re.compile(r'<s id="(\d+)">(.*?)</s>', re.DOTALL)
+#: Item wrapper. Not "<s>": "</s>" is the end-of-sequence token of many
+#: models, and Ollama stops generating at the first one.
+ITEM_TAG = "snippet"
+# The closing tag is optional: a model that stops right after the last item
+# (or forgets one closing tag) still yields every item it wrote.
+_ITEM_RE = re.compile(
+    rf'<{ITEM_TAG} id="(\d+)">(.*?)(?=</{ITEM_TAG}>|<{ITEM_TAG} id="|\Z)', re.DOTALL)
 # Placeholders the EPUB/DOCX pipelines use; a snippet must keep them verbatim.
 _PLACEHOLDER_RE = re.compile(r"\[\[\d+\]\]|\[id\d+\]")
 
@@ -47,11 +53,28 @@ def mark_snippet(item: SnippetItem) -> str:
 
 
 def parse_response(content: str) -> Dict[int, str]:
-    """{id: text} from a '<s id="N">...</s>' response. Duplicates keep the first."""
+    """{id: text} from a '<snippet id="N">...</snippet>' response.
+
+    Duplicates keep the first. Markers a model forgot to remove are stripped:
+    they only ever wrapped the term, so dropping them cannot change the text.
+    Edge whitespace is stripped too (it is the layout between items); the
+    corrector restores the snippet's own edges, see `_with_original_edges`.
+    """
     result: Dict[int, str] = {}
     for m in _ITEM_RE.finditer(content or ""):
-        result.setdefault(int(m.group(1)), m.group(2))
+        text = m.group(2).replace(MARK_OPEN, "").replace(MARK_CLOSE, "").strip()
+        result.setdefault(int(m.group(1)), text)
     return result
+
+
+def _with_original_edges(original: str, answer: str) -> str:
+    """`answer` with the leading/trailing whitespace of `original`."""
+    core = original.strip()
+    if not core:
+        return answer
+    start = original.index(core[0])
+    end = original.rindex(core[-1]) + 1
+    return original[:start] + answer + original[end:]
 
 
 def _stem(word: str) -> str:
@@ -149,6 +172,13 @@ class SmartCorrector:
         })
         return parse_response(content)
 
+    def _judge(self, item: SnippetItem, answer: Optional[str]):
+        """(answer with the snippet's own edge whitespace, rejection reason or None)."""
+        if answer is None:
+            return None, "no answer"
+        answer = _with_original_edges(item.text, answer)
+        return answer, check_correction(item, answer, self.rules)
+
     async def _correct_batch(self, items: Sequence[SnippetItem]) -> List[Correction]:
         from src.core.llm.exceptions import RateLimitError
 
@@ -162,8 +192,7 @@ class SmartCorrector:
 
         results: List[Optional[Correction]] = []
         for idx, item in enumerate(items, start=1):
-            answer = answers.get(idx)
-            reason = "no answer" if answer is None else check_correction(item, answer, self.rules)
+            answer, reason = self._judge(item, answers.get(idx))
             results.append(Correction(answer, STATUS_FIXED) if reason is None else None)
 
         # Retry each rejected snippet once, alone: a batch failure is often one
@@ -173,8 +202,7 @@ class SmartCorrector:
                 continue
             reason = "no answer"
             try:
-                answer = (await self._ask([item])).get(1)
-                reason = "no answer" if answer is None else check_correction(item, answer, self.rules)
+                answer, reason = self._judge(item, (await self._ask([item])).get(1))
             except RateLimitError:
                 raise
             except Exception as e:

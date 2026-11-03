@@ -442,6 +442,12 @@ export const CostEstimator = {
 
         badges.forEach((badge) => {
             const file = findFileForBadge(badge, files);
+            if (file && file.operation === 'term_fix') {
+                // The estimate prices a full pass; a term fix only sends the
+                // sentences that hold a match, so any figure would mislead.
+                renderBadge(badge, { kind: 'hidden' });
+                return;
+            }
             if (!file || !file.filePath) {
                 renderBadge(badge, { kind: 'no_content' });
                 return;

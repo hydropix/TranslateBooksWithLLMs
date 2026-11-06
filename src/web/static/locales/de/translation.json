@@ -231,6 +231,7 @@
   "settings_saved_env_log": "💾 In .env gespeichert: {{keys}}",
   "preferences_saved": "✅ Einstellungen gespeichert",
   "settings_save_failed": "❌ Speichern fehlgeschlagen: {{error}}",
+  "settings_webhook_secret_unresolved": "❌ Ein maskiertes Webhook-Geheimnis konnte nicht wiederhergestellt werden. Geben Sie die vollständige URL, den Header oder den Payload-Wert erneut ein und speichern Sie erneut.",
   "preferences_save_quota": "Browser-Speicher voll, Einstellungen konnten nicht gespeichert werden",
   "preferences_save_failed_log": "Speichern der Einstellungen fehlgeschlagen",
   "preferences_load_failed_log": "Gespeicherte Einstellungen konnten nicht geladen werden",

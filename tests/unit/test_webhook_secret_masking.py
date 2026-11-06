@@ -136,3 +136,85 @@ class TestConfigEndpoint:
         assert resp.status_code == 200
         assert cfg.NOTIFY_WEBHOOK_URL == ""
         assert cfg.NOTIFY_WEBHOOK_HEADERS == ""
+
+
+EVIL_URL_SAME_SHAPE = "https://evil.example/api/webhooks/***/***"
+PAYLOAD = '{"token":"PUSH_TOKEN_PLACEHOLDER","user":"PUSH_USER_PLACEHOLDER","message":"{file} done","title":"Static title"}'
+
+
+class TestSecurityHardening:
+    def test_host_change_does_not_restore_url_secrets(self):
+        assert unmask_webhook_url(EVIL_URL_SAME_SHAPE, DISCORD_URL) == EVIL_URL_SAME_SHAPE
+        evil_q = f"https://evil.example/message?token={MASK}"
+        assert unmask_webhook_url(evil_q, GOTIFY_URL) == evil_q
+        evil_ui = f"https://{MASK}@evil.example/x"
+        assert unmask_webhook_url(evil_ui, "https://u:p@good.example/x") == evil_ui
+        # scheme and port changes count as a different origin too
+        assert unmask_webhook_url(f"http://discord.com/api/webhooks/{MASK}/{MASK}", DISCORD_URL).count(MASK) == 2
+        assert unmask_webhook_url(f"https://discord.com:8443/api/webhooks/{MASK}/{MASK}", DISCORD_URL).count(MASK) == 2
+
+    def test_positional_mismatch_leaves_marker(self):
+        out = unmask_webhook_url("https://discord.com/***/***/***/***/***", DISCORD_URL)
+        assert MASK in out and "TOKEN" not in out
+
+    def test_fragment_valueless_and_semicolon_params_masked(self):
+        url = "https://h.example/p?TOKEN_ONLY&a=SECRET_A;b=SECRET_B#SECRET_FRAG"
+        masked = mask_webhook_url(url)
+        for leaked in ("TOKEN_ONLY", "SECRET_A", "SECRET_B", "SECRET_FRAG"):
+            assert leaked not in masked
+        assert unmask_webhook_url(masked, url) == url
+
+    def test_payload_secret_keys_masked_templates_visible(self):
+        from src.utils.webhook_secrets import mask_webhook_payload, unmask_webhook_payload
+        masked = json.loads(mask_webhook_payload(PAYLOAD))
+        assert masked == {"token": MASK, "user": MASK, "message": "{file} done", "title": "Static title"}
+        assert json.loads(unmask_webhook_payload(json.dumps(masked), PAYLOAD)) == json.loads(PAYLOAD)
+        # Nothing secret -> text untouched (formatting preserved)
+        plain = '{ "text": "hello {event}" }'
+        assert mask_webhook_payload(plain) == plain
+
+
+class TestSaveRejections:
+    def test_payload_masked_in_config_and_roundtrips(self, client, monkeypatch):
+        monkeypatch.setattr(cfg, "NOTIFY_WEBHOOK_PAYLOAD", PAYLOAD)
+        data = client.get("/api/config").get_json()
+        assert "PUSH_TOKEN_PLACEHOLDER" not in json.dumps(data)
+        monkeypatch.setattr(cfg, "NOTIFY_WEBHOOK_PAYLOAD", PAYLOAD)
+        resp = client.post("/api/settings", json={"NOTIFY_WEBHOOK_PAYLOAD": data["notify_webhook_payload"]})
+        assert resp.status_code == 200
+        assert json.loads(client.env_file.read_text(encoding="utf-8").split("NOTIFY_WEBHOOK_PAYLOAD=")[1].splitlines()[0].strip("'")) == json.loads(PAYLOAD)
+
+    def test_host_change_with_masked_url_is_rejected(self, client):
+        resp = client.post("/api/settings", json={"NOTIFY_WEBHOOK_URL": EVIL_URL_SAME_SHAPE})
+        assert resp.status_code == 400
+        assert resp.get_json()["error_code"] == "webhook_secret_unresolved"
+        assert not client.env_file.exists()
+        assert cfg.NOTIFY_WEBHOOK_URL == DISCORD_URL
+
+    def test_host_change_does_not_leak_headers(self, client):
+        resp = client.post("/api/settings", json={
+            "NOTIFY_WEBHOOK_URL": "https://evil.example/collect",
+            "NOTIFY_WEBHOOK_HEADERS": json.dumps({"Authorization": MASK}),
+        })
+        assert resp.status_code == 400
+        assert resp.get_json()["fields"] == ["NOTIFY_WEBHOOK_HEADERS"]
+        assert not client.env_file.exists()
+
+    def test_unresolvable_markers_rejected(self, client):
+        for payload in (
+            {"NOTIFY_WEBHOOK_HEADERS": json.dumps({"New-Key": MASK})},
+            {"NOTIFY_WEBHOOK_HEADERS": json.dumps({"Authorization": f"Bearer {MASK}"})},
+            {"NOTIFY_WEBHOOK_URL": f"https://discord.com/{MASK}/{MASK}/{MASK}/{MASK}/{MASK}"},
+        ):
+            resp = client.post("/api/settings", json=payload)
+            assert resp.status_code == 400, payload
+            assert resp.get_json()["error_code"] == "webhook_secret_unresolved"
+        assert not client.env_file.exists()
+
+    def test_same_host_edit_still_restores_headers(self, client):
+        resp = client.post("/api/settings", json={
+            "NOTIFY_WEBHOOK_URL": "https://discord.com/api/webhooks/999/NEW_TOKEN_PLACEHOLDER",
+            "NOTIFY_WEBHOOK_HEADERS": json.dumps({"Authorization": MASK, "X-Other": MASK}),
+        })
+        assert resp.status_code == 200
+        assert json.loads(cfg.NOTIFY_WEBHOOK_HEADERS) == json.loads(HEADERS)

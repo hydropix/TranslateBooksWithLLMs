@@ -231,6 +231,7 @@
   "settings_saved_env_log": "💾 Guardado en .env: {{keys}}",
   "preferences_saved": "✅ Preferencias guardadas",
   "settings_save_failed": "❌ Error al guardar: {{error}}",
+  "settings_webhook_secret_unresolved": "❌ No se pudo restaurar un secreto de webhook enmascarado. Vuelve a introducir la URL, el encabezado o el valor del payload completo y guarda de nuevo.",
   "preferences_save_quota": "Almacenamiento del navegador lleno, no se pudieron guardar las preferencias",
   "preferences_save_failed_log": "Error al guardar las preferencias",
   "preferences_load_failed_log": "No se pudieron cargar las preferencias guardadas",

@@ -231,6 +231,7 @@
   "settings_saved_env_log": "💾 Enregistré dans .env : {{keys}}",
   "preferences_saved": "✅ Préférences enregistrées",
   "settings_save_failed": "❌ Échec de l'enregistrement : {{error}}",
+  "settings_webhook_secret_unresolved": "❌ Un secret de webhook masqué n'a pas pu être restauré. Saisissez à nouveau l'URL, l'en-tête ou la valeur du payload en entier, puis enregistrez.",
   "preferences_save_quota": "Stockage du navigateur plein, impossible d'enregistrer les préférences",
   "preferences_save_failed_log": "Échec de l'enregistrement des préférences",
   "preferences_load_failed_log": "Impossible de charger les préférences enregistrées",

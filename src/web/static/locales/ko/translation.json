@@ -231,6 +231,7 @@
   "settings_saved_env_log": "💾 .env에 저장됨: {{keys}}",
   "preferences_saved": "✅ 환경 설정이 저장되었습니다",
   "settings_save_failed": "❌ 저장 실패: {{error}}",
+  "settings_webhook_secret_unresolved": "❌ 마스킹된 웹훅 비밀 값을 복원할 수 없습니다. URL, 헤더 또는 페이로드 값을 전체로 다시 입력한 후 다시 저장하세요.",
   "preferences_save_quota": "브라우저 저장 공간이 가득 차서 환경 설정을 저장할 수 없습니다",
   "preferences_save_failed_log": "환경 설정 저장 실패",
   "preferences_load_failed_log": "저장된 환경 설정을 로드할 수 없습니다",

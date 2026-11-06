@@ -231,6 +231,7 @@
   "settings_saved_env_log": "💾 已保存到 .env：{{keys}}",
   "preferences_saved": "✅ 偏好设置已保存",
   "settings_save_failed": "❌ 保存失败：{{error}}",
+  "settings_webhook_secret_unresolved": "❌ 无法还原已被遮蔽的 Webhook 密钥。请重新输入完整的 URL、请求头或负载值，然后再次保存。",
   "preferences_save_quota": "浏览器存储已满，无法保存偏好设置",
   "preferences_save_failed_log": "保存偏好设置失败",
   "preferences_load_failed_log": "无法加载已保存的偏好设置",

@@ -24,6 +24,7 @@ from src.config import (
 )
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError
+from ..cost_tracker import CostTracker, get_current_cost_tracker
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -75,11 +76,6 @@ class PoeProvider(LLMProvider):
         "Llama-3.1-405B",
         "Grok-4",
     ]
-
-    # Session cost tracking (class-level)
-    _session_cost = 0.0
-    _session_tokens = {"prompt": 0, "completion": 0}
-    _cost_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 
     # --- Bot default overrides ---------------------------------------------
     # Poe has no universal switch for reasoning or web search: each bot
@@ -142,6 +138,8 @@ class PoeProvider(LLMProvider):
         self.api_endpoint = api_endpoint or self.API_URL
         self.disable_thinking = disable_thinking
         self.disable_web_search = disable_web_search
+        # Used when no per-job tracker is active (direct use outside a job).
+        self._cost_tracker = CostTracker()
 
     def _get_context_limit(self) -> int:
         """
@@ -247,31 +245,24 @@ class PoeProvider(LLMProvider):
             print(f"⚙️ Poe ({self.model}): bot defaults overridden: {overrides}")
         return dict(overrides)
 
-    @classmethod
-    def get_session_cost(cls) -> tuple:
+    def get_session_cost(self) -> tuple:
         """
-        Get the current session cost and token usage.
+        Get this provider instance's token usage.
+
+        Poe bills in compute points, not USD, so the cost is always 0.0.
 
         Returns:
             Tuple of (total_cost_usd, token_counts_dict)
         """
-        return cls._session_cost, cls._session_tokens.copy()
+        return self._cost_tracker.snapshot()
 
-    @classmethod
-    def reset_session_cost(cls) -> None:
-        """Reset the session cost tracking."""
-        cls._session_cost = 0.0
-        cls._session_tokens = {"prompt": 0, "completion": 0}
+    def reset_session_cost(self) -> None:
+        """Reset this provider instance's usage tracking."""
+        self._cost_tracker.reset()
 
-    @classmethod
-    def set_cost_callback(cls, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
-        """
-        Set a callback to receive cost updates after each API call.
-
-        Args:
-            callback: Function that receives a dict with token usage info
-        """
-        cls._cost_callback = callback
+    def set_cost_callback(self, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
+        """Set a callback receiving token usage after each call on this instance."""
+        self._cost_tracker.callback = callback
 
     # Known official providers to filter models (excludes community bots)
     # Note: Poe sometimes hosts models via intermediaries like "Novita AI", "Together AI", etc.
@@ -562,23 +553,13 @@ class PoeProvider(LLMProvider):
                 prompt_tokens = usage.get("prompt_tokens", 0)
                 completion_tokens = usage.get("completion_tokens", 0)
 
-                # Update session tracking
-                PoeProvider._session_tokens["prompt"] += prompt_tokens
-                PoeProvider._session_tokens["completion"] += completion_tokens
-
                 print(f"💬 Poe ({self.model}): {prompt_tokens}+{completion_tokens} tokens")
 
-                # Call cost callback if set
-                if PoeProvider._cost_callback:
-                    try:
-                        PoeProvider._cost_callback({
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": completion_tokens,
-                            "total_prompt_tokens": PoeProvider._session_tokens["prompt"],
-                            "total_completion_tokens": PoeProvider._session_tokens["completion"],
-                        })
-                    except Exception as cb_err:
-                        print(f"⚠️ Cost callback error: {cb_err}")
+                # Poe reports no USD cost: record tokens only (cost 0.0).
+                self._cost_tracker.record(0.0, prompt_tokens, completion_tokens)
+                job_tracker = get_current_cost_tracker()
+                if job_tracker is not None:
+                    job_tracker.record(0.0, prompt_tokens, completion_tokens)
 
                 return LLMResponse(
                     content=response_text,

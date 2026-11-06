@@ -25,6 +25,7 @@ from src.config import (
 )
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError
+from ..cost_tracker import CostTracker, get_current_cost_tracker
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -70,10 +71,9 @@ class OpenRouterProvider(LLMProvider):
     PRESETS_PAGE_SIZE = 100  # API maximum
     PRESETS_MAX_PAGES = 10
 
-    # Session cost tracking (class-level)
-    _session_cost = 0.0
-    _session_tokens = {"prompt": 0, "completion": 0}
-    _cost_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+    # Rates (USD per 1M tokens) used ONLY when a response carries no usage.cost.
+    FALLBACK_PROMPT_RATE_PER_M = 0.50
+    FALLBACK_COMPLETION_RATE_PER_M = 1.50
 
     # Fallback text-only models (sorted by cost, cheapest first)
     FALLBACK_MODELS = [
@@ -133,6 +133,8 @@ class OpenRouterProvider(LLMProvider):
         super().__init__(model, api_keys=api_key, provider_name="openrouter")
         self.disable_thinking = disable_thinking
         self._warned_reasoning_tokens = False
+        # Used when no per-job tracker is active (direct use outside a job).
+        self._cost_tracker = CostTracker()
 
     async def _load_model_catalog(self) -> Optional[Dict[str, Dict[str, Any]]]:
         """
@@ -225,37 +227,42 @@ class OpenRouterProvider(LLMProvider):
         OpenRouterProvider._reasoning_overrides[self.model] = override
         return dict(override)
 
-    @classmethod
-    def get_session_cost(cls) -> tuple:
+    def get_session_cost(self) -> tuple:
         """
-        Get the current session cost and token usage.
+        Get this provider instance's cost and token usage.
 
         Returns:
             Tuple of (total_cost_usd, token_counts_dict)
         """
-        return cls._session_cost, cls._session_tokens.copy()
+        return self._cost_tracker.snapshot()
 
-    @classmethod
-    def reset_session_cost(cls) -> None:
-        """Reset the session cost tracking."""
-        cls._session_cost = 0.0
-        cls._session_tokens = {"prompt": 0, "completion": 0}
+    def reset_session_cost(self) -> None:
+        """Reset this provider instance's cost tracking."""
+        self._cost_tracker.reset()
 
-    @classmethod
-    def set_cost_callback(cls, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
+    def set_cost_callback(self, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
         """
-        Set a callback to receive cost updates after each API call.
+        Set a callback receiving cost updates for this instance after each call.
 
-        Args:
-            callback: Function that receives a dict with:
-                - request_cost: Cost of this specific request (USD)
-                - session_cost: Cumulative session cost (USD)
-                - prompt_tokens: Tokens used for this request's prompt
-                - completion_tokens: Tokens generated in this request
-                - total_prompt_tokens: Cumulative prompt tokens
-                - total_completion_tokens: Cumulative completion tokens
+        Jobs should use ``begin_job_cost_tracking`` instead, which covers every
+        provider instance created during the job.
+
+        Callback payload: request_cost, request_cost_estimated, session_cost,
+        cost_is_estimated, prompt_tokens, completion_tokens,
+        total_prompt_tokens, total_completion_tokens.
         """
-        cls._cost_callback = callback
+        self._cost_tracker.callback = callback
+
+    @staticmethod
+    def _extract_cost(usage: Dict[str, Any]) -> Optional[float]:
+        """Return the exact billed cost (USD) from ``usage.cost``, or None if absent."""
+        raw = usage.get("cost") if isinstance(usage, dict) else None
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
 
     async def get_available_models(self, text_only: bool = True) -> list:
         """
@@ -476,32 +483,27 @@ class OpenRouterProvider(LLMProvider):
                           f"refused or filtered this chunk (sensitive/policy-flagged content "
                           f"or provider-side moderation). Try a different model.")
 
-                if "cost" in result:
-                    cost = float(result.get("cost", 0))
-                else:
-                    # Fallback estimate when OpenRouter omits cost (typical rates in USD)
-                    cost = (prompt_tokens * 0.50 / 1_000_000) + (completion_tokens * 1.50 / 1_000_000)
+                cost = self._extract_cost(usage)
+                estimated = cost is None
+                if estimated:
+                    # usage.cost is returned automatically (the old usage.include
+                    # request flag is deprecated); fall back to flat rates if absent
+                    cost = (
+                        prompt_tokens * self.FALLBACK_PROMPT_RATE_PER_M / 1_000_000
+                        + completion_tokens * self.FALLBACK_COMPLETION_RATE_PER_M / 1_000_000
+                    )
 
-                OpenRouterProvider._session_cost += cost
-                OpenRouterProvider._session_tokens["prompt"] += prompt_tokens
-                OpenRouterProvider._session_tokens["completion"] += completion_tokens
+                # Instance totals always; the job tracker (if any) is per job.
+                self._cost_tracker.record(cost, prompt_tokens, completion_tokens, estimated)
+                job_tracker = get_current_cost_tracker()
+                if job_tracker is not None:
+                    job_tracker.record(cost, prompt_tokens, completion_tokens, estimated)
+                session_cost = (job_tracker or self._cost_tracker).snapshot()[0]
 
                 reasoning_note = f" ({reasoning_tokens} reasoning)" if reasoning_tokens else ""
+                cost_label = "Estimated cost (usage.cost missing)" if estimated else "Cost"
                 print(f"[OpenRouter] {prompt_tokens}+{completion_tokens} tokens{reasoning_note} | "
-                      f"Cost: ${cost:.6f} (session: ${OpenRouterProvider._session_cost:.4f})")
-
-                if OpenRouterProvider._cost_callback:
-                    try:
-                        OpenRouterProvider._cost_callback({
-                            "request_cost": cost,
-                            "session_cost": OpenRouterProvider._session_cost,
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": completion_tokens,
-                            "total_prompt_tokens": OpenRouterProvider._session_tokens["prompt"],
-                            "total_completion_tokens": OpenRouterProvider._session_tokens["completion"],
-                        })
-                    except Exception as cb_err:
-                        print(f"[OpenRouter] WARN: Cost callback error: {cb_err}")
+                      f"{cost_label}: ${cost:.6f} (session: ${session_cost:.4f})")
 
                 return LLMResponse(
                     content=response_text,

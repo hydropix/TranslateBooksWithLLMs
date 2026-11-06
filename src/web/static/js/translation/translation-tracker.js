@@ -669,7 +669,8 @@ export const TranslationTracker = {
         // Show cost grid if there's any cost or token data
         if (cost > 0 || totalTokens > 0) {
             DomHelpers.show('openrouterCostGrid');
-            DomHelpers.setText('openrouterCost', '$' + cost.toFixed(4));
+            // '~' marks an estimate: usage.cost was missing for some requests
+            DomHelpers.setText('openrouterCost', (stats.openrouter_cost_estimated ? '~$' : '$') + cost.toFixed(4));
             DomHelpers.setText('openrouterTokens', totalTokens.toLocaleString());
         }
     },
@@ -1018,7 +1019,7 @@ export const TranslationTracker = {
         }
 
         if (cost > 0 || totalTokens > 0) {
-            items.push(`$${cost.toFixed(4)} · ${totalTokens.toLocaleString()} tokens`);
+            items.push(`${stats.openrouter_cost_estimated ? '~' : ''}$${cost.toFixed(4)} · ${totalTokens.toLocaleString()} tokens`);
         }
 
         if (items.length === 0) return '';

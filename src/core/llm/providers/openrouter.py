@@ -26,7 +26,6 @@ from src.config import (
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError
 from ..cost_tracker import CostTracker, get_current_cost_tracker
-from ..cost_tracker import CostTracker, get_current_cost_tracker
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -428,8 +427,6 @@ class OpenRouterProvider(LLMProvider):
             "model": self.model,
             "messages": messages,
             "stream": False,
-            # Ask OpenRouter to report the billed cost in usage.cost.
-            "usage": {"include": True},
         }
         reasoning_override = await self._get_reasoning_override()
         if reasoning_override:
@@ -489,8 +486,12 @@ class OpenRouterProvider(LLMProvider):
                 cost = self._extract_cost(usage)
                 estimated = cost is None
                 if estimated:
-                    # usage.cost missing: fall back to flat typical rates
-                    cost = (prompt_tokens * self.FALLBACK_PROMPT_RATE_PER_M / 1_000_000) +                            (completion_tokens * self.FALLBACK_COMPLETION_RATE_PER_M / 1_000_000)
+                    # usage.cost is returned automatically (the old usage.include
+                    # request flag is deprecated); fall back to flat rates if absent
+                    cost = (
+                        prompt_tokens * self.FALLBACK_PROMPT_RATE_PER_M / 1_000_000
+                        + completion_tokens * self.FALLBACK_COMPLETION_RATE_PER_M / 1_000_000
+                    )
 
                 # Instance totals always; the job tracker (if any) is per job.
                 self._cost_tracker.record(cost, prompt_tokens, completion_tokens, estimated)

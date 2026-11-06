@@ -71,7 +71,6 @@ async def test_usage_cost_is_used_and_not_flagged_estimated():
     assert cost == pytest.approx(0.0123)
     assert tokens == {"prompt": 100, "completion": 50}
     assert provider._cost_tracker.is_estimated is False
-    assert client.payloads[0]["usage"] == {"include": True}
 
 
 @pytest.mark.asyncio

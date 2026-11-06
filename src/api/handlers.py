@@ -590,8 +590,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
 
     def _openrouter_cost_callback(cost_data):
         """Update OpenRouter cost in state. No emit: this callback runs on the
-        provider's HTTP response thread, and a cross-thread emit can overtake
-        the main loop's stats emit on the wire (showing a stale snapshot and
+        job's event loop thread (inside the provider call), and an emit from
+        here can overtake the stats emit on the wire (showing a stale snapshot and
         rolling the progress bar backward). The cost is picked up by the next
         chunk's stats_callback, which is the same thread that owns progress."""
         if state_manager.exists(translation_id):

@@ -24,7 +24,7 @@ jobs:
           - os: macos-15-intel
             arch: x86_64
             artifact_suffix: Intel
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             artifact_suffix: AppleSilicon
 

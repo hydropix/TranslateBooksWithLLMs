@@ -242,7 +242,9 @@ class DeepSeekProvider(LLMProvider):
                 )
 
                 if response.status_code == 401:
-                    raise ValueError("Invalid DeepSeek API key")
+                    # A wrong key cannot be fixed by retrying: report it and stop.
+                    print(f"❌ DeepSeek: Invalid API key!")
+                    return None
 
                 if response.status_code == 429:
                     rate_limit_events += 1

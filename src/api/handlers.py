@@ -19,7 +19,7 @@ from src.utils.custom_instructions import (
     is_safe_filename,
 )
 from src.core import auto_prep
-from src.core.llm import OpenRouterProvider
+from src.core.llm.cost_tracker import begin_job_cost_tracking, end_job_cost_tracking
 from src.core.llm.exceptions import RateLimitError
 from src.core.llm_client import create_llm_client
 from src.config import AUTO_PAUSE_ON_RATE_LIMIT, RATE_LIMIT_AUTO_RESUME_DELAY
@@ -598,13 +598,15 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             state_manager.update_stats(translation_id, {
                 'openrouter_cost': cost_data['session_cost'],
                 'openrouter_prompt_tokens': cost_data['total_prompt_tokens'],
-                'openrouter_completion_tokens': cost_data['total_completion_tokens']
+                'openrouter_completion_tokens': cost_data['total_completion_tokens'],
+                # True when any request fell back to a rate estimate
+                'openrouter_cost_estimated': cost_data.get('cost_is_estimated', False),
             })
 
-    # Setup OpenRouter cost callback if using OpenRouter provider
+    # Per-job cost tracking (ContextVar): concurrent jobs keep separate totals.
+    cost_tracking_token = None
     if config.get('llm_provider') == 'openrouter':
-        OpenRouterProvider.reset_session_cost()
-        OpenRouterProvider.set_cost_callback(_openrouter_cost_callback)
+        _, cost_tracking_token = begin_job_cost_tracking(_openrouter_cost_callback)
 
     # Get checkpoint manager and handle resume
     checkpoint_manager = state_manager.get_checkpoint_manager()
@@ -1110,14 +1112,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         # Log OpenRouter cost summary if applicable
         if config.get('llm_provider') == 'openrouter':
             cost = stats.get('openrouter_cost', 0.0)
+            cost_estimated = stats.get('openrouter_cost_estimated', False)
             prompt_tokens = stats.get('openrouter_prompt_tokens', 0)
             completion_tokens = stats.get('openrouter_completion_tokens', 0)
             total_tokens = prompt_tokens + completion_tokens
             if cost > 0 or total_tokens > 0:
                 _log_message_callback("openrouter_cost_final",
-                    f"💰 OpenRouter Cost: ${cost:.4f} | Tokens: {total_tokens:,} ({prompt_tokens:,} prompt + {completion_tokens:,} completion)")
-            # Clear the callback to avoid memory leaks
-            OpenRouterProvider.set_cost_callback(None)
+                    f"💰 OpenRouter Cost{' (estimate, usage.cost missing)' if cost_estimated else ''}: ${cost:.4f} | Tokens: {total_tokens:,} ({prompt_tokens:,} prompt + {completion_tokens:,} completion)")
 
         # TTS Generation (if enabled and translation completed successfully)
         if config.get('tts_enabled') and final_status_payload.get('status') == 'completed':
@@ -1268,6 +1269,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             await asyncio.to_thread(notify, EVENT_FAILURE,
                 _notification_context(config, translation_id, elapsed_time,
                                       error=critical_error_msg))
+    finally:
+        if cost_tracking_token is not None:
+            end_job_cost_tracking(cost_tracking_token)
 
 
 async def _perform_tts_generation(translation_id, config, output_filepath, state_manager, socketio, log_callback):

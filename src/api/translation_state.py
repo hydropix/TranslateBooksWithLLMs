@@ -48,7 +48,8 @@ class TranslationStateManager:
                     # OpenRouter cost tracking
                     'openrouter_cost': 0.0,
                     'openrouter_prompt_tokens': 0,
-                    'openrouter_completion_tokens': 0
+                    'openrouter_completion_tokens': 0,
+                    'openrouter_cost_estimated': False
                 },
                 'logs': [f"[{datetime.now().strftime('%H:%M:%S')}] Translation {translation_id} queued."],
                 'result': None,

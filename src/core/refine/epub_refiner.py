@@ -53,6 +53,20 @@ def _globalize_chunk_text(
     return text
 
 
+def _count_file_chunks(doc_root, max_tokens_per_chunk: int) -> int:
+    """Count the chunks a content file will be split into (no LLM call)."""
+    try:
+        body_html, body_element, tag_preserver = _setup_translation(doc_root, None, None)
+        if not body_html or body_element is None:
+            return 0
+        text, tag_map, _ = _preserve_tags(
+            body_html, tag_preserver, None, protect_technical=True
+        )
+        return len(_create_chunks(text, tag_map, max_tokens_per_chunk, None, None))
+    except Exception:
+        return 0
+
+
 async def _refine_one_xhtml(
     doc_root: etree._Element,
     target_language: str,
@@ -64,6 +78,7 @@ async def _refine_one_xhtml(
     prompt_options: Optional[Dict],
     check_interruption_callback: Optional[Callable],
     container: Optional[TranslationContainer] = None,
+    stats_callback: Optional[Callable] = None,
 ) -> bool:
     """Refine a single parsed XHTML document in place."""
     body_html, body_element, tag_preserver = _setup_translation(
@@ -100,6 +115,7 @@ async def _refine_one_xhtml(
         placeholder_format=placeholder_format,
         log_callback=log_callback,
         prompt_options=prompt_options,
+        stats_callback=stats_callback,
     )
 
     if check_interruption_callback and check_interruption_callback():
@@ -175,8 +191,35 @@ async def refine_epub_file(
                 log_callback("epub_refine_start",
                              f"✨ Starting EPUB refine pass over {total_files} content files...")
 
+            # Progress is counted in chunks across all files (never in files), so
+            # numerator and denominator share one unit and cannot exceed 100%.
+            file_chunk_counts: Dict[str, int] = {}
+            for href in content_files:
+                fp = os.path.join(opf_dir, href)
+                n = 0
+                if os.path.exists(fp):
+                    try:
+                        n = _count_file_chunks(
+                            etree.parse(fp, etree.XMLParser(recover=True)).getroot(),
+                            max_tokens_per_chunk,
+                        )
+                    except Exception:
+                        n = 0
+                file_chunk_counts[href] = n
+            total_chunks = sum(file_chunk_counts.values())
+            chunks_done = 0  # chunks of files already handled (refined, failed or skipped)
+            failed_chunks = 0
+
+            def _emit(done: int, failed_c: int) -> None:
+                if stats_callback:
+                    stats_callback({
+                        'total_chunks': total_chunks,
+                        'completed_chunks': min(done, total_chunks),
+                        'failed_chunks': failed_c,
+                    })
+
             if stats_callback:
-                stats_callback({'total_chunks': total_files, 'completed_chunks': 0, 'failed_chunks': 0})
+                stats_callback({'total_chunks': total_chunks, 'completed_chunks': 0, 'failed_chunks': 0})
 
             completed, failed, interrupted = 0, 0, False
             for idx, href in enumerate(content_files):
@@ -195,6 +238,7 @@ async def refine_epub_file(
                     failed += 1
                     continue
 
+                file_chunks = file_chunk_counts.get(href, 0)
                 if log_callback:
                     log_callback("epub_refine_file",
                                  f"📄 Refining file {idx + 1}/{total_files}: {href}")
@@ -220,6 +264,8 @@ async def refine_epub_file(
                     context_manager=context_manager,
                     prompt_options=prompt_options,
                     check_interruption_callback=check_interruption_callback,
+                    stats_callback=lambda st, base=chunks_done: _emit(
+                        base + st.get('completed_chunks', 0), failed_chunks),
                 )
 
                 if ok:
@@ -231,17 +277,17 @@ async def refine_epub_file(
                             log_callback("epub_refine_write_error",
                                          f"⚠️ Could not write refined XHTML {href}: {e}")
                         failed += 1
+                        failed_chunks += file_chunks
+                        chunks_done += file_chunks
+                        _emit(chunks_done, failed_chunks)
                         continue
                     completed += 1
                 else:
                     failed += 1
+                    failed_chunks += file_chunks
 
-                if stats_callback:
-                    stats_callback({
-                        'total_chunks': total_files,
-                        'completed_chunks': completed + failed,
-                        'failed_chunks': failed,
-                    })
+                chunks_done += file_chunks
+                _emit(chunks_done, failed_chunks)
 
             from src.utils.file_utils import get_partial_output_path
             final_output = (

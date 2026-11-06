@@ -350,6 +350,10 @@ MAX_PLACEHOLDER_RETRIES = 3
 MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 2
 """Nombre maximum de tentatives de correction LLM pour les placeholders malformés"""
 
+MAX_REFINE_RETRIES = max(0, int(os.getenv('MAX_REFINE_RETRIES', '1')))
+"""Re-prompts per chunk when the refinement pass corrupts placeholders, before
+falling back to the draft translation (0 disables the retry)"""
+
 # === Chunking Limits ===
 MIN_CHUNK_SIZE_TOKENS = 50
 """Taille minimale d'un chunk pour éviter la sur-fragmentation"""

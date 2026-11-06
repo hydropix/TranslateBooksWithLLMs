@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, Optional
 import requests
 
 from src import config
+from src.utils.webhook_secrets import mask_webhook_url
 
 logger = logging.getLogger(__name__)
 
@@ -203,8 +204,13 @@ def notify(event: str, context: Optional[Dict[str, Any]] = None) -> bool:
             )
         response.raise_for_status()
     except requests.RequestException as exc:
-        logger.warning("Webhook notification failed (%s): %s", event, exc)
+        # The exception text embeds the full URL (tokens included): log only
+        # its type and the masked URL.
+        logger.warning(
+            "Webhook notification failed (%s): %s on %s",
+            event, type(exc).__name__, mask_webhook_url(rendered_url),
+        )
         return False
 
-    logger.debug("Webhook notification sent (%s) to %s", event, rendered_url)
+    logger.debug("Webhook notification sent (%s) to %s", event, mask_webhook_url(rendered_url))
     return True

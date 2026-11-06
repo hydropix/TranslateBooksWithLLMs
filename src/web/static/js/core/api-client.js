@@ -44,7 +44,9 @@ async function handleApiError(response) {
     const label = errorData.error || '';
     const detail = errorData.message || '';
     const parts = [label, detail !== label ? detail : ''].filter(Boolean);
-    throw new Error(parts.join(' — ') || `Request failed with status ${response.status}`);
+    const err = new Error(parts.join(' — ') || `Request failed with status ${response.status}`);
+    err.code = errorData.error_code;
+    throw err;
 }
 
 /**

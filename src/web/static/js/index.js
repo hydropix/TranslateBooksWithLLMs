@@ -558,6 +558,8 @@ window.saveSettings = async () => {
         MessageLogger.addLog(t('translation:settings_saved_env_log', { keys }));
     } else if (result.success) {
         MessageLogger.showMessage(t('translation:preferences_saved'), 'success');
+    } else if (result.code === 'webhook_secret_unresolved') {
+        MessageLogger.showMessage(t('translation:settings_webhook_secret_unresolved'), 'error');
     } else {
         MessageLogger.showMessage(t('translation:settings_save_failed', { error: result.error }), 'error');
     }

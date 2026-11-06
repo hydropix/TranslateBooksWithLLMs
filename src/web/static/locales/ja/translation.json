@@ -231,6 +231,7 @@
   "settings_saved_env_log": "💾 .env に保存しました: {{keys}}",
   "preferences_saved": "✅ 設定を保存しました",
   "settings_save_failed": "❌ 保存に失敗しました: {{error}}",
+  "settings_webhook_secret_unresolved": "❌ マスクされた Webhook のシークレットを復元できませんでした。URL、ヘッダー、またはペイロードの値を完全な形で入力し直して、もう一度保存してください。",
   "preferences_save_quota": "ブラウザのストレージが満杯のため、設定を保存できませんでした",
   "preferences_save_failed_log": "設定の保存に失敗しました",
   "preferences_load_failed_log": "保存された設定を読み込めませんでした",

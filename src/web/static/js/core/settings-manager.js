@@ -733,7 +733,7 @@ export const SettingsManager = {
                     this._clearEnvDirty();
                     return { success: true, savedToEnv: result.saved_keys };
                 } catch (e) {
-                    return { success: false, error: e.message };
+                    return { success: false, error: e.message, code: e.code };
                 }
             }
         }

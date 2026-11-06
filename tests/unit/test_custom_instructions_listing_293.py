@@ -42,7 +42,7 @@ def test_cp1252_text_preset_is_decoded(tmp_path):
 
 @pytest.mark.parametrize(
     "name",
-    ["a/b.txt", "a\b.txt", "../x.txt", ".hidden.txt", "a|b.txt", "a:b.yaml", "x.exe", "a\x01b.txt"],
+    ["a/b.txt", "a\\b.txt", "../x.txt", ".hidden.txt", "a|b.txt", "a:b.yaml", "x.exe", "a\x01b.txt"],
 )
 def test_unsafe_filenames_still_rejected(name):
     assert not is_safe_filename(name)

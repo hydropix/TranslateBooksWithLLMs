@@ -234,10 +234,6 @@ class MistralProvider(LLMProvider):
                     timeout=timeout
                 )
 
-                # Handle specific error codes
-                if response.status_code == 401:
-                    raise ValueError("Invalid Mistral API key")
-
                 if response.status_code == 429:
                     rate_limit_events += 1
                     await handle_rate_limit(

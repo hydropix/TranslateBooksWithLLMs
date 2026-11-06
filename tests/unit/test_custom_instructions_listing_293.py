@@ -46,3 +46,43 @@ def test_cp1252_text_preset_is_decoded(tmp_path):
 )
 def test_unsafe_filenames_still_rejected(name):
     assert not is_safe_filename(name)
+
+
+def test_cp1252_preset_round_trips_through_listing_and_read(tmp_path):
+    (tmp_path / "ansi.txt").write_bytes("été".encode("cp1252"))
+    assert [e["filename"] for e in list_custom_instructions(tmp_path)] == ["ansi.txt"]
+    assert read_preset("ansi.txt", tmp_path)["translation"] == "été"
+
+
+@pytest.mark.parametrize(
+    "name,data",
+    [
+        ("undefined.txt", b"abc \x81 def"),
+        ("utf16le.txt", "hello".encode("utf-16")),
+        ("utf16be.txt", b"\xfe\xff\x00h\x00i"),
+        ("nul.txt", b"ab\x00cd"),
+    ],
+)
+def test_undecodable_presets_are_skipped_and_not_overwritten(tmp_path, name, data):
+    path = tmp_path / name
+    path.write_bytes(data)
+
+    assert list_custom_instructions(tmp_path) == []
+    with pytest.raises(ValueError):
+        read_preset(name, tmp_path)
+    assert path.read_bytes() == data
+
+
+def test_undecodable_yaml_is_not_overwritten_by_write(tmp_path):
+    from src.utils.custom_instructions import write_preset
+
+    path = tmp_path / "bad.yaml"
+    data = "translation: x\n".encode("utf-16")
+    path.write_bytes(data)
+    with pytest.raises(ValueError):
+        write_preset("bad.yaml", {"translation": "new"}, tmp_path, overwrite=True)
+    assert path.read_bytes() == data
+
+
+def test_trailing_newline_filename_rejected():
+    assert not is_safe_filename("a.txt\n")

@@ -34,7 +34,7 @@ import yaml
 # files and `..` never match. `resolve_inside` remains the authoritative
 # containment check.
 SAFE_FILENAME_RE = re.compile(
-    r'^(?![.\s])[^<>:"/\\|?*\x00-\x1f]+\.(?:txt|ya?ml)$', re.IGNORECASE
+    r'^(?![.\s])[^<>:"/\\|?*\x00-\x1f]+\.(?:txt|ya?ml)\Z', re.IGNORECASE
 )
 SUPPORTED_EXTENSIONS = (".txt", ".yaml", ".yml")
 
@@ -95,16 +95,30 @@ def is_safe_filename(filename: str) -> bool:
 
 
 def _read_text(file_path: Path) -> str:
-    """Read a preset as UTF-8 (BOM stripped), falling back to Windows-1252.
+    """Read a preset as UTF-8 (BOM stripped), falling back to strict Windows-1252.
 
-    Files saved as "ANSI" by Windows Notepad would otherwise fail to decode
-    and be silently dropped from the list.
+    Files saved as "ANSI" by Windows Notepad are decoded as cp1252. Anything
+    that cannot be decoded losslessly (UTF-16, NUL bytes, bytes undefined in
+    cp1252) raises ValueError so it is never mis-read, injected into a prompt
+    or rewritten with replacement characters by a later save.
     """
     data = file_path.read_bytes()
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
+        raise ValueError(
+            f"Preset '{file_path.name}' is not a UTF-8 or ANSI text file "
+            f"(UTF-16?). Re-save it as UTF-8."
+        )
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return data.decode("cp1252", errors="replace")
+        pass
+    try:
+        return data.decode("cp1252")
+    except UnicodeDecodeError:
+        raise ValueError(
+            f"Preset '{file_path.name}' has an unknown text encoding. "
+            f"Re-save it as UTF-8."
+        ) from None
 
 
 def resolve_inside(directory: Path, filename: str) -> Optional[Path]:

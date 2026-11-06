@@ -71,6 +71,8 @@ _RELOADABLE_ENV_SETTINGS = (
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
+    ('OPENCODE_API_KEY',    'OPENCODE_API_KEY',    ''),
+    ('OPENCODE_MODEL',      'OPENCODE_MODEL',      ''),
     # LiteLLM gateway (CLI-only). Provider-prefixed model name, e.g.
     # "anthropic/claude-sonnet-4-6". Keys are read from each provider's native
     # env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), not from a single key.
@@ -356,8 +358,9 @@ MIN_CHUNK_SIZE_TOKENS = 50
 
 # LLM Provider configuration
 # LLM_PROVIDER, GEMINI_*, OPENAI_*, OPENROUTER_API_KEY/MODEL, MISTRAL_API_KEY/MODEL,
-# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL are loaded via
-# _apply_reloadable_env_settings() so reload_config() can refresh them at runtime.
+# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL, OPENCODE_API_KEY/MODEL
+# are loaded via _apply_reloadable_env_settings() so reload_config() can refresh
+# them at runtime.
 OPENROUTER_API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 # Many OpenRouter models reason by default (DeepSeek V4.x, Qwen 3.x), and the
 # reasoning tokens are billed as output. The provider sends OpenRouter's unified
@@ -382,6 +385,10 @@ POE_DISABLE_THINKING = os.getenv('POE_DISABLE_THINKING', 'true').lower() == 'tru
 # needs. Set to 'false' to allow retrieval.
 POE_DISABLE_WEB_SEARCH = os.getenv('POE_DISABLE_WEB_SEARCH', 'true').lower() == 'true'
 NIM_API_ENDPOINT = os.getenv('NIM_API_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions')
+# Opencode gateway root. OpencodeProvider appends the catalog path picked by the
+# model id prefix: /go/v1 for "opencode-go/<id>" (Go subscription) and /v1 for
+# "opencode/<id>" (Zen, pay-as-you-go), then /chat/completions or /models.
+OPENCODE_API_BASE = os.getenv('OPENCODE_API_BASE', 'https://opencode.ai/zen')
 
 # SRT-specific configuration
 # Single knob for both translate and refine: every SRT block sent to the
@@ -718,6 +725,7 @@ class TranslationConfig:
     deepseek_api_key: str = DEEPSEEK_API_KEY
     poe_api_key: str = POE_API_KEY
     nim_api_key: str = NIM_API_KEY
+    opencode_api_key: str = OPENCODE_API_KEY
 
     # LLM parameters
     timeout: int = REQUEST_TIMEOUT
@@ -761,6 +769,7 @@ class TranslationConfig:
             deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
             poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
             nim_api_key=getattr(args, 'nim_api_key', NIM_API_KEY),
+            opencode_api_key=getattr(args, 'opencode_api_key', OPENCODE_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=getattr(args, 'parallel', PARALLEL_TRANSLATIONS)
@@ -810,6 +819,7 @@ class TranslationConfig:
             deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
             poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
             nim_api_key=request_data.get('nim_api_key', NIM_API_KEY),
+            opencode_api_key=request_data.get('opencode_api_key', OPENCODE_API_KEY),
             max_tokens_per_chunk=clamped_max_tokens,
             soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=clamped_workers
@@ -834,6 +844,7 @@ class TranslationConfig:
             'deepseek_api_key': self.deepseek_api_key,
             'poe_api_key': self.poe_api_key,
             'nim_api_key': self.nim_api_key,
+            'opencode_api_key': self.opencode_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'soft_limit_ratio': self.soft_limit_ratio,
             'parallel_workers': self.parallel_workers

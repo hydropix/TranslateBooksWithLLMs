@@ -85,3 +85,10 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
     done = [s["completed_chunks"] for s in seen]
     assert done == sorted(done)
 
+
+
+def test_reminder_lists_placeholders_in_numeric_order():
+    tag_map = {f"[id{i}]": "<x>" for i in range(13)}
+    reminder = xt._build_refine_placeholder_reminder(tag_map)
+    expected = ", ".join(f"[id{i}]" for i in range(13))
+    assert expected in reminder

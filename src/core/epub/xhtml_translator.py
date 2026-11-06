@@ -1599,7 +1599,11 @@ async def _request_refinement_with_adaptive_context(
 
 def _build_refine_placeholder_reminder(local_tag_map: Dict) -> str:
     """Build the reminder appended to a refinement prompt after placeholder corruption."""
-    expected = ", ".join(sorted(str(k) for k in local_tag_map))
+    def _ph_index(key: Any) -> Tuple[int, str]:
+        m = re.search(r"(\d+)", str(key))
+        return (int(m.group(1)) if m else 0, str(key))
+
+    expected = ", ".join(str(k) for k in sorted(local_tag_map, key=_ph_index))
     return (
         "\n\nIMPORTANT: your previous answer altered, dropped, duplicated or reordered "
         "the placeholders. Keep EVERY placeholder exactly as written, once each, in the "

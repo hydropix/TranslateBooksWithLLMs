@@ -15,6 +15,13 @@ from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, send_from_directory, render_template, make_response
 from pathlib import Path
 
+from src.utils.webhook_secrets import (
+    mask_webhook_url,
+    mask_webhook_headers,
+    unmask_webhook_url,
+    unmask_webhook_headers,
+)
+
 # UI locales served by /static/locales/<code>/*.json. Keep in sync with the
 # SUPPORTED_LOCALES constant in src/web/static/js/i18n/i18n.js. The list is
 # small enough that duplication beats a separate config file for now.
@@ -354,12 +361,12 @@ def create_config_blueprint(server_session_id=None):
             "parallel_translations": int(_config.PARALLEL_TRANSLATIONS),
             "max_parallel_translations": int(_config.MAX_PARALLEL_TRANSLATIONS),
             "disable_auto_pause": str(_config.DISABLE_AUTO_PAUSE).strip().lower() == 'true',
-            # Webhook notifications — returned as-is for editing. URLs and tokens
-            # only ever travel between this server and the same-origin browser
-            # session that already controls the .env on disk.
-            "notify_webhook_url": _config.NOTIFY_WEBHOOK_URL,
+            # Webhook notifications: secrets in the URL and header values are
+            # masked (see webhook_secrets). save_settings() restores the stored
+            # value when the masked text comes back unchanged.
+            "notify_webhook_url": mask_webhook_url(_config.NOTIFY_WEBHOOK_URL),
             "notify_webhook_method": _config.NOTIFY_WEBHOOK_METHOD,
-            "notify_webhook_headers": _config.NOTIFY_WEBHOOK_HEADERS,
+            "notify_webhook_headers": mask_webhook_headers(_config.NOTIFY_WEBHOOK_HEADERS),
             "notify_webhook_payload": _config.NOTIFY_WEBHOOK_PAYLOAD,
             "notify_on_success": bool(_config.NOTIFY_ON_SUCCESS),
             "notify_on_failure": bool(_config.NOTIFY_ON_FAILURE),
@@ -1049,6 +1056,12 @@ def create_config_blueprint(server_session_id=None):
                         except (TypeError, ValueError):
                             continue
                         safe_value = str(max(1, min(_config.MAX_PARALLEL_TRANSLATIONS, n)))
+                    # The UI shows masked webhook secrets; keep the stored real
+                    # value for any part the user left masked.
+                    elif key == 'NOTIFY_WEBHOOK_URL':
+                        safe_value = unmask_webhook_url(safe_value, _config.NOTIFY_WEBHOOK_URL)
+                    elif key == 'NOTIFY_WEBHOOK_HEADERS':
+                        safe_value = unmask_webhook_headers(safe_value, _config.NOTIFY_WEBHOOK_HEADERS)
                     updates[key] = safe_value
 
             if not updates:

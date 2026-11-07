@@ -81,7 +81,7 @@ Edit your `.env` file:
 ```env
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
 ### Using OpenAI (Cloud LLM)
@@ -280,7 +280,7 @@ docker-compose exec translatebook python translate.py \
   -o /app/translated_files/book_fr.txt \
   --provider gemini \
   --gemini_api_key $GEMINI_API_KEY \
-  -m gemini-2.0-flash
+  -m gemini-3.6-flash
 ```
 
 **OpenAI:**

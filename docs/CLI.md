@@ -143,7 +143,7 @@ python translate.py -i book.txt -o book_fr.txt \
 python translate.py -i book.txt -o book_fr.txt \
     --provider gemini \
     --gemini_api_key xxx \
-    -m gemini-2.0-flash
+    -m gemini-3.6-flash
 
 # Mistral
 python translate.py -i book.txt -o book_fr.txt \

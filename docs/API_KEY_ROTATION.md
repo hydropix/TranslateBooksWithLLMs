@@ -61,7 +61,7 @@ key1, key2, key3
 ```bash
 python translate.py -i book.epub --provider gemini \
     --gemini_api_key "key1,key2,key3" \
-    -m gemini-2.0-flash -tl French
+    -m gemini-3.6-flash -tl French
 ```
 
 ---

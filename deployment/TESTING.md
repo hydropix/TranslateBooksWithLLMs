@@ -215,7 +215,7 @@ docker-compose logs
    ```env
    LLM_PROVIDER=gemini
    GEMINI_API_KEY=your_actual_api_key
-   GEMINI_MODEL=gemini-2.0-flash
+   GEMINI_MODEL=gemini-3.6-flash
    ```
 
 2. Restart container:

@@ -155,7 +155,7 @@ def interactive_env_setup():
 
     elif config['LLM_PROVIDER'] == 'gemini':
         config['GEMINI_API_KEY'] = input("   Gemini API Key: ").strip()
-        config['GEMINI_MODEL'] = input("   Gemini Model [gemini-2.0-flash]: ").strip() or 'gemini-2.0-flash'
+        config['GEMINI_MODEL'] = input("   Gemini Model [gemini-3.6-flash]: ").strip() or 'gemini-3.6-flash'
 
     elif config['LLM_PROVIDER'] == 'openai':
         config['OPENAI_API_KEY'] = input("   OpenAI API Key: ").strip()
@@ -185,10 +185,10 @@ def interactive_env_setup():
 
             if config['LLM_PROVIDER'] == 'gemini':
                 f.write(f"GEMINI_API_KEY={config.get('GEMINI_API_KEY', '')}\n")
-                f.write(f"GEMINI_MODEL={config.get('GEMINI_MODEL', 'gemini-2.0-flash')}\n")
+                f.write(f"GEMINI_MODEL={config.get('GEMINI_MODEL', 'gemini-3.6-flash')}\n")
             else:
                 f.write("GEMINI_API_KEY=\n")
-                f.write("GEMINI_MODEL=gemini-2.0-flash\n")
+                f.write("GEMINI_MODEL=gemini-3.6-flash\n")
 
             if config['LLM_PROVIDER'] == 'openai':
                 f.write(f"OPENAI_API_KEY={config.get('OPENAI_API_KEY', '')}\n")

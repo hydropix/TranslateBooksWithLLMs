@@ -59,7 +59,7 @@ _RELOADABLE_ENV_SETTINGS = (
     ('DEFAULT_MODEL',       'DEFAULT_MODEL',       'qwen3:14b'),
     ('LLM_PROVIDER',        'LLM_PROVIDER',        'ollama'),
     ('GEMINI_API_KEY',      'GEMINI_API_KEY',      ''),
-    ('GEMINI_MODEL',        'GEMINI_MODEL',        'gemini-2.0-flash'),
+    ('GEMINI_MODEL',        'GEMINI_MODEL',        'gemini-3.6-flash'),
     ('OPENAI_API_KEY',      'OPENAI_API_KEY',      ''),
     ('OPENROUTER_API_KEY',  'OPENROUTER_API_KEY',  ''),
     ('OPENROUTER_MODEL',    'OPENROUTER_MODEL',    'anthropic/claude-sonnet-4'),

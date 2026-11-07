@@ -124,7 +124,7 @@ python translate.py -i book.txt --provider openai \
 
 # With Gemini
 python translate.py -i book.txt --provider gemini \
-    --gemini_api_key YOUR_KEY -m gemini-2.0-flash -tl French
+    --gemini_api_key YOUR_KEY -m gemini-3.6-flash -tl French
 
 # With Mistral
 python translate.py -i book.txt --provider mistral \

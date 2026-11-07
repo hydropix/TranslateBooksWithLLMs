@@ -1560,6 +1560,31 @@ async def _request_refinement_with_adaptive_context(
     repetition loop a too-small window provokes) bumps the context and retries
     until the context manager refuses. Any other error propagates.
     """
+    # Each call gets its own context growth budget; a call that still fails
+    # gives back the context it grew so later chunks stay at their size.
+    if context_manager:
+        context_manager.begin_request()
+    try:
+        llm_response = await _refinement_request_loop(
+            llm_client, context_manager, prompt_pair, model_name, log_callback
+        )
+    except BaseException:
+        if context_manager:
+            context_manager.abandon_request()
+        raise
+    if context_manager and (llm_response is None or not llm_response.content):
+        context_manager.abandon_request()
+    return llm_response
+
+
+async def _refinement_request_loop(
+    llm_client: Any,
+    context_manager: Optional[AdaptiveContextManager],
+    prompt_pair: Any,
+    model_name: str,
+    log_callback: Optional[Callable],
+) -> Any:
+    """Retry loop behind _request_refinement_with_adaptive_context."""
     from ..llm import ContextOverflowError, RepetitionLoopError
 
     while True:
@@ -1572,7 +1597,19 @@ async def _request_refinement_with_adaptive_context(
             llm_response = await llm_client.make_request(
                 prompt_pair.user, model_name, system_prompt=prompt_pair.system
             )
-        except (ContextOverflowError, RepetitionLoopError):
+        except RepetitionLoopError:
+            # Ollama also raises this for a stream that overflowed the window.
+            # One step per retry, bounded: a loop that survives larger windows
+            # is the model's, not the window's.
+            if context_manager and context_manager.should_retry_repetition_loop():
+                context_manager.increase_context()
+                if log_callback:
+                    log_callback("refinement_repetition_retry",
+                        f"Refinement repetition loop - retrying with "
+                        f"{context_manager.get_context_size()} tokens")
+                continue
+            raise
+        except ContextOverflowError:
             if context_manager and context_manager.should_retry_with_larger_context(True, 0):
                 context_manager.increase_context()
                 if log_callback:

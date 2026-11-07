@@ -257,15 +257,52 @@ export const ProviderManager = {
         const serverConfig = StateManager.getState('ui.defaultConfig');
         if (serverConfig) {
             console.log('[ProviderManager] Config already loaded, loading models immediately');
+            this.applyConfiguredProvider(serverConfig);
             this.toggleProviderSettings(true);
         } else {
             // Listen for server config to be loaded, THEN load models with correct endpoint
             console.log('[ProviderManager] Waiting for defaultConfigLoaded event');
             window.addEventListener('defaultConfigLoaded', () => {
                 console.log('[ProviderManager] Server config loaded, now loading models with correct endpoint');
+                this.applyConfiguredProvider(StateManager.getState('ui.defaultConfig'));
                 this.toggleProviderSettings(true);
             }, { once: true });
         }
+    },
+
+    /**
+     * Apply the provider configured in .env (LLM_PROVIDER).
+     *
+     * Provider selection is owned by .env. The browser caches the last
+     * provider in localStorage as a fallback, but that cache must not silently
+     * override the server configuration: a stale "ollama" made a cloud-provider
+     * install look like Ollama was selected, leaving the model dropdown empty
+     * because no local server was running.
+     *
+     * The value is set without dispatching `change`; models are loaded by the
+     * caller via toggleProviderSettings() once the server config is applied.
+     *
+     * @param {Object} config - Server config from /api/config
+     */
+    applyConfiguredProvider(config) {
+        const provider = String((config && config.llm_provider) || '').trim().toLowerCase();
+        const providerSelect = DomHelpers.getElement('llmProvider');
+        if (!provider || !providerSelect) return;
+
+        const known = Array.from(providerSelect.options).some(opt => opt.value === provider);
+        if (!known) {
+            console.warn(`[ProviderManager] .env LLM_PROVIDER '${provider}' is not a known provider, keeping current selection`);
+            return;
+        }
+
+        providerSelect.value = provider;
+
+        // Setting .value does not notify the custom dropdown: refresh its
+        // label, then restore the logo+name rendering normally applied by
+        // onSelect. No change event, so model loading stays in one place.
+        const instance = SearchableSelectFactory.get('llmProvider');
+        if (instance) instance.refresh();
+        this.updateProviderDisplay(provider);
     },
 
     /**

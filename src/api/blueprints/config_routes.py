@@ -371,6 +371,9 @@ def create_config_blueprint(server_session_id=None):
             "api_endpoint": _config.API_ENDPOINT,
             "ollama_api_endpoint": _config.OLLAMA_API_ENDPOINT,
             "openai_api_endpoint": _config.OPENAI_API_ENDPOINT,
+            # Provider selection is owned by .env. The web UI applies this on
+            # load so a stale localStorage value cannot silently override it.
+            "llm_provider": _config.LLM_PROVIDER,
             "default_model": _config.DEFAULT_MODEL,
             "default_source_language": _config.DEFAULT_SOURCE_LANGUAGE,
             "default_target_language": _config.DEFAULT_TARGET_LANGUAGE,

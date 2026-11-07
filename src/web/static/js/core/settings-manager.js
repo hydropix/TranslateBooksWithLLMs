@@ -341,7 +341,10 @@ export const SettingsManager = {
             DomHelpers.setValue('outputFilenamePattern', prefs.outputFilenamePattern);
         }
 
-        // Apply last provider AFTER endpoints are set
+        // Apply last provider AFTER endpoints are set.
+        // This is only a fallback: once /api/config arrives,
+        // ProviderManager.applyConfiguredProvider() overwrites it with the
+        // .env LLM_PROVIDER, which is the single owner of provider selection.
         // NOTE: We set the provider value but DON'T trigger the change event here.
         // The change event would trigger model loading, but we need to wait for
         // FormManager.loadDefaultConfig() to complete and update the endpoint

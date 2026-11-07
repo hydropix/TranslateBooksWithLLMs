@@ -92,8 +92,8 @@ def test_session_id_is_not_machine_derived():
     ids = {OpencodeProvider(model="m", api_key="k").session_id for _ in range(5)}
     assert len(ids) == 5
     for session_id in ids:
-        assert session_id.startswith("opencode-session-")
-        raw = session_id.removeprefix("opencode-session-")
+        assert session_id.startswith("ses_")
+        raw = session_id.removeprefix("ses_")
         assert uuid.UUID(raw).version == 4
         assert not re.fullmatch(r"[0-9a-fA-F]{12,}", session_id)
 
@@ -181,6 +181,21 @@ async def test_get_available_models_sends_header_and_parses_list():
     assert models[1]["context_length"] == 32000
 
 
+@pytest.mark.asyncio
+async def test_generate_records_http_error():
+    """A failed call must leave a human-readable reason for the caller."""
+    def handler(request):
+        return httpx.Response(402, json={"error": {"message": "Insufficient account funds"}})
+
+    provider = _provider_with_transport(handler)
+    try:
+        assert await provider.generate("hi") is None
+    finally:
+        await provider.close()
+
+    assert provider.last_error == "HTTP 402: Insufficient account funds"
+
+
 def test_default_endpoint_comes_from_config():
     from src.config import OPENCODE_API_ENDPOINT
 
@@ -247,18 +262,21 @@ async def test_get_available_models_without_key_returns_empty():
         assert await provider.get_available_models() == []
     finally:
         await provider.close()
+    assert provider.last_error == "Opencode API key is required"
 
 
 @pytest.mark.asyncio
 async def test_get_available_models_http_error_returns_empty():
     def handler(request):
-        return httpx.Response(500, json={"error": "boom"})
+        return httpx.Response(401, json={"error": {"message": "This API key has expired"}})
 
     provider = _provider_with_transport(handler)
     try:
         assert await provider.get_available_models() == []
     finally:
         await provider.close()
+
+    assert provider.last_error == "HTTP 401: This API key has expired"
 
 
 @pytest.mark.asyncio

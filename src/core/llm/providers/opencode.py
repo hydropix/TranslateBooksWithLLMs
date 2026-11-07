@@ -16,8 +16,24 @@ NOT derived from the machine, the install, or any user data.
 from typing import Callable, List, Optional, Union
 import uuid
 
+import httpx
+
 from src.config import OLLAMA_NUM_CTX, OPENCODE_API_ENDPOINT
 from .openai import OpenAICompatibleProvider
+
+
+def _http_error_message(error: httpx.HTTPStatusError) -> str:
+    """Best-effort API error message, preferring the gateway's JSON error."""
+    status = error.response.status_code
+    try:
+        detail = error.response.json().get("error")
+        if isinstance(detail, dict):
+            detail = detail.get("message") or detail.get("code")
+        if detail:
+            return f"HTTP {status}: {detail}"
+    except Exception:
+        pass
+    return f"HTTP {status}: {error.response.text[:200]}"
 
 
 class OpencodeProvider(OpenAICompatibleProvider):
@@ -26,7 +42,7 @@ class OpencodeProvider(OpenAICompatibleProvider):
 
     Example:
         >>> provider = OpencodeProvider(
-        ...     api_endpoint="https://opencode.ai/zen/go/v1/chat/completions",
+        ...     api_endpoint="https://opencode.ai/inference/go/openai/v1/chat/completions",
         ...     model="opencode-go/deepseek-v4.1-flash",
         ...     api_key="YOUR_API_KEY_HERE",
         ... )
@@ -62,7 +78,7 @@ class OpencodeProvider(OpenAICompatibleProvider):
         # A "conversation" is the lifetime of this provider instance (one
         # translation job). Reuse a caller-supplied id when one is threaded
         # through; otherwise mint a fresh random one. Never machine-derived.
-        self.session_id = session_id or f"opencode-session-{uuid.uuid4()}"
+        self.session_id = session_id or f"ses_{uuid.uuid4().hex}"
         headers = dict(extra_headers or {})
         headers[self.SESSION_HEADER] = self.session_id
 
@@ -83,9 +99,11 @@ class OpencodeProvider(OpenAICompatibleProvider):
         Returns:
             List of model dicts with id, name, and (when the API exposes it)
             context_length. Empty list when no key is configured or the API
-            call fails.
+            call fails; ``last_error`` then describes the failure.
         """
+        self.last_error = None
         if not self.api_key:
+            self.last_error = "Opencode API key is required"
             return []
 
         models_url = self.api_endpoint.replace("/chat/completions", "").rstrip("/") + "/models"
@@ -114,6 +132,11 @@ class OpencodeProvider(OpenAICompatibleProvider):
             models.sort(key=lambda m: m["name"].lower())
             return models
 
+        except httpx.HTTPStatusError as e:
+            self.last_error = _http_error_message(e)
+            print(f"⚠️ Failed to fetch Opencode models: {self.last_error}")
+            return []
         except Exception as e:
-            print(f"⚠️ Failed to fetch Opencode models: {e}")
+            self.last_error = str(e)
+            print(f"⚠️ Failed to fetch Opencode models: {self.last_error}")
             return []

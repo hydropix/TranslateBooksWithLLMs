@@ -394,7 +394,9 @@ POE_DISABLE_WEB_SEARCH = os.getenv('POE_DISABLE_WEB_SEARCH', 'true').lower() == 
 NIM_API_ENDPOINT = os.getenv('NIM_API_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions')
 # Opencode is a standard OpenAI-compatible gateway; the only difference is the
 # mandatory `x-opencode-session` conversation header added by OpencodeProvider.
-OPENCODE_API_ENDPOINT = os.getenv('OPENCODE_API_ENDPOINT', 'https://opencode.ai/zen/go/v1/chat/completions')
+# Go plan endpoint (the pay-as-you-go equivalent is
+# https://opencode.ai/inference/openai/v1/chat/completions).
+OPENCODE_API_ENDPOINT = os.getenv('OPENCODE_API_ENDPOINT', 'https://opencode.ai/inference/go/openai/v1/chat/completions')
 
 # SRT-specific configuration
 # Single knob for both translate and refine: every SRT block sent to the

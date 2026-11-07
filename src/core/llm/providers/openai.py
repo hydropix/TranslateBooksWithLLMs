@@ -98,6 +98,7 @@ class OpenAICompatibleProvider(LLMProvider):
         Returns:
             LLMResponse with content and token usage info, or None if failed
         """
+        self.last_error = None
         # Build messages array with optional system prompt
         messages = []
         if system_prompt:
@@ -155,6 +156,7 @@ class OpenAICompatibleProvider(LLMProvider):
                         f"Tokens: prompt={prompt_tokens}, response={completion_tokens}, "
                         f"total={context_used}")
 
+                self.last_error = None
                 return LLMResponse(
                     content=response_text,
                     prompt_tokens=prompt_tokens,
@@ -167,6 +169,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
 
             except httpx.TimeoutException as e:
+                self.last_error = f"Request timed out after {timeout}s"
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'
@@ -225,6 +228,11 @@ class OpenAICompatibleProvider(LLMProvider):
                                 error_message = str(error_json.get("error", e))
                     except Exception:
                         error_message = f"{e} - {error_body}"
+
+                self.last_error = (
+                    f"HTTP {e.response.status_code if e.response else 'unknown'}: "
+                    f"{error_message}"
+                )
 
                 # Handle rate limiting (429) — rotate key or sleep, raise if exhausted
                 if (hasattr(e, 'response') and e.response is not None
@@ -306,6 +314,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
                 return None
             except json.JSONDecodeError as e:
+                self.last_error = f"Invalid JSON response: {e}"
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'
@@ -341,6 +350,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
                 return None
             except Exception as e:
+                self.last_error = f"{type(e).__name__}: {e}"
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'

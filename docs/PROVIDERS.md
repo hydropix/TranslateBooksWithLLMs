@@ -335,8 +335,13 @@ An OpenAI-compatible gateway. It behaves exactly like any other OpenAI-compatibl
 endpoint, with one requirement: every request must carry an `x-opencode-session`
 header holding a stable identifier for the conversation. TBL generates one id per
 translation job (the provider instance lives for the whole job) and sends it on
-every call, including the model-list probe. It is random per job, never derived
-from the machine or the install.
+every call, including the model-list probe. It uses the documented `ses_...`
+format and is random per job, never derived from the machine or the install.
+
+> **Free vs paid:** OpenCode's free Zen models are restricted to the official
+> OpenCode client. Third-party clients such as TBL receive
+> `429 FreeUsageLimitError` for them. Use paid Zen credits or an OpenCode Go
+> subscription instead; both work from any client.
 
 ### Setup
 
@@ -349,7 +354,10 @@ from the machine or the install.
 ```bash
 OPENCODE_API_KEY=
 OPENCODE_MODEL=
-# OPENCODE_API_ENDPOINT=https://opencode.ai/zen/go/v1/chat/completions
+# Go plan (default):
+# OPENCODE_API_ENDPOINT=https://opencode.ai/inference/go/openai/v1/chat/completions
+# Pay-as-you-go (Zen credits):
+# OPENCODE_API_ENDPOINT=https://opencode.ai/inference/openai/v1/chat/completions
 ```
 
 `OPENCODE_API_ENDPOINT` overrides the built-in endpoint. It is read at server

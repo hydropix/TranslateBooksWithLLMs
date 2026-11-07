@@ -490,10 +490,11 @@ def create_config_blueprint(server_session_id=None):
             models = asyncio.run(provider.get_available_models(**(get_models_kwargs or {})))
 
             if not models:
-                return jsonify(_error_body(
-                    f"{status_prefix}_error",
-                    f"Failed to retrieve {display_name} models"
-                ))
+                detail = getattr(provider, "last_error", None)
+                message = f"Failed to retrieve {display_name} models"
+                if detail:
+                    message = f"{message}: {detail}"
+                return jsonify(_error_body(f"{status_prefix}_error", message))
 
             model_names = [m[model_name_field] for m in models]
             resolved_default = default_model

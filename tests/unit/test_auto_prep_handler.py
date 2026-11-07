@@ -263,6 +263,7 @@ async def test_client_is_built_with_the_jobs_own_keys(patched):
         deepseek_api_key='dk',
         poe_api_key='pk',
         nim_api_key='nk',
+        opencode_api_key='ck',
     )
 
     await handlers._apply_auto_prep(config, LogRecorder())
@@ -276,6 +277,7 @@ async def test_client_is_built_with_the_jobs_own_keys(patched):
         'deepseek_api_key': 'dk',
         'poe_api_key': 'pk',
         'nim_api_key': 'nk',
+        'opencode_api_key': 'ck',
         'context_window': auto_prep.AUTO_PREP_CONTEXT_WINDOW,
     }
 

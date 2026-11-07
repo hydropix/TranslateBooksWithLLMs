@@ -28,12 +28,19 @@ class OpenAICompatibleProvider(LLMProvider):
     def __init__(self, api_endpoint: str, model: str,
                  api_key: Optional[Union[str, List[str]]] = None,
                  context_window: int = OLLAMA_NUM_CTX, log_callback: Optional[Callable] = None,
-                 provider_name: str = "openai-compatible"):
+                 provider_name: str = "openai-compatible",
+                 extra_headers: Optional[dict] = None):
         # Skip pool creation if no key (local servers like llama.cpp don't need one)
         super().__init__(model, api_keys=api_key, provider_name=provider_name)
         self.api_endpoint = self._normalize_endpoint(api_endpoint)
         self.context_window = context_window
         self.log_callback = log_callback
+        # Extra headers merged into every request this provider makes. Used by
+        # subclasses (e.g. OpencodeProvider) that need a mandatory header on
+        # every call. Never sent on the shared client, so the install-
+        # fingerprint guard (tests/unit/test_no_install_fingerprint.py) keeps
+        # asserting the client default headers are the four constant ones.
+        self.extra_headers = dict(extra_headers or {})
         self._detected_context_size: Optional[int] = None
         self._context_detector = ContextDetector()
 
@@ -91,6 +98,7 @@ class OpenAICompatibleProvider(LLMProvider):
         Returns:
             LLMResponse with content and token usage info, or None if failed
         """
+        self.last_error = None
         # Build messages array with optional system prompt
         messages = []
         if system_prompt:
@@ -117,7 +125,11 @@ class OpenAICompatibleProvider(LLMProvider):
         rate_limit_events = 0
         while attempt < MAX_TRANSLATION_ATTEMPTS:
             current_key = await self._key_pool.acquire() if self._key_pool else None
-            headers = {"Content-Type": "application/json"}
+            # Provider-mandated extra headers first, then the base headers, so a
+            # caller-supplied dict can never clobber Content-Type or the
+            # Authorization derived from the active API key.
+            headers = dict(self.extra_headers)
+            headers["Content-Type"] = "application/json"
             if current_key:
                 headers["Authorization"] = f"Bearer {current_key}"
             try:
@@ -144,6 +156,7 @@ class OpenAICompatibleProvider(LLMProvider):
                         f"Tokens: prompt={prompt_tokens}, response={completion_tokens}, "
                         f"total={context_used}")
 
+                self.last_error = None
                 return LLMResponse(
                     content=response_text,
                     prompt_tokens=prompt_tokens,
@@ -156,6 +169,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
 
             except httpx.TimeoutException as e:
+                self.last_error = f"Request timed out after {timeout}s"
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'
@@ -214,6 +228,11 @@ class OpenAICompatibleProvider(LLMProvider):
                                 error_message = str(error_json.get("error", e))
                     except Exception:
                         error_message = f"{e} - {error_body}"
+
+                self.last_error = (
+                    f"HTTP {e.response.status_code if e.response else 'unknown'}: "
+                    f"{error_message}"
+                )
 
                 # Handle rate limiting (429) — rotate key or sleep, raise if exhausted
                 if (hasattr(e, 'response') and e.response is not None
@@ -295,6 +314,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
                 return None
             except json.JSONDecodeError as e:
+                self.last_error = f"Invalid JSON response: {e}"
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'
@@ -330,6 +350,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
                 return None
             except Exception as e:
+                self.last_error = f"{type(e).__name__}: {e}"
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'
@@ -374,7 +395,8 @@ class OpenAICompatibleProvider(LLMProvider):
             model=self.model,
             endpoint=self.api_endpoint,
             api_key=self.api_key,
-            log_callback=self.log_callback
+            log_callback=self.log_callback,
+            extra_headers=self.extra_headers,
         )
 
         self._detected_context_size = ctx

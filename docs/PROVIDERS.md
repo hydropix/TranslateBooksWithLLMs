@@ -329,6 +329,55 @@ Browse models: [build.nvidia.com](https://build.nvidia.com/)
 
 ---
 
+## Opencode (Cloud)
+
+An OpenAI-compatible gateway. It behaves exactly like any other OpenAI-compatible
+endpoint, with one requirement: every request must carry an `x-opencode-session`
+header holding a stable identifier for the conversation. TBL generates one id per
+translation job (the provider instance lives for the whole job) and sends it on
+every call, including the model-list probe. It uses the documented `ses_...`
+format and is random per job, never derived from the machine or the install.
+
+> **Free vs paid:** OpenCode's free Zen models are restricted to the official
+> OpenCode client. Third-party clients such as TBL receive
+> `429 FreeUsageLimitError` for them. Use paid Zen credits or an OpenCode Go
+> subscription instead; both work from any client.
+
+### Setup
+
+1. Get an API key from your Opencode account.
+2. In TBL: select "Opencode", enter your key.
+3. Optionally set `OPENCODE_MODEL` in `.env` (or pick a model in the UI).
+
+### Configuration
+
+```bash
+OPENCODE_API_KEY=
+OPENCODE_MODEL=
+# Go plan (default):
+# OPENCODE_API_ENDPOINT=https://opencode.ai/inference/go/openai/v1/chat/completions
+# Pay-as-you-go (Zen credits):
+# OPENCODE_API_ENDPOINT=https://opencode.ai/inference/openai/v1/chat/completions
+```
+
+`OPENCODE_API_ENDPOINT` overrides the built-in endpoint. It is read at server
+startup, so changing it requires a restart (unlike the UI-editable Ollama/OpenAI
+endpoints). Unlike `ollama`/`openai`, the Opencode provider ignores the
+per-request `llm_api_endpoint` field: it always uses the `.env`/built-in
+endpoint, like most other cloud providers (NVIDIA NIM is the exception and does
+read the per-request endpoint).
+
+### CLI Example
+
+```bash
+python translate.py -i book.txt -o book_fr.txt \
+    --provider opencode \
+    --opencode_api_key YOUR_API_KEY_HERE \
+    -m opencode-go/deepseek-v4.1-flash
+```
+
+---
+
 ## Endpoint Allowlist
 
 The web API lets a request choose the endpoint the server calls, so the server checks that endpoint against an allowlist before using it. Accepted out of the box:

@@ -324,6 +324,12 @@ CONTEXT_STEP = ADAPTIVE_CONTEXT_STEP
 INITIAL_CONTEXT_SIZE = ADAPTIVE_CONTEXT_INITIAL
 STABILITY_WINDOW = ADAPTIVE_CONTEXT_STABILITY_WINDOW
 
+# Repetition-loop retries with a larger window allowed per chunk request (Ollama
+# also raises a repetition loop for a stream that overflowed the window). Past
+# this the loop is the model's, not the window's, and further growth only
+# inflates the cost of every failed attempt.
+MAX_REPETITION_RETRIES = 3
+
 # Floor for the refinement pass: its prompt carries the draft chunk plus the
 # previous and next chunks as context, so it is roughly 3x a translation prompt.
 REFINEMENT_MIN_CONTEXT = 4096
@@ -398,6 +404,12 @@ class AdaptiveContextManager:
         self._retry_count = 0
         self._max_retries = 10  # Safety limit
 
+        # Per-request state (see begin_request / abandon_request). A request
+        # that fails after growing the window must not leave the larger window
+        # in place for every following chunk.
+        self._request_start_context = initial_context
+        self._repetition_retries = 0
+
     def get_context_size(self) -> int:
         """Get the current context size to use for the next request"""
         return self.current_context
@@ -455,6 +467,54 @@ class AdaptiveContextManager:
             return True
 
         return False
+
+    def begin_request(self) -> None:
+        """Start the retry budget of one chunk request.
+
+        Each chunk gets its own growth budget (``_max_retries`` steps, of
+        which at most ``MAX_REPETITION_RETRIES`` for repetition loops), and
+        the window it started with is remembered so a failed request can
+        give back what it grew.
+        """
+        self._request_start_context = self.current_context
+        self._retry_count = 0
+        self._repetition_retries = 0
+
+    def abandon_request(self) -> None:
+        """Give back the context grown by a request that still failed.
+
+        Growing the window did not help this chunk, so keeping it would only
+        make every following request bigger and slower (and, on metered
+        hosts, more expensive).
+        """
+        if self.current_context > self._request_start_context:
+            old_context = self.current_context
+            self.current_context = self._request_start_context
+            if self.log_callback:
+                self.log_callback("context_adaptive",
+                    f"↩️ Request failed despite a larger context: restoring "
+                    f"{old_context} → {self.current_context}")
+        self._retry_count = 0
+        self._repetition_retries = 0
+
+    def should_retry_repetition_loop(self) -> bool:
+        """Whether a repetition loop is worth one more retry with a larger window.
+
+        A loop caused by a window too small for a thinking model goes away
+        after one or two bigger windows. A loop that survives that is the
+        model itself looping on this chunk, and growing the window further
+        only makes each failed attempt more expensive.
+        """
+        if self._repetition_retries >= MAX_REPETITION_RETRIES:
+            if self.log_callback:
+                self.log_callback("context_adaptive",
+                    f"⚠️ Repetition loop persists after {MAX_REPETITION_RETRIES} larger "
+                    f"context(s): not a context size problem, giving up on this chunk")
+            return False
+        if not self.should_retry_with_larger_context(True, 0):
+            return False
+        self._repetition_retries += 1
+        return True
 
     def increase_context(self) -> int:
         """
@@ -518,6 +578,8 @@ class AdaptiveContextManager:
         self.current_context = self.min_context
         self._usage_history.clear()
         self._retry_count = 0
+        self._request_start_context = self.min_context
+        self._repetition_retries = 0
 
     def get_stats(self) -> Dict:
         """Get statistics about context usage"""

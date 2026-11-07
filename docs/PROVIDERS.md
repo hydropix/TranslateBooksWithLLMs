@@ -57,6 +57,8 @@ TBL supports local and hosted endpoints that implement the OpenAI Chat Completio
 
 > **Hosted endpoints in the web UI:** the server only calls hosts on its [endpoint allowlist](#endpoint-allowlist). Local and LAN servers are accepted out of the box, but a public hostname is rejected with HTTP 400 until you add it to `LLM_ENDPOINT_ALLOWLIST` in `.env` (or set it as `OPENAI_API_ENDPOINT`). The CLI does not apply this check.
 
+> **Anthropic:** Claude models work through Anthropic's OpenAI compatibility layer. Set the endpoint to `https://api.anthropic.com/v1/chat/completions` and use an Anthropic API key. The web UI loads the model list from Anthropic's `/v1/models`, which needs an `anthropic-version` header; the server adds it automatically for this host.
+
 | Server | Default Endpoint |
 |--------|------------------|
 | llama.cpp (`llama-server`) | `http://localhost:8080/v1/chat/completions` |

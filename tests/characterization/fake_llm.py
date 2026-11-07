@@ -93,6 +93,13 @@ _PATCH_TARGETS = (
 
 
 def install(monkeypatch) -> None:
-    """Patch all ``create_llm_provider`` lookup sites to the echo provider."""
+    """Patch all ``create_llm_provider`` lookup sites to the echo provider.
+
+    Echoing is by design an untranslated answer, which the source-residue check
+    (issue #270) would flag and retry; the goldens pin the happy path, so the
+    check is switched off for them.
+    """
+    import src.config
+    monkeypatch.setattr(src.config, "SOURCE_RESIDUE_CHECK_ENABLED", False)
     for target in _PATCH_TARGETS:
         monkeypatch.setattr(target, _fake_create_llm_provider, raising=True)

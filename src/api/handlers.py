@@ -871,7 +871,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             )
             if config.get('refine_after') and config.get('file_type') in ('pdf', 'pgn'):
                 _log_message_callback(
-                    "refine_after_unsupported_pdf",
+                    "refine_after_unsupported_format",
                     f"ℹ️ Refinement is not available for {config['file_type'].upper()} files yet; "
                     f"the translated file is kept as is."
                 )

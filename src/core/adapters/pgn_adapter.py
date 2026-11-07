@@ -16,6 +16,7 @@ is retried, and kept in the source language if it still differs.
 """
 
 import re
+import textwrap
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -27,14 +28,35 @@ _COMMAND_RE = re.compile(r"\[%[^\]]*\]|\[#\]")
 
 # SAN moves, castling and bare squares quoted in prose. Compared as a
 # multiset, so the translation may reorder words but not add, drop or
-# alter a move (e.g. Nf3 -> Cf3).
+# alter a move (e.g. Nf3 -> Cf3). The lookarounds are ASCII-only on
+# purpose: \b would fail after a CJK character ("在dxe5之后"), since Python
+# treats it as a word character, and the move would go unnoticed.
 _NOTATION_RE = re.compile(
-    r"\b(?:O-O-O|O-O"
+    r"(?<![A-Za-z0-9])(?:O-O-O|O-O"
     r"|[KQRBN][a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?"
     r"|[a-h]x[a-h][1-8](?:=[QRBN])?"
     r"|[a-h][1-8](?:=[QRBN])?)"
-    r"[+#]?"
+    r"[+#]?(?![A-Za-z0-9])"
 )
+
+# Rules every request carries, so the model keeps the notation on the first
+# attempt instead of learning it from a failed validation.
+_CHESS_INSTRUCTIONS = (
+    "These lines are comments from annotated chess games. Copy every move, "
+    "square and castling notation (e.g. Nf3, exd5, Qxh7+, O-O, e4, 12...Rd8) "
+    "exactly as written, letters included: never translate the piece "
+    "letters K, Q, R, B, N into the target language. Use the target "
+    "language's usual chess vocabulary for the prose."
+)
+
+# Pieces of comment prose sent per request. Measured on a real annotated
+# study with gemma3:4b: 20 per block left 24 of 170 comments untranslated
+# (dropped [N] markers), 6 per block left 2.
+_PIECES_PER_BLOCK = 6
+
+# Translated prose longer than this is wrapped inside {...} comments, close
+# to the 80-column style of PGN exports and well below their 255 limit.
+_WRAP_WIDTH = 79
 
 
 def _notation_fingerprint(text: str) -> Counter:
@@ -50,6 +72,39 @@ def _sanitize(text: str) -> str:
     """
     text = text.replace("{", "(").replace("}", ")")
     return " ".join(text.split())
+
+
+def _column(parts: List[str]) -> int:
+    """Length of the current output line once ``parts`` are joined."""
+    length = 0
+    for part in reversed(parts):
+        newline = part.rfind("\n")
+        if newline >= 0:
+            return length + len(part) - newline - 1
+        length += len(part)
+    return length
+
+
+def _wrap(text: str, column: int, newline: str) -> str:
+    """Wrap comment prose that starts at ``column`` within _WRAP_WIDTH.
+
+    Words are never split, so moves ("4...dxe5", "O-O-O") and hyphenated
+    words stay whole; text without spaces (Chinese, Japanese) is left on
+    one line rather than broken at an arbitrary character.
+    """
+    if column + len(text) <= _WRAP_WIDTH:
+        return text
+    lines = textwrap.wrap(
+        text, width=_WRAP_WIDTH, initial_indent="\0" * column,
+        break_long_words=False, break_on_hyphens=False,
+    )
+    if not lines:
+        return text
+    lines[0] = lines[0][column:]
+    # A leading space (bilingual " / ") is dropped by textwrap; keep it.
+    if text.startswith(" ") and not lines[0].startswith(" "):
+        lines[0] = " " + lines[0]
+    return newline.join(lines)
 
 
 def _skip_tag_pair(text: str, start: int) -> int:
@@ -156,11 +211,14 @@ class PgnAdapter(FormatAdapter):
 
             self.pieces = []
             for body_start, body_end in _comment_spans(self.text):
+                # A line break would end a ; comment, so only {...} prose
+                # may be wrapped over several lines.
+                wrappable = self.text[body_start - 1] == "{"
                 pos = body_start
                 for command in _COMMAND_RE.finditer(self.text, body_start, body_end):
-                    self._add_piece(pos, command.start())
+                    self._add_piece(pos, command.start(), wrappable)
                     pos = command.end()
-                self._add_piece(pos, body_end)
+                self._add_piece(pos, body_end, wrappable)
 
             self.blocks = self._group_pieces()
             self._units = None
@@ -169,7 +227,7 @@ class PgnAdapter(FormatAdapter):
         except Exception:
             return False
 
-    def _add_piece(self, start: int, end: int):
+    def _add_piece(self, start: int, end: int, wrappable: bool):
         """Register text[start:end] as a piece of prose if it has any words."""
         raw = self.text[start:end]
         prose = " ".join(raw.split())
@@ -182,20 +240,24 @@ class PgnAdapter(FormatAdapter):
             'end': end - trailing,
             'text': prose,
             'fingerprint': _notation_fingerprint(prose),
+            'wrappable': wrappable,
         })
 
     def _group_pieces(self) -> List[List[int]]:
         """Group consecutive pieces into blocks bounded by count and tokens.
 
-        The count bound (SRT_LINES_PER_BLOCK, shared with SRT) keeps [N]
-        marker accounting reliable; the token bound keeps long book
-        annotations within the usual chunk size. A piece larger than the
-        token bound goes alone in its block.
+        The count bound keeps [N] marker accounting reliable; the token
+        bound keeps long book annotations within the usual chunk size. A
+        piece larger than the token bound goes alone in its block.
+
+        The count bound is not SRT_LINES_PER_BLOCK: that setting is tuned
+        for short subtitle lines, while a piece here is often a paragraph,
+        and small local models drop markers on blocks of 20 paragraphs.
         """
-        from src.config import SRT_LINES_PER_BLOCK, MAX_TOKENS_PER_CHUNK
+        from src.config import MAX_TOKENS_PER_CHUNK
         from src.core.chunking.token_chunker import count_tokens
 
-        max_items = self.config.get('lines_per_block') or SRT_LINES_PER_BLOCK
+        max_items = self.config.get('lines_per_block') or _PIECES_PER_BLOCK
         max_tokens = self.config.get('max_tokens_per_chunk') or MAX_TOKENS_PER_CHUNK
 
         blocks: List[List[int]] = []
@@ -303,11 +365,14 @@ class PgnAdapter(FormatAdapter):
             f"CRITICAL: Your previous response was invalid ({feedback}). "
             f"You MUST reproduce every [N] index marker from the input exactly "
             f"once, in order, each followed by its translation. Do NOT merge, "
-            f"drop or renumber markers. These lines are annotations of chess "
-            f"games: copy every move, square and castling notation (e.g. Nf3, "
-            f"exd5, Qxh7+, O-O, e4) exactly as written, letters included. "
-            f"Never translate piece letters into the target language."
+            f"drop or renumber markers. Never translate piece letters into "
+            f"the target language: every move, square and castling must come "
+            f"back exactly as in the source line."
         )
+
+    def get_format_instructions(self) -> str:
+        """Chess notation rules, sent with every request."""
+        return _CHESS_INSTRUCTIONS
 
     async def save_unit_translation(self, unit_id: str, translated_content: str) -> bool:
         """Store the valid pieces of a translated block; the rest stay untranslated."""
@@ -341,22 +406,26 @@ class PgnAdapter(FormatAdapter):
         try:
             from src.config import ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE
 
+            newline = '\r\n' if '\r\n' in self.text else '\n'
             parts = []
             pos = 0
             for global_idx, piece in enumerate(self.pieces):
                 translated = self.translations.get(global_idx)
                 if translated is None or translated == piece['text']:
                     continue
-                original = self.text[piece['start']:piece['end']]
                 parts.append(self.text[pos:piece['start']])
-                parts.append(f"{original} / {translated}" if bilingual else translated)
+                if bilingual:
+                    parts.append(self.text[piece['start']:piece['end']] + " /")
+                    translated = " " + translated
+                if piece['wrappable']:
+                    translated = _wrap(translated, _column(parts), newline)
+                parts.append(translated)
                 pos = piece['end']
             parts.append(self.text[pos:])
             pgn_content = ''.join(parts)
 
             # Signature as % escape lines, which PGN readers ignore
             if ATTRIBUTION_ENABLED:
-                newline = '\r\n' if '\r\n' in self.text else '\n'
                 if pgn_content and not pgn_content.endswith('\n'):
                     pgn_content += newline
                 pgn_content += f"% Translated with {GENERATOR_NAME}{newline}"

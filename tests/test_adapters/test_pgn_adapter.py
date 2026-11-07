@@ -184,7 +184,7 @@ class TestReconstruction:
         )
         output = (await adapter.reconstruct_output(bilingual=True)).decode('utf-8')
         assert ("{A famous lesson in rapid development. / "
-                "PT A famous lesson in rapid development.}") in output
+                "PT A famous lesson in rapid development.}") in " ".join(output.split())
 
     @pytest.mark.asyncio
     async def test_braces_and_line_breaks_in_translation_are_neutralized(self, tmp_path):
@@ -341,3 +341,93 @@ async def test_persistent_notation_change_keeps_source_comment(tmp_path, cm, mon
     assert "{PT A famous lesson in rapid development.}" in output
     assert _strip_comment_prose(output) == _strip_comment_prose(PGN)
     assert cm.get_job("job")["status"] == "partial"
+
+
+class TestCjkNotation:
+    """Moves written right next to CJK characters, with no space around."""
+
+    @pytest.mark.parametrize("translated", [
+        "这步是错误：在4.dxe5之后黑方必须放弃象，因为4...dxe5 5.Qxd8+ Kxd8 6.Nxe5丢一个兵。",
+        "このピンは誤り：4.dxe5の後、4...dxe5 5.Qxd8+ Kxd8 6.Nxe5でポーンを失う。",
+        "이 핀은 실수다: 4.dxe5 이후 4...dxe5 5.Qxd8+ Kxd8 6.Nxe5로 폰을 잃는다.",
+    ])
+    @pytest.mark.asyncio
+    async def test_moves_next_to_cjk_are_recognized(self, tmp_path, translated):
+        adapter = await _prepared(tmp_path, config={'lines_per_block': 2})
+        response = f"[0]著名的一课。\n[1]{translated}"
+        assert adapter.validate_unit_translation("block_0", response) is None
+
+    @pytest.mark.asyncio
+    async def test_altered_move_next_to_cjk_is_rejected(self, tmp_path):
+        adapter = await _prepared(tmp_path, config={'lines_per_block': 2})
+        response = ("[0]著名的一课。\n"
+                    "[1]这步是错误：在4.dxe5之后，4...dxe5 5.Dxd8+ Kxd8 6.Nxe5丢兵。")
+        feedback = adapter.validate_unit_translation("block_0", response)
+        assert feedback is not None and "[1]" in feedback
+
+
+class TestWrapping:
+
+    @pytest.mark.asyncio
+    async def test_long_translation_is_wrapped_inside_braces(self, tmp_path):
+        adapter = await _prepared(tmp_path)
+        unit = adapter.get_translation_units()[0]
+        long_prose = lambda t: ("PT " + t + " ") * 4
+        await adapter.save_unit_translation(
+            unit.unit_id, _translate_lines(unit.content, long_prose)
+        )
+        output = (await adapter.reconstruct_output()).decode('utf-8')
+        lines = output.splitlines()
+        # Lines holding only translated prose fit the wrap width; a line
+        # that closes a comment may go on with the original move text.
+        prose_lines = [l for l in lines
+                       if "PT" in l and not any(c in l for c in "{};")]
+        assert prose_lines and all(len(l) <= 79 for l in prose_lines)
+        assert all(len(l) < 255 for l in lines)
+        # Wrapping only touches comment bodies, and no move is split.
+        assert _strip_comment_prose(output) == _strip_comment_prose(PGN)
+        assert "4...dxe5 5.Qxd8+" in output.replace('\n', ' ')
+
+    @pytest.mark.asyncio
+    async def test_semicolon_comment_is_never_wrapped(self, tmp_path):
+        adapter = await _prepared(tmp_path)
+        unit = adapter.get_translation_units()[-1]
+        long_prose = lambda t: ("PT " + t + " ") * 6
+        await adapter.save_unit_translation(
+            unit.unit_id, _translate_lines(unit.content, long_prose)
+        )
+        output = (await adapter.reconstruct_output()).decode('utf-8')
+        semicolon_line = next(l for l in output.splitlines() if l.startswith("1. d4 ;"))
+        assert semicolon_line.count("PT The queen's pawn opening.") == 6
+        assert "1... d5 2. c4" in output
+
+    @pytest.mark.asyncio
+    async def test_crlf_is_kept_when_wrapping(self, tmp_path):
+        crlf = PGN.replace('\n', '\r\n')
+        adapter = await _prepared(tmp_path, crlf)
+        unit = adapter.get_translation_units()[0]
+        await adapter.save_unit_translation(
+            unit.unit_id, _translate_lines(unit.content, lambda t: ("PT " + t + " ") * 4)
+        )
+        output = (await adapter.reconstruct_output()).decode('utf-8')
+        assert '\n' not in output.replace('\r\n', '')
+
+
+@pytest.mark.asyncio
+async def test_chess_rules_are_sent_on_the_first_attempt(tmp_path, cm, monkeypatch):
+    success, _, calls = await _run_translation(
+        tmp_path, cm, monkeypatch, lambda n: (lambda t: f"PT {t}"),
+    )
+    assert success is True
+    assert len(calls) == 1
+    assert "never translate the piece letters" in calls[0].get("custom_instructions", "")
+
+
+@pytest.mark.asyncio
+async def test_block_size_ignores_the_subtitle_setting(tmp_path, monkeypatch):
+    # SRT_LINES_PER_BLOCK is tuned for short subtitle lines; comment prose is
+    # often a paragraph, so PGN keeps its own, smaller bound.
+    monkeypatch.setattr(config_module, "SRT_LINES_PER_BLOCK", 20)
+    adapter = await _prepared(tmp_path)
+    sizes = [len(u.metadata['local_to_global']) for u in adapter.get_translation_units()]
+    assert sizes == [6, 2]

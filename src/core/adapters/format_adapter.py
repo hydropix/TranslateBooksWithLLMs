@@ -90,6 +90,20 @@ class FormatAdapter(ABC):
         """
         return None
 
+    def get_format_instructions(self) -> str:
+        """
+        Format-specific instructions sent with every translation request.
+
+        Adapters whose content needs rules the generic prompt does not
+        cover (e.g. chess notation in PGN comments) override this so the
+        model gets them on the first attempt, not only after a failed
+        validation. They are appended after the user's custom instructions.
+
+        Returns:
+            Instruction text, or an empty string when none are needed
+        """
+        return ""
+
     def get_validation_retry_instructions(self, feedback: str) -> str:
         """
         Build the instruction appended to the prompt when a unit is retried

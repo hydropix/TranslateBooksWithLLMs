@@ -73,6 +73,13 @@ def build_glossary_block(
 
     metadata = term_metadata or {}
 
+    def _forbidden_values(source: str) -> List[str]:
+        raw = (metadata.get(source) or {}).get("forbidden") or ""
+        if isinstance(raw, str):
+            return [part.strip() for part in raw.split("|") if part.strip()]
+        return [str(part).strip() for part in raw if str(part).strip()]
+
+    has_forbidden = any(_forbidden_values(source) for source in filtered_terms)
     lines = [
         "# GLOSSARY - REQUIRED TRANSLATIONS",
         "",
@@ -83,6 +90,8 @@ def build_glossary_block(
         "Apply each rule consistently every time the term occurs.",
         "When several source forms are listed before the arrow (comma-separated), they are inflected variants of the same entity — translate any of them with the single target on the right.",
         "Bracketed hints after the arrow (e.g. [character, female]) describe the entity type and, where known, its gender — use them to disambiguate and to pick pronouns, never as part of the translation.",
+        *(["If a forbidden rendering is listed, never use it, even if it sounds natural in the target language."]
+          if has_forbidden else []),
         "",
     ]
 
@@ -90,16 +99,19 @@ def build_glossary_block(
         meta = metadata.get(source) or {}
         category = (meta.get("category") or "").strip()
         gender = normalize_gender(meta.get("gender"))
+        forbidden = _forbidden_values(source)
         # Render alternatives (declined forms separated by '|' in storage) as
         # a comma-separated list so the LLM reads them as a natural set.
         display_source = ", ".join(
             a.strip() for a in source.split("|") if a.strip()
         ) or source
         hints = [h for h in (category, gender) if h]
+        line = f"  - {display_source} -> {target}"
         if hints:
-            lines.append(f"  - {display_source} -> {target}  [{', '.join(hints)}]")
-        else:
-            lines.append(f"  - {display_source} -> {target}")
+            line += f"  [{', '.join(hints)}]"
+        if forbidden:
+            line += f"  [forbidden: {', '.join(forbidden)}]"
+        lines.append(line)
 
     return "\n".join(lines) + "\n"
 

@@ -28,11 +28,17 @@ def _iter_term_entries(raw_terms: Iterable) -> Iterable[Dict[str, str]]:
             continue
         category = (entry.get("category") or "").strip()
         gender = normalize_gender(entry.get("gender") or entry.get("sex"))
+        forbidden = entry.get("forbidden") or entry.get("forbidden_translations") or []
+        if isinstance(forbidden, str):
+            forbidden = [part.strip() for part in forbidden.split("|") if part.strip()]
+        else:
+            forbidden = [str(part).strip() for part in forbidden if str(part).strip()]
         yield {
             "source": source,
             "target": target,
             "category": category,
             "gender": gender or "",
+            "forbidden": forbidden,
         }
 
 
@@ -88,6 +94,8 @@ def load_glossary_from_file(path: str) -> Tuple[Dict[str, str], Dict[str, Dict[s
             entry_meta["category"] = e["category"]
         if e["gender"]:
             entry_meta["gender"] = e["gender"]
+        if e.get("forbidden"):
+            entry_meta["forbidden"] = "|".join(e["forbidden"])
         if entry_meta:
             metadata[source] = entry_meta
     return terms, metadata

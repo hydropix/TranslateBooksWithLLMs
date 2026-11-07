@@ -64,6 +64,7 @@ from .exceptions import (
 from .placeholder_validator import PlaceholderValidator
 from .container import TranslationContainer
 from ..translator import generate_translation_request
+from ..common.source_residue import detect_blocking_residue, residue_log_message
 from ..context_optimizer import AdaptiveContextManager, INITIAL_CONTEXT_SIZE, CONTEXT_STEP, MAX_CONTEXT_SIZE
 from src.config import (
     PLACEHOLDER_PATTERN,
@@ -487,6 +488,19 @@ async def translate_chunk_with_fallback(
         validation_result = validate_placeholders(translated, local_tag_map)
 
         if validation_result:
+            # Tags intact, but the text may still be partly in the source
+            # language (issue #270). generate_translation_request already
+            # retried once; what is left is kept, since it is still the most
+            # translated version, and the chunk is recorded as untranslated so
+            # a resume or a repair pass picks it up.
+            if _has_source_residue(chunk_text, translated, source_language,
+                                   target_language, log_callback):
+                stats.fallback_used += 1
+                stats.record_chunk_outcome(chunk_index, CHUNK_UNTRANSLATED)
+                result = placeholder_mgr.restore_to_global(translated, global_indices)
+                stats.record_processed()
+                return result
+
             # Success - restore to global indices
             if attempt == 0:
                 stats.successful_first_try += 1
@@ -567,7 +581,12 @@ async def translate_chunk_with_fallback(
                     log_callback("phase2_warning", "⚠️ Note: Proportional repositioning may cause minor layout imperfections")
 
                 # 6. Restore global indices and return
-                stats.record_chunk_outcome(chunk_index, CHUNK_TOKEN_ALIGNED)
+                if _has_source_residue(chunk_text, result_with_placeholders, source_language,
+                                       target_language, log_callback):
+                    stats.fallback_used += 1
+                    stats.record_chunk_outcome(chunk_index, CHUNK_UNTRANSLATED)
+                else:
+                    stats.record_chunk_outcome(chunk_index, CHUNK_TOKEN_ALIGNED)
                 result = placeholder_mgr.restore_to_global(result_with_placeholders, global_indices)
                 stats.record_processed()  # Mark chunk as fully processed
                 return result
@@ -596,6 +615,24 @@ async def translate_chunk_with_fallback(
 
 
 # === Private Helper Functions ===
+
+def _has_source_residue(
+    source_text: str,
+    translated_text: str,
+    source_language: str,
+    target_language: str,
+    log_callback: Optional[Callable],
+) -> bool:
+    """True, with a warning logged, when a translation kept source text (issue #270)."""
+    report = detect_blocking_residue(source_text, translated_text, source_language, target_language)
+    if report is None:
+        return False
+    if log_callback:
+        log_callback("source_residue_kept",
+                     f"⚠️ {residue_log_message(report, source_language)} - chunk marked "
+                     "untranslated, it will be retried on resume")
+    return True
+
 
 def _setup_translation(
     doc_root: etree._Element,

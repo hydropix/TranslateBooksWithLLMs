@@ -59,3 +59,14 @@ Every user-facing string in the web frontend (`src/web/templates/`, `src/web/sta
 No ad-hoc test or debug scripts at the repo root. The patterns `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, `tmp_*.py` at the root are gitignored — this is intentional.
 
 The real entrypoints at the root are `translate.py`, `translation_api.py`, `launcher.py`. Real tests live under `tests/` (pytest) or `tests/standalone/` (manual scripts). If an ad-hoc script becomes useful long-term, move it into `tests/standalone/` or `scripts/` before committing it.
+
+## Prompt change rules — every addition costs the rest of the prompt
+
+Changes to LLM prompts (`src/prompts/`, and any instruction text injected into translation, refinement, glossary or style prompts) do not behave like ordinary code. A system prompt is a shared attention budget: each new instruction, example or warning dilutes the weight of every other one. A fix that solves one failure case can silently degrade quality elsewhere (formatting, tag preservation, tone, glossary adherence, output completeness), especially on small local models.
+
+Rules:
+
+- **Do not patch a prompt by appending a new instruction for each bug.** First ask whether the problem can be solved in code (pre/post-processing, validation, retry, chunking) instead of in the prompt. Prefer the code fix when it exists.
+- **When a prompt change is necessary, keep it minimal.** Rephrase or merge with an existing instruction rather than adding a new one. Remove or shorten something if you add something. Never let the prompt grow without a reason that is worth its cost.
+- **Prove there is no regression.** A prompt change is not done because the targeted case now works. The primary tool is the prompt regression harness (`tests/prompt_eval/README.md`): run `python -m tests.prompt_eval diff` first to see which corpus cases the change touches, then `python -m tests.prompt_eval run` with at least one small local model (where dilution effects show up first), and paste the generated `report.md` into the PR. Also run the existing prompt tests (`tests/unit/test_plain_text_prompt_structure.py`, `tests/unit/style/`, `tests/unit/glossary/`, and related) and the real-LLM integration tests (`pytest tests/integration/test_real_llm_translation.py -v`, uses `.env`).
+- **Report the evidence.** In the PR description, state which tests and samples were run before and after, and what changed in the outputs. If the regression check could not be run (no LLM available, etc.), say so explicitly instead of claiming the change is safe.

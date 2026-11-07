@@ -570,6 +570,17 @@ MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 0
 EPUB_TOKEN_ALIGNMENT_ENABLED = os.getenv('EPUB_TOKEN_ALIGNMENT_ENABLED', 'true').lower() == 'true'
 """Enable token alignment fallback for EPUB translation (Phase 2)"""
 
+SOURCE_RESIDUE_CHECK_ENABLED = os.getenv('SOURCE_RESIDUE_CHECK_ENABLED', 'true').lower() == 'true'
+"""Check every translated chunk for text left in the source language (issue #270).
+
+A chunk that still holds a long run of a script only the source language uses,
+or that comes back identical to its source, is retried once with a stricter
+prompt. If a non-Latin source script is still left after that retry, the chunk
+is recorded as untranslated so a resume or a repair pass retries it; an echo or
+leftover Latin text is accepted after the retry, since it is often legitimate
+(bibliographies, names, code, quotations). Set to false to accept every answer
+as before."""
+
 EPUB_SCRIPT_NORMALIZATION_ENABLED = os.getenv(
     'EPUB_SCRIPT_NORMALIZATION_ENABLED', 'true').lower() == 'true'
 """Enable source-script (CJK) typography normalization for translated EPUBs:

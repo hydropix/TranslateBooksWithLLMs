@@ -18,6 +18,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from src.core.chunking.token_chunker import TokenChunker
 from src.core.translator import generate_translation_request
+from src.core.common.source_residue import detect_blocking_residue, residue_log_message
 from src.core.post_processor import clean_translated_text
 from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.epub.xhtml_translation_state import (
@@ -940,6 +941,22 @@ async def translate_paragraphs_plain(
                                                 "the repair still returned the wrong "
                                                 "count - keeping the original translation"
                                             )
+                    # Text left in the source language (issue #270): the
+                    # request already retried once, so keep the most translated
+                    # answer but record the segment as untranslated, which is
+                    # what makes a resume or a repair pass retry it.
+                    residue = detect_blocking_residue(
+                        main_content, translated_parts[i], source_language, target_language)
+                    if residue is not None:
+                        if log_callback:
+                            log_callback(
+                                "source_residue_kept",
+                                f"⚠️ Chunk {i + 1}/{len(chunks)}: "
+                                f"{residue_log_message(residue, source_language)} - "
+                                "segment marked untranslated, it will be retried on resume"
+                            )
+                        stats.successful_first_try -= 1
+                        _record_failure(i)
                     # A retried segment sits inside the restored prefix and
                     # must not move the running chain the new segments use.
                     if sequential and i >= len(prefix):

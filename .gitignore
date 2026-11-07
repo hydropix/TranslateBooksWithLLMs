@@ -21,6 +21,7 @@ build/TranslateBookWithLLM/
 .wiki_repo/
 /prompt_optimization_results
 tests/.placeholder_tests/
+/tests/prompt_eval/runs/
 /plan/
 /experiments
 /benchmark_results/

@@ -274,6 +274,17 @@ class TestAutoGlossary:
         assert warnings
 
     @pytest.mark.asyncio
+    async def test_secondary_name_in_long_text_reaches_the_prompt(self):
+        # Evenly spaced excerpts would miss a name confined to one stretch.
+        filler = "The road went on through the quiet hills under a grey sky. "
+        middle = "Then the guide spoke with Ignatius by the fire. " * 4
+        text = filler * 1200 + middle + filler * 3000
+        client = FakeLLMClient(ner=_ner_payload([]))
+        await auto_prep.auto_glossary(text, "English", "French", client)
+        assert client.calls == 1
+        assert "Ignatius" in client.prompts[0]
+
+    @pytest.mark.asyncio
     async def test_blank_text_makes_no_call(self):
         client = FakeLLMClient(ner=_ner_payload([]))
         result = await auto_prep.auto_glossary("   ", "English", "French", client)

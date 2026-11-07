@@ -49,6 +49,7 @@ import { ProgressManager } from './translation/progress-manager.js';
 import { ResumeManager } from './translation/resume-manager.js';
 import { HistoryManager } from './translation/history-manager.js';
 import { QuickTestManager } from './translation/quick-test.js';
+import { TermFixPanel } from './translation/term-fix-panel.js';
 
 // ========================================
 // Utilities
@@ -446,6 +447,7 @@ async function initializeModules() {
     // on source/target language fire first and recreate the file <li>s (with
     // empty cost-badge slots) before CostEstimator's listener queries the DOM.
     FileUpload.initialize();
+    TermFixPanel.initialize();
     CostEstimator.initialize();
     FileManager.initialize();
     ProgressManager.reset();
@@ -483,6 +485,7 @@ async function initializeModules() {
 // File Upload
 window.handleFileSelect = FileUpload.handleFileSelect.bind(FileUpload);
 window.handleFileSelectRefine = FileUpload.handleFileSelectRefine.bind(FileUpload);
+window.handleFileSelectTermFix = FileUpload.handleFileSelectTermFix.bind(FileUpload);
 window.resetFiles = () => {
     FileUpload.clearAll();
     DomHelpers.hide('fileInfo');
@@ -555,6 +558,8 @@ window.saveSettings = async () => {
         MessageLogger.addLog(t('translation:settings_saved_env_log', { keys }));
     } else if (result.success) {
         MessageLogger.showMessage(t('translation:preferences_saved'), 'success');
+    } else if (result.code === 'webhook_secret_unresolved') {
+        MessageLogger.showMessage(t('translation:settings_webhook_secret_unresolved'), 'error');
     } else {
         MessageLogger.showMessage(t('translation:settings_save_failed', { error: result.error }), 'error');
     }

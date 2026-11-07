@@ -98,7 +98,7 @@ function collectLanguagePairs(queuedFiles, formSource, formTarget) {
         fileValue && fileValue !== 'Other' ? String(fileValue).trim() : fallback
     );
     return queuedFiles
-        .filter(file => (file.operation || 'translate') !== 'refine')
+        .filter(file => (file.operation || 'translate') === 'translate')
         .map(file => ({
             source: pick(file.sourceLanguage, formSource),
             target: pick(file.targetLanguage, formTarget),
@@ -114,7 +114,9 @@ function collectLanguagePairs(queuedFiles, formSource, formTarget) {
 export function buildContext() {
     const model = DomHelpers.getValue('model') || '';
     const files = StateManager.getState('files.toProcess') || [];
-    const queuedFiles = files.filter(f => f && f.status === 'Queued');
+    // Term-fix files are left out: every rule here advises on a translation or
+    // refinement prompt, and a term fix sends neither.
+    const queuedFiles = files.filter(f => f && f.status === 'Queued' && f.operation !== 'term_fix');
     const plainTextModeEl = DomHelpers.getElement('plainTextMode');
     const parallelWorkers = parseInt(DomHelpers.getValue('parallelWorkers'), 10);
     const parallelGroup = DomHelpers.getElement('parallelWorkersGroup');

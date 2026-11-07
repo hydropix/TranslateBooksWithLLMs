@@ -342,6 +342,34 @@ def _apply_resume_overrides(config, overrides):
     return _validate_provider_credentials(config)
 
 
+def _parse_term_fix_request(raw, check_mode: bool = True):
+    """Validate a `term_fix` request field: {rules_text, mode}.
+
+    Returns (normalized dict, None) or (None, error message). The rules are
+    parsed here so a malformed rule fails the request with its line number
+    instead of failing the job later.
+    """
+    from src.core.term_fix import (
+        MODE_LITERAL, MODE_SMART, MODES, RuleParseError, check_literal_rules, parse_rules_text,
+    )
+
+    if not isinstance(raw, dict):
+        return None, "term_fix must be an object with 'rules_text' and 'mode'."
+    rules_text = raw.get('rules_text')
+    if not isinstance(rules_text, str) or not rules_text.strip():
+        return None, "Term fix: no correction rule given."
+    mode = raw.get('mode') or MODE_SMART
+    if check_mode and mode not in MODES:
+        return None, f"Term fix: unknown mode '{mode}'."
+    try:
+        rules = parse_rules_text(rules_text)
+        if check_mode and mode == MODE_LITERAL:
+            check_literal_rules(rules)
+    except (RuleParseError, ValueError) as e:
+        return None, f"Term fix: {e}"
+    return {'rules_text': rules_text, 'mode': mode}, None
+
+
 def create_translation_blueprint(state_manager, start_translation_job, output_dir):
     """
     Create and configure the translation blueprint
@@ -406,10 +434,21 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'refine_only': data.get('refine_only', False),
             # Chained refinement pass after translation
             'refine_after': data.get('refine_after', False),
+            # Term-fix mode (correct wrong renderings of a term, no translation)
+            'term_fix': None,
             # TTS configuration
             'tts_enabled': data.get('tts_enabled', False),
             'tts_config': TTSConfig.from_web_request(data).to_dict() if data.get('tts_enabled') else None
         }
+
+        if data.get('term_fix') is not None:
+            term_fix, term_fix_error = _parse_term_fix_request(data.get('term_fix'))
+            if term_fix_error is not None:
+                return jsonify({"error": term_fix_error}), 400
+            config['term_fix'] = term_fix
+            # Mutually exclusive with the refine paths.
+            config['refine_only'] = False
+            config['refine_after'] = False
 
         # Add file-specific or text-specific configuration
         safe_path = None
@@ -469,6 +508,35 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             # '__USE_ENV__' request must not get the resolved .env key back.
             "config_received": _strip_api_keys(dict(config))
         })
+
+    @bp.route('/api/term-fix/scan', methods=['POST'])
+    def scan_term_fix():
+        """Count the matches of term-fix rules in an uploaded file (no LLM)."""
+        import asyncio
+        from src.core.adapters import scan_file
+        from src.core.adapters.exceptions import UnsupportedFormatError
+        from src.core.term_fix import scan_to_dict
+
+        data = request.json or {}
+        term_fix, term_fix_error = _parse_term_fix_request(
+            {'rules_text': data.get('rules_text'), 'mode': 'literal'}, check_mode=False)
+        if term_fix_error is not None:
+            return jsonify({"error": term_fix_error}), 400
+        if not data.get('file_path'):
+            return jsonify({"error": "Missing or empty field: file_path"}), 400
+        safe_path, path_error = PathValidator.validate_upload_path(
+            data['file_path'], uploads_dir
+        )
+        if path_error is not None:
+            return jsonify({"error": path_error}), 403
+
+        from src.core.term_fix import parse_rules_text
+        rules = parse_rules_text(term_fix['rules_text'])
+        try:
+            results = asyncio.run(scan_file(str(safe_path), rules))
+        except (UnsupportedFormatError, FileNotFoundError) as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"rules": scan_to_dict(results)})
 
     @bp.route('/api/translation/<translation_id>', methods=['GET'])
     def get_translation_job_status(translation_id):

@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TBL Promo</title>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Hebrew:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Devanagari:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Tamil:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Georgian:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Ethiopic:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Khmer:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Lao:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Myanmar:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Canadian+Aboriginal:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Sinhala:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Kannada:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Malayalam:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Gujarati:wght@400;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Gurmukhi:wght@400;600;700&display=block" rel="stylesheet">
+<script src="cues.js"></script>
+<style>
+:root {
+  --bg: #f0f2f5;
+  --outer: #ffffff;
+  --ink: #1f2a3a;
+  --muted: #6b7a90;
+  --faint: #b9c2ce;
+  --primary: #3676d8;
+  --primary-soft: #dfe7f3;
+  --teal: #70bccb;
+  --chip: #2e353f;
+  --border: #e0e4e9;
+  --sd: #d2d6dc;
+  --sl: #ffffff;
+  --success: #28a745;
+  --success-bg: #e6faed;
+  --dark-bg: #121212;
+  --dark-card: #2a2a2a;
+  --serif: "Spectral", "Noto Serif", "Noto Serif SC", "Noto Serif JP", "Noto Serif KR",
+    "Noto Naskh Arabic", "Noto Serif Hebrew", "Noto Serif Devanagari", "Noto Serif Bengali",
+    "Noto Serif Tamil", "Noto Serif Thai", "Noto Serif Georgian", "Noto Serif Armenian",
+    "Noto Serif Ethiopic", "Noto Serif Khmer", "Noto Serif Lao", "Noto Serif Myanmar",
+    "Noto Sans Canadian Aboriginal", "Noto Serif Sinhala", "Noto Serif Telugu", "Noto Serif Kannada",
+    "Noto Serif Malayalam", "Noto Serif Gujarati", "Noto Serif Gurmukhi", serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #000; }
+#stage {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  background: var(--bg); font-family: var(--serif); color: var(--ink);
+}
+.abs { position: absolute; }
+.scene { position: absolute; inset: 0; display: none; }
+.center { left: 0; right: 0; text-align: center; }
+.neu { background: var(--bg); box-shadow: 14px 14px 32px var(--sd), -14px -14px 32px var(--sl); }
+.ms {
+  font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal;
+  line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block;
+  white-space: nowrap; direction: ltr; font-feature-settings: 'liga';
+  font-variation-settings: 'FILL' 0, 'wght' 400;
+}
+.eyebrow { font-size: 22px; letter-spacing: .28em; text-transform: uppercase; font-weight: 600; color: var(--primary); }
+
+/* background multilingual rows */
+#rows { position: absolute; inset: -60px -40px; pointer-events: none; }
+.row { position: absolute; left: 0; white-space: nowrap; font-size: 34px; line-height: 45px; will-change: transform; }
+.row .copy { display: inline-block; padding-right: 0; }
+.row span { unicode-bidi: isolate; padding: 0 28px; }
+#bgDark { position: absolute; inset: 0; background: var(--dark-bg); opacity: 0; }
+#flash { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, #ffffff 0%, #ffffff 40%, #f0f2f5 100%); opacity: 0; pointer-events: none; }
+#vignette { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%, rgba(31,42,58,0.05) 100%); }
+
+/* ---------- scene 1: intro ---------- */
+#s1cap { top: 250px; font-size: 56px; font-weight: 500; color: var(--ink); letter-spacing: .01em; }
+#s1word { top: 360px; height: 300px; font-size: 210px; font-weight: 600; line-height: 300px; white-space: nowrap; }
+#s1label { top: 690px; font-size: 24px; letter-spacing: .42em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+#s1line { top: 750px; left: 50%; width: 520px; height: 3px; margin-left: -260px; background: var(--primary); transform-origin: 50% 50%; }
+
+/* ---------- logo svg ---------- */
+.logo .part { transform-box: fill-box; }
+
+/* ---------- scene 2: logo reveal ---------- */
+#s2logo { left: 50%; top: 150px; width: 460px; height: 298px; margin-left: -230px; }
+#s2ring1, #s2ring2 { left: 50%; top: 300px; width: 10px; height: 10px; border-radius: 50%; border: 3px solid var(--teal); }
+#s2title { top: 450px; font-size: 176px; font-weight: 700; line-height: 1; letter-spacing: .02em; }
+#s2title span { display: inline-block; }
+#s2sub { top: 655px; font-size: 32px; font-weight: 600; text-transform: uppercase; color: var(--ink); }
+#s2tag1, #s2tag2 { top: 770px; font-size: 50px; font-style: italic; color: var(--ink); }
+#s2tag2 b { font-style: normal; color: var(--primary); font-weight: 700; }
+
+/* ---------- scene 3: UI demo ---------- */
+#s3words { left: 110px; top: 250px; }
+.s3w { position: absolute; left: 0; font-size: 104px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.s3w small { font-size: 30px; color: var(--primary); vertical-align: top; margin-right: 22px; font-weight: 600; position: relative; top: 14px; }
+#s3foot { left: 114px; top: 800px; font-size: 38px; font-style: italic; color: var(--muted); }
+#ui { left: 760px; top: 82px; width: 900px; height: 760px; transform-origin: 0 0; }
+#uiShadow { position: absolute; inset: 0; background: var(--outer); box-shadow: 0 30px 80px rgba(31,42,58,.16), 0 4px 14px rgba(31,42,58,.06); }
+.ui-header { position: absolute; left: 0; top: 0; width: 900px; height: 72px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.ui-header .lg { position: absolute; left: 28px; top: 16px; width: 52px; height: 38px; }
+.ui-header .tt { position: absolute; left: 92px; top: 13px; font-size: 22px; font-weight: 700; }
+.ui-header .tt small { font-size: 10px; color: var(--muted); font-weight: 500; margin-left: 6px; }
+.ui-header .st { position: absolute; left: 92px; top: 43px; font-size: 11.5px; color: var(--muted); }
+.ui-pill { position: absolute; top: 20px; height: 32px; border: 1px solid var(--border); background: var(--bg);
+  box-shadow: inset 2px 2px 4px var(--sd), inset -2px -2px 4px var(--sl); font-size: 11.5px; line-height: 30px; padding: 0 12px; color: var(--muted); }
+.ui-pill.mono { font-family: var(--mono); font-size: 11px; }
+.ui-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); margin-right: 7px; vertical-align: 0; }
+.ui-tabs { position: absolute; left: 0; top: 96px; display: flex; gap: 7px; }
+.ui-tab { height: 36px; padding: 0 16px; border: 1px solid var(--border); border-bottom: none; background: var(--outer); font-size: 13.5px;
+  font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+.ui-tab .ms { font-size: 16px; }
+.ui-tab.active { color: var(--ink); background: var(--bg); box-shadow: inset 0 -3px 0 var(--primary); }
+.ui-card { position: absolute; left: 0; top: 132px; width: 900px; height: 628px; background: var(--bg); border: 1px solid var(--border); }
+.ui-lbl { position: absolute; top: 22px; font-size: 10.5px; letter-spacing: .14em; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.ui-sel { position: absolute; top: 44px; height: 32px; width: 412px; background: var(--outer); border: 1px solid var(--border); font-size: 14px; line-height: 30px; padding: 0 16px; }
+.ui-sel .ms { position: absolute; right: 10px; top: 7px; font-size: 18px; color: var(--muted); }
+.ui-area { position: absolute; left: 28px; top: 100px; width: 844px; height: 300px; }
+.ui-drop { position: absolute; inset: 0; border: 2px dashed #a9c2ee; box-shadow: 4px 4px 10px var(--sd), -4px -4px 10px var(--sl); text-align: center; }
+.ui-drop .ic { width: 68px; height: 68px; margin: 42px auto 0; background: var(--primary-soft); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+.ui-drop .ic .ms { font-size: 40px; }
+.ui-drop h3 { margin: 22px 0 0; font-size: 21px; font-weight: 600; }
+.ui-drop p { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.ui-btn { display: inline-block; background: var(--primary); color: #fff; font-weight: 700; font-size: 12.5px; padding: 11px 26px; margin-top: 16px; }
+.ui-files { position: absolute; inset: 0; padding: 20px 22px; }
+.ui-files h4 { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
+.ui-file { height: 58px; background: var(--outer); border: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 14px; }
+.ui-file .ms { color: var(--primary); font-size: 28px; }
+.ui-file .nm { font-size: 15px; font-weight: 600; }
+.ui-file .mt { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.ui-badge { margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; background: var(--primary); padding: 4px 10px; }
+.ui-badge.ink { background: var(--chip); }
+.ui-prog { position: absolute; inset: 0; padding: 18px 22px; background: var(--bg); border: 1px solid var(--border); }
+.ui-prog .hd { font-size: 14px; font-weight: 700; display: flex; }
+.ui-prog .hd .pc { margin-left: auto; color: var(--primary); font-family: var(--mono); font-size: 13px; }
+.ui-bar { margin-top: 12px; height: 10px; background: #dde2e8; box-shadow: inset 1px 1px 3px var(--sd); }
+.ui-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3676d8, #5a9cf0); }
+.ui-prog .stt { margin-top: 8px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+.ui-prev { margin-top: 14px; height: 186px; display: flex; gap: 14px; }
+.ui-prev > div { flex: 1; background: var(--outer); border: 1px solid var(--border); padding: 12px 14px; font-size: 13px; line-height: 1.55; overflow: hidden; }
+.ui-prev .cap { font-size: 9.5px; letter-spacing: .14em; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
+.ui-prev .jp { font-size: 13.5px; line-height: 1.75; }
+.ui-done { position: absolute; inset: 0; background: var(--success-bg); border: 2px solid var(--success); text-align: center; }
+.ui-done .ms { font-size: 64px; color: var(--success); margin-top: 40px; font-variation-settings: 'FILL' 1; }
+.ui-done h3 { margin: 12px 0 0; font-size: 24px; }
+.ui-done p { margin: 8px 0 0; font-size: 15px; color: var(--muted); }
+.ui-done .ui-btn { background: var(--success); }
+.ui-start { position: absolute; left: 385px; top: 420px; width: 130px; height: 42px; background: var(--primary); color: #fff; font-size: 17px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 4px 4px 10px var(--sd), -4px -4px 10px var(--sl); }
+.ui-start .ms { font-size: 20px; }
+.ui-chips { position: absolute; left: 0; width: 900px; display: flex; justify-content: center; gap: 6px; }
+.ui-chip { font-size: 11.5px; font-weight: 700; color: #fff; background: var(--chip); padding: 5px 11px; }
+.ui-chip.b { background: var(--primary); }
+.ui-dd { position: absolute; left: 460px; top: 78px; width: 412px; background: var(--outer); border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(31,42,58,.18); padding: 6px 0; }
+.ui-dd .gr { font-size: 10px; letter-spacing: .12em; color: var(--muted); font-weight: 700; padding: 4px 16px; }
+.ui-dd .it { height: 30px; line-height: 30px; padding: 0 16px 0 26px; font-size: 14px; }
+.ui-dd .it.hl { background: var(--primary); color: #fff; }
+#cursor { position: absolute; left: 0; top: 0; width: 34px; height: 34px; }
+#dragfile { position: absolute; left: 0; top: 0; background: var(--outer); border: 1px solid var(--border); box-shadow: 0 12px 30px rgba(31,42,58,.2);
+  padding: 10px 14px; display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 600; white-space: nowrap; }
+#dragfile .ms { color: var(--primary); font-size: 26px; }
+
+/* ---------- scene 4: providers ---------- */
+#s4title { top: 96px; font-size: 80px; font-weight: 700; }
+.pcard { position: absolute; top: 250px; width: 790px; height: 620px; padding: 44px 50px; }
+.pcard .hdr { display: flex; align-items: center; gap: 18px; }
+.pcard .hdr .ic { width: 64px; height: 64px; background: var(--primary-soft); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+.pcard .hdr .ic .ms { font-size: 38px; }
+.pcard .big { font-size: 150px; font-weight: 800; line-height: 1; margin-top: 34px; color: var(--primary); }
+.pcard .line { font-size: 34px; margin-top: 20px; color: var(--ink); }
+.pcard .chips { position: absolute; left: 50px; right: 50px; bottom: 44px; display: flex; flex-wrap: wrap; gap: 12px; }
+.pchip { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; padding: 10px 16px; background: var(--outer); border: 1px solid var(--border); }
+.pchip img { width: 28px; height: 28px; image-rendering: auto; }
+.pchip .ms { font-size: 28px; color: var(--chip); }
+#s4foot { top: 930px; font-size: 40px; font-style: italic; }
+#s4foot b { color: var(--primary); font-style: normal; }
+
+/* ---------- scene 5: hero features ---------- */
+.feat { position: absolute; inset: 0; }
+.feat .txt { position: absolute; left: 130px; top: 300px; width: 760px; }
+.feat h2 { margin: 22px 0 0; font-size: 100px; line-height: 1.02; font-weight: 700; }
+.feat p { margin: 34px 0 0; font-size: 38px; line-height: 1.35; color: var(--muted); }
+.feat .vis { position: absolute; left: 950px; top: 170px; width: 840px; height: 740px; padding: 44px 48px; }
+.gl-head { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 700; }
+.gl-head .ms { color: var(--primary); font-size: 34px; }
+.gl-tag { margin-left: auto; font-size: 16px; font-weight: 700; color: #fff; background: var(--primary); padding: 6px 12px; display: flex; gap: 6px; align-items: center; }
+.gl-tag .ms { color: #fff; font-size: 18px; }
+.gl-row { display: flex; align-items: center; height: 82px; background: var(--outer); border: 1px solid var(--border); margin-top: 14px; padding: 0 24px; font-size: 28px; }
+.gl-row .src { width: 170px; font-weight: 600; }
+.gl-row .ms { color: var(--faint); font-size: 28px; width: 50px; }
+.gl-row .dst { font-weight: 600; flex: 1; }
+.gl-row .cat { font-size: 17px; color: var(--muted); letter-spacing: .06em; }
+.gl-chaps { display: flex; gap: 12px; margin-top: 34px; }
+.gl-chap { flex: 1; text-align: center; background: var(--success-bg); border: 1px solid #b7e4c4; padding: 12px 6px; font-size: 18px; }
+.gl-chap b { display: block; font-size: 14px; letter-spacing: .12em; color: var(--muted); margin-bottom: 4px; }
+.gl-chap .ms { color: var(--success); font-size: 20px; vertical-align: -4px; font-variation-settings: 'FILL' 1; }
+.sty-files { display: flex; gap: 12px; }
+.sty-file { flex: 1; display: flex; gap: 10px; align-items: center; background: var(--outer); border: 1px solid var(--border); padding: 14px; font-size: 19px; font-weight: 600; }
+.sty-file .ms { color: var(--primary); font-size: 26px; }
+.sty-an { margin-top: 26px; height: 8px; background: #dde2e8; overflow: hidden; }
+.sty-an i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--primary)); }
+.sty-cap { margin-top: 12px; font-size: 16px; letter-spacing: .14em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+.sty-rule { display: flex; align-items: center; gap: 16px; height: 66px; background: var(--outer); border: 1px solid var(--border); margin-top: 12px; padding: 0 20px; font-size: 26px; }
+.sty-rule .ms { color: var(--primary); font-size: 30px; font-variation-settings: 'FILL' 1; }
+.sty-preset { margin-top: 22px; display: inline-flex; gap: 10px; align-items: center; background: var(--chip); color: #fff; font-size: 18px; font-weight: 700; padding: 10px 16px; }
+.sty-preset .ms { font-size: 22px; }
+.cover { position: absolute; width: 270px; height: 390px; padding: 34px 26px; color: #f5efe0; text-align: center;
+  background: linear-gradient(160deg, #1d3350, #0f1d30); box-shadow: 10px 16px 30px rgba(31,42,58,.28); }
+.cover::before { content: ""; position: absolute; left: 12px; top: 0; bottom: 0; width: 3px; background: rgba(255,255,255,.12); }
+.cover .ct { font-size: 40px; font-weight: 700; letter-spacing: .06em; margin-top: 40px; line-height: 1.1; }
+.cover .cs { font-size: 18px; font-style: italic; margin-top: 12px; opacity: .8; }
+.cover .ca { position: absolute; left: 0; right: 0; bottom: 70px; font-size: 15px; letter-spacing: .24em; opacity: .85; }
+.cover .wave { position: absolute; left: 30px; right: 30px; top: 200px; height: 60px; border-top: 2px solid rgba(245,239,224,.35); border-radius: 50%; }
+.cover .fmt { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--teal); color: #10202c; font-size: 13px; font-weight: 800; letter-spacing: .1em; padding: 4px 10px; }
+.keep { display: flex; flex-wrap: wrap; gap: 10px; }
+.keep div { display: flex; gap: 8px; align-items: center; background: var(--success-bg); border: 1px solid #b7e4c4; padding: 9px 14px; font-size: 19px; font-weight: 600; }
+.keep .ms { color: var(--success); font-size: 22px; font-variation-settings: 'FILL' 1; }
+.fmts { display: flex; gap: 12px; }
+.fmts div { flex: 1; text-align: center; font-size: 22px; font-weight: 800; letter-spacing: .1em; padding: 12px 0; background: var(--chip); color: #fff; }
+.bil { background: var(--outer); border: 1px solid var(--border); padding: 22px 28px; }
+.bil .o { font-size: 21px; color: var(--muted); }
+.bil .t { font-size: 25px; font-weight: 600; margin: 4px 0 16px; }
+.aud { margin-top: 24px; background: var(--chip); color: #fff; padding: 22px 26px; }
+.aud .top { display: flex; align-items: center; gap: 16px; font-size: 21px; font-weight: 600; }
+.aud .top .ms { font-size: 44px; color: var(--teal); font-variation-settings: 'FILL' 1; }
+.aud .top small { margin-left: auto; font-size: 16px; opacity: .7; font-family: var(--mono); }
+.aud .wv { display: flex; align-items: center; gap: 5px; height: 90px; margin-top: 12px; }
+.aud .wv i { flex: 1; background: var(--teal); }
+
+/* ---------- scene 6: feature grid ---------- */
+#s6title { top: 110px; font-size: 84px; font-weight: 700; }
+.gchip { position: absolute; width: 390px; height: 110px; display: flex; align-items: center; gap: 20px; padding: 0 22px; }
+.gchip .ic { width: 64px; height: 64px; flex: none; display: flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); }
+.gchip .ic .ms { font-size: 36px; }
+.gchip .lb { font-size: 27px; font-weight: 600; line-height: 1.15; }
+#s6foot { top: 900px; font-size: 44px; font-style: italic; }
+#s6foot b { color: var(--primary); font-style: normal; }
+
+/* ---------- scene 7: dark crescendo ---------- */
+#s7num { top: 250px; height: 340px; font-size: 330px; font-weight: 800; line-height: 1; color: #fff; }
+#s7num sup { font-size: 200px; color: var(--teal); vertical-align: 0; position: relative; top: -95px; }
+#s7inf { top: 270px; height: 300px; transform-origin: 50% 50%; }
+#s7lang { top: 600px; font-size: 64px; letter-spacing: .3em; text-transform: uppercase; color: #e8e8e8; font-weight: 600; }
+#s7any { top: 760px; font-size: 58px; font-style: italic; color: var(--teal); }
+#s7word { top: 360px; height: 300px; font-size: 200px; font-weight: 700; line-height: 300px; color: #fff; white-space: nowrap; }
+#s7label { top: 690px; font-size: 26px; letter-spacing: .42em; text-transform: uppercase; color: var(--teal); font-weight: 600; }
+
+/* ---------- scene 8: end card ---------- */
+#s8logo { left: 50%; top: 110px; width: 340px; height: 220px; margin-left: -170px; }
+#s8title { top: 330px; font-size: 150px; font-weight: 700; line-height: 1; }
+#s8sub { top: 505px; font-size: 32px; letter-spacing: .3em; text-transform: uppercase; font-weight: 600; }
+#s8tag { top: 590px; font-size: 56px; font-style: italic; }
+#s8pills { top: 720px; display: flex; justify-content: center; gap: 14px; }
+.epill { font-size: 26px; font-weight: 700; padding: 12px 22px; background: var(--chip); color: #fff; display: flex; align-items: center; gap: 10px; }
+.epill.b { background: var(--primary); }
+.epill .ms { font-size: 28px; }
+#s8gh { top: 850px; display: flex; justify-content: center; }
+#s8gh div { display: flex; align-items: center; gap: 16px; font-size: 34px; font-weight: 600; padding: 18px 30px; }
+#s8gh .ms { font-size: 38px; color: var(--primary); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <filter id="hblur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur id="hblurStd" stdDeviation="0 0"/></filter>
+  </defs>
+</svg>
+
+<div id="stage">
+  <div id="bgDark"></div>
+  <div id="rows"></div>
+  <div id="vignette"></div>
+
+  <!-- Scene 1: intro cascade -->
+  <div class="scene" id="s1">
+    <div class="abs center" id="s1cap"></div>
+    <div class="abs center" id="s1word"></div>
+    <div class="abs center" id="s1label"></div>
+    <div class="abs" id="s1line"></div>
+  </div>
+
+  <!-- Scene 2: logo -->
+  <div class="scene" id="s2">
+    <div class="abs" id="s2ring1"></div>
+    <div class="abs" id="s2ring2"></div>
+    <div class="abs" id="s2logo"></div>
+    <div class="abs center" id="s2title"><span>T</span><span>B</span><span>L</span></div>
+    <div class="abs center" id="s2sub">Translate Books with LLMs</div>
+    <div class="abs center" id="s2tag1">Translate entire books and documents with AI.</div>
+    <div class="abs center" id="s2tag2"><b>Free</b> on your machine. <b>Cheap</b> in the cloud.</div>
+  </div>
+
+  <!-- Scene 3: UI demo -->
+  <div class="scene" id="s3">
+    <div class="abs" id="s3words">
+      <div class="s3w" id="w1" style="top:0"><small>1</small>Drop.</div>
+      <div class="s3w" id="w2" style="top:128px"><small>2</small>Choose.</div>
+      <div class="s3w" id="w3" style="top:256px"><small>3</small>Translate.</div>
+      <div class="s3w" id="w4" style="top:384px; color: var(--success)"><small style="color:var(--success)"><span class="ms" style="font-size:34px;font-variation-settings:'FILL' 1">check_circle</span></small>Done.</div>
+    </div>
+    <div class="abs" id="s3foot">Simple enough for anyone.</div>
+    <div class="abs" id="ui">
+      <div id="uiShadow"></div>
+      <div class="ui-header">
+        <div class="lg logo-mini"></div>
+        <div class="tt">TBL <small>v1.5.15</small></div>
+        <div class="st">Translate Books with LLMs</div>
+        <div class="ui-pill mono" style="left:560px"><span class="ui-dot"></span>Ollama · qwen3:14b</div>
+        <div class="ui-pill" style="left:748px"><span class="ms" style="font-size:14px;vertical-align:-2px">language</span> EN</div>
+        <div class="ui-pill" style="left:818px;padding:0 9px"><span class="ms" style="font-size:16px;vertical-align:-3px">dark_mode</span></div>
+      </div>
+      <div class="ui-tabs">
+        <div class="ui-tab active"><span class="ms">translate</span>Translate</div>
+        <div class="ui-tab"><span class="ms">science</span>Sample</div>
+        <div class="ui-tab"><span class="ms">tune</span>Settings</div>
+        <div class="ui-tab"><span class="ms">menu_book</span>Glossaries</div>
+        <div class="ui-tab"><span class="ms">brush</span>Styles</div>
+        <div class="ui-tab"><span class="ms">folder_open</span>Files</div>
+      </div>
+      <div class="ui-card">
+        <div class="ui-lbl" style="left:28px">Source language</div>
+        <div class="ui-lbl" style="left:460px">Target language</div>
+        <div class="ui-sel" style="left:28px">English<span class="ms">expand_more</span></div>
+        <div class="ui-sel" id="uiTarget" style="left:460px"><span id="uiTargetTxt">French</span><span class="ms">expand_more</span></div>
+        <div class="ui-area">
+          <div class="ui-drop" id="uiDrop">
+            <div class="ic"><span class="ms">cloud_upload</span></div>
+            <h3>Drop files to translate</h3>
+            <p>Support for TXT, EPUB, SRT, and DOCX</p>
+            <div class="ui-btn">Browse Files</div>
+          </div>
+          <div class="ui-files" id="uiFiles">
+            <h4>Selected Files:</h4>
+            <div class="ui-file"><span class="ms">menu_book</span>
+              <div><div class="nm">Moby-Dick.epub</div><div class="mt">EPUB · 1.2 MB · 135 chapters</div></div>
+              <div class="ui-badge ink" id="uiPair">English → French</div><div class="ui-badge" style="margin-left:6px">Translate</div>
+            </div>
+          </div>
+          <div class="ui-prog" id="uiProg">
+            <div class="hd">Translating (1/1) · Moby-Dick.epub<span class="pc" id="uiPct">0%</span></div>
+            <div class="ui-bar"><i id="uiBar"></i></div>
+            <div class="stt" id="uiStat">Chunk 0 / 531</div>
+            <div class="ui-prev">
+              <div><div class="cap">ORIGINAL</div>Call me Ishmael. Some years ago, never mind how long precisely, having little or no money in my purse, and nothing particular to interest me on shore, I thought I would sail about a little and see the watery part of the world.</div>
+              <div class="jp"><div class="cap">TRANSLATION · 日本語</div><span id="uiJp"></span></div>
+            </div>
+          </div>
+          <div class="ui-done" id="uiDone">
+            <span class="ms">check_circle</span>
+            <h3>Translation completed</h3>
+            <p>Moby-Dick (Japanese).epub · 531 / 531 chunks</p>
+            <div class="ui-btn"><span class="ms" style="font-size:16px;vertical-align:-3px;color:#fff;margin:0">download</span>&nbsp; Download</div>
+          </div>
+        </div>
+        <div class="ui-start" id="uiStart"><span class="ms">play_circle</span>Start</div>
+        <div class="ui-chips" style="top:478px">
+          <div class="ui-chip">Ollama</div><div class="ui-chip">qwen3:14b</div><div class="ui-chip" id="uiChipPair">English → French</div>
+        </div>
+        <div class="ui-chips" style="top:510px">
+          <div class="ui-chip b">Glossary: Auto</div><div class="ui-chip b">Style: Auto, match this book</div>
+        </div>
+        <div class="ui-dd" id="uiDD">
+          <div class="gr">MOST COMMON</div>
+          <div class="it">English</div><div class="it">Chinese</div><div class="it">Spanish</div><div class="it">French</div>
+          <div class="it">German</div><div class="it">Japanese</div><div class="it">Korean</div><div class="it">Portuguese (Brazil)</div>
+        </div>
+      </div>
+      <div id="dragfile"><span class="ms">menu_book</span>Moby-Dick.epub</div>
+      <svg id="cursor" viewBox="0 0 24 24"><path d="M5 2 L5 19 L9.5 15 L12.5 21.5 L15.3 20.3 L12.4 14 L18.5 14 Z" fill="#1f2a3a" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+
+  <!-- Scene 4: providers -->
+  <div class="scene" id="s4">
+    <div class="abs center" id="s4title">Your AI, your choice.</div>
+    <div class="pcard neu" id="pcL" style="left:140px">
+      <div class="hdr"><div class="ic"><span class="ms">computer</span></div><div class="eyebrow">Runs locally</div></div>
+      <div class="big">Free</div>
+      <div class="line">Private. Offline. Unlimited.<br><span style="color:var(--muted)">Nothing leaves your machine.</span></div>
+      <div class="chips">
+        <div class="pchip"><img src="img/ollama.png">Ollama</div>
+        <div class="pchip"><span class="ms">memory</span>LM Studio</div>
+        <div class="pchip"><span class="ms">terminal</span>llama.cpp</div>
+        <div class="pchip"><span class="ms">dns</span>vLLM</div>
+      </div>
+    </div>
+    <div class="pcard neu" id="pcR" style="left:990px">
+      <div class="hdr"><div class="ic"><span class="ms">cloud</span></div><div class="eyebrow">Cloud API</div></div>
+      <div class="big">Pennies</div>
+      <div class="line">A whole novel for less than a coffee.<br><span style="color:var(--muted)">200+ models, pay per use.</span></div>
+      <div class="chips">
+        <div class="pchip"><img src="img/openrouter.png">OpenRouter</div>
+        <div class="pchip"><img src="img/deepseek.png">DeepSeek</div>
+        <div class="pchip"><img src="img/gemini.png">Gemini</div>
+        <div class="pchip"><img src="img/mistral.png">Mistral</div>
+        <div class="pchip"><img src="img/openai.png">OpenAI</div>
+        <div class="pchip"><img src="img/poe.png">Poe</div>
+        <div class="pchip"><img src="img/nvidia.png">NVIDIA NIM</div>
+      </div>
+    </div>
+    <div class="abs center" id="s4foot">Switch models anytime, <b>even mid-book.</b></div>
+  </div>
+
+  <!-- Scene 5: hero features -->
+  <div class="scene" id="s5">
+    <div class="feat" id="f1">
+      <div class="txt"><div class="eyebrow">01 · Glossary</div><h2>Consistent names.</h2><p>Every character, place and term stays the same, from page 1 to page 1,000.</p></div>
+      <div class="vis neu">
+        <div class="gl-head"><span class="ms">menu_book</span>Azure Cloud Saga<div class="gl-tag"><span class="ms">auto_awesome</span>Auto-extracted</div></div>
+        <div class="gl-row"><span class="src">李凡清</span><span class="ms">arrow_forward</span><span class="dst">Li Fanqing</span><span class="cat">CHARACTER · ♂</span></div>
+        <div class="gl-row"><span class="src">青云宗</span><span class="ms">arrow_forward</span><span class="dst">Azure Cloud Sect</span><span class="cat">ORGANIZATION</span></div>
+        <div class="gl-row"><span class="src">天元城</span><span class="ms">arrow_forward</span><span class="dst">Tianyuan City</span><span class="cat">PLACE</span></div>
+        <div class="gl-row"><span class="src">灵石</span><span class="ms">arrow_forward</span><span class="dst">spirit stone</span><span class="cat">ITEM</span></div>
+        <div class="gl-chaps">
+          <div class="gl-chap"><b>CH. 1</b><span class="ms">check_circle</span> Li Fanqing</div>
+          <div class="gl-chap"><b>CH. 12</b><span class="ms">check_circle</span> Li Fanqing</div>
+          <div class="gl-chap"><b>CH. 87</b><span class="ms">check_circle</span> Li Fanqing</div>
+          <div class="gl-chap"><b>CH. 240</b><span class="ms">check_circle</span> Li Fanqing</div>
+        </div>
+      </div>
+    </div>
+    <div class="feat" id="f2">
+      <div class="txt"><div class="eyebrow">02 · Style analysis</div><h2>The author's voice.</h2><p>Extract a writing style from sample books. Apply it to every page.</p></div>
+      <div class="vis neu">
+        <div class="sty-files">
+          <div class="sty-file"><span class="ms">menu_book</span>sample_1.epub</div>
+          <div class="sty-file"><span class="ms">menu_book</span>sample_2.epub</div>
+          <div class="sty-file"><span class="ms">menu_book</span>sample_3.epub</div>
+        </div>
+        <div class="sty-an"><i id="styBar"></i></div>
+        <div class="sty-cap">Extracted style rules</div>
+        <div class="sty-rule"><span class="ms">check_box</span>Dry, world-weary irony</div>
+        <div class="sty-rule"><span class="ms">check_box</span>Short, declarative sentences</div>
+        <div class="sty-rule"><span class="ms">check_box</span>Sparse, concrete imagery</div>
+        <div class="sty-rule"><span class="ms">check_box</span>Clipped, natural dialogue</div>
+        <div class="sty-rule"><span class="ms">check_box</span>Understated emotion</div>
+        <div class="sty-preset"><span class="ms">brush</span>Saved as preset: Noir detective</div>
+      </div>
+    </div>
+    <div class="feat" id="f3">
+      <div class="txt"><div class="eyebrow">03 · Any format</div><h2>EPUB in.<br>EPUB out.</h2><p>Chapters, styles, images and table of contents come out intact.</p></div>
+      <div class="vis neu">
+        <div class="cover" id="cv1" style="left:48px;top:44px"><div class="ct">MOBY-DICK</div><div class="cs">or, The Whale</div><div class="wave"></div><div class="ca">HERMAN MELVILLE</div><div class="fmt">EPUB</div></div>
+        <div class="abs" id="cvArrow" style="left:365px;top:200px;width:110px;text-align:center"><span class="ms" style="font-size:80px;color:var(--primary)">arrow_forward</span></div>
+        <div class="cover" id="cv2" style="left:522px;top:44px;background:linear-gradient(160deg,#6a2432,#3a121c)"><div class="ct" style="font-size:64px;letter-spacing:.1em">白鯨</div><div class="cs" style="font-style:normal">モービィ・ディック</div><div class="wave"></div><div class="ca" style="letter-spacing:.12em">ハーマン・メルヴィル</div><div class="fmt">EPUB</div></div>
+        <div class="abs keep" style="left:48px;top:470px;width:744px">
+          <div><span class="ms">check_circle</span>Chapters</div><div><span class="ms">check_circle</span>CSS styles</div><div><span class="ms">check_circle</span>Images</div>
+          <div><span class="ms">check_circle</span>Table of contents</div><div><span class="ms">check_circle</span>Metadata</div><div><span class="ms">check_circle</span>Footnotes</div>
+        </div>
+        <div class="abs fmts" style="left:48px;top:620px;width:744px"><div>EPUB</div><div>DOCX</div><div>SRT</div><div>TXT</div></div>
+      </div>
+    </div>
+    <div class="feat" id="f4">
+      <div class="txt"><div class="eyebrow">04 · Bilingual &amp; audio</div><h2>Read it.<br>Hear it.</h2><p>Side-by-side bilingual editions, and audiobooks from your translation.</p></div>
+      <div class="vis neu">
+        <div class="bil">
+          <div class="o">Call me Ishmael.</div><div class="t">Appelez-moi Ismaël.</div>
+          <div class="o">Some years ago, having little or no money in my purse,</div><div class="t">Il y a quelques années, n'ayant presque pas d'argent en poche,</div>
+          <div class="o">I thought I would sail about a little.</div><div class="t" style="margin-bottom:0">je songeai à naviguer un peu.</div>
+        </div>
+        <div class="aud">
+          <div class="top"><span class="ms">play_circle</span>Moby-Dick (French) · Audiobook<small id="audTime">00:00:00</small></div>
+          <div class="wv" id="wave"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scene 6: feature grid -->
+  <div class="scene" id="s6">
+    <div class="abs center" id="s6title">And so much more.</div>
+    <div id="grid"></div>
+    <div class="abs center" id="s6foot">All free. <b>All open source.</b></div>
+  </div>
+
+  <!-- Scene 7: dark crescendo -->
+  <div class="scene" id="s7">
+    <div class="abs center" id="s7num"><span id="s7n">0</span></div>
+    <div class="abs center" id="s7inf"><svg width="520" height="300" viewBox="-230 -130 460 260"><path id="s7infPath" d="M0,0 C-50,-95 -195,-95 -195,0 C-195,95 -50,95 0,0 C50,-95 195,-95 195,0 C195,95 50,95 0,0 Z" fill="none" stroke="#70bccb" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" pathLength="1000"/></svg></div>
+    <div class="abs center" id="s7lang">languages</div>
+    <div class="abs center" id="s7any">If your LLM speaks it, TBL translates it.</div>
+    <div class="abs center" id="s7word"></div>
+    <div class="abs center" id="s7label"></div>
+  </div>
+
+  <!-- Scene 8: end card -->
+  <div class="scene" id="s8">
+    <div class="abs" id="s8logo"></div>
+    <div class="abs center" id="s8title">TBL</div>
+    <div class="abs center" id="s8sub">Translate Books with LLMs</div>
+    <div class="abs center" id="s8tag">One book. Every language.</div>
+    <div class="abs center" id="s8pills">
+      <div class="epill b"><span class="ms">favorite</span>Free &amp; open source</div>
+      <div class="epill"><span class="ms">desktop_windows</span>Windows</div>
+      <div class="epill"><span class="ms">laptop_mac</span>macOS</div>
+      <div class="epill"><span class="ms">deployed_code</span>Docker</div>
+      <div class="epill"><span class="ms">terminal</span>CLI</div>
+    </div>
+    <div class="abs center" id="s8gh"><div class="neu"><span class="ms">code</span>github.com/hydropix/TranslateBooksWithLLMs</div></div>
+  </div>
+
+  <div id="flash"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- helpers
+const $ = s => document.querySelector(s);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const P = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = {
+  out: x => 1 - Math.pow(1 - x, 3),
+  in: x => x * x * x,
+  inOut: x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2,
+  back: x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
+  expo: x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x),
+};
+function st(el, { o, x = 0, y = 0, s = 1, sx, sy, r = 0, b = 0 } = {}) {
+  if (o !== undefined) el.style.opacity = clamp(o);
+  el.style.transform = `translate(${x}px,${y}px) rotate(${r}deg) scale(${sx ?? s},${sy ?? s})`;
+  el.style.filter = b > 0.05 ? `blur(${b}px)` : 'none';
+}
+// Visibility window with ease-in / ease-out ramps.
+function win(t, a, b, fi = .35, fo = .3) {
+  if (t < a || t > b) return 0;
+  return Math.min(ease.out(P(t, a, a + fi)), 1 - ease.in(P(t, b - fo, b)));
+}
+// Enter-from-below / exit-upwards transform for a block.
+function rise(el, t, a, b, { d = 60, fi = .4, fo = .3, s0 = 1 } = {}) {
+  const i = ease.out(P(t, a, a + fi)), o = ease.in(P(t, b - fo, b));
+  st(el, { o: t < a || t > b ? 0 : Math.min(i, 1 - o), y: (1 - i) * d - o * d, s: lerp(s0, 1, i) });
+}
+function pop(el, t, a, dur = .32, from = .6) {
+  const k = P(t, a, a + dur);
+  st(el, { o: ease.out(P(t, a, a + dur * .6)), s: t < a ? from : lerp(from, 1, ease.back(k)) });
+}
+function cueAt(list, t) { let c = null; for (const q of list) { if (q.t <= t) c = q; else break; } return c; }
+
+// ---------------------------------------------------------------- logo svg
+let LOGO_N = 0;
+function logoSVG(w, h) {
+  const u = 'lg' + (LOGO_N++);
+  return `<svg class="logo" width="${w}" height="${h}" viewBox="14 4 188 126" style="overflow:visible">
+    <defs>
+      <linearGradient id="${u}L" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a5a5a"/><stop offset="1" stop-color="#454545"/></linearGradient>
+      <linearGradient id="${u}R" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#383838"/><stop offset="1" stop-color="#2a2a2a"/></linearGradient>
+    </defs>
+    <g class="part cov" style="transform-origin:108px 110px"><path d="M23,21 L108,31 L193,21 L193,108 Q150,108 108,124 Q66,108 23,108 Z" fill="#a9aeae"/></g>
+    <g class="part edge" style="transform-origin:108px 110px"><path d="M29,14 Q72,14 108,30 Q144,14 187,14 L187,102 Q146,102 108,120 Q70,102 29,102 Z" fill="#e6e9e9"/></g>
+    <g class="part lp" style="transform-origin:106px 60px"><path d="M35,10 Q72,11 105,28 L105,114 Q72,98 35,96 Z" fill="url(#${u}L)"/></g>
+    <g class="part rp" style="transform-origin:111px 60px"><path d="M181,10 Q144,11 111,28 L111,114 Q144,98 181,96 Z" fill="url(#${u}R)"/></g>
+    <g class="part lb" style="transform-origin:72px 60px">
+      <path d="M53,31 L91,31 Q97,31 97,37 L97,70 Q97,76 91,76 L91,76 L86,91 L79,76 L53,76 Q47,76 47,70 L47,37 Q47,31 53,31 Z" fill="#c4c7c7"/>
+      <g class="part la" style="transform-origin:72px 54px"><path d="M59,54 L71,43 L71,50 L86,50 L86,58 L71,58 L71,65 Z" fill="#262626"/></g>
+    </g>
+    <g class="part rb" style="transform-origin:144px 60px">
+      <path d="M125,31 L163,31 Q169,31 169,37 L169,70 Q169,76 163,76 L137,76 L130,91 L125,76 Q119,76 119,70 L119,37 Q119,31 125,31 Z" fill="#72bccc"/>
+      <g class="part ra" style="transform-origin:144px 54px"><path d="M157,54 L145,43 L145,50 L130,50 L130,58 L145,58 L145,65 Z" fill="#262626"/></g>
+    </g>
+  </svg>`;
+}
+// Animate a logo instance: k0 = time since logo start (s).
+function animLogo(root, k) {
+  const q = s => root.querySelector(s);
+  const cov = ease.back(P(k, 0, .45)), pages = ease.back(P(k, .05, .5));
+  q('.cov').style.transform = `scale(${lerp(.4, 1, cov)},${lerp(.2, 1, cov)})`; q('.cov').style.opacity = P(k, 0, .15);
+  q('.edge').style.transform = `scale(${lerp(.3, 1, pages)},${lerp(.3, 1, pages)})`; q('.edge').style.opacity = P(k, 0, .15);
+  q('.lp').style.transform = `scaleX(${pages})`; q('.rp').style.transform = `scaleX(${pages})`;
+  const lb = ease.back(P(k, .3, .62)), rb = ease.back(P(k, .45, .77));
+  q('.lb').style.transform = `scale(${lb})`; q('.rb').style.transform = `scale(${rb})`;
+  const la = ease.out(P(k, .55, .85)), ra = ease.out(P(k, .7, 1.0));
+  q('.la').style.transform = `translateX(${(1 - la) * 14}px)`; q('.la').style.opacity = la;
+  q('.ra').style.transform = `translateX(${(ra - 1) * 14}px)`; q('.ra').style.opacity = ra;
+}
+
+// ---------------------------------------------------------------- data
+const SENT = [
+  "Every story, in every language.", "Chaque histoire, dans chaque langue.", "Cada historia, en cada idioma.",
+  "Jede Geschichte, in jeder Sprache.", "Ogni storia, in ogni lingua.", "Cada história, em cada idioma.",
+  "每一个故事，每一种语言。", "すべての物語を、すべての言語で。", "모든 이야기를, 모든 언어로.",
+  "كل قصة، بكل لغة.", "כל סיפור, בכל שפה.", "Каждая история — на каждом языке.",
+  "हर कहानी, हर भाषा में।", "প্রতিটি গল্প, প্রতিটি ভাষায়।", "ஒவ்வொரு கதையும், ஒவ்வொரு மொழியிலும்.",
+  "ทุกเรื่องราว ในทุกภาษา", "Κάθε ιστορία, σε κάθε γλώσσα.", "Her hikâye, her dilde.",
+  "Mọi câu chuyện, bằng mọi ngôn ngữ.", "هر داستان، به هر زبان.", "Kila hadithi, kwa kila lugha.",
+  "Każda historia, w każdym języku.", "Кожна історія — кожною мовою.", "ყველა ამბავი, ყველა ენაზე.",
+  "Hver saga, á hverju tungumáli.", "Pob stori, ym mhob iaith.", "Ĉiu rakonto, en ĉiu lingvo.",
+  "Jokainen tarina, jokaisella kielellä.", "Minden történet, minden nyelven.", "Setiap cerita, dalam setiap bahasa.",
+  "Bawat kuwento, sa bawat wika.", "ہر کہانی، ہر زبان میں۔", "Түүх бүр, хэл бүрээр.", "Omnis fabula, omni lingua.",
+  "Gach scéal, i ngach teanga.", "Každý příběh, v každém jazyce.", "Elk verhaal, in elke taal.",
+  "Varje berättelse, på varje språk.", "Fiecare poveste, în fiecare limbă.", "हरेक कथा, हरेक भाषामा।",
+];
+const WORDS_SET = [...new Set([...CUES.intro, ...CUES.outro].map(c => c.w))];
+const CHIPS = [
+  ["auto_awesome", "Auto glossary<br>& style"], ["auto_fix_high", "Literary<br>refine pass"], ["restart_alt", "Pause &amp;<br>resume anytime"], ["science", "Test on a<br>sample first"],
+  ["subtitles", "Subtitles<br>stay in sync"], ["document_scanner", "OCR text<br>cleanup"], ["travel_explore", "Language<br>auto-detect"], ["bolt", "Parallel<br>requests"],
+  ["key", "API key<br>rotation"], ["notifications", "Phone<br>notifications"], ["text_fields", "CJK typography<br>& metadata"], ["all_inclusive", "No size<br>limit"],
+  ["dark_mode", "Dark<br>mode"], ["language", "UI in<br>7 languages"], ["terminal", "CLI &amp;<br>Docker"], ["devices", "Multi-device<br>workspace"],
+];
+const JP = "私をイシュメールと呼んでくれ。何年か前のこと、正確に何年前かはどうでもいいが、財布にはほとんど金がなく、陸には特に興味を引くものもなかったので、少しばかり船で出かけて、世界の海の部分を見てこようと思った。";
+
+// ---------------------------------------------------------------- background rows
+const ROWS = [];
+const NROWS = 26;
+let OFFSET = null; // precomputed cumulative distance table
+const DT = 1 / 600;
+function rowSpeed(t) {
+  if (t < 3.5) return 0;
+  if (t < 12) return 40 + 2300 * Math.pow(P(t, 3.5, 11.8), 3);
+  if (t < 47.9) return 34;
+  if (t < 53.75) return 180 + 9500 * Math.pow(P(t, 48, 53.75), 3);
+  return 30;
+}
+function buildRows() {
+  const box = $('#rows');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  for (let i = 0; i < NROWS; i++) {
+    const list = SENT.slice().sort(() => rnd() - .5);
+    const html = list.map(s => `<span dir="auto">${s}</span>`).join('');
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.top = (i * 45) + 'px';
+    row.innerHTML = `<div class="copy">${html}</div><div class="copy">${html}</div>`;
+    box.appendChild(row);
+    ROWS.push({ el: row, dir: i % 2 ? 1 : -1, mult: .65 + rnd() * .7, phase: rnd() * 3000, w: 0 });
+  }
+  const n = Math.ceil(61 / DT);
+  OFFSET = new Float64Array(n + 1);
+  for (let i = 1; i <= n; i++) OFFSET[i] = OFFSET[i - 1] + rowSpeed(i * DT) * DT;
+}
+function measureRows() { for (const r of ROWS) r.w = r.el.firstChild.getBoundingClientRect().width; }
+function renderRows(t) {
+  const off = OFFSET[Math.min(OFFSET.length - 1, Math.round(t / DT))];
+  const v = rowSpeed(t);
+  let op = 0, color = '#1f2a3a';
+  if (t < 12) op = lerp(0, .09, P(t, 3.5, 6)) + lerp(0, .08, P(t, 6, 11.4)) - .17 * P(t, 11.6, 11.95);
+  else if (t < 18) op = .045 * P(t, 12.2, 13);
+  else if (t < 47.9) op = .03;
+  else if (t < 53.75) { op = lerp(.16, .5, P(t, 48, 53.5)); color = '#e8e8e8'; }
+  else op = .035 * P(t, 54.3, 55.5);
+  const box = $('#rows');
+  box.style.opacity = clamp(op); box.style.color = color;
+  box.style.display = op <= 0.001 ? 'none' : 'block';
+  if (t >= 47.9 && t < 53.75) {
+    const k = ease.inOut(P(t, 48, 53.75));
+    box.style.transform = `rotate(${-7 * k}deg) scale(${1 + .25 * k})`;
+  } else box.style.transform = 'none';
+  const blur = clamp(v / 30 * .28, 0, 42);
+  $('#hblurStd').setAttribute('stdDeviation', `${blur.toFixed(2)} 0`);
+  box.style.filter = blur > .3 ? 'url(#hblur)' : 'none';
+  for (const r of ROWS) {
+    const d = (off * r.mult + r.phase) % r.w;
+    const x = r.dir < 0 ? -d : d - r.w;
+    r.el.style.transform = `translateX(${x.toFixed(1)}px)`;
+  }
+}
+
+// ---------------------------------------------------------------- scenes
+const SC = [];
+function scene(id, a, b, fn) { SC.push({ el: document.getElementById(id), a, b, fn }); }
+
+// Scene 1: intro, 0 - 12
+scene('s1', 0, 12.05, t => {
+  const caps = [[.4, 3.3, "One book."], [3.5, 7.0, "Every language."], [7.2, 11.4, "Translated cover to cover, by AI."]];
+  const cap = $('#s1cap');
+  let shown = false;
+  for (const [a, b, txt] of caps) if (t >= a && t <= b) {
+    cap.textContent = txt; shown = true;
+    const i = ease.out(P(t, a, a + .5)), o = ease.in(P(t, b - .3, b));
+    st(cap, { o: Math.min(i, 1 - o), y: (1 - i) * 24 - o * 16, b: (1 - i) * 6 });
+  }
+  if (!shown) cap.style.opacity = 0;
+  const c = cueAt(CUES.intro, t), w = $('#s1word'), l = $('#s1label');
+  if (c && t < CUES.introEnd) {
+    w.textContent = c.w; l.textContent = c.l;
+    const since = t - c.t, fast = t > 9;
+    const k = ease.out(clamp(since / (fast ? .06 : .22)));
+    const grow = 1 + .1 * P(t, 3, 11.5);
+    st(w, { o: Math.min(k * 1.2, 1) * (t < 1 ? 0 : 1), y: (1 - k) * (fast ? 10 : 28), s: grow * lerp(1.04, 1, k), b: (1 - k) * (fast ? 2 : 8) });
+    st(l, { o: ease.out(P(t, 1.3, 1.8)) * (fast ? .8 : 1) });
+  } else { w.style.opacity = 0; l.style.opacity = 0; }
+  const ln = $('#s1line');
+  const lk = ease.inOut(P(t, 1.2, 2.2));
+  st(ln, { o: 1 - P(t, 11.3, 11.5), sx: lk * (1 + .6 * P(t, 3, 11.4)), sy: 1 });
+  ln.style.background = `linear-gradient(90deg, #3676d8, #70bccb)`;
+});
+
+// Scene 2: logo reveal, 12 - 18
+scene('s2', 11.95, 18.05, t => {
+  const k = t - 12;
+  const lg = $('#s2logo');
+  animLogo(lg, k);
+  const out = ease.in(P(t, 17.55, 18));
+  const idle = 1 + .015 * Math.sin(k * 2.2);
+  st(lg, { o: 1 - out, y: -out * 120 + (1 - ease.out(P(k, 0, .6))) * 30, s: idle * lerp(1, .9, out) });
+  for (const [id, d] of [['#s2ring1', 0], ['#s2ring2', .18]]) {
+    const r = ease.out(P(k, d, d + 1.3)), el = $(id);
+    const size = 10 + r * 1500;
+    el.style.width = el.style.height = size + 'px';
+    el.style.marginLeft = el.style.marginTop = (-size / 2) + 'px';
+    el.style.opacity = (1 - r) * .6 * (k >= d ? 1 : 0);
+    el.style.borderWidth = (3 + (1 - r) * 5) + 'px';
+  }
+  [...$('#s2title').children].forEach((s, i) => {
+    const a = .75 + i * .12, e = ease.back(P(k, a, a + .4));
+    st(s, { o: ease.out(P(k, a, a + .2)), y: (1 - e) * 60, s: lerp(.7, 1, e) });
+  });
+  st($('#s2title'), { o: 1 - out, y: -out * 120 });
+  const sub = $('#s2sub'), sk = ease.out(P(k, 1.3, 2.1));
+  sub.style.letterSpacing = lerp(.05, .34, sk) + 'em';
+  st(sub, { o: sk * (1 - out), y: -out * 120 });
+  rise($('#s2tag1'), t, 14.4, 16.1, { d: 30 });
+  rise($('#s2tag2'), t, 16.15, 18.0, { d: 30 });
+});
+
+// Scene 3: UI demo, 18 - 26
+const UI_S = 1.2;
+const CUR_KEYS = [ // t, x, y (in UI coords)
+  [18.1, 1060, 760], [18.95, 430, 380], [19.35, 430, 380], [20.0, 700, 192], [20.2, 700, 192],
+  [20.75, 690, 391], [20.95, 690, 391], [21.45, 470, 579], [22.2, 470, 579], [22.6, 960, 700],
+];
+function curPos(t) {
+  if (t <= CUR_KEYS[0][0]) return CUR_KEYS[0];
+  for (let i = 1; i < CUR_KEYS.length; i++) {
+    const [t1, x1, y1] = CUR_KEYS[i], [t0, x0, y0] = CUR_KEYS[i - 1];
+    if (t <= t1) { const k = ease.inOut(P(t, t0, t1)); return [t, lerp(x0, x1, k), lerp(y0, y1, k)]; }
+  }
+  return CUR_KEYS[CUR_KEYS.length - 1];
+}
+scene('s3', 17.95, 26.05, t => {
+  const ui = $('#ui');
+  const i = ease.out(P(t, 18, 18.55)), o = ease.in(P(t, 25.6, 26));
+  ui.style.opacity = Math.min(i, 1 - o);
+  ui.style.transform = `translate(${(1 - i) * 220 - o * 160}px, 0) scale(${UI_S})`;
+  // left words
+  const wt = [18.35, 19.95, 21.55, 24.75];
+  ['#w1', '#w2', '#w3', '#w4'].forEach((id, n) => {
+    const el = $(id), a = wt[n];
+    const e = ease.out(P(t, a, a + .35));
+    const active = t >= a && (n === 3 || t < wt[n + 1]);
+    el.style.color = n === 3 ? '' : (active || t < a ? 'var(--ink)' : 'var(--faint)');
+    st(el, { o: e * (1 - o), x: (1 - e) * -40 - o * 80, s: active ? lerp(1.0, 1.0, 1) : 1 });
+  });
+  const f = $('#s3foot'); const fk = ease.out(P(t, 25.0, 25.4));
+  st(f, { o: fk * (1 - o), y: (1 - fk) * 20 });
+  // cursor & drag
+  const [, cx, cy] = curPos(t);
+  const clicks = [20.1, 20.9, 21.6];
+  let press = 0; for (const c of clicks) press = Math.max(press, 1 - Math.abs(t - c) / .09);
+  const cur = $('#cursor');
+  st(cur, { o: t < 18.1 ? 0 : 1 - P(t, 22.2, 22.5), x: cx, y: cy, s: 1 - .18 * clamp(press) });
+  const df = $('#dragfile');
+  const dragging = t < 19.0;
+  const dk = P(t, 18.95, 19.15);
+  st(df, { o: t < 18.1 ? 0 : (dragging ? 1 : 1 - dk), x: cx + 18, y: cy + 22, s: 1 - dk * .4, r: dragging ? -4 * (1 - P(t, 18.8, 18.95)) : 0 });
+  // drop zone highlight while hovering
+  const hover = P(t, 18.6, 18.9) * (t < 19.05 ? 1 : 0);
+  const drop = $('#uiDrop');
+  drop.style.borderColor = hover > 0 ? `rgba(54,118,216,${.4 + .6 * hover})` : '#a9c2ee';
+  drop.style.borderStyle = hover > .5 ? 'solid' : 'dashed';
+  drop.style.background = hover > 0 ? `rgba(54,118,216,${.06 * hover})` : 'transparent';
+  const files = $('#uiFiles'), prog = $('#uiProg'), done = $('#uiDone');
+  drop.style.opacity = t < 19.05 ? 1 : 0;
+  const fl = ease.out(P(t, 19.05, 19.35));
+  st(files, { o: t < 21.75 ? fl : 1 - P(t, 21.75, 21.9), y: (1 - fl) * 16 });
+  // dropdown
+  const dd = $('#uiDD');
+  const ddOpen = t >= 20.12 && t < 20.98;
+  const ddk = ease.out(P(t, 20.12, 20.3));
+  st(dd, { o: ddOpen ? ddk : 0, y: (1 - ddk) * -10 });
+  const items = dd.querySelectorAll('.it');
+  const hlIdx = t < 20.2 ? 3 : Math.round(lerp(0, 5, ease.inOut(P(t, 20.2, 20.75))));
+  items.forEach((it, n) => it.classList.toggle('hl', n === hlIdx));
+  const target = t >= 20.95 ? 'Japanese' : 'French';
+  $('#uiTargetTxt').textContent = target;
+  $('#uiPair').textContent = $('#uiChipPair').textContent = 'English → ' + target;
+  $('#uiTarget').style.borderColor = ddOpen ? 'var(--primary)' : '';
+  // start button
+  const sb = $('#uiStart');
+  const pr = clamp(1 - Math.abs(t - 21.62) / .12);
+  sb.style.transform = `scale(${1 - .06 * pr})`;
+  sb.style.boxShadow = pr > .1 ? 'inset 3px 3px 8px rgba(0,0,0,.25)' : '';
+  sb.style.opacity = t > 21.7 && t < 24.75 ? .55 : 1;
+  // progress
+  const pk = ease.inOut(P(t, 21.85, 24.6));
+  st(prog, { o: t >= 21.75 && t < 24.75 ? ease.out(P(t, 21.75, 21.95)) : 0 });
+  $('#uiBar').style.width = (pk * 100).toFixed(1) + '%';
+  $('#uiPct').textContent = Math.round(pk * 100) + '%';
+  $('#uiStat').textContent = `Chunk ${Math.round(pk * 531)} / 531  ·  qwen3:14b  ·  context preserved`;
+  $('#uiJp').textContent = JP.slice(0, Math.round(JP.length * P(t, 21.95, 24.1)));
+  const dk2 = ease.back(P(t, 24.72, 25.05));
+  st(done, { o: t >= 24.72 ? ease.out(P(t, 24.72, 24.85)) : 0, s: t >= 24.72 ? lerp(.92, 1, dk2) : .92 });
+});
+
+// Scene 4: providers, 26 - 34
+scene('s4', 25.95, 34.05, t => {
+  const o = ease.in(P(t, 33.6, 34));
+  rise($('#s4title'), t, 26.05, 34, { d: 40 });
+  for (const [id, a, dx] of [['#pcL', 26.35, -120], ['#pcR', 27.0, 120]]) {
+    const el = $(id), e = ease.out(P(t, a, a + .5));
+    st(el, { o: Math.min(e, 1 - o), x: (1 - e) * dx, y: -o * 60 });
+    const big = el.querySelector('.big'), bk = ease.back(P(t, a + .25, a + .7));
+    st(big, { o: P(t, a + .25, a + .4), s: lerp(.6, 1, bk) });
+    const chips = el.querySelectorAll('.pchip');
+    chips.forEach((c, n) => {
+      const ca = a + .55 + n * .125;
+      pop(c, t, ca, .3, .7);
+      const pulseT = 30.0 + (id === '#pcL' ? n : 4 + n) * .1875;
+      const pk = clamp(1 - Math.abs(t - pulseT) / .16);
+      c.style.background = pk > 0 ? `rgba(54,118,216,${.14 * pk + 0})` : '';
+      c.style.borderColor = pk > 0 ? `rgba(54,118,216,${.7 * pk})` : '';
+      if (t > ca + .3) c.style.transform = `scale(${1 + .06 * pk})`;
+    });
+  }
+  rise($('#s4foot'), t, 31.0, 34, { d: 30 });
+});
+
+// Scene 5: hero features, 34 - 42
+scene('s5', 33.95, 42.05, t => {
+  const F = [['#f1', 34], ['#f2', 36], ['#f3', 38], ['#f4', 40]];
+  for (const [id, a] of F) {
+    const el = $(id);
+    if (t < a - .05 || t > a + 2.05) { el.style.display = 'none'; continue; }
+    el.style.display = 'block';
+    const i = ease.out(P(t, a, a + .4)), o = ease.in(P(t, a + 1.72, a + 2));
+    const txt = el.querySelector('.txt'), vis = el.querySelector('.vis');
+    st(txt, { o: Math.min(i, 1 - o), y: (1 - i) * 70 - o * 70 });
+    st(vis, { o: Math.min(ease.out(P(t, a + .06, a + .46)), 1 - o), y: (1 - ease.out(P(t, a + .06, a + .46))) * 110 - o * 90, s: lerp(.96, 1, i) });
+    const k = t - a;
+    if (id === '#f1') {
+      el.querySelectorAll('.gl-row').forEach((r, n) => pop(r, k, .3 + n * .125, .3, .85));
+      el.querySelectorAll('.gl-chap').forEach((r, n) => pop(r, k, .9 + n * .125, .3, .6));
+    } else if (id === '#f2') {
+      el.querySelectorAll('.sty-file').forEach((r, n) => pop(r, k, .2 + n * .1, .3, .7));
+      $('#styBar').style.width = (ease.inOut(P(k, .45, .8)) * 100) + '%';
+      el.querySelectorAll('.sty-rule').forEach((r, n) => pop(r, k, .75 + n * .125, .3, .85));
+      pop(el.querySelector('.sty-preset'), k, 1.45, .3, .7);
+    } else if (id === '#f3') {
+      pop($('#cv1'), k, .15, .35, .8);
+      const w = ease.inOut(P(k, .45, 1.0));
+      const c2 = $('#cv2');
+      c2.style.clipPath = `inset(0 ${(1 - w) * 100}% 0 0)`;
+      c2.style.opacity = k > .45 ? 1 : 0;
+      st($('#cvArrow'), { o: P(k, .3, .5), x: Math.sin(k * 9) * 6 });
+      el.querySelectorAll('.keep div').forEach((r, n) => pop(r, k, .9 + n * .0625, .25, .7));
+      el.querySelectorAll('.fmts div').forEach((r, n) => pop(r, k, 1.3 + n * .0625, .25, .7));
+    } else {
+      el.querySelectorAll('.bil > div').forEach((r, n) => pop(r, k, .2 + n * .08, .3, .9));
+      const bars = el.querySelectorAll('#wave i');
+      const play = P(k, .7, .8);
+      bars.forEach((b, n) => {
+        const h = .15 + .85 * Math.abs(Math.sin(n * .7 + k * 9) * Math.sin(n * .23 + k * 4.3 + 1));
+        b.style.height = (lerp(8, 90 * h, play)) + 'px';
+        b.style.opacity = n / bars.length < P(k, .7, 1.9) ? 1 : .35;
+      });
+      const secs = Math.floor(P(k, .7, 2) * 5400);
+      $('#audTime').textContent = `0${Math.floor(secs / 3600)}:${String(Math.floor(secs / 60) % 60).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')} / 11:42:07`;
+    }
+  }
+});
+
+// Scene 6: feature grid, 42 - 48
+scene('s6', 41.95, 48.05, t => {
+  const z = ease.in(P(t, 47.45, 48));
+  rise($('#s6title'), t, 42.0, 48, { d: 40, fo: .5 });
+  document.querySelectorAll('.gchip').forEach((c, n) => {
+    const a = CUES.chips[n];
+    pop(c, t, a, .3, .5);
+    const wave = 46.5 + n * .0625;
+    const wk = clamp(1 - Math.abs(t - wave - .08) / .18);
+    c.style.background = wk > 0 ? `color-mix(in srgb, var(--primary) ${wk * 100}%, var(--bg))` : '';
+    c.style.color = wk > .5 ? '#fff' : '';
+    if (t > a + .3) {
+      const cx = parseFloat(c.style.left) + 195 - 960, cy = parseFloat(c.style.top) + 55 - 540;
+      st(c, { o: 1 - z, x: cx * z * .8, y: cy * z * .8, s: 1 + .05 * wk + z * .5, b: z * 6 });
+    }
+  });
+  rise($('#s6foot'), t, 46.25, 48, { d: 24, fo: .5 });
+});
+
+// Scene 7: dark crescendo, 48 - 53.75
+scene('s7', 47.95, 53.8, t => {
+  // Counter races up with no ceiling, then gives way to the infinity sign.
+  const n = $('#s7num'), sn = $('#s7n'), INF = 49.25;
+  const up = ease.inOut(P(t, 49.9, 50.4)), gone = ease.in(P(t, 51.6, 51.95));
+  let pop = 1, shake = 0;
+  if (t < INF) {
+    const v = Math.floor(Math.pow(10, 3.7 * Math.pow(P(t, 48.1, INF), 1.6))) - 1;
+    sn.textContent = v.toLocaleString('en-US');
+    sn.style.color = '#fff';
+    shake = 10 * P(t, INF - .25, INF) * Math.sin(t * 190);
+  }
+  st(n, { o: t < INF ? ease.out(P(t, 48.05, 48.3)) : 0, x: shake, s: lerp(1.25, 1, ease.out(P(t, 48.05, 48.6))), y: 0 });
+  const inf = $('#s7inf'), draw = ease.inOut(P(t, INF, INF + .45));
+  $('#s7infPath').style.strokeDasharray = `${draw * 1000} 1000`;
+  pop = lerp(.6, 1, ease.back(P(t, INF, INF + .4)));
+  st(inf, { o: t >= INF ? 1 - gone : 0, s: pop * lerp(1, .8, up), y: -up * 90 - gone * 60 });
+  st($('#s7lang'), { o: ease.out(P(t, 48.3, 48.7)) * (1 - gone), y: -up * 150 - gone * 60 });
+  rise($('#s7any'), t, 50.1, 51.95, { d: 30 });
+  const c = cueAt(CUES.outro, t), w = $('#s7word'), l = $('#s7label');
+  if (c && t < CUES.outroEnd) {
+    w.textContent = c.w; l.textContent = c.l;
+    const kk = ease.out(clamp((t - c.t) / .05));
+    st(w, { o: kk, s: 1 + .15 * P(t, 52, 53.75), y: (1 - kk) * 10 });
+    st(l, { o: .9 });
+  } else { w.style.opacity = 0; l.style.opacity = 0; }
+});
+
+// Scene 8: end card, 54 - 60
+scene('s8', 53.95, 60.1, t => {
+  const k = t - 54;
+  const lg = $('#s8logo');
+  animLogo(lg, k + .1);
+  const breathe = 1 + .02 * P(t, 54, 60);
+  st(lg, { o: 1, s: breathe });
+  const tt = $('#s8title'), te = ease.back(P(k, .35, .75));
+  st(tt, { o: P(k, .35, .5), y: (1 - te) * 50, s: lerp(.85, 1, te) * breathe });
+  const sb = $('#s8sub'), se = ease.out(P(k, .6, 1.3));
+  sb.style.letterSpacing = lerp(.1, .3, se) + 'em';
+  st(sb, { o: se });
+  rise($('#s8tag'), t, 55.0, 61, { d: 26 });
+  [...$('#s8pills').children].forEach((p, n) => pop(p, k, 1.5 + n * .125, .3, .6));
+  rise($('#s8gh'), t, 56.4, 61, { d: 30 });
+});
+
+// ---------------------------------------------------------------- global render
+function render(t) {
+  // stage background: light, dark during crescendo, black on the cut
+  let dark = 0;
+  if (t >= 47.75 && t < 53.75) dark = ease.inOut(P(t, 47.75, 48.0));
+  $('#bgDark').style.opacity = dark;
+  $('#bgDark').style.background = t >= 53.75 && t < 54 ? '#050505' : 'var(--dark-bg)';
+  if (t >= 53.75 && t < 54) $('#bgDark').style.opacity = 1;
+  $('#vignette').style.opacity = 1 - dark;
+  renderRows(t);
+  for (const s of SC) {
+    const on = t >= s.a && t < s.b;
+    s.el.style.display = on ? 'block' : 'none';
+    if (on) s.fn(t);
+  }
+  // flashes on the two big hits
+  let fl = 0;
+  fl = Math.max(fl, P(t, 11.6, 12.0) * (t < 12.0 ? 1 : 0) * .9);
+  if (t >= 12 && t < 12.6) fl = Math.max(fl, .9 * (1 - ease.out(P(t, 12, 12.6))));
+  if (t >= 54 && t < 54.7) fl = Math.max(fl, 1 - ease.out(P(t, 54, 54.7)));
+  $('#flash').style.opacity = fl;
+}
+
+async function init() {
+  $('#s2logo').innerHTML = logoSVG(460, 298);
+  $('#s8logo').innerHTML = logoSVG(340, 220);
+  document.querySelectorAll('.logo-mini').forEach(e => e.innerHTML = logoSVG(52, 36));
+  animLogo(document.querySelector('.logo-mini'), 5);
+  const grid = $('#grid');
+  CHIPS.forEach(([ic, lb], n) => {
+    const d = document.createElement('div');
+    d.className = 'gchip neu';
+    d.style.left = (135 + (n % 4) * 420) + 'px';
+    d.style.top = (270 + Math.floor(n / 4) * 150) + 'px';
+    d.innerHTML = `<div class="ic"><span class="ms">${ic}</span></div><div class="lb">${lb}</div>`;
+    grid.appendChild(d);
+  });
+  const wave = $('#wave');
+  for (let i = 0; i < 56; i++) wave.appendChild(document.createElement('i'));
+  buildRows();
+  // Force every script glyph to be laid out once so webfont subsets load.
+  const pre = document.createElement('div');
+  pre.style.cssText = 'position:absolute;left:-6000px;top:0;width:3000px;font-size:40px;font-weight:700;visibility:hidden';
+  pre.innerHTML = WORDS_SET.join(' ') + ' ' + SENT.join(' ') + ' ' + JP + ' 李凡清青云宗天元城灵石 白鯨モービィ・ディックハーマン・メルヴィル';
+  document.body.appendChild(pre);
+  const pre2 = pre.cloneNode(true); pre2.style.fontWeight = 600; document.body.appendChild(pre2);
+  const pre3 = pre.cloneNode(true); pre3.style.fontWeight = 400; document.body.appendChild(pre3);
+  await document.fonts.ready;
+  await new Promise(r => setTimeout(r, 1500));
+  await document.fonts.ready;
+  measureRows();
+  render(0);
+  window.READY = true;
+}
+window.render = render;
+init();
+</script>
+</body>
+</html>

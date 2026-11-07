@@ -77,6 +77,8 @@ export function renderTranslationTitle(file) {
     let titleText;
     if (file.operation === 'refine') {
         titleText = t('translation:refining');
+    } else if (file.operation === 'term_fix') {
+        titleText = t('translation:fixing_terms');
     } else if (file.refineAfter) {
         titleText = t('translation:translating_step', { step: 1, total: 2, defaultValue: 'Translating (1/2)' });
     } else {

@@ -12,6 +12,7 @@ oversized block).
 
 Used by the EPUB and DOCX adapters when prompt_options['plain_text_mode'] is True.
 """
+import math
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -224,6 +225,157 @@ async def _repair_segment_by_paragraph(
         )
 
     return PARAGRAPH_SEPARATOR.join(repaired), failed
+
+
+# A range this small is repaired paragraph by paragraph straight away: bisecting
+# it cannot beat its own paragraph count (issue #259).
+BISECTION_PER_PARAGRAPH_MAX = 3
+
+
+def bisection_repair_call_budget(paragraph_count: int) -> int:
+    """Most LLM calls the bisection repair may spend on one segment.
+
+    The old one-call-per-paragraph cost plus two calls per bisection level.
+    """
+    if paragraph_count <= 1:
+        return paragraph_count
+    return paragraph_count + 2 * math.ceil(math.log2(paragraph_count))
+
+
+async def _repair_segment_by_bisection(
+    segment: Dict[str, Any],
+    source_paragraphs: List[str],
+    *,
+    translate_range: Callable[[str, str, str, Dict[str, Any]], Awaitable[Optional[str]]],
+    translate_one: Callable[[str, str, str], Awaitable[Optional[str]]],
+    prompt_options: Optional[Dict[str, Any]] = None,
+    log_callback: Optional[Callable],
+    segment_index: int,
+    context_before: str = "",
+    context_after: str = "",
+) -> Tuple[str, int, int]:
+    """Repair a mismatched segment by locating the divergence (issue #259).
+
+    The segment already failed twice (first attempt and the count-stating
+    retry), but a wrong count is almost always local: most mismatches are off
+    by exactly one paragraph. Re-translating every paragraph to fix one
+    boundary is what made the old repair cost one call per paragraph.
+
+    The segment is split in two halves, each re-translated as one call with
+    its expected count stated. A half that comes back with the exact count is
+    accepted as is; a half that does not is split again, so the search narrows
+    onto the misbehaving paragraphs. A range of BISECTION_PER_PARAGRAPH_MAX
+    paragraphs or fewer goes through _repair_segment_by_paragraph, and a
+    one-paragraph half is translated directly with its surplus merged back.
+
+    A model failing across the board (both halves mismatch at every level)
+    would make blind bisection cost more than the old repair, so the search
+    runs under a call budget, bisection_repair_call_budget(len): a split is
+    only made while every still-unresolved paragraph could be finished one
+    call each within it, otherwise the range goes paragraph by paragraph. The
+    worst case is therefore the old cost plus two calls per bisection level.
+    A +1/-1 mismatch on a 53-paragraph segment costs 2 calls when the halves
+    obey the stated count, and at most 12 when one paragraph keeps failing.
+
+    The alignment guarantee is unchanged: a half is only accepted on an exact
+    count match (the same _paragraph_count_mismatch test as everywhere else),
+    and everything below that is positional by construction.
+
+    translate_range(text, context_before, context_after, options) and
+    translate_one(text, context_before, context_after) are injected so this
+    stays testable without an LLM client.
+
+    Returns (joined_text, failed_count, calls_made). joined_text holds exactly
+    len(segment['indices']) paragraphs separated by PARAGRAPH_SEPARATOR.
+    """
+    texts = [source_paragraphs[idx] for idx in segment['indices']]
+    calls = 0
+    failed = 0
+
+    def _context(lo: int, hi: int) -> Tuple[str, str]:
+        before = texts[lo - 1] if lo > 0 else context_before
+        after = texts[hi] if hi < len(texts) else context_after
+        return before, after
+
+    async def _counting_one(text, before, after):
+        nonlocal calls
+        calls += 1
+        return await translate_one(text, before, after)
+
+    async def _per_paragraph(lo: int, hi: int) -> List[str]:
+        nonlocal failed
+        before, after = _context(lo, hi)
+        joined, range_failed = await _repair_segment_by_paragraph(
+            {'indices': segment['indices'][lo:hi]},
+            source_paragraphs,
+            translate_one=_counting_one,
+            log_callback=None,
+            segment_index=segment_index,
+            context_before=before,
+            context_after=after,
+        )
+        failed += range_failed
+        return joined.split(PARAGRAPH_SEPARATOR)
+
+    async def _attempt(lo: int, hi: int) -> Optional[List[str]]:
+        """One call for texts[lo:hi]; the paragraphs on an exact count, else None."""
+        nonlocal calls
+        if hi - lo == 1:
+            return await _per_paragraph(lo, hi)
+        before, after = _context(lo, hi)
+        main_content = PARAGRAPH_SEPARATOR.join(texts[lo:hi])
+
+        async def _translate_segment(text, options):
+            return await translate_range(text, before, after, options)
+
+        calls += 1
+        answer = await _retry_segment_with_paragraph_count(
+            main_content,
+            hi - lo,
+            translate_segment=_translate_segment,
+            prompt_options=prompt_options,
+        )
+        if answer is None:
+            return None
+        return _split_translated_back_to_paragraphs(answer)
+
+    async def _resolve(lo: int, hi: int) -> List[str]:
+        """Translate texts[lo:hi], a range already known to mismatch."""
+        nonlocal resolved
+        # Every unresolved paragraph can always be finished at one call each,
+        # so a split (two calls) is only made while that fallback still fits.
+        affordable = calls + 2 + (total - resolved) <= budget
+        if hi - lo <= BISECTION_PER_PARAGRAPH_MAX or not affordable:
+            out = await _per_paragraph(lo, hi)
+            resolved += hi - lo
+            return out
+        mid = lo + (hi - lo) // 2
+        left = await _attempt(lo, mid)
+        if left is not None:
+            resolved += mid - lo
+        right = await _attempt(mid, hi)
+        if right is not None:
+            resolved += hi - mid
+        if left is None:
+            left = await _resolve(lo, mid)
+        if right is None:
+            right = await _resolve(mid, hi)
+        return left + right
+
+    total = len(texts)
+    resolved = 0
+    budget = bisection_repair_call_budget(total)
+
+    repaired = await _resolve(0, len(texts))
+
+    if failed and log_callback:
+        log_callback(
+            "plain_text_paragraph_repair_failed",
+            f"⚠️ Segment {segment_index + 1}: {failed} of {len(texts)} paragraph(s) "
+            "could not be re-translated - they keep their source text"
+        )
+
+    return PARAGRAPH_SEPARATOR.join(repaired), failed, calls
 
 
 def build_plain_segments(
@@ -569,6 +721,14 @@ async def translate_paragraphs_plain(
         """
         return await _request(text, context_before, context_after, "")
 
+    async def _translate_paragraph_range(text, context_before, context_after, options):
+        """Repair call for a sub-range of a segment, with its count stated.
+
+        Same empty previous_translation_context as _translate_one_paragraph,
+        for the same reason.
+        """
+        return await _request(text, context_before, context_after, "", options)
+
     def _fill_remaining_with_source():
         for j in range(len(chunks)):
             if translated_parts[j] is None:
@@ -603,6 +763,9 @@ async def translate_paragraphs_plain(
     pending = unfinished_chunk_indices(statuses)
     rate_limit_error = None
     delivered = 0
+    # Extra LLM calls spent by the mismatch repair, surfaced in the log so a
+    # metered key can see the overhead while the run is going (issue #259).
+    repair_calls_total = 0
 
     # Continuous concurrency with in-order delivery (see iter_ordered_concurrent).
     # aclosing() is required: the rate-limit branch breaks out of the loop, and
@@ -729,7 +892,7 @@ async def translate_paragraphs_plain(
                                             "plain_text_paragraph_repair_started",
                                             f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the "
                                             f"retry did not return {expected} paragraph(s) - "
-                                            "re-translating this segment paragraph by paragraph"
+                                            "locating the divergence to repair this segment"
                                         )
                                     # Repaired here, inside the ordered consumer
                                     # loop and before the checkpoint hook below,
@@ -737,15 +900,26 @@ async def translate_paragraphs_plain(
                                     # repaired text. Never inside
                                     # _translate_chunk: that runs under the
                                     # worker semaphore and would deadlock.
-                                    repaired, repair_failed = await _repair_segment_by_paragraph(
+                                    repaired, repair_failed, repair_calls = await _repair_segment_by_bisection(
                                         segments[i],
                                         source,
+                                        translate_range=_translate_paragraph_range,
                                         translate_one=_translate_one_paragraph,
+                                        prompt_options=prompt_options,
                                         log_callback=log_callback,
                                         segment_index=i,
                                         context_before=chunks[i].get('context_before', ''),
                                         context_after=chunks[i].get('context_after', ''),
                                     )
+                                    repair_calls_total += repair_calls
+                                    if log_callback:
+                                        log_callback(
+                                            "plain_text_paragraph_repair_done",
+                                            f"Chunk {i + 1}/{len(chunks)} (segment {i}): repaired "
+                                            f"{expected} paragraph(s) in {repair_calls} extra "
+                                            f"call(s) ({repair_calls_total} repair call(s) so far "
+                                            "in this file)"
+                                        )
                                     if _paragraph_count_mismatch(repaired, expected) is None:
                                         # Single joined string, as the checkpoint
                                         # format and _reassemble both expect.
@@ -763,7 +937,7 @@ async def translate_paragraphs_plain(
                                             log_callback(
                                                 "plain_text_paragraph_repair_failed",
                                                 f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): "
-                                                "the per-paragraph repair still returned the wrong "
+                                                "the repair still returned the wrong "
                                                 "count - keeping the original translation"
                                             )
                     # A retried segment sits inside the restored prefix and

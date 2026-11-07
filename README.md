@@ -231,6 +231,7 @@ Two things stay local to the device: if you queue several files, other devices o
 | [docs/API_KEY_ROTATION.md](docs/API_KEY_ROTATION.md) | Use multiple API keys per provider with automatic failover on rate-limit |
 | [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Webhook notifications on completion (ntfy, gotify, Discord, Slack, custom) |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Force consistent term translations across a book (Web UI + CLI, auto-extract via NER) |
+| [docs/TERM_FIX.md](docs/TERM_FIX.md) | Fix a term in an already-translated book without translating again (Web UI + CLI) |
 | [docs/STYLE_EXTRACTION.md](docs/STYLE_EXTRACTION.md) | Extract a reusable writing-style preset from sample books and apply it to every chunk (Web UI) |
 | [docs/CLI.md](docs/CLI.md) | Complete CLI reference |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problem solutions |

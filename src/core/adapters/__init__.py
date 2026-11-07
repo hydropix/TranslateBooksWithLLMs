@@ -26,6 +26,9 @@ from .translate_file import translate_file, get_file_type_from_path, build_trans
 # Refine-only entry point
 from .refine_file import refine_file
 
+# Term-fix entry point (correct terms in an already-translated file)
+from .term_fix_file import term_fix_file, scan_file
+
 # Error handling system (Phase 5)
 from .exceptions import (
     TranslationError,
@@ -67,6 +70,10 @@ __all__ = [
 
     # Refine-only entry point
     'refine_file',
+
+    # Term-fix entry point
+    'term_fix_file',
+    'scan_file',
 
     # Error handling - Exceptions
     'TranslationError',

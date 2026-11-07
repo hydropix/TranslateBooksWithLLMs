@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.core.glossary.models import normalize_gender
+from src.core.glossary.name_scan import take_glossary_samples
 from src.core.glossary.ner import suggest_terms
 from src.core.style.assembler import assemble_instructions
 from src.core.style.extractor import extract_style
@@ -197,10 +198,12 @@ def extract_source_text(
 async def auto_glossary(
     text: str, source_language: str, target_language: str, llm_client
 ) -> tuple[dict[str, str], dict[str, dict[str, str]], int, list[str]]:
-    """One NER pass over distributed excerpts of `text`.
+    """One NER pass over excerpts of `text` that target its recurring names.
 
-    Samples with take_distributed_samples(text, GLOSSARY_MAX_CHARS,
-    GLOSSARY_SAMPLE_COUNT, min_sample_size=GLOSSARY_MIN_SAMPLE_SIZE), then calls
+    Samples with take_glossary_samples(text, GLOSSARY_MAX_CHARS,
+    GLOSSARY_SAMPLE_COUNT, min_sample_size=GLOSSARY_MIN_SAMPLE_SIZE) — a few
+    evenly spaced excerpts plus a short window around each recurring name the
+    whole-text scan found (plain distributed excerpts when it finds none) — then calls
     `suggest_terms(sample, source_language, target_language, llm_client,
     max_chars=GLOSSARY_MAX_CHARS)` and converts via candidates_to_glossary.
 
@@ -216,12 +219,17 @@ async def auto_glossary(
         return {}, {}, 0, warnings
 
     try:
-        sample, excerpt_count = document_sampler.take_distributed_samples(
+        sample, excerpt_count, names_targeted = take_glossary_samples(
             text,
             GLOSSARY_MAX_CHARS,
             GLOSSARY_SAMPLE_COUNT,
             min_sample_size=GLOSSARY_MIN_SAMPLE_SIZE,
         )
+        if names_targeted:
+            logger.info(
+                "auto glossary sample targets %d recurring names found across %d chars",
+                names_targeted, len(text),
+            )
         candidates, ner_warnings = await suggest_terms(
             sample,
             source_language,

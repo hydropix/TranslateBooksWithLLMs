@@ -422,8 +422,10 @@ async def _make_llm_request_with_adaptive_context(
 
         except RepetitionLoopError as e:
             # Repetition loop detected - this typically happens with thinking models
-            # when context window is too small. Try increasing context.
-            if context_manager:
+            # when context window is too small. Try increasing context, but only a
+            # bounded number of times: a loop that survives larger windows is the
+            # model looping on this chunk, not a context size problem.
+            if context_manager and context_manager.should_retry_repetition_loop():
                 old_context = context_manager.get_context_size()
                 # Force a larger context increase for repetition loops
                 context_manager.increase_context()
@@ -531,23 +533,33 @@ async def generate_translation_request(main_content, context_before, context_aft
             log_callback("skip_translation", f"Skipping LLM for single/empty character: '{main_content}'")
         return main_content
 
-    # Use the adaptive context handler
-    translated_text, _, _ = await _make_llm_request_with_adaptive_context(
-        main_content=main_content,
-        context_before=context_before,
-        context_after=context_after,
-        previous_translation_context=previous_translation_context,
-        source_language=source_language,
-        target_language=target_language,
-        model=model,
-        llm_client=llm_client,
-        log_callback=log_callback,
-        has_placeholders=has_placeholders,
-        prompt_options=prompt_options,
-        context_manager=context_manager,
-        placeholder_format=placeholder_format,
-        raw_response_callback=raw_response_callback,
-    )
+    # Use the adaptive context handler. Each chunk gets its own context growth
+    # budget, and a chunk that still fails gives back what it grew.
+    if context_manager:
+        context_manager.begin_request()
+    try:
+        translated_text, _, _ = await _make_llm_request_with_adaptive_context(
+            main_content=main_content,
+            context_before=context_before,
+            context_after=context_after,
+            previous_translation_context=previous_translation_context,
+            source_language=source_language,
+            target_language=target_language,
+            model=model,
+            llm_client=llm_client,
+            log_callback=log_callback,
+            has_placeholders=has_placeholders,
+            prompt_options=prompt_options,
+            context_manager=context_manager,
+            placeholder_format=placeholder_format,
+            raw_response_callback=raw_response_callback,
+        )
+    except BaseException:
+        if context_manager:
+            context_manager.abandon_request()
+        raise
+    if not translated_text and context_manager:
+        context_manager.abandon_request()
 
     if translated_text:
         return translated_text
@@ -561,7 +573,7 @@ async def generate_translation_request(main_content, context_before, context_aft
 
 
 
-async def _make_refinement_request(
+async def _refinement_request_attempt(
     draft_translation: str,
     context_before: str,
     context_after: str,
@@ -696,8 +708,9 @@ async def _make_refinement_request(
                     return None, llm_response
 
         except RepetitionLoopError as e:
-            # Repetition loop detected - try increasing context (double increase)
-            if context_manager:
+            # Repetition loop detected - try increasing context (double increase),
+            # a bounded number of times per chunk
+            if context_manager and context_manager.should_retry_repetition_loop():
                 old_context = context_manager.get_context_size()
                 context_manager.increase_context()
                 context_manager.increase_context()  # Double increase for repetition loops
@@ -729,6 +742,27 @@ async def _make_refinement_request(
                 log_callback("refinement_error",
                     f"⚠️ Refinement context overflow, cannot recover: {e}")
             return None, last_response
+
+
+async def _make_refinement_request(**kwargs) -> Tuple[Optional[str], Optional[LLMResponse]]:
+    """Refine one chunk with its own context growth budget.
+
+    Wraps _refinement_request_attempt: the context manager (if any) starts a
+    fresh per-chunk budget, and a chunk that still fails gives back the
+    context it grew, so one bad chunk cannot inflate every later request.
+    """
+    context_manager = kwargs.get('context_manager')
+    if context_manager:
+        context_manager.begin_request()
+    try:
+        refined_text, llm_response = await _refinement_request_attempt(**kwargs)
+    except BaseException:
+        if context_manager:
+            context_manager.abandon_request()
+        raise
+    if refined_text is None and context_manager:
+        context_manager.abandon_request()
+    return refined_text, llm_response
 
 
 async def refine_chunks(

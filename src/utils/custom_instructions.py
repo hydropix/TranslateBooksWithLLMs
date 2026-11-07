@@ -27,13 +27,15 @@ from typing import Optional, TypedDict
 import yaml
 
 
-# Letters and digits from any script (`\w` is Unicode-aware), plus `_-.`,
-# spaces and parentheses, so a preset renamed by hand to "Romance (v2).yaml"
-# or "武侠.yaml" is still listed. Path separators and every character Windows
-# forbids in a filename stay excluded, and a leading dot or space is refused
-# so hidden files and `..` never match. `resolve_inside` remains the
-# authoritative containment check.
-SAFE_FILENAME_RE = re.compile(r"^(?![.\s])[\w\-. ()]+\.(?:txt|ya?ml)$", re.IGNORECASE)
+# Any character is allowed in a preset filename except path separators, the
+# characters Windows forbids (`<>:"/\|?*`) and control characters, so a preset
+# renamed by hand to "Romance, tome 1 (v2).txt", "L'été [draft].txt" or
+# "武侠.yaml" is still listed. A leading dot or space is refused so hidden
+# files and `..` never match. `resolve_inside` remains the authoritative
+# containment check.
+SAFE_FILENAME_RE = re.compile(
+    r'^(?![.\s])[^<>:"/\\|?*\x00-\x1f]+\.(?:txt|ya?ml)\Z', re.IGNORECASE
+)
 SUPPORTED_EXTENSIONS = (".txt", ".yaml", ".yml")
 
 # Key order enforced when write_preset serializes a preset. Unknown keys
@@ -88,8 +90,35 @@ yaml.add_representer(LiteralStr, _represent_literal_str, Dumper=yaml.SafeDumper)
 
 
 def is_safe_filename(filename: str) -> bool:
-    """Whitelist filenames to letters/digits (any script), `_-. ()` and a supported extension."""
+    """Accept filenames free of path separators, Windows-forbidden and control characters, with a supported extension."""
     return bool(SAFE_FILENAME_RE.match(filename or ""))
+
+
+def _read_text(file_path: Path) -> str:
+    """Read a preset as UTF-8 (BOM stripped), falling back to strict Windows-1252.
+
+    Files saved as "ANSI" by Windows Notepad are decoded as cp1252. Anything
+    that cannot be decoded losslessly (UTF-16, NUL bytes, bytes undefined in
+    cp1252) raises ValueError so it is never mis-read, injected into a prompt
+    or rewritten with replacement characters by a later save.
+    """
+    data = file_path.read_bytes()
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
+        raise ValueError(
+            f"Preset '{file_path.name}' is not a UTF-8 or ANSI text file "
+            f"(UTF-16?). Re-save it as UTF-8."
+        )
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return data.decode("cp1252")
+    except UnicodeDecodeError:
+        raise ValueError(
+            f"Preset '{file_path.name}' has an unknown text encoding. "
+            f"Re-save it as UTF-8."
+        ) from None
 
 
 def resolve_inside(directory: Path, filename: str) -> Optional[Path]:
@@ -174,8 +203,8 @@ def load_custom_instructions(
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: letters, digits, "
-            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Not allowed: "
+            f"path separators, any of <>:\"|?*; extension must be .txt, .yaml, or .yml."
         )
 
     file_path = resolve_inside(custom_instructions_dir, filename)
@@ -192,7 +221,7 @@ def load_custom_instructions(
     # exports default to UTF-8-with-BOM). Plain `utf-8` would leave the BOM
     # as a literal `﻿` character at the start of the parsed value, and
     # would also raise UnicodeDecodeError on a Latin-1 file.
-    raw = file_path.read_text(encoding="utf-8-sig")
+    raw = _read_text(file_path)
 
     if suffix == ".txt":
         text = raw.strip()
@@ -235,8 +264,8 @@ def read_preset(filename: str, custom_instructions_dir: Path) -> dict:
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: letters, digits, "
-            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Not allowed: "
+            f"path separators, any of <>:\"|?*; extension must be .txt, .yaml, or .yml."
         )
 
     file_path = resolve_inside(custom_instructions_dir, filename)
@@ -249,7 +278,7 @@ def read_preset(filename: str, custom_instructions_dir: Path) -> dict:
         raise FileNotFoundError(f"Custom instructions file not found: {filename}")
 
     suffix = file_path.suffix.lower()
-    raw = file_path.read_text(encoding="utf-8-sig")
+    raw = _read_text(file_path)
 
     result: dict = {
         "filename": filename,
@@ -331,8 +360,8 @@ def write_preset(
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: letters, digits, "
-            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Not allowed: "
+            f"path separators, any of <>:\"|?*; extension must be .txt, .yaml, or .yml."
         )
 
     target = resolve_inside(custom_instructions_dir, filename)
@@ -352,7 +381,7 @@ def write_preset(
     existing_data: dict = {}
     if overwrite and target.exists():
         try:
-            existing_raw = target.read_text(encoding="utf-8-sig")
+            existing_raw = _read_text(target)
             existing_parsed = yaml.safe_load(existing_raw)
             if isinstance(existing_parsed, dict):
                 existing_data = existing_parsed
@@ -465,8 +494,8 @@ def _checked_target(filename: str, custom_instructions_dir: Path) -> Path:
     """Validate `filename` and return its path inside the directory."""
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: letters, digits, "
-            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Not allowed: "
+            f"path separators, any of <>:\"|?*; extension must be .txt, .yaml, or .yml."
         )
     target = resolve_inside(custom_instructions_dir, filename)
     if target is None:
@@ -487,8 +516,8 @@ def delete_preset(filename: str, custom_instructions_dir: Path) -> bool:
     """
     if not is_safe_filename(filename):
         raise ValueError(
-            f"Invalid filename '{filename}'. Allowed: letters, digits, "
-            f"spaces, `_`, `-`, `.`, `(`, `)`; extension must be .txt, .yaml, or .yml."
+            f"Invalid filename '{filename}'. Not allowed: "
+            f"path separators, any of <>:\"|?*; extension must be .txt, .yaml, or .yml."
         )
 
     target = resolve_inside(custom_instructions_dir, filename)

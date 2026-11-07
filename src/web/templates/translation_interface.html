@@ -490,6 +490,37 @@
                     <input type="file" id="fileInputRefine" accept=".txt,.epub,.srt,.docx" style="display: none;" onchange="handleFileSelectRefine(event)" multiple>
                 </div>
 
+                <!-- File Upload Area (Term fix, secondary) -->
+                <div class="file-upload file-upload-secondary" id="fileUploadTermFix" data-zone="term_fix" onclick="document.getElementById('fileInputTermFix').click()">
+                    <div class="upload-icon">
+                        <span class="material-symbols-outlined">spellcheck</span>
+                    </div>
+                    <h4 data-i18n="translation:drop_files_term_fix_title">Drop files to fix a term (already translated)</h4>
+                    <p data-i18n="translation:drop_files_term_fix_support">Replace a term the glossary missed, without translating again</p>
+                    <input type="file" id="fileInputTermFix" accept=".txt,.epub,.srt,.docx" style="display: none;" onchange="handleFileSelectTermFix(event)" multiple>
+                </div>
+
+                <!-- Term fix rules (shown while the queue holds term-fix files) -->
+                <div id="termFixPanel" class="term-fix-panel hidden">
+                    <h4 data-i18n="translation:term_fix_panel_title">Terms to fix</h4>
+                    <p class="term-fix-help" data-i18n="translation:term_fix_rules_help">One rule per line: the wrong forms found in the translation, separated by |, then -> and the correct term. A * at the end of a form matches every word starting with it.</p>
+                    <textarea id="termFixRules" class="form-control term-fix-rules" rows="4" spellcheck="false"
+                              data-i18n-attr="placeholder:translation:term_fix_rules_placeholder;aria-label:translation:term_fix_panel_title"
+                              placeholder="Drakbrand*|Fire Drake -> Eldsdraken"></textarea>
+                    <div class="term-fix-row">
+                        <label for="termFixMode" data-i18n="translation:term_fix_mode_label">Mode</label>
+                        <select id="termFixMode" class="form-control term-fix-mode">
+                            <option value="smart" data-i18n="translation:term_fix_mode_smart">Smart: the LLM inflects the term and fixes agreement</option>
+                            <option value="literal" data-i18n="translation:term_fix_mode_literal">Literal: plain replacement, no LLM, no * wildcards</option>
+                        </select>
+                        <button type="button" id="termFixScanBtn" class="btn btn-secondary term-fix-scan-btn">
+                            <span class="material-symbols-outlined">search</span>
+                            <span data-i18n="translation:term_fix_scan_button">Check matches</span>
+                        </button>
+                    </div>
+                    <div id="termFixScanResults" class="term-fix-results" aria-live="polite"></div>
+                </div>
+
                 <!-- File Info Section (Batch Files) -->
                 <div id="fileInfo" class="hidden" style="margin-bottom: 20px; margin-top: 20px;">
                     <h4 data-i18n="translation:selected_files" style="color: var(--text-dark); font-weight: 700; margin-bottom: 1rem;">Selected Files:</h4>
@@ -1979,7 +2010,7 @@
             <div class="modal-body" id="ner-modal-body">
                 <div id="ner-input-step">
                     <p class="ner-modal-intro" data-i18n-html="glossary:ner_intro">
-                        Pick a source file (TXT, SRT, EPUB, DOCX, PDF). The LLM will scan <strong id="ner-budget-label">6000</strong> characters drawn from <strong id="ner-samples-label">10</strong> evenly-spaced excerpts across the document, and propose recurring named entities. You'll review and edit each candidate before it joins the glossary.
+                        Pick a source file (TXT, SRT, EPUB, DOCX, PDF). The LLM will read <strong id="ner-budget-label">6000</strong> characters: up to <strong id="ner-samples-label">10</strong> evenly-spaced excerpts, plus short passages around the recurring names found by a scan of the whole document. It proposes recurring named entities, and you'll review and edit each candidate before it joins the glossary.
                     </p>
                     <input type="file" id="ner-file-input" accept=".txt,.srt,.epub,.docx,.pdf" style="display: none;">
                     <div id="ner-drop-zone" class="glossary-ner-dropzone">
@@ -2149,6 +2180,6 @@
 
     <!-- Scripts -->
     <script src="/static/js/vendor/socket.io.min.js"></script>
-    <script type="module" src="/static/js/index.js?v=20260802-preflight1"></script>
+    <script type="module" src="/static/js/index.js?v=20261103-termfix1"></script>
 </body>
 </html>

@@ -19,7 +19,7 @@ from src.utils.custom_instructions import (
     is_safe_filename,
 )
 from src.core import auto_prep
-from src.core.llm import OpenRouterProvider
+from src.core.llm.cost_tracker import begin_job_cost_tracking, end_job_cost_tracking
 from src.core.llm.exceptions import RateLimitError
 from src.core.llm_client import create_llm_client
 from src.config import AUTO_PAUSE_ON_RATE_LIMIT, RATE_LIMIT_AUTO_RESUME_DELAY
@@ -64,7 +64,7 @@ def resolve_custom_instructions(prompt_options, custom_instructions_dir, log_cal
             log_callback(
                 "custom_instructions_invalid",
                 f"⚠️ Custom instructions file name '{custom_instruction_file}' is invalid "
-                f"(allowed: letters, digits, spaces, underscore, hyphen, dot, parentheses; must end in .txt, .yaml, or .yml). "
+                f"(no path separators or any of <>:\"|?*; must end in .txt, .yaml, or .yml). "
                 f"Translation will proceed without it."
             )
         else:
@@ -142,6 +142,10 @@ def _auto_prep_wants(config):
             config['prompt_options'] = prompt_options
 
         glossary_requested, style_requested = auto_prep.normalize_auto_flags(prompt_options)
+        if config.get('term_fix'):
+            # A term fix sends no translation or refinement prompt, so neither
+            # an auto glossary nor an auto style would ever be used.
+            return False, False
 
         want_glossary = bool(
             glossary_requested
@@ -564,6 +568,14 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             'enable_refinement': False, 'refine_only': True, 'current_phase': 1,
         })
 
+    def _term_fix_stats_callback(new_stats_dict):
+        # Single-phase like refine-only (same progress mapping); the extra flag
+        # lets the UI name the work "Fixing terms" instead of "Refining".
+        _emit_progress(new_stats_dict, {
+            'enable_refinement': False, 'refine_only': True, 'term_fix': True,
+            'current_phase': 1,
+        })
+
     def _finalize_stats_callback(new_stats_dict):
         # Finalization pushes (e.g. final elapsed_time) must not re-assert a
         # phase; the stored stats already carry the terminal phase/percent.
@@ -578,21 +590,23 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
 
     def _openrouter_cost_callback(cost_data):
         """Update OpenRouter cost in state. No emit: this callback runs on the
-        provider's HTTP response thread, and a cross-thread emit can overtake
-        the main loop's stats emit on the wire (showing a stale snapshot and
+        job's event loop thread (inside the provider call), and an emit from
+        here can overtake the stats emit on the wire (showing a stale snapshot and
         rolling the progress bar backward). The cost is picked up by the next
         chunk's stats_callback, which is the same thread that owns progress."""
         if state_manager.exists(translation_id):
             state_manager.update_stats(translation_id, {
                 'openrouter_cost': cost_data['session_cost'],
                 'openrouter_prompt_tokens': cost_data['total_prompt_tokens'],
-                'openrouter_completion_tokens': cost_data['total_completion_tokens']
+                'openrouter_completion_tokens': cost_data['total_completion_tokens'],
+                # True when any request fell back to a rate estimate
+                'openrouter_cost_estimated': cost_data.get('cost_is_estimated', False),
             })
 
-    # Setup OpenRouter cost callback if using OpenRouter provider
+    # Per-job cost tracking (ContextVar): concurrent jobs keep separate totals.
+    cost_tracking_token = None
     if config.get('llm_provider') == 'openrouter':
-        OpenRouterProvider.reset_session_cost()
-        OpenRouterProvider.set_cost_callback(_openrouter_cost_callback)
+        _, cost_tracking_token = begin_job_cost_tracking(_openrouter_cost_callback)
 
     # Get checkpoint manager and handle resume
     checkpoint_manager = state_manager.get_checkpoint_manager()
@@ -735,7 +749,41 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 f"⚠️ Could not load glossary: {glossary_load_error}"
             )
 
-        if config.get('refine_only'):
+        if config.get('term_fix'):
+            from src.core.adapters import term_fix_file
+            from src.core.term_fix import parse_rules_text
+            term_fix = config['term_fix']
+            _log_message_callback(
+                "term_fix_mode",
+                f"🔤 Term-fix mode ({term_fix.get('mode', 'smart')}): only the listed "
+                f"wrong renderings are changed, the rest of the file is kept as is."
+            )
+            await term_fix_file(
+                input_filepath=input_path_for_translate_module,
+                output_filepath=output_filepath_on_server,
+                rules=parse_rules_text(term_fix['rules_text']),
+                mode=term_fix.get('mode', 'smart'),
+                target_language=config['target_language'],
+                model_name=config['model'],
+                llm_provider=config.get('llm_provider', 'ollama'),
+                llm_api_endpoint=config['llm_api_endpoint'],
+                gemini_api_key=config.get('gemini_api_key', ''),
+                openai_api_key=config.get('openai_api_key', ''),
+                openrouter_api_key=config.get('openrouter_api_key', ''),
+                mistral_api_key=config.get('mistral_api_key', ''),
+                deepseek_api_key=config.get('deepseek_api_key', ''),
+                poe_api_key=config.get('poe_api_key', ''),
+                nim_api_key=config.get('nim_api_key', ''),
+                context_window=config.get('context_window', 2048),
+                auto_adjust_context=config.get('auto_adjust_context', True),
+                parallel_workers=config.get('parallel_workers', 1),
+                log_callback=_log_message_callback,
+                stats_callback=_term_fix_stats_callback,
+                check_interruption_callback=should_interrupt_current_task,
+                # Uploads carry a random prefix; the report names the user's file.
+                source_name=config.get('input_filename'),
+            )
+        elif config.get('refine_only'):
             _log_message_callback(
                 "refine_only_mode",
                 "✨ Refine-only mode: skipping translation, polishing the input file as-is."
@@ -1065,14 +1113,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         # Log OpenRouter cost summary if applicable
         if config.get('llm_provider') == 'openrouter':
             cost = stats.get('openrouter_cost', 0.0)
+            cost_estimated = stats.get('openrouter_cost_estimated', False)
             prompt_tokens = stats.get('openrouter_prompt_tokens', 0)
             completion_tokens = stats.get('openrouter_completion_tokens', 0)
             total_tokens = prompt_tokens + completion_tokens
             if cost > 0 or total_tokens > 0:
                 _log_message_callback("openrouter_cost_final",
-                    f"💰 OpenRouter Cost: ${cost:.4f} | Tokens: {total_tokens:,} ({prompt_tokens:,} prompt + {completion_tokens:,} completion)")
-            # Clear the callback to avoid memory leaks
-            OpenRouterProvider.set_cost_callback(None)
+                    f"💰 OpenRouter Cost{' (estimate, usage.cost missing)' if cost_estimated else ''}: ${cost:.4f} | Tokens: {total_tokens:,} ({prompt_tokens:,} prompt + {completion_tokens:,} completion)")
 
         # TTS Generation (if enabled and translation completed successfully)
         if config.get('tts_enabled') and final_status_payload.get('status') == 'completed':
@@ -1223,6 +1270,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             await asyncio.to_thread(notify, EVENT_FAILURE,
                 _notification_context(config, translation_id, elapsed_time,
                                       error=critical_error_msg))
+    finally:
+        if cost_tracking_token is not None:
+            end_job_cost_tracking(cost_tracking_token)
 
 
 async def _perform_tts_generation(translation_id, config, output_filepath, state_manager, socketio, log_callback):

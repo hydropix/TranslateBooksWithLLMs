@@ -68,13 +68,14 @@ from ..context_optimizer import AdaptiveContextManager, INITIAL_CONTEXT_SIZE, CO
 from src.config import (
     PLACEHOLDER_PATTERN,
     MAX_PLACEHOLDER_CORRECTION_ATTEMPTS,
+    MAX_REFINE_RETRIES,
     create_placeholder,
     detect_placeholder_format_in_text,
     detect_format_from_placeholder,
     THINKING_MODELS,
     ADAPTIVE_CONTEXT_INITIAL_THINKING,
 )
-from src.prompts.prompts import generate_placeholder_correction_prompt, CORRECTED_TAG_IN, CORRECTED_TAG_OUT
+from src.prompts.prompts import PromptPair, generate_placeholder_correction_prompt, CORRECTED_TAG_IN, CORRECTED_TAG_OUT
 from src.utils.unified_logger import LogLevel, LogType
 
 
@@ -1559,6 +1560,31 @@ async def _request_refinement_with_adaptive_context(
     repetition loop a too-small window provokes) bumps the context and retries
     until the context manager refuses. Any other error propagates.
     """
+    # Each call gets its own context growth budget; a call that still fails
+    # gives back the context it grew so later chunks stay at their size.
+    if context_manager:
+        context_manager.begin_request()
+    try:
+        llm_response = await _refinement_request_loop(
+            llm_client, context_manager, prompt_pair, model_name, log_callback
+        )
+    except BaseException:
+        if context_manager:
+            context_manager.abandon_request()
+        raise
+    if context_manager and (llm_response is None or not llm_response.content):
+        context_manager.abandon_request()
+    return llm_response
+
+
+async def _refinement_request_loop(
+    llm_client: Any,
+    context_manager: Optional[AdaptiveContextManager],
+    prompt_pair: Any,
+    model_name: str,
+    log_callback: Optional[Callable],
+) -> Any:
+    """Retry loop behind _request_refinement_with_adaptive_context."""
     from ..llm import ContextOverflowError, RepetitionLoopError
 
     while True:
@@ -1571,7 +1597,19 @@ async def _request_refinement_with_adaptive_context(
             llm_response = await llm_client.make_request(
                 prompt_pair.user, model_name, system_prompt=prompt_pair.system
             )
-        except (ContextOverflowError, RepetitionLoopError):
+        except RepetitionLoopError:
+            # Ollama also raises this for a stream that overflowed the window.
+            # One step per retry, bounded: a loop that survives larger windows
+            # is the model's, not the window's.
+            if context_manager and context_manager.should_retry_repetition_loop():
+                context_manager.increase_context()
+                if log_callback:
+                    log_callback("refinement_repetition_retry",
+                        f"Refinement repetition loop - retrying with "
+                        f"{context_manager.get_context_size()} tokens")
+                continue
+            raise
+        except ContextOverflowError:
             if context_manager and context_manager.should_retry_with_larger_context(True, 0):
                 context_manager.increase_context()
                 if log_callback:
@@ -1596,6 +1634,21 @@ async def _request_refinement_with_adaptive_context(
         return llm_response
 
 
+def _build_refine_placeholder_reminder(local_tag_map: Dict) -> str:
+    """Build the reminder appended to a refinement prompt after placeholder corruption."""
+    def _ph_index(key: Any) -> Tuple[int, str]:
+        m = re.search(r"(\d+)", str(key))
+        return (int(m.group(1)) if m else 0, str(key))
+
+    expected = ", ".join(str(k) for k in sorted(local_tag_map, key=_ph_index))
+    return (
+        "\n\nIMPORTANT: your previous answer altered, dropped, duplicated or reordered "
+        "the placeholders. Keep EVERY placeholder exactly as written, once each, in the "
+        "same order and position. "
+        + (f"Expected placeholders: {expected}." if expected else "")
+    )
+
+
 async def _refine_epub_chunks(
     translated_chunks: List[str],
     chunks: List[Dict],
@@ -1607,7 +1660,8 @@ async def _refine_epub_chunks(
     log_callback: Optional[Callable],
     prompt_options: Optional[Dict],
     stats_callback: Optional[Callable] = None,
-    stats: Optional['TranslationMetrics'] = None
+    stats: Optional['TranslationMetrics'] = None,
+    max_refine_retries: Optional[int] = None
 ) -> List[str]:
     """
     Refine translated EPUB chunks using a second LLM pass.
@@ -1628,11 +1682,16 @@ async def _refine_epub_chunks(
         prompt_options: Prompt options dict
         stats_callback: Optional callback for progress updates during refinement
         stats: Optional TranslationMetrics to update during refinement
+        max_refine_retries: Re-prompts allowed per chunk when the refined text
+            corrupts placeholders (default: MAX_REFINE_RETRIES from config)
 
     Returns:
         List of refined chunk texts
     """
     from src.prompts.prompts import generate_post_processing_prompt
+
+    if max_refine_retries is None:
+        max_refine_retries = MAX_REFINE_RETRIES
 
     total_chunks = len(translated_chunks)
     refined_chunks = []
@@ -1706,6 +1765,26 @@ async def _refine_epub_chunks(
                 llm_client, context_manager, prompt_pair, model_name, log_callback
             )
             execution_time = time.time() - start_time
+
+            # Bounded retry when the refined text corrupts placeholders: re-prompt
+            # with an explicit reminder before falling back to the draft translation.
+            refine_attempt = 0
+            while (refine_attempt < max_refine_retries and local_tag_map
+                   and llm_response and llm_response.content):
+                candidate = llm_client.extract_translation(llm_response.content)
+                if not candidate or validate_placeholders(candidate, local_tag_map):
+                    break
+                refine_attempt += 1
+                _log_error(log_callback, "epub_refinement_placeholder_retry",
+                           f"Chunk {idx + 1}/{total_chunks}: refinement corrupted placeholders, "
+                           f"retry {refine_attempt}/{max_refine_retries}")
+                retry_prompt = PromptPair(
+                    system=prompt_pair.system,
+                    user=prompt_pair.user + _build_refine_placeholder_reminder(local_tag_map),
+                )
+                llm_response = await _request_refinement_with_adaptive_context(
+                    llm_client, context_manager, retry_prompt, model_name, log_callback
+                )
 
             # Log the response (like translation does)
             if log_callback and llm_response:

@@ -44,7 +44,9 @@ async function handleApiError(response) {
     const label = errorData.error || '';
     const detail = errorData.message || '';
     const parts = [label, detail !== label ? detail : ''].filter(Boolean);
-    throw new Error(parts.join(' — ') || `Request failed with status ${response.status}`);
+    const err = new Error(parts.join(' — ') || `Request failed with status ${response.status}`);
+    err.code = errorData.error_code;
+    throw err;
 }
 
 /**
@@ -304,6 +306,19 @@ export const ApiClient = {
         return await apiRequest('/api/detect-language', {
             method: 'POST',
             body: JSON.stringify({ file_path: filePath })
+        });
+    },
+
+    /**
+     * Count the matches of term-fix rules in an uploaded file (no LLM call)
+     * @param {string} filePath - Path to the uploaded file
+     * @param {string} rulesText - Rules, one 'wrong|other -> correct' per line
+     * @returns {Promise<Object>} { rules: [{ rule, total, alternatives, samples }] }
+     */
+    async scanTermFix(filePath, rulesText) {
+        return await apiRequest('/api/term-fix/scan', {
+            method: 'POST',
+            body: JSON.stringify({ file_path: filePath, rules_text: rulesText })
         });
     },
 

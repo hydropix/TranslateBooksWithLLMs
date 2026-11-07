@@ -99,8 +99,11 @@ def install(monkeypatch) -> None:
     acceptance rules reject when source and target languages differ
     (``request_core.tagged_answer_problem``). With this fake installed, the
     languages are treated as equal for that one rule, so the characterization
-    runs keep exercising the happy path.
+    runs keep exercising the happy path. The source-residue check (issue
+    #270) would flag the same echo and retry it, so it is switched off too.
     """
+    import src.config
+    monkeypatch.setattr(src.config, "SOURCE_RESIDUE_CHECK_ENABLED", False)
     for target in _PATCH_TARGETS:
         monkeypatch.setattr(target, _fake_create_llm_provider, raising=True)
     allow_echo(monkeypatch)

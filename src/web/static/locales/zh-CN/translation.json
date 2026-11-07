@@ -12,7 +12,7 @@
   "custom_target_lang_placeholder": "输入自定义目标语言",
 
   "drop_files_title": "拖放文件以进行翻译",
-  "drop_files_support": "支持 TXT、EPUB、SRT、DOCX 和 PDF",
+  "drop_files_support": "支持 TXT、EPUB、SRT、PGN、DOCX 和 PDF",
   "drop_files_refine_title": "拖放文件以润色（已翻译）",
   "drop_files_refine_support": "润色已有的译文 — 同一语言输入，同一语言输出",
   "drop_files_term_fix_title": "拖入文件以修正术语（已翻译）",

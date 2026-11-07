@@ -2,7 +2,7 @@
 Adapter pattern implementation for generic file translation.
 
 This module provides a unified interface for translating different file formats
-(TXT, SRT, EPUB, PDF) using the adapter pattern. Each format implements the
+(TXT, SRT, PGN, EPUB, PDF) using the adapter pattern. Each format implements the
 FormatAdapter interface to handle format-specific operations.
 
 New in Phase 5: Comprehensive error handling system with:
@@ -17,6 +17,7 @@ from .format_adapter import FormatAdapter
 from .generic_translator import GenericTranslator
 from .txt_adapter import TxtAdapter
 from .srt_adapter import SrtAdapter
+from .pgn_adapter import PgnAdapter
 from .epub_adapter import EpubAdapter
 
 # Unified translation entry point (Phase 6)
@@ -59,6 +60,7 @@ __all__ = [
     'GenericTranslator',
     'TxtAdapter',
     'SrtAdapter',
+    'PgnAdapter',
     'EpubAdapter',
 
     # Unified translation entry point (Phase 6)

@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/4afc5f90-18d8-4586-ba73-626ae681ba57
 
 A desktop app that translates **books**, **subtitles**, and **documents** with AI - local or cloud. Drop a file, pick a language, get the result.
 
-**Formats:** EPUB, SRT, DOCX, PDF, TXT
+**Formats:** EPUB, SRT, DOCX, PDF, TXT, PGN
 
 - **No size limit.** Process documents of any length - from a single page to thousand-page novels. The intelligent chunking system handles unlimited content while preserving context between segments.
 - **Perfect preservation.** Your documents come out exactly as they went in: EPUB formatting, styles, and structure remain intact. SRT timecodes stay perfectly synchronized. Every tag, every timestamp, every formatting detail is preserved.
@@ -18,6 +18,7 @@ A desktop app that translates **books**, **subtitles**, and **documents** with A
 - **Reusable writing styles.** Extract a style preset from sample books (or write one by hand) and apply it to every chunk for a consistent register, rhythm, and imagery across the whole translation.
 - **Auto glossary & style.** No glossary or preset ready? Pick Auto in the dropdown and the app derives both straight from the document being translated - one extra LLM call each before the job starts, nothing saved.
 - **PDF support.** Text PDFs are translated into a new, reflowed PDF: headings, paragraphs, lists and images are kept, ruled tables are rebuilt as tables, and paragraph colours, background boxes and the font family (serif, sans-serif, monospace) are preserved, but the original page layout is not, and bold or colour inside a sentence is not. Scanned PDFs are not supported (no OCR), multi-column layouts are best effort, and the refinement pass is not available for PDF yet.
+- **Chess annotations (PGN).** Only the comments of annotated games are translated; tags, moves, variations, NAGs and embedded commands such as `[%cal]` arrows or ChessBase `[#]` diagrams are kept byte for byte. Moves quoted inside a comment ("after 12.Nf3 ...") must come back unchanged, otherwise that comment is retried and finally left in its original language. Moves keep their English piece letters (Nf3, not Cf3) so every chess program can read them. The output is UTF-8, and the refinement pass is not available for PGN yet.
 
 <img width="1150" height="579" alt="image" src="https://github.com/user-attachments/assets/d7dfa806-830b-4405-8300-f10208943d22" />
 

@@ -59,3 +59,21 @@ def test_contributor_role_uses_epub3_refinement(tmp_path, monkeypatch):
     serialized = opf_path.read_text(encoding="utf-8")
     assert "ns0:role" not in serialized
     assert "opf:role" not in serialized
+
+
+def test_attribution_disabled_does_not_add_contributor_or_role(tmp_path, monkeypatch):
+    monkeypatch.setattr(translator, "ATTRIBUTION_ENABLED", False)
+
+    opf_path = tmp_path / "content.opf"
+    opf_path.write_text(OPF, encoding="utf-8")
+    tree = etree.parse(str(opf_path))
+
+    translator._update_epub_metadata(tree, str(opf_path), "Portuguese (Brazil)")
+
+    root = etree.parse(str(opf_path)).getroot()
+    assert root.findall(".//dc:contributor", NAMESPACES) == []
+    assert root.find(".//opf:meta[@refines='#tbl-translator']", NAMESPACES) is None
+
+    serialized = opf_path.read_text(encoding="utf-8")
+    assert "ns0:role" not in serialized
+    assert "opf:role" not in serialized

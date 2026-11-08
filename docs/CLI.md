@@ -18,7 +18,7 @@ python translate.py -i input_file -o output_file
 
 | Option | Description |
 |--------|-------------|
-| `-i, --input` | Input file (.txt, .epub, .srt, .docx, .pdf) |
+| `-i, --input` | Input file (.txt, .epub, .srt, .pgn, .docx, .pdf) |
 
 ### Output
 

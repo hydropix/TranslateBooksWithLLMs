@@ -24,6 +24,11 @@ class _ValidationFailed:
         self.content = content
 
 
+def _join_instructions(*parts: str) -> str:
+    """Join the non-empty instruction blocks with a blank line."""
+    return "\n\n".join(p for p in parts if p)
+
+
 def _run_counters(completed_count: int, restored_count: int) -> Dict[str, int]:
     """Per-run twins of the counters the UI's rate context reads.
 
@@ -241,8 +246,14 @@ class GenericTranslator:
                     log_callback("unit_start",
                         f"Translating unit {i+1}/{total_units} ({unit.unit_id})")
 
-                base_instructions = (prompt_options or {}).get('custom_instructions', '')
-                attempt_options = prompt_options
+                base_instructions = _join_instructions(
+                    (prompt_options or {}).get('custom_instructions', ''),
+                    self.adapter.get_format_instructions(),
+                )
+                attempt_options = (
+                    {**(prompt_options or {}), 'custom_instructions': base_instructions}
+                    if base_instructions else prompt_options
+                )
                 result = None
 
                 for attempt in range(max_validation_attempts):
@@ -283,9 +294,8 @@ class GenericTranslator:
                     reinforced = self.adapter.get_validation_retry_instructions(feedback)
                     attempt_options = {
                         **(prompt_options or {}),
-                        'custom_instructions': (
-                            f"{base_instructions}\n\n{reinforced}"
-                            if base_instructions else reinforced
+                        'custom_instructions': _join_instructions(
+                            base_instructions, reinforced
                         ),
                     }
 
@@ -300,9 +310,9 @@ class GenericTranslator:
                 if log_callback:
                     log_callback("translation_interrupted",
                         f"Translation interrupted at unit {at_index+1}/{total_units}")
-                # Try to save partial output for TXT/SRT (fast reconstruction).
+                # Try to save partial output for TXT/SRT/PGN (fast reconstruction).
                 # For EPUB, partial output may not be valid, so we skip it.
-                if self.adapter.format_name in ['txt', 'srt']:
+                if self.adapter.format_name in ['txt', 'srt', 'pgn']:
                     try:
                         if log_callback:
                             log_callback("reconstruct_partial", "Saving partial output before interruption")

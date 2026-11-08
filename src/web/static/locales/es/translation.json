@@ -12,7 +12,7 @@
   "custom_target_lang_placeholder": "Introduce un idioma de destino personalizado",
 
   "drop_files_title": "Suelta archivos para traducir",
-  "drop_files_support": "Compatible con TXT, EPUB, SRT, DOCX y PDF",
+  "drop_files_support": "Compatible con TXT, EPUB, SRT, PGN, DOCX y PDF",
   "drop_files_refine_title": "Suelta archivos para refinar (ya traducidos)",
   "drop_files_refine_support": "Pule una traducción existente — misma lengua de entrada y salida",
   "drop_files_term_fix_title": "Suelta archivos para corregir un término (ya traducidos)",

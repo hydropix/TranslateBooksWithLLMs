@@ -2132,6 +2132,36 @@ def _repackage_epub(
                     arcname = os.path.relpath(file_path_abs, temp_dir)
                     epub_zip.write(file_path_abs, arcname)
 
+def _set_translator_role(
+    opf_root: etree._Element,
+    metadata: etree._Element,
+    contributor_el: etree._Element,
+) -> None:
+    """Mark the contributor as translator in the form the package version allows.
+
+    EPUB 2 expresses the role as an ``opf:role`` attribute on the element.
+    EPUB 3 removed that attribute (EPUBCheck RSC-005) and expresses it as a
+    ``meta`` refinement pointing at the contributor's id.
+    """
+    if opf_root.get('version', '').strip().startswith('2'):
+        contributor_el.set('{http://www.idpf.org/2007/opf}role', 'trl')
+        return
+
+    used_ids = set(opf_root.xpath('//@id'))
+    contributor_id = 'tbl-translator'
+    suffix = 2
+    while contributor_id in used_ids:
+        contributor_id = f'tbl-translator-{suffix}'
+        suffix += 1
+    contributor_el.set('id', contributor_id)
+
+    role_el = etree.SubElement(metadata, '{http://www.idpf.org/2007/opf}meta')
+    role_el.set('refines', f'#{contributor_id}')
+    role_el.set('property', 'role')
+    role_el.set('scheme', 'marc:relators')
+    role_el.text = 'trl'
+
+
 def _update_epub_metadata(
     opf_tree: etree._ElementTree,
     opf_path: str,
@@ -2159,7 +2189,7 @@ def _update_epub_metadata(
                 '{http://purl.org/dc/elements/1.1/}contributor'
             )
             contributor_el.text = GENERATOR_NAME
-            contributor_el.set('{http://www.idpf.org/2007/opf}role', 'trl')
+            _set_translator_role(opf_root, metadata, contributor_el)
 
             # Add or update description with signature
             desc_el = metadata.find('.//dc:description', namespaces=NAMESPACES)

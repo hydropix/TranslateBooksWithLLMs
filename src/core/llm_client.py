@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 
 from src.config import API_ENDPOINT, DEFAULT_MODEL
 from src.core.llm import create_llm_provider, LLMProvider, ContextOverflowError, RepetitionLoopError, LLMResponse
+from src.core.llm.thinking.behavior import ThinkingBehavior
 
 # Re-export for convenience
 __all__ = ['LLMClient', 'default_client', 'create_llm_client', 'ContextOverflowError', 'RepetitionLoopError', 'LLMResponse']
@@ -136,27 +137,36 @@ class LLMClient:
         Returns:
             True if model produces thinking output, False if not, None if unknown/not detected yet
         """
-        if self._provider and hasattr(self._provider, '_is_thinking_model'):
-            return self._provider._is_thinking_model
-        return None
+        if not self._provider:
+            return None
+        provider = self._provider
+        if hasattr(provider, '_thinking_behavior'):
+            # Ollama: behavior enum, None until detected
+            behavior = provider._thinking_behavior
+            if behavior is None:
+                return None
+            return behavior != ThinkingBehavior.STANDARD
+        status = getattr(provider, '_is_thinking_model', None)
+        if callable(status):
+            # Gemini, DeepSeek: name-based check exposed as a method
+            status = status()
+        return None if status is None else bool(status)
 
     async def detect_thinking_model(self) -> Optional[bool]:
         """
         Trigger thinking model detection (for Ollama provider).
 
-        This sends a simple test prompt to detect if the model produces
-        thinking output, and caches the result for future use.
+        Ollama classifies the model's thinking behavior (from its cache, the
+        known model lists, or test prompts) and keeps the result for later
+        requests. Other providers report their name-based status.
 
         Returns:
-            True if model produces thinking output, False if not, None if detection not supported
+            True if model produces thinking output, False if not, None if unknown
         """
         provider = self._get_provider()
-        if hasattr(provider, '_detect_thinking_model'):
-            # Trigger detection if not already done
-            if provider._is_thinking_model is None:
-                provider._is_thinking_model = await provider._detect_thinking_model()
-            return provider._is_thinking_model
-        return None
+        if hasattr(provider, '_detect_thinking_behavior') and provider._thinking_behavior is None:
+            provider._thinking_behavior = await provider._detect_thinking_behavior()
+        return self.get_is_thinking_model()
 
 
 # Global instance for backward compatibility

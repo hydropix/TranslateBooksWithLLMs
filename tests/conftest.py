@@ -42,6 +42,16 @@ _placeholder_validator = import_module_from_path(
     project_root / 'src' / 'core' / 'epub' / 'placeholder_validator.py'
 )
 
+_tag_classifier = import_module_from_path(
+    'src.core.epub.tag_classifier',
+    project_root / 'src' / 'core' / 'epub' / 'tag_classifier.py'
+)
+
+_initial_letters = import_module_from_path(
+    'src.core.epub.initial_letters',
+    project_root / 'src' / 'core' / 'epub' / 'initial_letters.py'
+)
+
 _tag_preservation = import_module_from_path(
     'src.core.epub.tag_preservation',
     project_root / 'src' / 'core' / 'epub' / 'tag_preservation.py'

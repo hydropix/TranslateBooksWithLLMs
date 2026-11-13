@@ -62,8 +62,9 @@ class SrtAdapter(FormatAdapter):
 
             return True
 
-        except Exception:
-            return False
+        except Exception as e:
+            # Surface the cause instead of a bare "failed to prepare".
+            raise RuntimeError(f"Could not read or parse the SRT file: {e}") from e
 
     def get_translation_units(self) -> List[TranslationUnit]:
         """Create translation units from subtitle blocks (cached after first build)."""
@@ -172,7 +173,8 @@ class SrtAdapter(FormatAdapter):
 
             return True
 
-        except Exception:
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
             return False
 
     async def reconstruct_output(self, bilingual: bool = False) -> bytes:
@@ -201,10 +203,10 @@ class SrtAdapter(FormatAdapter):
 
             return srt_content.encode('utf-8')
 
-        except Exception:
-            # Fallback: return original file
-            with open(self.input_file_path, 'rb') as f:
-                return f.read()
+        except Exception as e:
+            # Never hand back the untranslated source as if it were the
+            # output: the caller fails the job and logs this.
+            raise RuntimeError(f"Could not rebuild the translated SRT: {e}") from e
 
     def _reconstruct_bilingual_srt(self) -> str:
         """
@@ -264,8 +266,10 @@ class SrtAdapter(FormatAdapter):
 
             return checkpoint_data.get('resume_from_index', 0)
 
-        except Exception:
-            return 0
+        except Exception as e:
+            # A half-restored checkpoint would write source text for units the
+            # job counts as translated: fail visibly instead.
+            raise RuntimeError(f"Could not restore the SRT checkpoint: {e}") from e
 
     async def cleanup(self):
         """No cleanup needed for SRT files."""

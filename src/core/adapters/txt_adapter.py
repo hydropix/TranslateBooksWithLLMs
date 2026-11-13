@@ -66,8 +66,8 @@ class TxtAdapter(FormatAdapter):
 
             return True
 
-        except Exception:
-            return False
+        except Exception as e:
+            raise RuntimeError(f"Could not read or split the text file: {e}") from e
 
     def get_translation_units(self) -> List[TranslationUnit]:
         """
@@ -159,7 +159,8 @@ class TxtAdapter(FormatAdapter):
                 return True
             return False
 
-        except Exception:
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
             return False
 
     async def reconstruct_output(self, bilingual: bool = False) -> bytes:
@@ -235,8 +236,8 @@ class TxtAdapter(FormatAdapter):
             # Return resume index
             return checkpoint_data.get('resume_from_index', 0)
 
-        except Exception:
-            return 0
+        except Exception as e:
+            raise RuntimeError(f"Could not restore the text checkpoint: {e}") from e
 
     async def cleanup(self):
         """

@@ -16,6 +16,7 @@ API Documentation: https://creator.poe.com/docs/external-applications/openai-com
 from typing import Optional, Dict, Any, Callable, List, Union
 import httpx
 import asyncio
+import time
 import json
 
 from src.config import (
@@ -105,8 +106,11 @@ class PoeProvider(LLMProvider):
     WEB_SEARCH_PARAMS = ("web_search", "enable_web_search")
 
     # Advertised parameter schemas, fetched once per process: {model_id: [param]}
+    # A failed fetch is retried after this many seconds.
+    CATALOG_RETRY_SECONDS = 300
     _model_parameters: Optional[Dict[str, List[Dict[str, Any]]]] = None
-    _model_parameters_failed = False
+    # monotonic time of the last failed fetch; retried after CATALOG_RETRY_SECONDS
+    _model_parameters_failed_at: Optional[float] = None
     _model_parameters_lock: Optional[asyncio.Lock] = None
     # Resolved overrides, keyed by model *and* flags since they decide the
     # result: {(model_id, disable_thinking, disable_web_search): {param: value}}
@@ -155,16 +159,28 @@ class PoeProvider(LLMProvider):
                 return limit
         return 32000  # Conservative default for unknown models
 
+    @staticmethod
+    def _catalog_failed_recently() -> bool:
+        """True while a failed catalog fetch is too recent to retry.
+
+        A transient failure must not disable the overrides for the life of
+        the process (reasoning would stay on, and billed, for every job).
+        """
+        failed_at = PoeProvider._model_parameters_failed_at
+        return (failed_at is not None
+                and time.monotonic() - failed_at < PoeProvider.CATALOG_RETRY_SECONDS)
+
     async def _load_model_parameters(self) -> Optional[Dict[str, List[Dict[str, Any]]]]:
         """
         Fetch the parameter schemas Poe advertises for every bot.
 
         Fetched once per process and cached class-side. Returns None when the
-        catalog is unreachable, which means "unknown" and not "no parameters".
+        catalog is unreachable, which means "unknown" and not "no parameters";
+        the fetch is retried once CATALOG_RETRY_SECONDS have passed.
         """
         if PoeProvider._model_parameters is not None:
             return PoeProvider._model_parameters
-        if PoeProvider._model_parameters_failed:
+        if PoeProvider._catalog_failed_recently():
             return None
 
         # Safe to create here without a double-check race: no await between the
@@ -175,7 +191,7 @@ class PoeProvider(LLMProvider):
         async with PoeProvider._model_parameters_lock:
             if PoeProvider._model_parameters is not None:
                 return PoeProvider._model_parameters
-            if PoeProvider._model_parameters_failed:
+            if PoeProvider._catalog_failed_recently():
                 return None
             try:
                 client = await self._get_client()
@@ -188,6 +204,7 @@ class PoeProvider(LLMProvider):
                     timeout=30
                 )
                 response.raise_for_status()
+                PoeProvider._model_parameters_failed_at = None
                 PoeProvider._model_parameters = {
                     m["id"]: (m.get("parameters") or [])
                     for m in response.json().get("data", [])
@@ -197,7 +214,7 @@ class PoeProvider(LLMProvider):
             except Exception as e:
                 print(f"⚠️ Poe: could not read model parameters ({e});"
                       f" reasoning stays at the bot's default")
-                PoeProvider._model_parameters_failed = True
+                PoeProvider._model_parameters_failed_at = time.monotonic()
                 return None
 
     def _pick_bot_overrides(self, advertised: List[Dict[str, Any]]) -> Dict[str, Any]:

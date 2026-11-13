@@ -18,6 +18,7 @@ Features:
 from typing import List, Optional, Dict, Any, Callable, Union
 import httpx
 import asyncio
+import time
 import json
 
 from src.config import (
@@ -108,8 +109,11 @@ class OpenRouterProvider(LLMProvider):
     REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
     # Model catalog entries, fetched once per process: {model_id: model_dict}
+    # A failed fetch is retried after this many seconds.
+    CATALOG_RETRY_SECONDS = 300
     _model_catalog: Optional[Dict[str, Dict[str, Any]]] = None
-    _model_catalog_failed = False
+    # monotonic time of the last failed fetch; retried after CATALOG_RETRY_SECONDS
+    _model_catalog_failed_at: Optional[float] = None
     _model_catalog_lock: Optional[asyncio.Lock] = None
     # Resolved override per model: {model_id: reasoning dict, or {} for none}
     _reasoning_overrides: Dict[str, Dict[str, Any]] = {}
@@ -137,16 +141,28 @@ class OpenRouterProvider(LLMProvider):
         # Used when no per-job tracker is active (direct use outside a job).
         self._cost_tracker = CostTracker()
 
+    @staticmethod
+    def _catalog_failed_recently() -> bool:
+        """True while a failed catalog fetch is too recent to retry.
+
+        A transient failure must not disable the overrides for the life of
+        the process (reasoning would stay on, and billed, for every job).
+        """
+        failed_at = OpenRouterProvider._model_catalog_failed_at
+        return (failed_at is not None
+                and time.monotonic() - failed_at < OpenRouterProvider.CATALOG_RETRY_SECONDS)
+
     async def _load_model_catalog(self) -> Optional[Dict[str, Dict[str, Any]]]:
         """
         Fetch OpenRouter's model catalog (reasoning metadata included).
 
         Fetched once per process and cached class-side. Returns None when the
-        catalog is unreachable, which means "unknown" and not "no models".
+        catalog is unreachable, which means "unknown" and not "no models";
+        the fetch is retried once CATALOG_RETRY_SECONDS have passed.
         """
         if OpenRouterProvider._model_catalog is not None:
             return OpenRouterProvider._model_catalog
-        if OpenRouterProvider._model_catalog_failed:
+        if OpenRouterProvider._catalog_failed_recently():
             return None
 
         # Safe to create here without a double-check race: no await between the
@@ -157,7 +173,7 @@ class OpenRouterProvider(LLMProvider):
         async with OpenRouterProvider._model_catalog_lock:
             if OpenRouterProvider._model_catalog is not None:
                 return OpenRouterProvider._model_catalog
-            if OpenRouterProvider._model_catalog_failed:
+            if OpenRouterProvider._catalog_failed_recently():
                 return None
             try:
                 client = await self._get_client()
@@ -167,6 +183,7 @@ class OpenRouterProvider(LLMProvider):
                     timeout=30
                 )
                 response.raise_for_status()
+                OpenRouterProvider._model_catalog_failed_at = None
                 OpenRouterProvider._model_catalog = {
                     m["id"]: m for m in response.json().get("data", []) if m.get("id")
                 }
@@ -174,7 +191,7 @@ class OpenRouterProvider(LLMProvider):
             except Exception as e:
                 print(f"[OpenRouter] WARN: could not read the model catalog ({e}); "
                       f"reasoning stays at the model default")
-                OpenRouterProvider._model_catalog_failed = True
+                OpenRouterProvider._model_catalog_failed_at = time.monotonic()
                 return None
 
     def _pick_reasoning_override(self, model_info: Dict[str, Any]) -> Dict[str, Any]:

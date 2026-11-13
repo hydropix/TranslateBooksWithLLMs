@@ -7,10 +7,15 @@
 export const DomHelpers = {
     /**
      * Escape HTML to prevent XSS
-     * @param {string} unsafe - Unsafe HTML string
+     * Numbers and booleans are stringified; null, undefined and objects
+     * yield an empty string.
+     * @param {string|number|boolean} unsafe - Unsafe value
      * @returns {string} Escaped HTML
      */
     escapeHtml(unsafe) {
+        if (typeof unsafe === 'number' || typeof unsafe === 'boolean') {
+            unsafe = String(unsafe);
+        }
         if (typeof unsafe !== 'string') return '';
 
         return unsafe

@@ -60,18 +60,10 @@ function $(id) {
     return document.getElementById(id);
 }
 
-function escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 function isConflictError(err) {
-    if (!err || !err.message) return false;
+    if (!err) return false;
+    if (err.status === 409) return true;
+    if (!err.message) return false;
     const m = err.message.toLowerCase();
     return m.includes('already') || m.includes('conflict') || m.includes('unique') || m.includes('409');
 }
@@ -332,15 +324,15 @@ function refreshGlossaryInfoCard() {
     card.innerHTML = '';
 
     const meta = document.createElement('span');
-    meta.innerHTML = `<strong>${escapeHtml(g.name)}</strong> · ${count} ${termWord} · <span class="glossary-info-meta">${escapeHtml(src)} → ${escapeHtml(tgt)}</span>`;
+    meta.innerHTML = `<strong>${DomHelpers.escapeHtml(g.name)}</strong> · ${count} ${termWord} · <span class="glossary-info-meta">${DomHelpers.escapeHtml(src)} → ${DomHelpers.escapeHtml(tgt)}</span>`;
     card.appendChild(meta);
 
     if (hasWarning) {
         const warn = document.createElement('span');
         warn.className = 'glossary-info-warn';
         const parts = [];
-        if (srcMismatch) parts.push(t('glossary:lang_mismatch_source', { glossary: escapeHtml(g.source_lang), request: escapeHtml(reqSrc) }));
-        if (tgtMismatch) parts.push(t('glossary:lang_mismatch_target', { glossary: escapeHtml(g.target_lang), request: escapeHtml(reqTgt) }));
+        if (srcMismatch) parts.push(t('glossary:lang_mismatch_source', { glossary: DomHelpers.escapeHtml(g.source_lang), request: DomHelpers.escapeHtml(reqSrc) }));
+        if (tgtMismatch) parts.push(t('glossary:lang_mismatch_target', { glossary: DomHelpers.escapeHtml(g.target_lang), request: DomHelpers.escapeHtml(reqTgt) }));
         warn.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">warning</span> ${t('glossary:lang_mismatch', { parts: parts.join(', ') })}`;
         card.appendChild(warn);
     }
@@ -379,7 +371,7 @@ async function loadList() {
         console.error('Failed to load glossary list:', err);
         if (loading) loading.classList.add('hidden');
         if (body) {
-            body.innerHTML = `<tr><td colspan="5" style="color:#ef4444;">${t('glossary:load_failed_row', { error: escapeHtml(err.message || t('glossary:unknown_error')) })}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="5" style="color:#ef4444;">${t('glossary:load_failed_row', { error: DomHelpers.escapeHtml(err.message || t('glossary:unknown_error')) })}</td></tr>`;
         }
         if (table) table.classList.remove('hidden');
         return;

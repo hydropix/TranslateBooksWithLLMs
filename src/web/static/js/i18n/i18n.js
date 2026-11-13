@@ -7,6 +7,8 @@
  * window (see <script> tags in translation_interface.html).
  */
 
+import { DomHelpers } from '../ui/dom-helpers.js';
+
 export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko'];
 export const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'tts', 'errors', 'sample', 'style'];
 
@@ -87,6 +89,42 @@ export function t(key, options) {
 }
 
 /**
+ * Translate a key for an innerHTML sink. i18next runs with
+ * `escapeValue: false` (several locale values carry trusted markup), so
+ * interpolated params are inserted raw; this helper HTML-escapes every string
+ * param first. Use it whenever a param can come from the server, a file name,
+ * a model or the user. Non-string params (numbers, `count`) pass through.
+ * @param {string} key
+ * @param {Object} [params]
+ * @returns {string} Translated HTML with escaped params
+ */
+export function tHtml(key, params) {
+    if (!params || typeof params !== 'object') return t(key, params);
+    const safe = {};
+    for (const [name, value] of Object.entries(params)) {
+        safe[name] = typeof value === 'string' ? DomHelpers.escapeHtml(value) : value;
+    }
+    return t(key, safe);
+}
+
+/**
+ * Build a reactive, escaped text span for HTML built in JS: the span carries
+ * data-i18n (+ data-i18n-params), so applyToDOM() re-translates it on a
+ * locale switch, and both the initial text and the params are escaped.
+ * @param {string} key
+ * @param {Object} [params]
+ * @param {string} [attrs] - Extra trusted attributes for the span (e.g. 'class="x"')
+ * @returns {string} HTML
+ */
+export function i18nSpan(key, params, attrs = '') {
+    const paramsAttr = params
+        ? ` data-i18n-params="${DomHelpers.escapeHtml(JSON.stringify(params))}"`
+        : '';
+    const extra = attrs ? ` ${attrs}` : '';
+    return `<span data-i18n="${DomHelpers.escapeHtml(key)}"${paramsAttr}${extra}>${DomHelpers.escapeHtml(t(key, params))}</span>`;
+}
+
+/**
  * Change UI locale. Persists via /api/ui-locale (cookie), then asks i18next
  * to reload — i18next emits 'languageChanged' which re-applies the DOM.
  */
@@ -139,7 +177,8 @@ export function applyToDOM(root) {
         const key = el.getAttribute('data-i18n-html');
         if (!key) return;
         const params = parseParams(el.getAttribute('data-i18n-params'));
-        el.innerHTML = t(key, params);
+        // The key's markup is trusted; its params are not, so escape them.
+        el.innerHTML = tHtml(key, params);
     });
 
     root.querySelectorAll('[data-i18n-attr]').forEach((el) => {

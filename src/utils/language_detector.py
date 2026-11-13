@@ -6,8 +6,12 @@ for fast and accurate language identification from text content.
 """
 import re
 from typing import Optional, Tuple
-from langdetect import detect_langs, LangDetectException
+from langdetect import DetectorFactory, detect_langs, LangDetectException
 from lxml import etree
+
+# langdetect is randomised: without a fixed seed the same text can yield a
+# different language or confidence on every call.
+DetectorFactory.seed = 0
 
 
 # Mapping from ISO 639-1 codes (langdetect output) to full language names

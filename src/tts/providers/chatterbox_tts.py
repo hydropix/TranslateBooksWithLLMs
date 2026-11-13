@@ -19,27 +19,58 @@ from typing import Optional, List, AsyncIterator
 from pathlib import Path
 import io
 
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-
-try:
-    from chatterbox.tts import ChatterboxTTS
-    CHATTERBOX_AVAILABLE = True
-except ImportError:
-    CHATTERBOX_AVAILABLE = False
-
-try:
-    import torchaudio
-    TORCHAUDIO_AVAILABLE = True
-except ImportError:
-    TORCHAUDIO_AVAILABLE = False
-
 from .base import TTSProvider, TTSResult, VoiceInfo, TTSError
 
 logger = logging.getLogger(__name__)
+
+# The heavy optional dependencies (torch, torchaudio, chatterbox-tts) are only
+# imported on first real use (_load_backend), never when this module is
+# imported: importing torch costs seconds and the module is reachable from
+# every CLI and server start even with TTS disabled.
+torch = None
+torchaudio = None
+ChatterboxTTS = None
+_BACKEND: Optional[dict] = None
+_BACKEND_FLAGS = {
+    "TORCH_AVAILABLE": "torch",
+    "CHATTERBOX_AVAILABLE": "chatterbox",
+    "TORCHAUDIO_AVAILABLE": "torchaudio",
+}
+
+
+def _load_backend() -> dict:
+    """Import torch, chatterbox-tts and torchaudio once; return what is available."""
+    global torch, torchaudio, ChatterboxTTS, _BACKEND
+    if _BACKEND is not None:
+        return _BACKEND
+    backend = {"torch": False, "chatterbox": False, "torchaudio": False}
+    try:
+        import torch as _torch
+        torch = _torch
+        backend["torch"] = True
+    except ImportError:
+        pass
+    try:
+        from chatterbox.tts import ChatterboxTTS as _ChatterboxTTS
+        ChatterboxTTS = _ChatterboxTTS
+        backend["chatterbox"] = True
+    except ImportError:
+        pass
+    try:
+        import torchaudio as _torchaudio
+        torchaudio = _torchaudio
+        backend["torchaudio"] = True
+    except ImportError:
+        pass
+    _BACKEND = backend
+    return backend
+
+
+def __getattr__(name: str):
+    """Keep the former TORCH_AVAILABLE-style module flags readable (probed lazily)."""
+    if name in _BACKEND_FLAGS:
+        return _load_backend()[_BACKEND_FLAGS[name]]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # Maximum text length per synthesis call (characters)
@@ -170,12 +201,13 @@ class ChatterboxProvider(TTSProvider):
     def _validate_dependencies(self):
         """Validate that all required dependencies are available."""
         missing = []
+        backend = _load_backend()
 
-        if not TORCH_AVAILABLE:
+        if not backend["torch"]:
             missing.append("torch")
-        if not CHATTERBOX_AVAILABLE:
+        if not backend["chatterbox"]:
             missing.append("chatterbox-tts")
-        if not TORCHAUDIO_AVAILABLE:
+        if not backend["torchaudio"]:
             missing.append("torchaudio")
 
         if missing:
@@ -188,7 +220,7 @@ class ChatterboxProvider(TTSProvider):
 
     def _get_device(self) -> str:
         """Determine the best available device (GPU/CPU)."""
-        if not TORCH_AVAILABLE:
+        if not _load_backend()["torch"]:
             return "cpu"
 
         if torch.cuda.is_available():
@@ -253,7 +285,7 @@ class ChatterboxProvider(TTSProvider):
         """Get information about the current device."""
         info = {
             "device": self.device,
-            "gpu_available": torch.cuda.is_available() if TORCH_AVAILABLE else False,
+            "gpu_available": torch.cuda.is_available() if _load_backend()["torch"] else False,
         }
         if info["gpu_available"]:
             info["gpu_name"] = torch.cuda.get_device_name(0)
@@ -337,7 +369,7 @@ class ChatterboxProvider(TTSProvider):
 
     def _clear_cuda_state(self):
         """Clear CUDA state after an error to allow recovery."""
-        if TORCH_AVAILABLE and torch.cuda.is_available():
+        if _load_backend()["torch"] and torch.cuda.is_available():
             try:
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
@@ -640,8 +672,8 @@ def create_chatterbox_provider(
 
 
 def is_chatterbox_available() -> bool:
-    """Check if Chatterbox TTS dependencies are available."""
-    return TORCH_AVAILABLE and CHATTERBOX_AVAILABLE and TORCHAUDIO_AVAILABLE
+    """Check if Chatterbox TTS dependencies are available (imports them on first call)."""
+    return all(_load_backend().values())
 
 
 def get_gpu_status() -> dict:
@@ -651,16 +683,17 @@ def get_gpu_status() -> dict:
     Returns:
         Dictionary with GPU availability and details
     """
+    backend = _load_backend()
     status = {
-        "torch_available": TORCH_AVAILABLE,
-        "chatterbox_available": CHATTERBOX_AVAILABLE,
-        "torchaudio_available": TORCHAUDIO_AVAILABLE,
+        "torch_available": backend["torch"],
+        "chatterbox_available": backend["chatterbox"],
+        "torchaudio_available": backend["torchaudio"],
         "cuda_available": False,
         "gpu_name": None,
         "vram_total_gb": None,
     }
 
-    if TORCH_AVAILABLE and torch.cuda.is_available():
+    if backend["torch"] and torch.cuda.is_available():
         status["cuda_available"] = True
         status["gpu_name"] = torch.cuda.get_device_name(0)
         status["vram_total_gb"] = round(

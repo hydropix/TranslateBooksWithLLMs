@@ -112,6 +112,38 @@ class LanguageDetector:
             return ""
 
     @staticmethod
+    def _extract_text_from_docx(file_data: bytes) -> str:
+        """
+        Extract readable text from a DOCX file (body paragraphs and tables)
+
+        Args:
+            file_data: Raw DOCX file bytes
+
+        Returns:
+            Extracted text content, or "" if the document cannot be read
+        """
+        import io
+
+        try:
+            from docx import Document
+            from docx.oxml.ns import qn
+
+            document = Document(io.BytesIO(file_data))
+            text_parts = []
+            length = 0
+            # Every <w:p> of the body in document order, table cells included.
+            for paragraph in document.element.body.iter(qn("w:p")):
+                text = "".join(node.text or "" for node in paragraph.iter(qn("w:t")))
+                if text.strip():
+                    text_parts.append(text)
+                    length += len(text) + 1
+                    if length >= LanguageDetector.MAX_SAMPLE_LENGTH * 3:
+                        break
+            return " ".join(text_parts)
+        except Exception:
+            return ""
+
+    @staticmethod
     def _extract_text_from_srt(file_data: bytes) -> str:
         """
         Extract readable text from SRT subtitle file
@@ -226,6 +258,8 @@ class LanguageDetector:
                 text = LanguageDetector._extract_text_from_srt(file_data)
             elif filename_lower.endswith('.pdf'):
                 text = LanguageDetector._extract_text_from_pdf(file_data)
+            elif filename_lower.endswith('.docx'):
+                text = LanguageDetector._extract_text_from_docx(file_data)
             else:
                 # Plain text file
                 # Try common encodings

@@ -1,19 +1,18 @@
 """
 Locate the wrong renderings named by correction rules.
 
-Matching follows the glossary filter (src/core/glossary/filter.py): Latin
-alternatives are anchored on word boundaries so "Fan" does not match inside
-"Fantasy", CJK alternatives are plain substrings. Unlike the filter, this
-returns positions, because the term-fix pass edits the text in place.
+Matching shares the glossary filter's logic (src/core/glossary/filter.py):
+Latin alternatives are anchored on word boundaries so "Fan" does not match
+inside "Fantasy", CJK alternatives are plain substrings, and overlaps resolve
+to the longest match. Unlike the filter, this returns positions, because the
+term-fix pass edits the text in place.
 """
 import re
 from dataclasses import dataclass
 from typing import List, Sequence, Tuple
 
-from src.core.glossary.filter import _is_cjk
+from src.core.glossary.filter import longest_non_overlapping, term_pattern
 from src.core.term_fix.rules import Alternative, TermRule
-
-_WORD_CHAR_RE = re.compile(r"\w")
 
 
 @dataclass(frozen=True)
@@ -28,17 +27,9 @@ class Span:
 
 def _alternative_pattern(alt: Alternative) -> str:
     """Regex for one alternative. Boundaries only apply on word-character edges,
-    so an alternative ending in punctuation (e.g. "Mr.") still matches."""
-    body = re.escape(alt.text)
-    if _is_cjk(alt.text):
-        # No word boundaries in CJK scripts: a prefix wildcard adds nothing.
-        return body
-    left = r"(?<!\w)" if _WORD_CHAR_RE.match(alt.text[0]) else ""
-    if alt.prefix:
-        right = r"\w*"
-    else:
-        right = r"(?!\w)" if _WORD_CHAR_RE.match(alt.text[-1]) else ""
-    return f"{left}{body}{right}"
+    so an alternative ending in punctuation (e.g. "Mr.") still matches. In CJK
+    scripts there are no word boundaries, so a prefix wildcard adds nothing."""
+    return term_pattern(alt.text, prefix=alt.prefix)
 
 
 def find_spans(
@@ -62,12 +53,7 @@ def find_spans(
                 if m.end() > m.start():
                     candidates.append((m.start(), m.end(), rule_index, alt_index))
 
-    candidates.sort(key=lambda c: (c[0], -(c[1] - c[0])))
-    spans: List[Span] = []
-    last_end = -1
-    for start, end, rule_index, alt_index in candidates:
-        if start < last_end:
-            continue
-        spans.append(Span(start, end, rule_index, alt_index, text[start:end]))
-        last_end = end
-    return spans
+    return [
+        Span(start, end, rule_index, alt_index, text[start:end])
+        for start, end, rule_index, alt_index in longest_non_overlapping(candidates)
+    ]

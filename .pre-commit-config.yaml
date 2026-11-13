@@ -12,6 +12,13 @@ repos:
       - id: trailing-whitespace
         name: Remove trailing whitespace
 
+  # Lint (rules in pyproject.toml; keep rev in sync with requirements-dev.txt)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+
   # Sorted Python imports
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2

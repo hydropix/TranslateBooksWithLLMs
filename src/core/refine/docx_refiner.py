@@ -9,9 +9,9 @@ import os
 import tempfile
 from typing import Optional, Callable, Dict
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT, MAX_TOKENS_PER_CHUNK
+from src.config import DEFAULT_MODEL, API_ENDPOINT
 from src.core.epub.xhtml_translator import _refine_epub_chunks, _escape_stray_angle_brackets
-from src.core.epub.container import TranslationContainer
+from src.core.epub.container import TranslationConfig, TranslationContainer
 from src.core.docx.converter import DocxHtmlConverter
 from .client_setup import build_refine_client
 from .epub_refiner import _globalize_chunk_text
@@ -37,9 +37,16 @@ async def refine_docx_file(
     context_window: int = 2048,
     auto_adjust_context: bool = True,
     prompt_options: Optional[Dict] = None,
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
+    max_tokens_per_chunk: Optional[int] = None,
 ) -> bool:
-    """Run a refinement-only pass on an already-translated DOCX file."""
+    """Run a refinement-only pass on an already-translated DOCX file.
+
+    `max_tokens_per_chunk` sizes the refine chunks; None reads the current
+    MAX_TOKENS_PER_CHUNK setting at call time.
+    """
+    if max_tokens_per_chunk is None:
+        from src.config import MAX_TOKENS_PER_CHUNK
+        max_tokens_per_chunk = MAX_TOKENS_PER_CHUNK
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input DOCX file '{input_filepath}' not found."
         if log_callback:
@@ -69,7 +76,11 @@ async def refine_docx_file(
             log_callback("docx_refine_start", "✨ Starting DOCX refine pass...")
 
         converter = DocxHtmlConverter()
-        container = TranslationContainer()
+        # An explicit config: the default one sizes chunks with the
+        # MAX_TOKENS_PER_CHUNK frozen at import and ignores the caller's value.
+        container = TranslationContainer(
+            TranslationConfig(max_tokens_per_chunk=max_tokens_per_chunk)
+        )
         tag_preserver = container.tag_preserver
 
         html_content, metadata = converter.to_html(input_filepath)

@@ -21,7 +21,6 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
@@ -33,7 +32,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from src.config import INPUT_TAG_IN, INPUT_TAG_OUT, TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
-from src.core.llm.base import LLMProvider, LLMResponse
+from src.core.llm.base import LLMProvider, LLMRequest, LLMResponse
 from scripts.build_test_epub import build_epub
 from src.core.epub.translator import translate_epub_file
 
@@ -62,8 +61,8 @@ class UpperCaseProvider(LLMProvider):
         self.context_window = _kwargs.get("context_window") or 8192
         self._is_thinking_model = False
 
-    async def generate(self, prompt: str, timeout: int = 0,
-                       system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
+    async def _send(self, request: LLMRequest) -> LLMResponse:
+        prompt = request.prompt
         source = _extract_source_block(prompt)
         translated = source.upper()
         content = f"{TRANSLATE_TAG_IN}{translated}{TRANSLATE_TAG_OUT}"
@@ -89,8 +88,7 @@ def _fake_factory(provider_type: str = "ollama", **kwargs) -> UpperCaseProvider:
 def _install_fake():
     import src.core.llm.factory as factory_mod
     import src.core.llm as llm_pkg
-    import src.core.llm_client as client_mod
-    for mod in (factory_mod, llm_pkg, client_mod):
+    for mod in (factory_mod, llm_pkg):
         if hasattr(mod, "create_llm_provider"):
             mod.create_llm_provider = _fake_factory
 

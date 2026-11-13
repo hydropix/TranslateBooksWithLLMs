@@ -56,7 +56,7 @@ def _provider(body, cls=OpenRouterProvider, **kwargs):
 
 @pytest.fixture(autouse=True)
 def _no_reasoning_lookup(monkeypatch):
-    async def _none(self):
+    async def _none(self, model=None):
         return {}
 
     monkeypatch.setattr(OpenRouterProvider, "_get_reasoning_override", _none)
@@ -177,7 +177,7 @@ async def test_poe_records_tokens_per_job_without_cost():
         async def _get_client():
             return client
 
-        async def _no_overrides():
+        async def _no_overrides(model=None):
             return {}
 
         provider._get_client = _get_client

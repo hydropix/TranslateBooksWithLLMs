@@ -11,19 +11,14 @@ Features:
 """
 
 from typing import List, Optional, Union
-import httpx
-import asyncio
 
-from src.config import (
-    REQUEST_TIMEOUT,
-    MAX_TRANSLATION_ATTEMPTS,
-    TEMPERATURE,
-    GEMINI_SAFETY_THRESHOLD,
+import httpx
+
+from src.config import GEMINI_SAFETY_THRESHOLD
+from ..base import (
+    LLMProvider, LLMRequest, LLMResponse, is_output_limit_finish, provider_error_from_response,
 )
-from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError, RateLimitError
-from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
-from ..utils.error_classification import is_context_overflow_error
+from ..policy import RetryPolicy
 
 # Four harm categories returned by the Gemini API. By default Gemini blocks
 # anything at MEDIUM and above on all four, which strips a significant portion
@@ -65,7 +60,15 @@ class GeminiProvider(LLMProvider):
         >>> response = await provider.generate("Translate: Hello")
     """
 
-    def __init__(self, api_key: Union[str, List[str]], model: str = "gemini-3.6-flash"):
+    API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+    DISPLAY_NAME = "Gemini"
+    # Gemini may also report an oversized prompt as RESOURCE_EXHAUSTED (a 429
+    # with that status is a quota error and is never read as an overflow).
+    OVERFLOW_KEYWORDS = ("resource_exhausted",)
+
+    def __init__(self, api_key: Union[str, List[str]], model: str = "gemini-3.6-flash",
+                 *, retry_policy: Optional[RetryPolicy] = None,
+                 temperature: Optional[float] = None, log_callback=None):
         """
         Initialize the Gemini provider.
 
@@ -75,16 +78,21 @@ class GeminiProvider(LLMProvider):
                 them in a KeyPool that rotates on rate-limit).
             model: Gemini model name (default: gemini-3.6-flash)
         """
-        super().__init__(model, api_keys=api_key, provider_name="gemini")
-        self.api_endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        super().__init__(model, api_keys=api_key, provider_name="gemini",
+                         retry_policy=retry_policy, temperature=temperature,
+                         log_callback=log_callback)
+        self.api_endpoint = self._endpoint_for(model)
 
-    def _is_thinking_model(self) -> bool:
-        """Check if the current model supports thinking mode (Gemini 2.5+)."""
-        return "2.5" in self.model
+    def _endpoint_for(self, model: str) -> str:
+        return f"{self.API_BASE}/{model}:generateContent"
 
-    def _get_thinking_config(self) -> dict:
+    def _is_thinking_model(self, model: Optional[str] = None) -> bool:
+        """Check if the model supports thinking mode (Gemini 2.5+)."""
+        return "2.5" in (model or self.model)
+
+    def _get_thinking_config(self, model: Optional[str] = None) -> dict:
         """Return thinkingConfig to disable thinking for supported models."""
-        if self._is_thinking_model():
+        if self._is_thinking_model(model):
             return {"thinkingConfig": {"thinkingBudget": 0}}
         return {}
 
@@ -100,7 +108,7 @@ class GeminiProvider(LLMProvider):
             "x-goog-api-key": self.api_key
         }
 
-        models_endpoint = "https://generativelanguage.googleapis.com/v1beta/models"
+        models_endpoint = self.API_BASE
 
         client = await self._get_client()
         try:
@@ -150,32 +158,18 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             raise RuntimeError(f"Error fetching Gemini models: {e}") from e
 
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
-                      system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
-        """
-        Generate text using Gemini API.
-
-        Args:
-            prompt: The user prompt (content to translate)
-            timeout: Request timeout in seconds
-            system_prompt: Optional system prompt (role/instructions)
-
-        Returns:
-            LLMResponse with content and token usage info, or None if failed
-
-        Raises:
-            ContextOverflowError: If input exceeds Gemini's context window
-        """
+    async def _send(self, request: LLMRequest) -> LLMResponse:
+        """One generateContent call (request loop in ``LLMProvider``)."""
         payload = {
             "contents": [{
                 "role": "user",
                 "parts": [{
-                    "text": prompt
+                    "text": request.prompt
                 }]
             }],
             "generationConfig": {
-                "temperature": TEMPERATURE,
-                **self._get_thinking_config()
+                "temperature": self.effective_temperature(),
+                **self._get_thinking_config(request.model)
             },
             "safetySettings": [
                 {"category": category, "threshold": GEMINI_SAFETY_THRESHOLD}
@@ -183,147 +177,81 @@ class GeminiProvider(LLMProvider):
             ],
         }
 
-        # Add system instruction if provided (Gemini API supports systemInstruction field)
-        if system_prompt:
+        # Gemini takes the system prompt as a dedicated systemInstruction field.
+        if request.system_prompt:
             payload["systemInstruction"] = {
                 "parts": [{
-                    "text": system_prompt
+                    "text": request.system_prompt
                 }]
             }
 
+        headers = {"Content-Type": "application/json"}
+        if request.api_key:
+            headers["x-goog-api-key"] = request.api_key
+
         client = await self._get_client()
-        # 429s have their own budget (rate_limit_events): rotating to a spare
-        # key must not consume a transient-retry attempt (issue #217).
-        attempt = 0
-        rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
-            headers = {
-                "Content-Type": "application/json",
-                "x-goog-api-key": current_key,
-            }
-            try:
-                response = await client.post(
-                    self.api_endpoint,
-                    headers=headers,
-                    json=payload,
-                    timeout=timeout
-                )
-                response.raise_for_status()
+        response = await client.post(
+            self._endpoint_for(request.model),
+            headers=headers,
+            json=payload,
+            timeout=request.timeout
+        )
+        if response.status_code >= 400:
+            raise provider_error_from_response(response)
+        return self._parse_response(response.json())
 
-                response_json = response.json()
-                # Extract text from Gemini response structure
-                response_text = ""
-                was_truncated = False
-                finish_reason = None
-                # When the input prompt itself is blocked, Gemini returns 200
-                # with no candidates and promptFeedback.blockReason populated.
-                # Surface this so the empty response isn't silently treated as
-                # a translation failure.
-                prompt_feedback = response_json.get("promptFeedback", {})
-                if prompt_feedback.get("blockReason") and not response_json.get("candidates"):
-                    print(
-                        f"⚠️ Gemini blocked the input prompt "
-                        f"(blockReason: {prompt_feedback['blockReason']}). "
-                        f"Consider lowering GEMINI_SAFETY_THRESHOLD "
-                        f"(current: {GEMINI_SAFETY_THRESHOLD})."
-                    )
-                if "candidates" in response_json and response_json["candidates"]:
-                    candidate = response_json["candidates"][0]
-                    content = candidate.get("content", {})
-                    parts = content.get("parts", [])
-                    # Gemini can split one answer across several parts, and adds
-                    # a part flagged "thought" when thinking is enabled. Keep
-                    # every text part; taking parts[0] truncated long responses.
-                    response_text = "".join(
-                        part.get("text", "")
-                        for part in parts
-                        if not part.get("thought")
-                    )
-                    # Detect finishReason: MAX_TOKENS = truncation; SAFETY/RECITATION
-                    # = the model produced nothing because the response was blocked
-                    # post-generation. We log SAFETY explicitly because a silent
-                    # empty content here is the main cause of mixed-language
-                    # output in EPUB translations.
-                    finish_reason = candidate.get("finishReason", "")
-                    if finish_reason == "MAX_TOKENS":
-                        was_truncated = True
-                        print(f"⚠️ Gemini response was truncated (finishReason: MAX_TOKENS)")
-                    elif finish_reason in ("SAFETY", "RECITATION") and not response_text:
-                        print(
-                            f"⚠️ Gemini returned empty content (finishReason: {finish_reason}). "
-                            f"This chunk was blocked post-generation; consider lowering "
-                            f"GEMINI_SAFETY_THRESHOLD (current: {GEMINI_SAFETY_THRESHOLD})."
-                        )
+    def _parse_response(self, response_json: dict) -> LLMResponse:
+        response_text = ""
+        was_truncated = False
+        finish_reason = None
+        # When the input prompt itself is blocked, Gemini returns 200 with no
+        # candidates and promptFeedback.blockReason populated. Surface this so
+        # the empty response isn't silently treated as a translation failure.
+        prompt_feedback = response_json.get("promptFeedback", {})
+        if prompt_feedback.get("blockReason") and not response_json.get("candidates"):
+            self._log("gemini_prompt_blocked",
+                      f"⚠️ Gemini blocked the input prompt "
+                      f"(blockReason: {prompt_feedback['blockReason']}). "
+                      f"Consider lowering GEMINI_SAFETY_THRESHOLD "
+                      f"(current: {GEMINI_SAFETY_THRESHOLD}).")
+        if "candidates" in response_json and response_json["candidates"]:
+            candidate = response_json["candidates"][0]
+            content = candidate.get("content", {})
+            parts = content.get("parts", [])
+            # Gemini can split one answer across several parts, and adds a part
+            # flagged "thought" when thinking is enabled. Keep every text part;
+            # taking parts[0] truncated long responses.
+            response_text = "".join(
+                part.get("text", "")
+                for part in parts
+                if not part.get("thought")
+            )
+            # finishReason MAX_TOKENS = truncation; SAFETY/RECITATION = the
+            # response was blocked post-generation. SAFETY is logged explicitly
+            # because a silent empty content here is the main cause of
+            # mixed-language output in EPUB translations.
+            finish_reason = candidate.get("finishReason", "")
+            if finish_reason == "MAX_TOKENS":
+                was_truncated = True
+                self._log("gemini_max_tokens",
+                          "⚠️ Gemini response was truncated (finishReason: MAX_TOKENS)")
+            elif finish_reason in ("SAFETY", "RECITATION") and not response_text:
+                self._log("gemini_blocked_output",
+                          f"⚠️ Gemini returned empty content (finishReason: {finish_reason}). "
+                          f"This chunk was blocked post-generation; consider lowering "
+                          f"GEMINI_SAFETY_THRESHOLD (current: {GEMINI_SAFETY_THRESHOLD}).")
 
-                # Extract token usage if available
-                usage_metadata = response_json.get("usageMetadata", {})
-                prompt_tokens = usage_metadata.get("promptTokenCount", 0)
-                completion_tokens = usage_metadata.get("candidatesTokenCount", 0)
+        usage_metadata = response_json.get("usageMetadata", {})
+        prompt_tokens = usage_metadata.get("promptTokenCount", 0)
+        completion_tokens = usage_metadata.get("candidatesTokenCount", 0)
 
-                return LLMResponse(
-                    content=response_text,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    context_used=prompt_tokens + completion_tokens,
-                    context_limit=0,  # Gemini manages context internally
-                    was_truncated=was_truncated,
-                    finish_reason=finish_reason,
-                    output_truncated=is_output_limit_finish(finish_reason)
-                )
-
-            except httpx.TimeoutException as e:
-                    print(f"Gemini API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                    attempt += 1
-                    if attempt < MAX_TRANSLATION_ATTEMPTS:
-                        await asyncio.sleep(2)
-                        continue
-                    return None
-            except httpx.HTTPStatusError as e:
-                    error_message = str(e)
-                    error_body = ""
-                    if hasattr(e, 'response') and hasattr(e.response, 'text'):
-                        error_body = e.response.text[:500]
-                        error_message = f"{e} - {error_body}"
-
-                    # Handle rate limiting (429) — rotate key or sleep, raise if exhausted
-                    if e.response.status_code == 429:
-                        rate_limit_events += 1
-                        await handle_rate_limit(
-                            self._key_pool, current_key, e.response.headers,
-                            rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
-                        )
-                        continue
-
-                    print(f"Gemini API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                    if error_body:
-                        print(f"Response details: Status {e.response.status_code}, Body: {error_body[:200]}...")
-
-                    # Detect context overflow errors (Gemini may also report RESOURCE_EXHAUSTED)
-                    if is_context_overflow_error(error_message, e.response.status_code,
-                                                 extra_keywords=("resource_exhausted",)):
-                        raise ContextOverflowError(f"Gemini context overflow: {error_message}")
-
-                    # Client errors (404 model retired, 400/401/403) won't recover
-                    # on retry — fail fast instead of hammering the API 3x.
-                    if not is_retryable_http_status(e.response.status_code):
-                        return None
-
-                    attempt += 1
-                    if attempt < MAX_TRANSLATION_ATTEMPTS:
-                        await asyncio.sleep(2)
-                        continue
-                    return None
-            except (RateLimitError, ContextOverflowError):
-                # Must reach the pipeline: a rate-limit pause or a chunk split,
-                # never a retried-then-failed chunk.
-                raise
-            except Exception as e:
-                    print(f"Gemini API Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                    attempt += 1
-                    if attempt < MAX_TRANSLATION_ATTEMPTS:
-                        await asyncio.sleep(2)
-                        continue
-                    return None
-
-        return None
+        return LLMResponse(
+            content=response_text,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            context_used=prompt_tokens + completion_tokens,
+            context_limit=0,  # Gemini manages context internally
+            was_truncated=was_truncated,
+            finish_reason=finish_reason,
+            output_truncated=is_output_limit_finish(finish_reason)
+        )

@@ -13,7 +13,6 @@ Token counts are derived from string length so cost/token fields are stable
 too (the recorder strips them anyway).
 """
 
-from typing import Optional
 
 from src.config import (
     INPUT_TAG_IN,
@@ -21,7 +20,7 @@ from src.config import (
     TRANSLATE_TAG_IN,
     TRANSLATE_TAG_OUT,
 )
-from src.core.llm.base import LLMProvider, LLMResponse
+from src.core.llm.base import LLMProvider, LLMRequest, LLMResponse
 
 
 def _extract_source_block(prompt: str) -> str:
@@ -50,12 +49,9 @@ class FakeEchoProvider(LLMProvider):
         self.context_window = _kwargs.get("context_window") or 4096
         self._is_thinking_model = False
 
-    async def generate(
-        self,
-        prompt: str,
-        timeout: int = 0,
-        system_prompt: Optional[str] = None,
-    ) -> Optional[LLMResponse]:
+    async def _send(self, request: LLMRequest) -> LLMResponse:
+        # Goes through the real LLMProvider request loop; only the transport is fake.
+        prompt = request.prompt
         source = _extract_source_block(prompt)
         content = f"{TRANSLATE_TAG_IN}{source}{TRANSLATE_TAG_OUT}"
         prompt_tokens = max(1, len(prompt) // 4)
@@ -65,13 +61,10 @@ class FakeEchoProvider(LLMProvider):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             context_used=prompt_tokens + completion_tokens,
-            context_limit=self.context_window,
+            context_limit=request.context_window or self.context_window,
             was_truncated=False,
             was_fallback=False,
         )
-
-    async def _detect_thinking_model(self) -> bool:
-        return False
 
 
 def _fake_create_llm_provider(provider_type: str = "ollama", **kwargs) -> FakeEchoProvider:
@@ -88,7 +81,6 @@ def _fake_create_llm_provider(provider_type: str = "ollama", **kwargs) -> FakeEc
 _PATCH_TARGETS = (
     "src.core.llm.factory.create_llm_provider",
     "src.core.llm.create_llm_provider",
-    "src.core.llm_client.create_llm_provider",
 )
 
 

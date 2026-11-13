@@ -6,11 +6,14 @@ carried in a ``ContextVar``: every provider call made from that job (translate,
 refine, term-fix, ...) reports to the same tracker, and concurrent jobs never
 see each other's totals or callbacks.
 """
+import logging
 import threading
 from contextvars import ContextVar, Token
 from typing import Any, Callable, Dict, Optional, Tuple
 
 CostCallback = Callable[[Dict[str, Any]], None]
+
+logger = logging.getLogger("llm.cost_tracker")
 
 
 class CostTracker:
@@ -63,7 +66,7 @@ class CostTracker:
             try:
                 callback(data)
             except Exception as cb_err:
-                print(f"[CostTracker] WARN: Cost callback error: {cb_err}")
+                logger.warning(f"Cost callback error: {cb_err}")
         return data
 
 

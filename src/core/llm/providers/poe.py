@@ -13,24 +13,20 @@ Features:
 API Documentation: https://creator.poe.com/docs/external-applications/openai-compatible-api
 """
 
-from typing import Optional, Dict, Any, Callable, List, Union
-import httpx
-import asyncio
-import time
-import json
+import logging
+from typing import Any, Dict, Iterable, List, Optional, Union
 
-from src.config import (
-    REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE,
-    POE_DISABLE_THINKING, POE_DISABLE_WEB_SEARCH
-)
-from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError, RateLimitError
-from ..cost_tracker import CostTracker, get_current_cost_tracker
-from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
-from ..utils.error_classification import is_context_overflow_error
+from src.config import POE_DISABLE_THINKING, POE_DISABLE_WEB_SEARCH
+
+from ..base import LLMRequest
+from ..catalog import CatalogCache
+from ..policy import RetryPolicy
+from .openai_chat import OpenAIChatProvider
+
+logger = logging.getLogger("llm.poe")
 
 
-class PoeProvider(LLMProvider):
+class PoeProvider(OpenAIChatProvider):
     """
     Provider for Poe API (OpenAI-compatible).
 
@@ -105,16 +101,25 @@ class PoeProvider(LLMProvider):
     # for gemini-3.6-flash and grok-4.5, where it inflates every single chunk.
     WEB_SEARCH_PARAMS = ("web_search", "enable_web_search")
 
-    # Advertised parameter schemas, fetched once per process: {model_id: [param]}
-    # A failed fetch is retried after this many seconds.
+    # Advertised parameter schemas, fetched once per process: {model_id: [param]}.
+    # A failed fetch is retried after CATALOG_RETRY_SECONDS. The cache is safe
+    # to share across the per-job event loops (see CatalogCache).
     CATALOG_RETRY_SECONDS = 300
-    _model_parameters: Optional[Dict[str, List[Dict[str, Any]]]] = None
-    # monotonic time of the last failed fetch; retried after CATALOG_RETRY_SECONDS
-    _model_parameters_failed_at: Optional[float] = None
-    _model_parameters_lock: Optional[asyncio.Lock] = None
+    _catalog = CatalogCache("Poe", retry_seconds=CATALOG_RETRY_SECONDS)
     # Resolved overrides, keyed by model *and* flags since they decide the
     # result: {(model_id, disable_thinking, disable_web_search): {param: value}}
     _bot_overrides: Dict[tuple, Dict[str, Any]] = {}
+
+    DEFAULT_CONTEXT_LIMIT = 32000  # Conservative default for unknown models
+    DISPLAY_NAME = "Poe"
+    # Poe's 400s for an unsupported knob do not always name it: when our own
+    # overrides are in the request, retry once without them to rule them out.
+    DROP_ALL_OPTIONAL_ON_UNNAMED_400 = True
+    STATUS_HINTS = {
+        401: "invalid API key, get one at https://poe.com/api_key",
+        402: "insufficient points/credits, see https://poe.com/subscribe",
+        404: "bot not found (only public bots are reachable through the API)",
+    }
 
     def __init__(
         self,
@@ -122,7 +127,11 @@ class PoeProvider(LLMProvider):
         model: str = "Claude-Sonnet-4",
         api_endpoint: Optional[str] = None,
         disable_thinking: bool = POE_DISABLE_THINKING,
-        disable_web_search: bool = POE_DISABLE_WEB_SEARCH
+        disable_web_search: bool = POE_DISABLE_WEB_SEARCH,
+        *,
+        retry_policy: Optional[RetryPolicy] = None,
+        temperature: Optional[float] = None,
+        log_callback=None,
     ):
         """
         Initialize the Poe provider.
@@ -139,83 +148,39 @@ class PoeProvider(LLMProvider):
                 grok-4.5 sends 1141 prompt tokens for an 84-token translation
                 prompt with search on, and every chunk pays that.
         """
-        super().__init__(model, api_keys=api_key, provider_name="poe")
-        self.api_endpoint = api_endpoint or self.API_URL
+        super().__init__(
+            api_key=api_key, model=model, api_endpoint=api_endpoint, provider_name="poe",
+            retry_policy=retry_policy, temperature=temperature, log_callback=log_callback,
+        )
         self.disable_thinking = disable_thinking
         self.disable_web_search = disable_web_search
-        # Used when no per-job tracker is active (direct use outside a job).
-        self._cost_tracker = CostTracker()
-
-    def _get_context_limit(self) -> int:
-        """
-        Determine context limit based on model name.
-
-        Returns:
-            Context limit in tokens
-        """
-        model_lower = self.model.lower()
-        for prefix, limit in self.MODEL_CONTEXT_SIZES.items():
-            if prefix in model_lower:
-                return limit
-        return 32000  # Conservative default for unknown models
-
-    @staticmethod
-    def _catalog_failed_recently() -> bool:
-        """True while a failed catalog fetch is too recent to retry.
-
-        A transient failure must not disable the overrides for the life of
-        the process (reasoning would stay on, and billed, for every job).
-        """
-        failed_at = PoeProvider._model_parameters_failed_at
-        return (failed_at is not None
-                and time.monotonic() - failed_at < PoeProvider.CATALOG_RETRY_SECONDS)
 
     async def _load_model_parameters(self) -> Optional[Dict[str, List[Dict[str, Any]]]]:
         """
-        Fetch the parameter schemas Poe advertises for every bot.
+        The parameter schemas Poe advertises for every bot.
 
-        Fetched once per process and cached class-side. Returns None when the
-        catalog is unreachable, which means "unknown" and not "no parameters";
-        the fetch is retried once CATALOG_RETRY_SECONDS have passed.
+        Fetched once per process. Returns None when the catalog is
+        unreachable, which means "unknown" and not "no parameters"; the fetch
+        is retried once CATALOG_RETRY_SECONDS have passed.
         """
-        if PoeProvider._model_parameters is not None:
-            return PoeProvider._model_parameters
-        if PoeProvider._catalog_failed_recently():
-            return None
+        async def fetch():
+            client = await self._get_client()
+            response = await client.get(
+                self.MODELS_URL,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Accept": "application/json"
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return {
+                m["id"]: (m.get("parameters") or [])
+                for m in response.json().get("data", [])
+                if m.get("id")
+            }
 
-        # Safe to create here without a double-check race: no await between the
-        # test and the assignment, so the event loop cannot interleave.
-        if PoeProvider._model_parameters_lock is None:
-            PoeProvider._model_parameters_lock = asyncio.Lock()
-
-        async with PoeProvider._model_parameters_lock:
-            if PoeProvider._model_parameters is not None:
-                return PoeProvider._model_parameters
-            if PoeProvider._catalog_failed_recently():
-                return None
-            try:
-                client = await self._get_client()
-                response = await client.get(
-                    self.MODELS_URL,
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Accept": "application/json"
-                    },
-                    timeout=30
-                )
-                response.raise_for_status()
-                PoeProvider._model_parameters_failed_at = None
-                PoeProvider._model_parameters = {
-                    m["id"]: (m.get("parameters") or [])
-                    for m in response.json().get("data", [])
-                    if m.get("id")
-                }
-                return PoeProvider._model_parameters
-            except Exception as e:
-                print(f"⚠️ Poe: could not read model parameters ({e});"
-                      f" reasoning stays at the bot's default")
-                PoeProvider._model_parameters_failed_at = time.monotonic()
-                return None
+        return await type(self)._catalog.get(fetch)
 
     def _pick_bot_overrides(self, advertised: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Map a bot's advertised parameters to the settings translation wants."""
@@ -240,16 +205,20 @@ class PoeProvider(LLMProvider):
 
         return overrides
 
+    def _overrides_key(self, model: Optional[str] = None) -> tuple:
+        return (model or self.model, self.disable_thinking, self.disable_web_search)
+
     @property
     def _overrides_cache_key(self) -> tuple:
-        return (self.model, self.disable_thinking, self.disable_web_search)
+        return self._overrides_key()
 
-    async def _get_bot_overrides(self) -> Dict[str, Any]:
+    async def _get_bot_overrides(self, model: Optional[str] = None) -> Dict[str, Any]:
         """Return the request params that override this bot's costly defaults."""
+        model = model or self.model
         if not (self.disable_thinking or self.disable_web_search):
             return {}
 
-        cached = PoeProvider._bot_overrides.get(self._overrides_cache_key)
+        cached = PoeProvider._bot_overrides.get(self._overrides_key(model))
         if cached is not None:
             return dict(cached)
 
@@ -257,30 +226,11 @@ class PoeProvider(LLMProvider):
         if catalog is None:
             return {}
 
-        overrides = self._pick_bot_overrides(catalog.get(self.model, []))
-        PoeProvider._bot_overrides[self._overrides_cache_key] = overrides
+        overrides = self._pick_bot_overrides(catalog.get(model, []))
+        PoeProvider._bot_overrides[self._overrides_key(model)] = overrides
         if overrides:
-            print(f"⚙️ Poe ({self.model}): bot defaults overridden: {overrides}")
+            logger.info(f"Poe ({model}): bot defaults overridden: {overrides}")
         return dict(overrides)
-
-    def get_session_cost(self) -> tuple:
-        """
-        Get this provider instance's token usage.
-
-        Poe bills in compute points, not USD, so the cost is always 0.0.
-
-        Returns:
-            Tuple of (total_cost_usd, token_counts_dict)
-        """
-        return self._cost_tracker.snapshot()
-
-    def reset_session_cost(self) -> None:
-        """Reset this provider instance's usage tracking."""
-        self._cost_tracker.reset()
-
-    def set_cost_callback(self, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
-        """Set a callback receiving token usage after each call on this instance."""
-        self._cost_tracker.callback = callback
 
     # Known official providers to filter models (excludes community bots)
     # Note: Poe sometimes hosts models via intermediaries like "Novita AI", "Together AI", etc.
@@ -430,14 +380,14 @@ class PoeProvider(LLMProvider):
                 models.sort(key=lambda x: (x.get("owned_by", "zzz").lower(), x.get("id", "").lower()))
 
                 if models:
-                    print(f"✅ Poe: Loaded {len(models)} text models from API (filtered from {len(models_data)} total)")
+                    logger.info(f"Poe: loaded {len(models)} text models from API (filtered from {len(models_data)} total)")
                     return models
 
             # API error - fall back to static list
-            print(f"⚠️ Poe API returned status {response.status_code}, using fallback models")
+            logger.warning(f"Poe API returned status {response.status_code}, using fallback models")
 
         except Exception as e:
-            print(f"⚠️ Poe: Error fetching models: {e}, using fallback list")
+            logger.warning(f"Poe: error fetching models: {e}, using fallback list")
 
         # Fallback to static list
         return self._get_fallback_models()
@@ -455,197 +405,17 @@ class PoeProvider(LLMProvider):
 
     def _get_context_limit_for_model(self, model_name: str) -> int:
         """Get context limit for a specific model name."""
-        model_lower = model_name.lower()
-        for prefix, limit in self.MODEL_CONTEXT_SIZES.items():
-            if prefix in model_lower:
-                return limit
-        return 32000
+        return self._context_limit_for(model_name)
 
-    async def generate(
-        self,
-        prompt: str,
-        timeout: int = REQUEST_TIMEOUT,
-        system_prompt: Optional[str] = None
-    ) -> Optional[LLMResponse]:
-        """
-        Generate text using Poe API.
+    # ------------------------------------------------- chat-completions hooks
+    async def _optional_params(self, request: LLMRequest) -> Dict[str, Any]:
+        params = await super()._optional_params(request)
+        params.update(await self._get_bot_overrides(request.model))
+        return params
 
-        Args:
-            prompt: The user prompt (content to translate)
-            timeout: Request timeout in seconds
-            system_prompt: Optional system prompt (role/instructions)
-
-        Returns:
-            LLMResponse with content and token usage info, or None if failed
-
-        Raises:
-            ContextOverflowError: If input exceeds model's context window
-        """
-        # Build messages array
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        bot_overrides = await self._get_bot_overrides()
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "temperature": TEMPERATURE,
-            **bot_overrides,
-        }
-
-        client = await self._get_client()
-        # 429s have their own budget (rate_limit_events): rotating to a spare
-        # key must not consume a transient-retry attempt (issue #217).
-        attempt = 0
-        rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
-            headers = {
-                "Authorization": f"Bearer {current_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-            try:
-                response = await client.post(
-                    self.api_endpoint,
-                    headers=headers,
-                    json=payload,
-                    timeout=timeout
-                )
-
-                # Handle specific error codes
-                if response.status_code == 401:
-                    print(f"❌ Poe: Invalid API key!")
-                    print(f"   Get your API key at: https://poe.com/api_key")
-                    return None
-
-                if response.status_code == 402:
-                    print(f"❌ Poe: Insufficient points/credits!")
-                    print(f"   Check your subscription at: https://poe.com/subscribe")
-                    return None
-
-                if response.status_code == 429:
-                    rate_limit_events += 1
-                    await handle_rate_limit(
-                        self._key_pool, current_key, response.headers,
-                        rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
-                    )
-                    continue
-
-                # Never let our own overrides be the reason a chunk fails: on
-                # any 400 we retry once without them. Consumes no attempt, and
-                # the branch is one-shot since the overrides are emptied. Poe
-                # names the offending argument in the body ("Unrecognized
-                # request argument supplied: X", or "do not support extra_body
-                # fields: X"); when it names one of ours, the bot genuinely
-                # rejects it, so stop sending it this run.
-                if response.status_code == 400 and bot_overrides:
-                    rejected = [n for n in bot_overrides if n in response.text]
-                    if rejected:
-                        print(f"⚠️ Poe ({self.model}): params {sorted(rejected)} "
-                              f"rejected by the bot, dropping them for this run")
-                        PoeProvider._bot_overrides[self._overrides_cache_key] = {}
-                    else:
-                        print(f"⚠️ Poe ({self.model}): HTTP 400, retrying once without "
-                              f"our param overrides to rule them out")
-                    for name in bot_overrides:
-                        payload.pop(name, None)
-                    bot_overrides = {}
-                    continue
-
-                response.raise_for_status()
-                result = response.json()
-
-                if "choices" not in result or len(result["choices"]) == 0:
-                    print(f"⚠️ Poe: Unexpected response format: {result}")
-                    return None
-
-                response_text = result["choices"][0].get("message", {}).get("content", "")
-                finish_reason = result["choices"][0].get("finish_reason")
-
-                # Track token usage
-                usage = result.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-
-                print(f"💬 Poe ({self.model}): {prompt_tokens}+{completion_tokens} tokens")
-
-                # Poe reports no USD cost: record tokens only (cost 0.0).
-                self._cost_tracker.record(0.0, prompt_tokens, completion_tokens)
-                job_tracker = get_current_cost_tracker()
-                if job_tracker is not None:
-                    job_tracker.record(0.0, prompt_tokens, completion_tokens)
-
-                return LLMResponse(
-                    content=response_text,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    context_used=prompt_tokens + completion_tokens,
-                    context_limit=self._get_context_limit(),
-                    was_truncated=False,
-                    finish_reason=finish_reason,
-                    output_truncated=is_output_limit_finish(finish_reason)
-                )
-
-            except httpx.TimeoutException as e:
-                print(f"Poe API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-            except httpx.HTTPStatusError as e:
-                error_body = ""
-                error_message = str(e)
-                if hasattr(e, 'response') and hasattr(e.response, 'text'):
-                    error_body = e.response.text[:500]
-                    error_message = f"{e} - {error_body}"
-
-                if e.response.status_code == 404:
-                    print(f"❌ Poe: Bot '{self.model}' not found!")
-                    print(f"   Note: Only public bots are accessible via API")
-                    print(f"   Find bots at: https://poe.com/explore")
-                elif e.response.status_code not in [401, 402, 429]:  # Already handled above
-                    print(f"Poe API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                    print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
-
-                # Detect context overflow errors
-                if is_context_overflow_error(error_message, e.response.status_code):
-                    raise ContextOverflowError(f"Poe context overflow: {error_message}")
-
-                # Client errors (404 bot, 401 key, 402 credits, 400) won't
-                # recover on retry — fail fast.
-                if not is_retryable_http_status(e.response.status_code):
-                    return None
-
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-            except json.JSONDecodeError as e:
-                print(f"Poe API JSON Decode Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-            except (RateLimitError, ContextOverflowError):
-                # Must reach the pipeline: a rate-limit pause or a chunk split,
-                # never a retried-then-failed chunk.
-                raise
-            except Exception as e:
-                print(f"Poe API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-        return None
+    def _on_optional_params_rejected(self, rejected: Iterable[str], request: LLMRequest) -> None:
+        # The bot genuinely rejects one of our overrides: stop sending them
+        # for the rest of the run.
+        key = self._overrides_key(request.model)
+        if any(name in (PoeProvider._bot_overrides.get(key) or {}) for name in rejected):
+            PoeProvider._bot_overrides[key] = {}

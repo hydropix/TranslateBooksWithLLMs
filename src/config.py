@@ -134,7 +134,8 @@ OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '4096'))
 # byte-for-byte identical to the legacy behavior, including cross-chunk
 # translation context chaining). Values > 1 dispatch that many LLM requests at
 # once in ordered windows; the per-chunk "previous translation" context is
-# dropped in that mode (source context_before/after is still used).
+# dropped in that mode, so each chunk is sent with no cross-chunk context at
+# all (the source text around a chunk is never part of the prompt).
 #
 # Only cloud providers benefit: a single local Ollama instance serializes
 # requests anyway, so resolve_parallel_workers() forces local providers back to
@@ -286,10 +287,28 @@ if _max_retries_legacy and not os.getenv('MAX_TRANSLATION_ATTEMPTS'):
 else:
     MAX_TRANSLATION_ATTEMPTS = int(os.getenv('MAX_TRANSLATION_ATTEMPTS', '2'))
 
-# Sampling temperature applied to cloud LLM providers (gemini, deepseek, mistral,
-# poe). Lower values favor consistent translations; higher values produce more
-# variation. Ollama is unaffected because it uses its own server-side defaults.
+# Sampling temperature sent with every request by the OpenAI-compatible
+# providers (OpenAI, NVIDIA NIM and local OpenAI-compatible servers), OpenRouter,
+# Mistral, DeepSeek, Poe, Gemini and LiteLLM. Lower values favor consistent
+# translations; higher values produce more variation. Exceptions: Ollama keeps
+# the sampling parameters of the model's Modelfile (thinking models ship tuned
+# values there, and low temperatures make them loop), and OpenRouter presets
+# carry their own. A model that rejects the parameter (some OpenAI reasoning
+# models) gets the request re-sent once without it.
 TEMPERATURE = float(os.getenv('TEMPERATURE', '0.3'))
+
+# Retry policy of every LLM request (see src/core/llm/policy.py). Transient
+# failures (timeouts, 5xx, connection errors) are retried up to
+# MAX_TRANSLATION_ATTEMPTS times, waiting RETRY_BASE_DELAY seconds before the
+# second attempt and RETRY_BACKOFF_FACTOR times longer before each next one
+# (capped at RETRY_MAX_DELAY), plus up to RETRY_JITTER of random extra so
+# parallel workers do not retry in lockstep. A web job's own timeout /
+# attempts / retry delay settings override these. HTTP 429 has its own budget
+# (key rotation never consumes an attempt).
+RETRY_BASE_DELAY = float(os.getenv('RETRY_BASE_DELAY', '2'))
+RETRY_BACKOFF_FACTOR = float(os.getenv('RETRY_BACKOFF_FACTOR', '2'))
+RETRY_MAX_DELAY = float(os.getenv('RETRY_MAX_DELAY', '30'))
+RETRY_JITTER = float(os.getenv('RETRY_JITTER', '0.25'))
 
 # Gemini safety filter threshold applied to all four harm categories
 # (HARASSMENT, HATE_SPEECH, SEXUALLY_EXPLICIT, DANGEROUS_CONTENT). Default is

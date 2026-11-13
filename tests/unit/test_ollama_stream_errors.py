@@ -91,7 +91,8 @@ async def test_context_overflow_detected_from_plain_text_body():
 @pytest.mark.asyncio
 async def test_unrelated_http_error_is_retried_then_gives_up(monkeypatch):
     """A 500 with no overflow keyword stays a plain retryable HTTP error."""
-    monkeypatch.setattr("src.core.llm.providers.ollama.MAX_TRANSLATION_ATTEMPTS", 2)
+    from src.core.llm.policy import RetryPolicy, begin_job_retry_policy, end_job_retry_policy
+    token = begin_job_retry_policy(RetryPolicy(max_attempts=2))
     monkeypatch.setattr("asyncio.sleep", _no_sleep)
 
     calls = []
@@ -105,6 +106,7 @@ async def test_unrelated_http_error_is_retried_then_gives_up(monkeypatch):
         assert await provider.generate("prompt") is None
         assert len(calls) == 2
     finally:
+        end_job_retry_policy(token)
         await provider.close()
 
 

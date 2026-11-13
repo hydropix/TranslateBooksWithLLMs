@@ -21,11 +21,14 @@ trying every key (issue #217).
 """
 
 import asyncio
+import logging
 import time
 from typing import Callable, Mapping, Optional
 
 from .exceptions import RateLimitError
 from .key_pool import KeyPool
+
+logger = logging.getLogger("llm.rate_limit")
 
 
 def is_retryable_http_status(status_code: int) -> bool:
@@ -165,11 +168,11 @@ async def handle_rate_limit(
 
 
 def _log(log_callback: Optional[Callable], event: str, message: str) -> None:
-    """Best-effort logging: callback if provided, else stdout via print."""
+    """Best-effort logging: callback if provided, else the module logger."""
     if log_callback:
         try:
             log_callback(event, message)
             return
         except Exception:
             pass
-    print(message)
+    logger.warning(message)

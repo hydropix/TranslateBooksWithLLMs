@@ -4,11 +4,13 @@ disable the reasoning overrides for the life of the server process: the
 fetch is skipped for CATALOG_RETRY_SECONDS, then retried.
 """
 
-import sys
-import types
+import asyncio
+import threading
 
 import httpx
 import pytest
+
+from src.core.llm.catalog import CatalogCache
 
 FAKE_KEY = "YOUR_API_KEY_HERE"
 
@@ -16,28 +18,24 @@ FAKE_KEY = "YOUR_API_KEY_HERE"
 def _openrouter():
     from src.core.llm.providers.openrouter import OpenRouterProvider
     return (OpenRouterProvider(api_key=FAKE_KEY, model="openai/gpt-4o"),
-            OpenRouterProvider, "_load_model_catalog", "_model_catalog")
+            OpenRouterProvider, "_load_model_catalog")
 
 
 def _poe():
     from src.core.llm.providers.poe import PoeProvider
     return (PoeProvider(api_key=FAKE_KEY, model="GPT-4o"),
-            PoeProvider, "_load_model_parameters", "_model_parameters")
+            PoeProvider, "_load_model_parameters")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("build", [_openrouter, _poe], ids=["openrouter", "poe"])
 async def test_failed_catalog_fetch_is_retried_after_the_ttl(monkeypatch, build):
-    provider, cls, loader_name, cache_attr = build()
-    # Fresh class-side state for this test only.
-    monkeypatch.setattr(cls, cache_attr, None)
-    monkeypatch.setattr(cls, f"{cache_attr}_failed_at", None)
-    monkeypatch.setattr(cls, f"{cache_attr}_lock", None)
-
+    provider, cls, loader_name = build()
     clock = [1000.0]
-    # Fake clock for the provider module only; the event loop keeps the real one.
-    monkeypatch.setattr(sys.modules[cls.__module__], "time",
-                        types.SimpleNamespace(monotonic=lambda: clock[0]))
+    # Fresh process-wide cache for this test only, on a fake clock (the event
+    # loop keeps the real one).
+    monkeypatch.setattr(cls, "_catalog", CatalogCache(
+        cls.__name__, retry_seconds=cls.CATALOG_RETRY_SECONDS, clock=lambda: clock[0]))
 
     responses = [httpx.Response(503, text="temporarily unavailable"),
                  httpx.Response(200, json={"data": [{"id": "GPT-4o"}]})]
@@ -63,6 +61,39 @@ async def test_failed_catalog_fetch_is_retried_after_the_ttl(monkeypatch, build)
         catalog = await load()
         assert catalog is not None and "GPT-4o" in catalog
         assert len(requests) == 2
-        assert getattr(cls, f"{cache_attr}_failed_at") is None
+        assert cls._catalog.failed_at is None
     finally:
         await provider.close()
+
+
+def test_catalog_cache_is_usable_from_several_event_loops():
+    """Jobs run on their own event loops (one per worker thread): the cache
+    must not hand one loop a lock bound to another."""
+    cache = CatalogCache("test", retry_seconds=300)
+    fetches = []
+
+    async def fetch():
+        fetches.append(1)
+        await asyncio.sleep(0)
+        return {"model": {}}
+
+    results, errors = [], []
+
+    def run():
+        try:
+            results.append(asyncio.run(cache.get(fetch)))
+        except Exception as e:  # pragma: no cover - the failure being tested
+            errors.append(e)
+
+    # First loop holds the per-loop lock while a second loop asks too.
+    threads = [threading.Thread(target=run) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    assert all(r == {"model": {}} for r in results)
+    # Later callers, whatever their loop, are served from the cache.
+    assert asyncio.run(cache.get(fetch)) == {"model": {}}
+    assert len(fetches) <= 4

@@ -124,13 +124,16 @@ def _make_error_response(status_code, headers=None, body=None):
 def _make_provider(monkeypatch, responder, max_attempts=2):
     """Build an OllamaProvider wired to a fake client, with thinking detection
     short-circuited and the retry sleeps neutralised."""
-    monkeypatch.setattr(ollama_mod, "MAX_TRANSLATION_ATTEMPTS", max_attempts)
+    from src.core.llm import base as base_mod
+    from src.core.llm.policy import RetryPolicy
 
     sleeps = []
-    monkeypatch.setattr(ollama_mod, "asyncio", _AsyncioShim(sleeps))
+    # The retry loop (and its sleeps) lives in the provider base.
+    monkeypatch.setattr(base_mod, "asyncio", _AsyncioShim(sleeps))
 
     provider = ollama_mod.OllamaProvider(
-        api_endpoint=TEST_ENDPOINT, model="test-model"
+        api_endpoint=TEST_ENDPOINT, model="test-model",
+        retry_policy=RetryPolicy(max_attempts=max_attempts, jitter=0),
     )
     # Skip _detect_thinking_behavior(), which would issue its own HTTP request.
     provider._thinking_behavior = ThinkingBehavior.STANDARD

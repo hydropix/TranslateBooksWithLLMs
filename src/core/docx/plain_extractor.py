@@ -91,18 +91,17 @@ def _extract_inline_images(paragraph, doc: Document) -> List[_ImageRef]:
             blob = rel.target_part.blob
         except AttributeError:
             continue
-        # Try to read dimensions from the associated <wp:extent> if present.
+        # <wp:extent> is a child of the <wp:inline>/<wp:anchor> ancestor of
+        # this blip (a sibling of <a:graphic>), never an ancestor of the blip.
         width = height = None
-        extent = blip.getparent()
-        while extent is not None and not extent.tag.endswith("}extent"):
-            extent = extent.getparent()
-        # Search more broadly: extent lives a few levels up in <wp:inline>/<wp:anchor>
-        if extent is None:
-            extents = paragraph._element.findall(
-                ".//" + qn("wp:extent")
-            )
-            if extents:
-                extent = extents[0]
+        extent = None
+        container = blip.getparent()
+        while container is not None and container.tag not in (
+            qn("wp:inline"), qn("wp:anchor")
+        ):
+            container = container.getparent()
+        if container is not None:
+            extent = container.find(qn("wp:extent"))
         if extent is not None:
             try:
                 width = int(extent.get("cx") or 0) or None

@@ -25,13 +25,14 @@ from src.core.epub.translator import translate_epub_file
 from src.utils.file_utils import find_partial_output_paths
 
 from tests.unit.epub.conftest import REAL_CSS, _disable_attribution, _echo_llm_client, _read
+from tests.job_helpers import make_ctx, make_job
 
 
 # `input_epub` is a fixture defined in conftest.py -- pytest injects it
 # automatically, no import needed.
 
 
-def _stub_create_llm_client(**kwargs):
+def _stub_create_llm_client(*args, **kwargs):
     return _echo_llm_client()
 
 
@@ -48,15 +49,12 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, **overrid
     def log_callback(event, message, **_kwargs):
         events.append((event, message))
 
-    kwargs = dict(
-        input_filepath=str(input_path),
-        output_filepath=str(output_path),
-        source_language="Chinese",
-        target_language="French",
-        log_callback=log_callback,
+    check_interruption = overrides.pop("check_interruption_callback", None)
+    await translate_epub_file(
+        make_job(str(input_path), str(output_path),
+                 source_language="Chinese", target_language="French", **overrides),
+        make_ctx(log_callback=log_callback, check_interruption=check_interruption),
     )
-    kwargs.update(overrides)
-    await translate_epub_file(**kwargs)
     return events
 
 

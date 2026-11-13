@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.core.chunking.reassembly import join_translated_chunks
 from src.core.llm.exceptions import RateLimitError
 from src.core.text_processor import split_text_into_chunks
+from tests.job_helpers import make_ctx, make_job
 
 
 # Three ~11-token paragraphs; max_tokens=25 splits them into exactly two chunks.
@@ -77,8 +78,9 @@ def _install_fakes(monkeypatch, fail_at_index: int):
         return _refined(draft), _FakeResponse()
 
     monkeypatch.setattr(translator, "_make_refinement_request", fake_request)
+    import src.core.llm.factory as llm_factory
     monkeypatch.setattr(
-        translator, "create_provider_from_args", lambda *a, **kw: _StubLLMClient()
+        llm_factory, "create_llm_provider", lambda *a, **kw: _StubLLMClient()
     )
     return seen
 
@@ -115,11 +117,11 @@ async def _run_refine_txt_file(tmp_path, log_events=None):
         log_callback = lambda event, message: log_events.append((event, message))
 
     result = await refine_txt_file(
-        input_filepath=str(input_file),
-        output_filepath=str(output_file),
-        target_language="English",
-        log_callback=log_callback,
-        **CHUNK_CONFIG,
+        make_job(str(input_file), str(output_file), operation="refine",
+                 target_language="English",
+                 max_tokens_per_chunk=CHUNK_CONFIG["max_tokens_per_chunk"]),
+        make_ctx(log_callback=log_callback),
+        soft_limit_ratio=CHUNK_CONFIG["soft_limit_ratio"],
     )
     return result, output_file
 
@@ -159,11 +161,11 @@ class TestRefineChunksAttachesPartial:
 
         with pytest.raises(RateLimitError) as excinfo:
             await refine_chunks(
-                translated_chunks=drafts,
-                original_chunks=[{} for _ in drafts],
-                target_language="English",
-                model_name="test-model",
-                api_endpoint="http://localhost:11434/api/generate",
+                drafts,
+                [{} for _ in drafts],
+                make_job(model="test-model", target_language="English",
+                         endpoint="http://localhost:11434/api/generate"),
+                make_ctx(),
             )
 
         parts = excinfo.value.partial_result
@@ -184,11 +186,11 @@ class TestRefineChunksAttachesPartial:
 
         with pytest.raises(RateLimitError) as excinfo:
             await refine_chunks(
-                translated_chunks=drafts,
-                original_chunks=[{} for _ in drafts],
-                target_language="English",
-                model_name="test-model",
-                api_endpoint="http://localhost:11434/api/generate",
+                drafts,
+                [{} for _ in drafts],
+                make_job(model="test-model", target_language="English",
+                         endpoint="http://localhost:11434/api/generate"),
+                make_ctx(),
             )
 
         parts = excinfo.value.partial_result

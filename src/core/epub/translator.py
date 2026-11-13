@@ -20,11 +20,11 @@ from urllib.parse import unquote
 from lxml import etree
 
 from src.config import (
-    NAMESPACES, DEFAULT_MODEL, API_ENDPOINT,
-    MAX_TOKENS_PER_CHUNK, THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING,
+    NAMESPACES, DEFAULT_MODEL, THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING,
     MAX_TRANSLATION_ATTEMPTS, ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE,
     EPUB_SCRIPT_NORMALIZATION_ENABLED, EPUB_TRANSLATE_METADATA_ENABLED, OLLAMA_NUM_CTX,
 )
+from ..job import JobConfig, JobContext, JobResult
 from ..llm.exceptions import LLMClientConfigError
 from ..common.translation_orchestrator import GenericTranslationOrchestrator
 from .epub_translation_adapter import EpubTranslationAdapter
@@ -43,37 +43,7 @@ from .metadata_translator import translate_opf_metadata
 from src.utils.security import safe_extract_zip
 
 
-async def translate_epub_file(
-    input_filepath: str,
-    output_filepath: str,
-    source_language: str = "English",
-    target_language: str = "Chinese",
-    model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    llm_provider: str = "ollama",
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: int = 2048,
-    auto_adjust_context: bool = True,
-    min_chunk_size: int = 5,
-    checkpoint_manager=None,
-    translation_id: Optional[str] = None,
-    resume_from_index: int = 0,
-    prompt_options: Optional[Dict] = None,
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
-    max_attempts: int = None,
-    bilingual: bool = False,
-    parallel_workers: int = 1,
-    retry_token_aligned: bool = False,
-) -> bool:
+async def translate_epub_file(job: JobConfig, ctx: JobContext) -> JobResult:
     """
     Translate an EPUB file using LLM with generic orchestrator.
 
@@ -89,62 +59,61 @@ async def translate_epub_file(
     6. Repackage EPUB
 
     Args:
-        input_filepath: Path to input EPUB
-        output_filepath: Path to output EPUB
-        source_language: Source language
-        target_language: Target language
-        model_name: LLM model name
-        cli_api_endpoint: API endpoint
-        log_callback: Logging callback
-        stats_callback: Statistics callback
-        check_interruption_callback: Interruption check callback
-        llm_provider: LLM provider (ollama/gemini/openai/openrouter/mistral/deepseek/poe)
-        gemini_api_key: Gemini API key
-        openai_api_key: OpenAI API key
-        openrouter_api_key: OpenRouter API key
-        mistral_api_key: Mistral API key
-        deepseek_api_key: DeepSeek API key
-        poe_api_key: Poe API key
-        nim_api_key: NVIDIA NIM API key
-        context_window: Context window size for LLM
-        auto_adjust_context: Auto-adjust context based on model
-        min_chunk_size: Minimum chunk size
-        checkpoint_manager: Checkpoint manager for resume functionality
-        translation_id: ID of the translation job
-        resume_from_index: Index to resume from (file index)
-        prompt_options: Optional dict with prompt customization options
-        max_tokens_per_chunk: Maximum tokens per chunk
-        max_attempts: Maximum translation attempts per chunk
-        bilingual: Enable bilingual translation mode
-        retry_token_aligned: Explicit, user-initiated retry of the chunks token
-            alignment translated with approximate tag positions. Off by default;
-            it is the only thing that widens the work set to them (D3).
+        job: The job. Reads ``input_path``, ``output_path``, the languages,
+            the provider, ``context_window`` (2048 when unset),
+            ``auto_adjust_context``, ``max_tokens_per_chunk`` (the current
+            ``MAX_TOKENS_PER_CHUNK`` when unset), ``prompt_options``,
+            ``bilingual_output``, ``parallel_workers`` and
+            ``retry_token_aligned`` (explicit, user-initiated retry of the
+            chunks token alignment translated with approximate tag
+            positions; the only thing that widens the work set to them, D3).
+        ctx: Log/stats/interruption hooks, checkpoint manager, job id and
+            ``resume_from_index`` (file index to resume from).
 
     Returns:
-        True only when the whole book was translated and written: no failed
-        file, no chunk left unfinished, not interrupted. False when the input
-        is missing, the LLM client cannot be created, an error aborts the job,
-        or the result is partial (a partial EPUB and the checkpoint are still
-        written as before, so the job can be resumed or retried).
+        A :class:`JobResult`. COMPLETED only when the whole book was
+        translated and written: no failed file, no chunk left unfinished, not
+        interrupted. FAILED when the input is missing, the LLM client cannot
+        be created or an error aborts the job. PARTIAL / INTERRUPTED
+        otherwise (a partial EPUB and the checkpoint are still written as
+        before, so the job can be resumed or retried); an interrupted run's
+        ``output_path`` is the ``[partial ...]`` file it wrote. Documents
+        whose translation failed are listed in ``failed_documents``.
 
     Raises:
         RateLimitError: propagated unchanged so the caller can auto-pause.
     """
+    ctx, seen_stats = ctx.tap_stats()
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    source_language = job.source_language
+    target_language = job.target_language
+    model_name = job.model or DEFAULT_MODEL
+    llm_provider = job.llm_provider
+    log_callback = ctx.log_callback
+    stats_callback = ctx.stats_callback
+    check_interruption_callback = ctx.check_interruption
+    checkpoint_manager = ctx.checkpoint_manager
+    translation_id = ctx.translation_id
+    resume_from_index = ctx.resume_from_index
+    context_window = job.context_window or 2048
+    auto_adjust_context = job.auto_adjust_context
+    max_tokens_per_chunk = _job_max_tokens_per_chunk(job)
+    prompt_options = job.engine_prompt_options()
+    bilingual = job.bilingual_output
+    parallel_workers = job.parallel_workers
+    retry_token_aligned = job.retry_token_aligned
+    max_attempts = MAX_TRANSLATION_ATTEMPTS
+
     # Validate input file
-    if not os.path.exists(input_filepath):
+    if not input_filepath or not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input EPUB file '{input_filepath}' not found."
         if log_callback:
             log_callback("epub_input_file_not_found", err_msg)
-        return False
-
-    # Use default MAX_TRANSLATION_ATTEMPTS if not provided
-    if max_attempts is None:
-        max_attempts = MAX_TRANSLATION_ATTEMPTS
+        return JobResult.failed(err_msg)
 
     # Add bilingual option to prompt_options
     if bilingual:
-        if prompt_options is None:
-            prompt_options = {}
         prompt_options['bilingual'] = True
 
     # Determine initial context size based on model type
@@ -153,26 +122,13 @@ async def translate_epub_file(
 
     # Create LLM client; a configuration error stops the job (no fallback).
     try:
-        llm_client = _create_llm_client(
-            llm_provider=llm_provider,
-            model_name=model_name,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            cli_api_endpoint=cli_api_endpoint,
-            initial_context=initial_context,
-            log_callback=log_callback
-        )
-    except LLMClientConfigError:
-        return False
+        llm_client = _create_llm_client(job, initial_context, log_callback)
+    except LLMClientConfigError as e:
+        return JobResult.failed(f"Could not create the LLM client: {e}")
 
     # Resolve effective parallel workers (local providers are forced back to 1).
     # translate_file() already logged the effective count; this re-resolve is
-    # idempotent and covers the direct-call path (CLI EPUB goes through here).
+    # idempotent and covers the direct-call path.
     from src.config import resolve_parallel_workers
     parallel_workers = resolve_parallel_workers(llm_provider, parallel_workers)
 
@@ -454,9 +410,14 @@ async def translate_epub_file(
                 log_callback("epub_major_error", err_msg)
                 import traceback
                 log_callback("epub_major_error_traceback", traceback.format_exc())
-            return False
+            return JobResult.failed(err_msg, stats=seen_stats)
 
-    return book_complete
+    return JobResult.from_run(
+        seen_stats, output_filepath,
+        engine_ok=book_complete,
+        interrupted=bool(results.get('was_interrupted')),
+        failed_documents=failed_doc_paths,
+    )
 
 
 # === Private Helper Functions ===
@@ -600,46 +561,41 @@ def initial_context_size(model_name: str, auto_adjust_context: bool,
     return initial, is_thinking_model
 
 
+def _job_max_tokens_per_chunk(job: JobConfig) -> int:
+    """The job's chunk size; the current ``MAX_TOKENS_PER_CHUNK`` when unset.
+
+    Read at call time, so a ``reload_config()`` between jobs is honoured.
+    """
+    if job.max_tokens_per_chunk is not None:
+        return job.max_tokens_per_chunk
+    import src.config as config
+    return config.MAX_TOKENS_PER_CHUNK
+
+
 def _create_llm_client(
-    llm_provider: str,
-    model_name: str,
-    gemini_api_key: Optional[str],
-    openai_api_key: Optional[str],
-    openrouter_api_key: Optional[str],
-    mistral_api_key: Optional[str],
-    deepseek_api_key: Optional[str],
-    poe_api_key: Optional[str],
-    nim_api_key: Optional[str],
-    cli_api_endpoint: str,
+    job: JobConfig,
     initial_context: int,
-    log_callback: Optional[Callable] = None
+    log_callback: Optional[Callable] = None,
+    *,
+    refine: bool = False,
 ) -> Any:
-    """Create the LLM provider for this job.
+    """Create the LLM provider for this job (its refine provider with ``refine``).
 
     Raises ``LLMClientConfigError`` for an unknown provider or a missing
     required key, after reporting it to the job's log. There is no default
     client to fall back to.
     """
-    from ..llm.factory import create_provider_from_args
+    from ..llm.factory import create_llm_provider
 
+    provider = job.provider_for(context_window=initial_context,
+                                log_callback=log_callback, refine=refine)
     try:
-        return create_provider_from_args(
-            llm_provider, model_name, cli_api_endpoint,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            context_window=initial_context,
-            log_callback=log_callback,
-        )
+        return create_llm_provider(provider)
     except LLMClientConfigError as e:
         if log_callback:
             log_callback("llm_client_error",
                          f"ERROR: Could not create LLM client for provider "
-                         f"'{llm_provider}': {e}")
+                         f"'{provider.provider or 'ollama'}': {e}")
         raise
 
 

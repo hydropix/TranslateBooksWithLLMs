@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from src.core.epub import xhtml_translator as xt
 from src.core.refine import epub_refiner
+from tests.job_helpers import make_ctx, make_job
 
 FMT = ("[id", "]")
 DRAFT = "[id0]Hello[id1]"
@@ -62,7 +63,7 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
         "content_files": list(files), "opf_dir": str(tmp_path)})
     monkeypatch.setattr(epub_refiner, "_repackage_epub", lambda **k: None)
     monkeypatch.setattr(epub_refiner, "build_refine_client",
-                        lambda **k: (SimpleNamespace(), None))
+                        lambda *a, **k: (SimpleNamespace(), None))
     for name, n in files.items():
         (tmp_path / name).write_text(f'<html xmlns="http://www.w3.org/1999/xhtml" n="{n}"><body/></html>')
 
@@ -77,7 +78,9 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
     epub = tmp_path / "in.epub"
     epub.write_bytes(b"")
     ok = asyncio.run(epub_refiner.refine_epub_file(
-        str(epub), str(tmp_path / "out.epub"), "French", stats_callback=seen.append))
+        make_job(str(epub), str(tmp_path / "out.epub"), operation="refine",
+                 target_language="French"),
+        make_ctx(stats_callback=seen.append)))
     assert ok
     assert seen[0]["total_chunks"] == 9
     assert all(s["total_chunks"] == 9 and s["completed_chunks"] <= 9 for s in seen)

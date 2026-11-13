@@ -7,44 +7,36 @@ support in v1.
 
 import os
 import tempfile
-from typing import Optional, Callable, Dict
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT
+from src.config import DEFAULT_MODEL
 from src.core.epub.xhtml_translator import _refine_epub_chunks, _escape_stray_angle_brackets
 from src.core.epub.container import TranslationContainer
 from src.core.epub.html_chunker import HtmlChunker
 from src.core.docx.converter import DocxHtmlConverter
+from src.core.job import JobConfig, JobContext
+from src.core.llm.exceptions import LLMClientConfigError
 from .client_setup import build_refine_client
 from .epub_refiner import _globalize_chunk_text
 
 
-async def refine_docx_file(
-    input_filepath: str,
-    output_filepath: str,
-    target_language: str,
-    model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    llm_provider: str = "ollama",
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: int = 2048,
-    auto_adjust_context: bool = True,
-    prompt_options: Optional[Dict] = None,
-    max_tokens_per_chunk: Optional[int] = None,
-) -> bool:
+async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
     """Run a refinement-only pass on an already-translated DOCX file.
 
-    `max_tokens_per_chunk` sizes the refine chunks; None reads the current
-    MAX_TOKENS_PER_CHUNK setting at call time.
+    Reads ``job.input_path`` and writes ``job.output_path``.
+    ``job.max_tokens_per_chunk`` sizes the refine chunks; None reads the
+    current MAX_TOKENS_PER_CHUNK setting at call time. Returns True when the
+    refined file was written.
     """
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    target_language = job.target_language
+    model_name = job.refine_provider_config().model or DEFAULT_MODEL
+    prompt_options = job.engine_prompt_options()
+    max_tokens_per_chunk = job.max_tokens_per_chunk
+    log_callback = ctx.log_callback
+    stats_callback = ctx.stats_callback
+    check_interruption_callback = ctx.check_interruption
+
     if max_tokens_per_chunk is None:
         from src.config import MAX_TOKENS_PER_CHUNK
         max_tokens_per_chunk = MAX_TOKENS_PER_CHUNK
@@ -54,22 +46,10 @@ async def refine_docx_file(
             log_callback("docx_input_file_not_found", err_msg)
         return False
 
-    llm_client, context_manager = build_refine_client(
-        model_name=model_name,
-        llm_provider=llm_provider,
-        cli_api_endpoint=cli_api_endpoint,
-        auto_adjust_context=auto_adjust_context,
-        context_window=context_window,
-        gemini_api_key=gemini_api_key,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        log_callback=log_callback,
-    )
-    if llm_client is None:
+    try:
+        llm_client, context_manager = build_refine_client(job, log_callback=log_callback)
+    except LLMClientConfigError:
+        # Already reported to the job log by build_refine_client.
         return False
 
     try:

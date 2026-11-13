@@ -21,6 +21,7 @@ from src.config import (
     TRANSLATE_TAG_OUT,
 )
 from src.core.llm.base import LLMProvider, LLMRequest, LLMResponse
+from src.core.llm.provider_config import ProviderConfig
 
 
 def _extract_source_block(prompt: str) -> str:
@@ -67,8 +68,15 @@ class FakeEchoProvider(LLMProvider):
         )
 
 
-def _fake_create_llm_provider(provider_type: str = "ollama", **kwargs) -> FakeEchoProvider:
-    """Drop-in replacement for ``create_llm_provider`` used by monkeypatching."""
+def _fake_create_llm_provider(provider_type="ollama", **kwargs) -> FakeEchoProvider:
+    """Drop-in replacement for ``create_llm_provider`` used by monkeypatching.
+
+    Accepts a ``ProviderConfig`` (what the engines pass) or the legacy
+    provider type plus keyword arguments.
+    """
+    if isinstance(provider_type, ProviderConfig):
+        return FakeEchoProvider(model=provider_type.model or "fake-echo",
+                                context_window=provider_type.context_window)
     return FakeEchoProvider(model=kwargs.get("model", "fake-echo"), **{
         k: v for k, v in kwargs.items() if k == "context_window"
     })

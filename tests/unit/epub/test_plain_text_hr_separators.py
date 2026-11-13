@@ -40,6 +40,7 @@ from tests.unit.epub.conftest import (
     _write,
     _zip_dir_as_epub,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 XHTML_NS = "http://www.w3.org/1999/xhtml"
@@ -217,17 +218,20 @@ async def test_hr_survives_the_full_plain_text_epub_pipeline(hr_chapter_epub, tm
     requests: List[str] = []
     monkeypatch.setattr(
         translator_module, "_create_llm_client",
-        lambda **kwargs: _recording_llm_client(requests),
+        lambda *args, **kwargs: _recording_llm_client(requests),
     )
     _disable_attribution(monkeypatch)
 
     output_epub = tmp_path / "output_plain.epub"
     await translate_epub_file(
-        input_filepath=str(hr_chapter_epub),
-        output_filepath=str(output_epub),
-        source_language="Chinese",
-        target_language="French",
-        prompt_options={"plain_text_mode": True},
+        make_job(
+            input_path=str(hr_chapter_epub),
+            output_path=str(output_epub),
+            source_language="Chinese",
+            target_language="French",
+            prompt_options={"plain_text_mode": True},
+        ),
+        make_ctx(),
     )
 
     with zipfile.ZipFile(hr_chapter_epub) as archive:

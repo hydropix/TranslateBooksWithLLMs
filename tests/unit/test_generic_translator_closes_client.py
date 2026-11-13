@@ -12,6 +12,7 @@ from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.txt_adapter import TxtAdapter
 from src.core.llm.exceptions import RateLimitError
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 created = []
 
@@ -44,7 +45,7 @@ async def test_client_is_closed_on_every_exit(tmp_path, cm, monkeypatch, outcome
             raise RateLimitError("429", provider="test")
         return "Bonjour le monde."
 
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_ClosingClient))
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(_ClosingClient))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     translator = GenericTranslator(
@@ -52,8 +53,8 @@ async def test_client_is_closed_on_every_exit(tmp_path, cm, monkeypatch, outcome
         checkpoint_manager=cm, translation_id="job",
     )
     run = translator.translate(
-        source_language="English", target_language="French",
-        model_name="m", llm_provider="openai",
+        make_job(source_language="English", target_language="French", model="m", provider="openai"),
+        make_ctx(),
     )
     if outcome == "rate_limit":
         with pytest.raises(RateLimitError):
@@ -65,7 +66,8 @@ async def test_client_is_closed_on_every_exit(tmp_path, cm, monkeypatch, outcome
 
 
 def _fake_factory(client_cls):
-    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
-    def build(llm_provider, model=None, endpoint=None, **kwargs):
-        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
     return build

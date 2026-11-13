@@ -36,6 +36,7 @@ from src.core.llm.utils.extraction import TranslationExtractor
 from src.core.translator import _make_llm_request_with_adaptive_context
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.persistence.raw_response_log import raw_response_log_path
+from tests.job_helpers import make_ctx, make_job
 
 
 SENTENCE = "他看着远方的山，心里想着很多事情。“你为什么要走？”她问道。阿言没有回答，只是默默地转过身去！"
@@ -337,7 +338,7 @@ def cm(tmp_path):
 def scripted_llm(monkeypatch):
     _ScriptedLLMClient.script = []
     _ScriptedLLMClient.calls = []
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_ScriptedLLMClient))
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(_ScriptedLLMClient))
     return _ScriptedLLMClient
 
 
@@ -353,11 +354,8 @@ async def _translate(tmp_path, cm, text, logs=None):
             logs.append((msg_type, message))
 
     success = await translator.translate(
-        source_language="English",
-        target_language="French",
-        model_name="fake-model",
-        llm_provider="ollama",
-        log_callback=log_callback,
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(log_callback=log_callback),
     )
     return success, output
 
@@ -436,9 +434,10 @@ class TestRawResponseLog:
 
 
 def _fake_factory(client_cls):
-    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
-    def build(llm_provider, model=None, endpoint=None, **kwargs):
-        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
     return build
 
 
@@ -468,7 +467,7 @@ async def test_txt_on_ollama_uses_adaptive_context(tmp_path, cm, monkeypatch):
 
     _ContextRecordingClient.calls = []
     _ContextRecordingClient.built_with = []
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args",
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider",
                         _fake_factory(_ContextRecordingClient))
     success, _ = await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
 

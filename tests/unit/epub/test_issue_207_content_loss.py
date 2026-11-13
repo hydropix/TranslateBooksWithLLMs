@@ -37,6 +37,7 @@ from tests.unit.epub.conftest import (
     _echo_llm_client,
     _read,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 # === A. dc:language metadata ===
@@ -548,7 +549,7 @@ def _count_p(element: etree._Element) -> int:
     return sum(1 for tag in _local_tags(element) if tag == "p")
 
 
-def _stub_create_llm_client(**kwargs):
+def _stub_create_llm_client(*args, **kwargs):
     return _echo_llm_client()
 
 
@@ -595,11 +596,14 @@ class TestPlainModeCoverPage:
         output_epub = tmp_path / "output_plain.epub"
 
         await translate_epub_file(
-            input_filepath=str(input_epub),
-            output_filepath=str(output_epub),
-            source_language="Chinese",
-            target_language="French",
-            prompt_options={"plain_text_mode": True},
+            make_job(
+                input_path=str(input_epub),
+                output_path=str(output_epub),
+                source_language="Chinese",
+                target_language="French",
+                prompt_options={"plain_text_mode": True},
+            ),
+            make_ctx(),
         )
 
         cover = _read(output_epub, "OEBPS/Text/cover.xhtml")

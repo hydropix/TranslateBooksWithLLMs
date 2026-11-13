@@ -64,6 +64,7 @@ os.environ.setdefault("MAX_TOKENS_PER_CHUNK", "1800")
 from src import config  # noqa: E402,F401
 from src.core.adapters import translate_file  # noqa: E402
 from src.persistence.checkpoint_manager import CheckpointManager  # noqa: E402
+from tests.job_helpers import make_ctx, make_job
 
 
 MODEL = os.getenv("REPRO_MODEL", "mistralai/mistral-medium-3.1")
@@ -310,26 +311,30 @@ async def run() -> int:
 
             started = time.perf_counter()
             ok = await translate_file(
-                input_filepath=str(input_path),
-                output_filepath=str(output_path),
-                source_language="English",
-                target_language="Russian",
-                model_name=MODEL,
-                llm_provider="openrouter",
-                checkpoint_manager=CheckpointManager(),
-                translation_id=f"issue253_{uuid.uuid4().hex[:8]}",
-                log_callback=log_callback,
-                stats_callback=stats_callback,
-                openrouter_api_key=api_key,
-                max_tokens_per_chunk=MAX_TOKENS,
-                parallel_workers=1,
-                prompt_options={
+                make_job(
+                    input_path=str(input_path),
+                    output_path=str(output_path),
+                    source_language="English",
+                    target_language="Russian",
+                    model=MODEL,
+                    provider="openrouter",
+                    api_key=api_key,
+                    max_tokens_per_chunk=MAX_TOKENS,
+                    parallel_workers=1,
+                    prompt_options={
                     "preserve_technical_content": True,
                     "text_cleanup": False,
                     "plain_text_mode": True,
                     "glossary_terms": GLOSSARY,
                     "custom_instructions": CUSTOM_INSTRUCTIONS,
                 },
+                ),
+                make_ctx(
+                    checkpoint_manager=CheckpointManager(),
+                    translation_id=f"issue253_{uuid.uuid4().hex[:8]}",
+                    log_callback=log_callback,
+                    stats_callback=stats_callback,
+                ),
             )
             elapsed = time.perf_counter() - started
             print(f"Result:     ok={ok} elapsed={elapsed:.0f}s")

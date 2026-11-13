@@ -69,8 +69,6 @@ def test_full_prompt_generation():
 
     prompt_pair = generate_translation_prompt(
         main_content="Translate this text",
-        context_before="",
-        context_after="",
         previous_translation_context="",
         source_language="English",
         target_language="French",

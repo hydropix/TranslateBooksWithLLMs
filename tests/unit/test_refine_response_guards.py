@@ -10,8 +10,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import src.core.llm.factory as llm_factory
 import src.core.translator as translator
 from src.core.llm.base import LLMResponse
+from tests.job_helpers import make_ctx, make_job
 
 DRAFT = (
     "Le vieux gardien du phare montait l'escalier chaque soir, "
@@ -75,12 +77,13 @@ async def test_refine_chunks_keeps_draft_when_refinement_is_empty(monkeypatch):
     async def empty_refinement(**kwargs):
         return "\n\n", Mock(prompt_tokens=1, completion_tokens=1, context_limit=4096)
 
-    monkeypatch.setattr(translator, "create_provider_from_args", lambda *a, **k: _Client())
+    monkeypatch.setattr(llm_factory, "create_llm_provider", lambda *a, **k: _Client())
     monkeypatch.setattr(translator, "_make_refinement_request", empty_refinement)
 
     result = await translator.refine_chunks(
-        [DRAFT], [{}], target_language="French", model_name="m",
-        api_endpoint="http://localhost", llm_provider="openai",
-        log_callback=lambda *a, **k: None,
+        [DRAFT], [{}],
+        make_job(provider="openai", model="m", endpoint="http://localhost",
+                 target_language="French"),
+        make_ctx(log_callback=lambda *a, **k: None),
     )
     assert result == [DRAFT]

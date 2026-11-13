@@ -19,6 +19,7 @@ import src.core.translator as translator_module
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.srt_adapter import SrtAdapter
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 SRT = """1
 00:00:01,000 --> 00:00:02,000
@@ -59,7 +60,7 @@ def _patch_llm(monkeypatch, responses, calls):
         })
         return responses[min(len(calls) - 1, len(responses) - 1)]
 
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(FakeLLMClient))
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(FakeLLMClient))
     monkeypatch.setattr(
         translator_module, "generate_translation_request", fake_request
     )
@@ -79,11 +80,8 @@ async def _run(tmp_path, cm, logs=None):
             logs.append((msg_type, message))
 
     success = await translator.translate(
-        source_language="English",
-        target_language="French",
-        model_name="fake-model",
-        llm_provider="ollama",
-        log_callback=log_callback,
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(log_callback=log_callback),
     )
     return success, output_file
 
@@ -164,7 +162,8 @@ async def test_complete_response_does_not_retry(tmp_path, cm, monkeypatch):
 
 
 def _fake_factory(client_cls):
-    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
-    def build(llm_provider, model=None, endpoint=None, **kwargs):
-        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
     return build

@@ -11,7 +11,6 @@ from typing import Optional, Callable, Dict, Any
 
 from src.config import (
     DEFAULT_MODEL,
-    API_ENDPOINT,
     SRT_LINES_PER_BLOCK,
 )
 
@@ -19,7 +18,7 @@ from src.config import (
 # (every block holds exactly SRT_LINES_PER_BLOCK subtitles).
 _NO_CHAR_CAP = 10 ** 12
 from src.core.llm.exceptions import RateLimitError
-from src.core.llm.factory import create_provider_from_args
+from src.core.job import JobConfig, JobContext
 from src.core.srt_processor import SRTProcessor
 from src.core.subtitle_translator import refine_subtitle_translations
 
@@ -93,34 +92,28 @@ async def _load_resumed_cues(
     return {idx: previous[idx]['text'] for idx in range(resume_from_index)}
 
 
-async def refine_srt_file(
-    input_filepath: str,
-    output_filepath: str,
-    target_language: str,
-    model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    llm_provider: str = "ollama",
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    prompt_options: Optional[Dict[str, Any]] = None,
-    checkpoint_manager: Any = None,
-    translation_id: Optional[str] = None,
-    resume_from_index: int = 0,
-) -> bool:
+async def refine_srt_file(job: JobConfig, ctx: JobContext) -> bool:
     """Run a refinement-only pass on an already-translated SRT file.
 
-    On a rate limit the cues refined so far are written to `output_filepath`
-    and, when a checkpoint manager is supplied, the last finished cue is
-    recorded so a resume (`resume_from_index`) skips the finished ones.
+    Reads ``job.input_path`` and writes ``job.output_path``. On a rate limit
+    the cues refined so far are written to the output and, when the context
+    carries a checkpoint manager and a job id, the last finished cue is
+    recorded in the job's refine checkpoint namespace (never in its
+    translation chunks), so a resume (``ctx.resume_from_index``) skips the
+    finished ones. Returns True when the refined file was written.
     """
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    target_language = job.target_language
+    model_name = job.refine_provider_config().model or DEFAULT_MODEL
+    prompt_options = job.engine_prompt_options()
+    log_callback = ctx.log_callback
+    stats_callback = ctx.stats_callback
+    check_interruption_callback = ctx.check_interruption
+    checkpoint_manager = ctx.checkpoint_manager
+    translation_id = ctx.translation_id
+    resume_from_index = ctx.resume_from_index
+
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input SRT file '{input_filepath}' not found."
         if log_callback:
@@ -187,22 +180,15 @@ async def refine_srt_file(
     }
     subtitle_positions = {id(sub): idx for idx, sub in enumerate(subtitles)}
 
+    from src.core.llm.factory import create_llm_provider
     try:
-        llm_client = create_provider_from_args(
-            llm_provider, model_name, cli_api_endpoint,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            log_callback=log_callback,
-        )
+        llm_client = create_llm_provider(
+            job.provider_for(log_callback=log_callback, refine=True))
     except Exception as e:
         if log_callback:
             log_callback("srt_refine_client_failed",
-                         f"❌ Could not create the LLM client for '{llm_provider}': {e}")
+                         f"❌ Could not create the LLM client for "
+                         f"'{job.refine_provider_config().provider or 'ollama'}': {e}")
         return False
 
     # Fixed-count grouping for refine (no char cap): every block sent to
@@ -258,6 +244,7 @@ async def refine_srt_file(
                         total_chunks=len(subtitles),
                         completed_chunks=last_done + 1,
                         failed_chunks=0,
+                        phase='refine',
                     )
                 except Exception as cp_err:
                     if log_callback:

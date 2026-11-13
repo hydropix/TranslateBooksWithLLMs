@@ -36,6 +36,7 @@ import src.core.epub.xhtml_translator as xhtml_translator
 from src.api.completion_status import classify_completion
 from src.common.placeholder_format import PlaceholderFormat
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 
 # The sabotaged chunk is identified by this sentinel: the stub returns None for
@@ -161,8 +162,9 @@ def epub_job(tmp_path, monkeypatch):
     # No LLM client is ever needed: chunk requests are stubbed per pass and the
     # packaging-metadata pass (the only other LLM caller) is switched off.
     monkeypatch.setattr(epub_translator, "_create_llm_client",
-                        lambda **kwargs: MagicMock())
+                        lambda *args, **kwargs: MagicMock())
     monkeypatch.setattr(epub_translator, "EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr(epub_translator, "MAX_TRANSLATION_ATTEMPTS", 1)
 
     return {
         'input': input_path,
@@ -248,22 +250,25 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
             return len(requests) >= interrupt_after
 
     await epub_translator.translate_epub_file(
-        input_filepath=str(job['input']),
-        output_filepath=str(job['output']),
-        source_language="English",
-        target_language="French",
-        model_name=MODEL,
-        llm_provider="ollama",
-        checkpoint_manager=job['manager'],
-        translation_id=job['translation_id'],
-        resume_from_index=resume_from_index,
-        log_callback=log_callback,
-        stats_callback=stats_callback,
-        check_interruption_callback=check_interruption,
-        max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
-        max_attempts=1,
-        prompt_options={},
-        retry_token_aligned=retry_token_aligned,
+        make_job(
+            input_path=str(job['input']),
+            output_path=str(job['output']),
+            source_language="English",
+            target_language="French",
+            model=MODEL,
+            provider="ollama",
+            max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
+            prompt_options={},
+            retry_token_aligned=retry_token_aligned,
+        ),
+        make_ctx(
+            checkpoint_manager=job['manager'],
+            translation_id=job['translation_id'],
+            resume_from_index=resume_from_index,
+            log_callback=log_callback,
+            stats_callback=stats_callback,
+            check_interruption=check_interruption,
+        ),
     )
 
     return stats, requests, log_kinds

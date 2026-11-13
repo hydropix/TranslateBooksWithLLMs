@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.job_helpers import make_job
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.context_optimizer import AdaptiveContextManager, REFINEMENT_MIN_CONTEXT
@@ -105,18 +107,19 @@ async def test_refine_falls_back_to_draft_without_context_manager():
 def test_refine_client_starts_at_refinement_floor(monkeypatch, auto_adjust, context_window):
     seen = {}
 
-    def fake_create_llm_client(**kwargs):
-        seen["initial_context"] = kwargs["initial_context"]
+    def fake_create_llm_client(job, initial_context, log_callback=None, *, refine=False):
+        seen["initial_context"] = initial_context
+        seen["refine"] = refine
         return object()
 
     monkeypatch.setattr(client_setup, "_create_llm_client", fake_create_llm_client)
 
-    client_setup.build_refine_client(
-        model_name="dummy",
-        llm_provider="ollama",
-        cli_api_endpoint="http://localhost:11434/api/generate",
+    client_setup.build_refine_client(make_job(
+        provider="ollama", model="dummy",
+        endpoint="http://localhost:11434/api/generate",
         auto_adjust_context=auto_adjust,
         context_window=context_window,
-    )
+    ))
 
     assert seen["initial_context"] >= REFINEMENT_MIN_CONTEXT
+    assert seen["refine"] is True

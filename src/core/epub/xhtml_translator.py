@@ -1502,10 +1502,6 @@ async def _refine_epub_chunks(
                     f"Warning: Length mismatch - translated_chunks: {len(translated_chunks)}, chunks: {len(chunks)}")
 
     for idx, (translated_text, chunk_dict) in enumerate(zip(translated_chunks, chunks)):
-        # Build context from surrounding chunks
-        context_before = translated_chunks[idx - 1] if idx > 0 else ""
-        context_after = translated_chunks[idx + 1] if idx < len(translated_chunks) - 1 else ""
-
         # Extract refinement instructions from prompt_options
         refinement_instructions = prompt_options.get('refinement_instructions', '') if prompt_options else ''
 
@@ -1536,8 +1532,6 @@ async def _refine_epub_chunks(
         prompt_pair = generate_post_processing_prompt(
             translated_text=text_for_refinement,  # Use localized version
             target_language=target_language,
-            context_before=context_before,
-            context_after=context_after,
             additional_instructions=refinement_instructions,
             has_placeholders=True,
             placeholder_format=placeholder_format,

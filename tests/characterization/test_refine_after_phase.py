@@ -21,6 +21,7 @@ from src.core.adapters import refine_file
 from src.core.progress import snapshot_from_legacy_stats
 from src.persistence.checkpoint_manager import CheckpointManager
 from tests.characterization import fake_llm, fixtures
+from tests.job_helpers import make_ctx, make_job
 
 
 def _run_refine_after(work_dir: Path, input_path: Path, output_path: Path):
@@ -41,18 +42,17 @@ def _run_refine_after(work_dir: Path, input_path: Path, output_path: Path):
 
     async def factory():
         await refine_file(
-            input_filepath=str(input_path),
-            output_filepath=str(output_path),
-            target_language="French",
-            model_name="fake-echo",
-            llm_provider="poe",
-            checkpoint_manager=checkpoint_manager,
-            translation_id="char_refine_after",
-            stats_callback=emit,
-            poe_api_key="UNUSED_FAKE_KEY",
-            max_tokens_per_chunk=60,
-            context_window=4096,
-            auto_adjust_context=False,
+            make_job(
+                str(input_path), str(output_path), operation='refine',
+                provider="poe", model="fake-echo", api_key="UNUSED_FAKE_KEY",
+                source_language="French", target_language="French",
+                max_tokens_per_chunk=60,
+                context_window=4096,
+                auto_adjust_context=False,
+            ),
+            make_ctx(translation_id="char_refine_after",
+                     checkpoint_manager=checkpoint_manager,
+                     stats_callback=emit),
         )
 
     cwd = os.getcwd()

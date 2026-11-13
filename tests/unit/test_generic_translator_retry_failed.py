@@ -16,6 +16,7 @@ from src.core.adapters.format_adapter import FormatAdapter
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.translation_unit import TranslationUnit
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 N_UNITS = 4
 FAILING_CONTENT = "content 1"
@@ -90,7 +91,7 @@ def _patch_llm(monkeypatch, fail_contents, calls):
             return None
         return f"translated {main_content}"
 
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(FakeLLMClient))
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(FakeLLMClient))
     monkeypatch.setattr(
         translator_module, "generate_translation_request", fake_request
     )
@@ -101,10 +102,8 @@ async def _run(adapter, cm):
         adapter=adapter, checkpoint_manager=cm, translation_id="job"
     )
     return await translator.translate(
-        source_language="English",
-        target_language="French",
-        model_name="fake-model",
-        llm_provider="ollama",
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(),
     )
 
 
@@ -171,7 +170,8 @@ async def test_resume_with_persistent_failure_stays_partial(
 
 
 def _fake_factory(client_cls):
-    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
-    def build(llm_provider, model=None, endpoint=None, **kwargs):
-        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
     return build

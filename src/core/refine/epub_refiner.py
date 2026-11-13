@@ -11,7 +11,7 @@ from typing import Optional, Callable, Dict, Any, List, Tuple
 from lxml import etree
 
 from src.config import (
-    DEFAULT_MODEL, API_ENDPOINT, MAX_TOKENS_PER_CHUNK,
+    DEFAULT_MODEL, MAX_TOKENS_PER_CHUNK,
 )
 from src.core.epub.translator import (
     _extract_epub, _parse_epub_manifest, _repackage_epub,
@@ -21,6 +21,8 @@ from src.core.epub.xhtml_translator import (
     _replace_body, _escape_stray_angle_brackets, _refine_epub_chunks,
 )
 from src.core.epub.container import TranslationContainer
+from src.core.job import JobConfig, JobContext
+from src.core.llm.exceptions import LLMClientConfigError
 from .client_setup import build_refine_client
 
 
@@ -128,51 +130,34 @@ async def _refine_one_xhtml(
     return _replace_body(body_element, final_html, log_callback)
 
 
-async def refine_epub_file(
-    input_filepath: str,
-    output_filepath: str,
-    target_language: str,
-    model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    llm_provider: str = "ollama",
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: int = 2048,
-    auto_adjust_context: bool = True,
-    prompt_options: Optional[Dict] = None,
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
-) -> bool:
-    """Run a refinement-only pass on an already-translated EPUB."""
+async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
+    """Run a refinement-only pass on an already-translated EPUB.
+
+    Reads ``job.input_path`` and writes ``job.output_path`` (the
+    ``[partial ...]`` sibling when interrupted). Returns True only when every
+    content file was refined and the run was not interrupted.
+    """
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    target_language = job.target_language
+    model_name = job.refine_provider_config().model or DEFAULT_MODEL
+    prompt_options = job.engine_prompt_options()
+    max_tokens_per_chunk = (job.max_tokens_per_chunk if job.max_tokens_per_chunk is not None
+                            else MAX_TOKENS_PER_CHUNK)
+    log_callback = ctx.log_callback
+    stats_callback = ctx.stats_callback
+    check_interruption_callback = ctx.check_interruption
+
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input EPUB file '{input_filepath}' not found."
         if log_callback:
             log_callback("epub_input_file_not_found", err_msg)
         return False
 
-    llm_client, context_manager = build_refine_client(
-        model_name=model_name,
-        llm_provider=llm_provider,
-        cli_api_endpoint=cli_api_endpoint,
-        auto_adjust_context=auto_adjust_context,
-        context_window=context_window,
-        gemini_api_key=gemini_api_key,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        log_callback=log_callback,
-    )
-    if llm_client is None:
+    try:
+        llm_client, context_manager = build_refine_client(job, log_callback=log_callback)
+    except LLMClientConfigError:
+        # Already reported to the job log by build_refine_client.
         return False
 
     try:

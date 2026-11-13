@@ -81,14 +81,9 @@ async def analyze_token_variations(input_file: str):
 
     for i, chunk_data in enumerate(chunks):
         main_content = chunk_data["main_content"]
-        context_before = chunk_data["context_before"]
-        context_after = chunk_data["context_after"]
-
         # Generate the prompt
         prompt_pair = generate_translation_prompt(
             main_content,
-            context_before,
-            context_after,
             last_context,
             source_language,
             target_language

@@ -16,6 +16,7 @@ from src.core.adapters.pgn_adapter import PgnAdapter
 from src.core.adapters.srt_adapter import SrtAdapter
 from src.core.adapters.txt_adapter import TxtAdapter
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 SRT = "1\n00:00:01,000 --> 00:00:02,000\nHello world.\n\n2\n00:00:03,000 --> 00:00:04,000\nGoodbye.\n"
 PGN = '[Event "x"]\n\n1. e4 {A strong opening move.} e5 *\n'
@@ -47,7 +48,7 @@ async def test_reconstruct_failure_does_not_write_the_source(
     async def fake_request(main_content=None, **kwargs):
         return main_content.upper()
 
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_FakeLLMClient))
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(_FakeLLMClient))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     def broken(*args, **kwargs):
@@ -64,9 +65,8 @@ async def test_reconstruct_failure_does_not_write_the_source(
     logs = []
     translator = GenericTranslator(adapter=adapter, checkpoint_manager=cm, translation_id="job")
     ok = await translator.translate(
-        source_language="English", target_language="French",
-        model_name="m", llm_provider="ollama",
-        log_callback=lambda kind, msg, data=None: logs.append(kind),
+        make_job(source_language="English", target_language="French", model="m", provider="ollama"),
+        make_ctx(log_callback=lambda kind, msg, data=None: logs.append(kind)),
     )
 
     assert ok is False
@@ -99,7 +99,8 @@ async def test_resume_failure_is_not_swallowed(tmp_path):
 
 
 def _fake_factory(client_cls):
-    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
-    def build(llm_provider, model=None, endpoint=None, **kwargs):
-        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
     return build

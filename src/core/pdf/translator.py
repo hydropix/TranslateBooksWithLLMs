@@ -21,29 +21,20 @@ from src.core.common.plain_text_checkpoint import (
     resume_plain_segments,
 )
 from src.core.common.plain_text_pipeline import translate_paragraphs_plain
+from src.core.job import JobConfig, JobContext
 from src.core.pdf.builder import build_pdf
 from src.core.pdf.content import PdfError
 from src.core.pdf.extractor import extract_pdf_paragraphs
 
 
 async def translate_pdf_file(
-    input_filepath: str,
-    output_filepath: str,
-    source_language: str,
-    target_language: str,
-    model_name: str,
-    llm_client: Any,
-    max_tokens_per_chunk: int = 450,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    prompt_options: Optional[Dict] = None,
-    max_retries: int = 1,
+    job: JobConfig,
+    ctx: JobContext,
+    *,
+    llm_client: Optional[Any] = None,
     context_manager: Optional[Any] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    checkpoint_manager: Optional[Any] = None,
-    translation_id: Optional[str] = None,
-    parallel_workers: int = 1,
-    **kwargs,
+    max_retries: int = 1,
+    parallel_workers: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Translate a text PDF into a new, reflowed PDF.
@@ -56,23 +47,17 @@ async def translate_pdf_file(
     4. Rebuild a PDF from the translated paragraphs and drop the checkpoint
 
     Args:
-        input_filepath: Input PDF file path
-        output_filepath: Output PDF file path
-        source_language: Source language name
-        target_language: Target language name
-        model_name: LLM model name
-        llm_client: LLM client instance
-        max_tokens_per_chunk: Max tokens per chunk
-        log_callback: Logging callback function, called as (key, message)
-        stats_callback: Statistics callback function (called after each chunk)
-        prompt_options: Prompt options (``bilingual`` is honoured by the builder)
-        max_retries: Max translation retries (recorded in the checkpoint)
+        job: The job: ``input_path``, ``output_path``, languages, provider,
+            ``max_tokens_per_chunk`` (the current ``MAX_TOKENS_PER_CHUNK``
+            when unset), ``prompt_options`` (``bilingual`` is honoured by the
+            builder) and ``parallel_workers``.
+        ctx: Log/stats/interruption hooks, checkpoint manager and job id.
+        llm_client: LLM client to use. When None, one is built from the job
+            (``create_llm_provider(job.provider_for(...))``) and closed on exit.
         context_manager: Adaptive context manager (optional)
-        check_interruption_callback: Callback to check for interruption (optional)
-        checkpoint_manager: Checkpoint manager for partial state (optional)
-        translation_id: Translation ID for checkpointing (optional)
-        parallel_workers: Number of concurrent chunk translations
-        **kwargs: Additional arguments (ignored)
+        max_retries: Max translation retries (recorded in the checkpoint)
+        parallel_workers: Concurrent chunks; None resolves
+            ``job.parallel_workers`` against the provider.
 
     Returns:
         Dict with success, stats, output_path (and ``interrupted`` when the
@@ -85,6 +70,62 @@ async def translate_pdf_file(
             PdfBuildError when the output cannot be generated. No output file
             is written on an extraction failure.
     """
+    from src.config import resolve_parallel_workers
+    from src.core.epub.translator import _job_max_tokens_per_chunk
+
+    if parallel_workers is None:
+        parallel_workers = resolve_parallel_workers(job.llm_provider, job.parallel_workers)
+    owns_client = llm_client is None
+    if owns_client:
+        from src.core.llm.factory import create_llm_provider
+        llm_client = create_llm_provider(job.provider_for(log_callback=ctx.log_callback))
+
+    try:
+        return await _translate_pdf(
+            input_filepath=job.input_path,
+            output_filepath=job.output_path,
+            source_language=job.source_language,
+            target_language=job.target_language,
+            model_name=job.model,
+            llm_client=llm_client,
+            max_tokens_per_chunk=_job_max_tokens_per_chunk(job),
+            log_callback=ctx.log_callback,
+            stats_callback=ctx.stats_callback,
+            prompt_options=job.engine_prompt_options(),
+            max_retries=max_retries,
+            context_manager=context_manager,
+            check_interruption_callback=ctx.check_interruption,
+            checkpoint_manager=ctx.checkpoint_manager,
+            translation_id=ctx.translation_id,
+            parallel_workers=parallel_workers,
+        )
+    finally:
+        if owns_client and hasattr(llm_client, 'close'):
+            try:
+                await llm_client.close()
+            except Exception:
+                pass
+
+
+async def _translate_pdf(
+    *,
+    input_filepath: str,
+    output_filepath: str,
+    source_language: str,
+    target_language: str,
+    model_name: str,
+    llm_client: Any,
+    max_tokens_per_chunk: int,
+    log_callback: Optional[Callable],
+    stats_callback: Optional[Callable],
+    prompt_options: Optional[Dict],
+    max_retries: int,
+    context_manager: Optional[Any],
+    check_interruption_callback: Optional[Callable],
+    checkpoint_manager: Optional[Any],
+    translation_id: Optional[str],
+    parallel_workers: int,
+) -> Dict[str, Any]:
     # Use filename as file_href for checkpointing (DOCX convention)
     file_href = os.path.basename(input_filepath)
     bilingual = bool(prompt_options.get('bilingual')) if prompt_options else False

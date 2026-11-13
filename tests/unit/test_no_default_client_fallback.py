@@ -8,8 +8,10 @@ client creation failures fail the pass clearly.
 
 import pytest
 
+import src.core.llm.factory as llm_factory
 import src.core.refine.srt_refiner as srt_refiner
 import src.core.translator as translator
+from tests.job_helpers import make_ctx, make_job
 
 
 @pytest.mark.asyncio
@@ -25,13 +27,13 @@ async def test_refine_chunks_fails_when_the_client_cannot_be_created(monkeypatch
     def factory(*args, **kwargs):
         raise ValueError("NVIDIA NIM provider requires an API key")
 
-    monkeypatch.setattr(translator, "create_provider_from_args", factory)
+    monkeypatch.setattr(llm_factory, "create_llm_provider", factory)
     logs = []
     with pytest.raises(RuntimeError, match="Could not create the LLM client"):
         await translator.refine_chunks(
-            ["Un brouillon."], [{}], target_language="French", model_name="m",
-            api_endpoint="", llm_provider="nim",
-            log_callback=lambda kind, msg, data=None: logs.append(kind),
+            ["Un brouillon."], [{}],
+            make_job(provider="nim", model="m", target_language="French"),
+            make_ctx(log_callback=lambda kind, msg, data=None: logs.append(kind)),
         )
     assert "refinement_client_failed" in logs
 
@@ -44,12 +46,12 @@ async def test_srt_refine_fails_when_the_client_cannot_be_created(tmp_path, monk
     def factory(*args, **kwargs):
         raise ValueError("missing key")
 
-    monkeypatch.setattr(srt_refiner, "create_provider_from_args", factory)
+    monkeypatch.setattr(llm_factory, "create_llm_provider", factory)
     logs = []
     ok = await srt_refiner.refine_srt_file(
-        input_filepath=str(src), output_filepath=str(tmp_path / "out.srt"),
-        target_language="French", model_name="m", llm_provider="nim",
-        log_callback=lambda kind, msg, data=None: logs.append(kind),
+        make_job(str(src), str(tmp_path / "out.srt"), operation="refine",
+                 provider="nim", model="m", target_language="French"),
+        make_ctx(log_callback=lambda kind, msg, data=None: logs.append(kind)),
     )
     assert ok is False
     assert "srt_refine_client_failed" in logs

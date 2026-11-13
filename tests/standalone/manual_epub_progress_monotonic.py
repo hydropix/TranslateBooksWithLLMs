@@ -27,6 +27,7 @@ from src import config  # noqa: F401
 from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
 from manual_epub_resume_parallel import _build_chunky_epub
+from tests.job_helpers import make_ctx, make_job
 
 
 PARALLEL = 3
@@ -61,18 +62,22 @@ async def run() -> int:
             translation_id = f"prog_{uuid.uuid4().hex[:8]}"
 
             await translate_file(
-                input_filepath=str(input_path),
-                output_filepath=str(output_path),
-                source_language="English",
-                target_language="French",
-                model_name=model,
-                llm_provider="poe",
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                stats_callback=stats_callback,
-                poe_api_key=api_key,
-                max_tokens_per_chunk=120,
-                parallel_requests=PARALLEL,
+                make_job(
+                    input_path=str(input_path),
+                    output_path=str(output_path),
+                    source_language="English",
+                    target_language="French",
+                    model=model,
+                    provider="poe",
+                    api_key=api_key,
+                    max_tokens_per_chunk=120,
+                    parallel_workers=PARALLEL,
+                ),
+                make_ctx(
+                    checkpoint_manager=checkpoint_manager,
+                    translation_id=translation_id,
+                    stats_callback=stats_callback,
+                ),
             )
 
             print(f"Total callbacks: {len(samples)}")

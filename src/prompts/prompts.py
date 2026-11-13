@@ -243,8 +243,6 @@ def _build_optional_prompt_sections(
 
 def generate_translation_prompt(
     main_content: str,
-    context_before: str,
-    context_after: str,
     previous_translation_context: str,
     source_language: str = "English",
     target_language: str = "English",
@@ -260,9 +258,6 @@ def generate_translation_prompt(
 
     Args:
         main_content: The text to translate
-        context_before: INTENTIONALLY UNUSED. Accepted for caller compatibility only;
-            the source text around the chunk is never sent to the model.
-        context_after: INTENTIONALLY UNUSED. Same as context_before.
         previous_translation_context: Previously translated text for consistency. This
             tail of the previous translation is the only cross-chunk context the model sees.
         source_language: Source language name
@@ -650,8 +645,6 @@ Produce the JSON now. Output it between {STYLE_TAG_IN} and {STYLE_TAG_OUT}, noth
 
 def generate_refinement_prompt(
     draft_translation: str,
-    context_before: str = "",
-    context_after: str = "",
     previous_refined_context: str = "",
     target_language: str = "English",
     translate_tag_in: str = TRANSLATE_TAG_IN,
@@ -670,9 +663,6 @@ def generate_refinement_prompt(
 
     Args:
         draft_translation: The first-pass translation to refine
-        context_before: INTENTIONALLY UNUSED. Accepted for caller compatibility only;
-            no surrounding text is sent to the model.
-        context_after: INTENTIONALLY UNUSED. Same as context_before.
         previous_refined_context: Last refined text for consistency (default: ""). This
             tail of the previous refined chunk is the only cross-chunk context the model sees.
         target_language: Target language name
@@ -1045,8 +1035,6 @@ Provide your translation now:"""
 def generate_post_processing_prompt(
     translated_text: str,
     target_language: str = "English",
-    context_before: str = "",
-    context_after: str = "",
     additional_instructions: str = "",
     has_placeholders: bool = True,
     prompt_options: dict = None,
@@ -1062,9 +1050,6 @@ def generate_post_processing_prompt(
     Args:
         translated_text: The draft translation to refine (mapped to draft_translation)
         target_language: Target language name
-        context_before: INTENTIONALLY UNUSED. Accepted for caller compatibility only
-            and forwarded to generate_refinement_prompt, which ignores it.
-        context_after: INTENTIONALLY UNUSED. Same as context_before.
         additional_instructions: Additional refinement instructions
         has_placeholders: If True, includes placeholder preservation instructions
             (section and reminder); if False, neither is emitted
@@ -1076,8 +1061,6 @@ def generate_post_processing_prompt(
     """
     return generate_refinement_prompt(
         draft_translation=translated_text,
-        context_before=context_before,
-        context_after=context_after,
         previous_refined_context="",  # Not used in post-processing calls
         target_language=target_language,
         has_placeholders=has_placeholders,

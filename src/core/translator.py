@@ -10,7 +10,6 @@ from src.config import (
 )
 from src.prompts.prompts import generate_translation_prompt, generate_refinement_prompt
 from .llm import RateLimitError, LLMResponse
-from .llm.factory import create_provider_from_args
 from .request_core import (
     ChunkStatus,
     ContextBudget,
@@ -34,7 +33,10 @@ from .context_optimizer import (
 )
 from .progress_tracker import TokenProgressTracker
 from .chunking.token_chunker import TokenChunker
-from typing import Callable, List, Dict, Tuple, Optional
+from typing import Callable, List, Dict, Tuple, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .job import JobConfig, JobContext
 
 
 # Configuration for context overflow recovery
@@ -382,8 +384,6 @@ async def _make_llm_request_with_adaptive_context(
         )
         prompt_pair = generate_translation_prompt(
             current_content,
-            context_before,
-            context_after,
             previous_translation_context,
             source_language,
             target_language,
@@ -587,8 +587,6 @@ async def _refinement_request_attempt(
 
     prompt_pair = generate_refinement_prompt(
         draft_translation=draft_translation,
-        context_before=context_before,
-        context_after=context_after,
         previous_refined_context=previous_refined_context,
         target_language=target_language,
         has_placeholders=False,
@@ -634,23 +632,8 @@ async def _make_refinement_request(**kwargs) -> Tuple[Optional[str], Optional[LL
 async def refine_chunks(
     translated_chunks: List[str],
     original_chunks: List[Dict],
-    target_language: str,
-    model_name: str,
-    api_endpoint: str,
-    log_callback=None,
-    stats_callback=None,
-    check_interruption_callback=None,
-    llm_provider="ollama",
-    gemini_api_key=None,
-    openai_api_key=None,
-    openrouter_api_key=None,
-    mistral_api_key=None,
-    deepseek_api_key=None,
-    poe_api_key=None,
-    nim_api_key=None,
-    context_window=2048,
-    auto_adjust_context=True,
-    prompt_options=None,
+    job: "JobConfig",
+    ctx: "JobContext",
 ) -> List[str]:
     """
     Refine translated chunks with a second pass for literary quality improvement.
@@ -662,22 +645,31 @@ async def refine_chunks(
     Args:
         translated_chunks: List of translated text strings from first pass
         original_chunks: Original chunk dictionaries (for context structure)
-        target_language: Target language name
-        model_name: LLM model name
-        api_endpoint: API endpoint        log_callback: Logging callback
-        stats_callback: Statistics update callback
-        check_interruption_callback: Interruption check callback
-        llm_provider: LLM provider name
-        gemini_api_key: Gemini API key
-        openai_api_key: OpenAI API key
-        openrouter_api_key: OpenRouter API key
-        context_window: Initial context window size
-        auto_adjust_context: Enable adaptive context adjustment
-        prompt_options: Optional dict with prompt customization options
+        job: The job. Its refine provider (``job.provider_for(refine=True)``)
+            builds the client; ``target_language``, ``context_window`` (2048
+            when unset), ``auto_adjust_context`` and ``prompt_options`` are
+            read from it.
+        ctx: Log, stats and interruption hooks.
 
     Returns:
         List of refined text strings
+
+    Raises:
+        RuntimeError: the LLM client cannot be created.
+        RateLimitError: re-raised with ``partial_result`` set to the complete
+            list (chunks from the failing one on are the unrefined drafts).
     """
+    provider = job.refine_provider_config()
+    llm_provider = provider.provider or "ollama"
+    model_name = provider.model or DEFAULT_MODEL
+    target_language = job.target_language
+    context_window = job.context_window or 2048
+    auto_adjust_context = job.auto_adjust_context
+    prompt_options = job.engine_prompt_options()
+    log_callback = ctx.log_callback
+    stats_callback = ctx.stats_callback
+    check_interruption_callback = ctx.check_interruption
+
     total_chunks = len(translated_chunks)
     refined_parts = []
     last_refined_context = ""
@@ -717,17 +709,9 @@ async def refine_chunks(
     # Create the provider. A failure must stop the pass: there is no safe
     # fallback client for an arbitrary provider.
     try:
-        llm_client = create_provider_from_args(
-            llm_provider, model_name, api_endpoint,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            context_window=initial_context, log_callback=log_callback
-        )
+        from .llm.factory import create_llm_provider
+        llm_client = create_llm_provider(job.provider_for(
+            context_window=initial_context, log_callback=log_callback, refine=True))
     except Exception as e:
         if log_callback:
             log_callback("refinement_client_failed",

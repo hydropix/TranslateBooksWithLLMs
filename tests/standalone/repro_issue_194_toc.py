@@ -35,6 +35,7 @@ from src.config import INPUT_TAG_IN, INPUT_TAG_OUT, TRANSLATE_TAG_IN, TRANSLATE_
 from src.core.llm.base import LLMProvider, LLMRequest, LLMResponse
 from scripts.build_test_epub import build_epub
 from src.core.epub.translator import translate_epub_file
+from tests.job_helpers import make_ctx, make_job
 
 
 def _extract_source_block(prompt: str) -> str:
@@ -80,7 +81,11 @@ class UpperCaseProvider(LLMProvider):
         return False
 
 
-def _fake_factory(provider_type: str = "ollama", **kwargs) -> UpperCaseProvider:
+def _fake_factory(provider_type="ollama", **kwargs) -> UpperCaseProvider:
+    # Engines pass a ProviderConfig; older callers pass keyword arguments.
+    if hasattr(provider_type, "model"):
+        return UpperCaseProvider(model=provider_type.model or "fake-upper",
+                                 context_window=provider_type.context_window)
     return UpperCaseProvider(model=kwargs.get("model", "fake-upper"),
                              context_window=kwargs.get("context_window"))
 
@@ -112,16 +117,18 @@ async def _run():
 
         _install_fake()
         await translate_epub_file(
-            input_filepath=str(src_epub),
-            output_filepath=str(out_epub),
-            source_language="English",
-            target_language="French",
-            model_name="fake-upper",
-            llm_provider="ollama",
-            context_window=8192,
-            auto_adjust_context=False,
-            max_tokens_per_chunk=120,
-            log_callback=lambda code, msg="", **_: print(f"  [log] {code}: {msg}"),
+            make_job(
+                input_path=str(src_epub),
+                output_path=str(out_epub),
+                source_language="English",
+                target_language="French",
+                model="fake-upper",
+                provider="ollama",
+                context_window=8192,
+                auto_adjust_context=False,
+                max_tokens_per_chunk=120,
+            ),
+            make_ctx(log_callback=lambda code, msg="", **_: print(f"  [log] {code}: {msg}")),
         )
 
         ch01 = _read_zip_text(out_epub, "ch01.xhtml")

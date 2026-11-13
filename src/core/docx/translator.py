@@ -5,29 +5,20 @@ Phase 2 implementation: Uses the unified GenericTranslationOrchestrator
 with DocxTranslationAdapter for clean, reusable architecture.
 """
 
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Dict, Any
 from ..common.translation_orchestrator import GenericTranslationOrchestrator
+from ..job import JobConfig, JobContext
 from .docx_translation_adapter import DocxTranslationAdapter
 
 
 async def translate_docx_file(
-    input_filepath: str,
-    output_filepath: str,
-    source_language: str,
-    target_language: str,
-    model_name: str,
-    llm_client: Any,
-    max_tokens_per_chunk: int = 450,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    prompt_options: Optional[Dict] = None,
-    max_retries: int = 1,
+    job: JobConfig,
+    ctx: JobContext,
+    *,
+    llm_client: Optional[Any] = None,
     context_manager: Optional[Any] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    checkpoint_manager: Optional[Any] = None,
-    translation_id: Optional[str] = None,
-    parallel_workers: int = 1,
-    **kwargs
+    max_retries: int = 1,
+    parallel_workers: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Translate a complete DOCX file using the generic orchestrator.
@@ -42,26 +33,58 @@ async def translate_docx_file(
     7. Finalize output (HTML → DOCX via python-docx)
 
     Args:
-        input_filepath: Input DOCX file path
-        output_filepath: Output DOCX file path
-        source_language: Source language name
-        target_language: Target language name
-        model_name: LLM model name
-        llm_client: LLM client instance
-        max_tokens_per_chunk: Max tokens per chunk
-        log_callback: Logging callback function
-        stats_callback: Statistics callback function (called after each chunk)
-        prompt_options: Prompt options (refinement, etc.)
-        max_retries: Max translation retries
+        job: The job: ``input_path``, ``output_path``, languages, provider,
+            ``max_tokens_per_chunk`` (the current ``MAX_TOKENS_PER_CHUNK``
+            when unset), ``prompt_options`` and ``parallel_workers``.
+        ctx: Log/stats/interruption hooks, checkpoint manager and job id.
+        llm_client: LLM client to use. When None, one is built from the job
+            (``create_llm_provider(job.provider_for(...))``) and closed on exit.
         context_manager: Adaptive context manager (optional)
-        check_interruption_callback: Callback to check for interruption (optional)
-        checkpoint_manager: Checkpoint manager for partial state (optional)
-        translation_id: Translation ID for checkpointing (optional)
-        **kwargs: Additional arguments
+        max_retries: Max translation retries
+        parallel_workers: Concurrent chunks; None resolves
+            ``job.parallel_workers`` against the provider.
 
     Returns:
         Dict with success, stats, output_path
     """
+    from src.config import resolve_parallel_workers
+    from src.core.epub.translator import _job_max_tokens_per_chunk
+
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    model_name = job.model
+    log_callback = ctx.log_callback
+    checkpoint_manager = ctx.checkpoint_manager
+    translation_id = ctx.translation_id
+    if parallel_workers is None:
+        parallel_workers = resolve_parallel_workers(job.llm_provider, job.parallel_workers)
+
+    owns_client = llm_client is None
+    if owns_client:
+        from src.core.llm.factory import create_llm_provider
+        llm_client = create_llm_provider(job.provider_for(log_callback=log_callback))
+
+    try:
+        return await _translate_docx(
+            input_filepath, output_filepath, job.source_language, job.target_language,
+            model_name, llm_client, _job_max_tokens_per_chunk(job), log_callback,
+            ctx.stats_callback, job.engine_prompt_options(), max_retries, context_manager,
+            ctx.check_interruption, checkpoint_manager, translation_id, parallel_workers,
+        )
+    finally:
+        if owns_client and hasattr(llm_client, 'close'):
+            try:
+                await llm_client.close()
+            except Exception:
+                pass
+
+
+async def _translate_docx(
+    input_filepath, output_filepath, source_language, target_language, model_name,
+    llm_client, max_tokens_per_chunk, log_callback, stats_callback, prompt_options,
+    max_retries, context_manager, check_interruption_callback, checkpoint_manager,
+    translation_id, parallel_workers,
+) -> Dict[str, Any]:
     import os
 
     # Create adapter and orchestrator

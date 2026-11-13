@@ -423,8 +423,6 @@ async def _run_cell_translate(
     """Run a single translate call. Returns the translated text, or None."""
     prompt_pair = generate_translation_prompt(
         main_content=item["source_text"],
-        context_before=item.get("context_before", ""),
-        context_after=item.get("context_after", ""),
         previous_translation_context="",
         source_language=source_language,
         target_language=target_language,
@@ -456,8 +454,6 @@ async def _run_cell_refine(
     """Run a single refine call. Emits one WebSocket event when done."""
     prompt_pair = generate_refinement_prompt(
         draft_translation=draft_text,
-        context_before=item.get("context_before", ""),
-        context_after=item.get("context_after", ""),
         previous_refined_context="",
         target_language=target_language,
         has_placeholders=False,

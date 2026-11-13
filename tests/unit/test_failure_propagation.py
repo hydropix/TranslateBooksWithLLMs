@@ -18,6 +18,7 @@ from src.core.job import OP_REFINE, JobConfig, JobResult, JobStatus
 from src.core.llm.provider_config import ProviderConfig
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.utils.notifier import EVENT_FAILURE, EVENT_SUCCESS
+from tests.job_helpers import make_ctx, make_job
 
 
 class _FakeLogger:
@@ -149,11 +150,13 @@ def test_cli_success_still_exits_zero(cli):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("epub_result,expected", [(True, True), (False, False), (None, False)])
-async def test_translate_file_propagates_the_epub_result(tmp_path, monkeypatch, epub_result, expected):
+@pytest.mark.parametrize("status", [JobStatus.COMPLETED, JobStatus.PARTIAL, JobStatus.FAILED])
+async def test_translate_file_propagates_the_epub_result(tmp_path, monkeypatch, status):
     import src.core.epub.translator as epub_translator
 
-    async def fake_translate_epub_file(**kwargs):
+    epub_result = JobResult(status=status, output_path=str(tmp_path / "out.epub"))
+
+    async def fake_translate_epub_file(job, ctx):
         return epub_result
 
     monkeypatch.setattr(epub_translator, "translate_epub_file", fake_translate_epub_file)
@@ -161,14 +164,9 @@ async def test_translate_file_propagates_the_epub_result(tmp_path, monkeypatch, 
     src.write_bytes(b"PK\x03\x04")  # detection goes by extension
 
     result = await adapter_translate_file(
-        input_filepath=str(src),
-        output_filepath=str(tmp_path / "out.epub"),
-        source_language="English",
-        target_language="French",
-        model_name="m",
-        llm_provider="ollama",
-        checkpoint_manager=None,
-        translation_id=None,
+        make_job(str(src), str(tmp_path / "out.epub"), model="m", provider="ollama"),
+        make_ctx(),
     )
 
-    assert result is expected
+    assert result is epub_result
+    assert bool(result) is (status is JobStatus.COMPLETED)

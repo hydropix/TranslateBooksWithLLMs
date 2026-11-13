@@ -77,7 +77,7 @@ def test_post_processing_follows_has_placeholders(has_placeholders):
 
 def test_translation_cleanup_never_merges_with_placeholders():
     system = generate_translation_prompt(
-        "Text.", "", "", "", "English", "French",
+        "Text.", "", "English", "French",
         has_placeholders=True, prompt_options={"text_cleanup": True},
     ).system
     assert MERGE_BULLET not in system
@@ -163,7 +163,7 @@ def test_subtitle_translation_chinese_example_unchanged():
 @pytest.mark.parametrize("has_placeholders", [True, False])
 def test_translation_output_example_comes_from_helper(has_placeholders):
     system = generate_translation_prompt(
-        "Text.", "", "", "", "English", "German", has_placeholders=has_placeholders
+        "Text.", "", "English", "German", has_placeholders=has_placeholders
     ).system
     assert get_output_format_example("German", has_placeholders) in system
 
@@ -177,23 +177,3 @@ def test_refinement_output_example_comes_from_helper():
     assert get_refinement_output_example("French") == "Votre texte affiné ici"
     assert "Votre texte affiné ici" in _refine(has_placeholders=False).system
     assert get_refinement_output_example("Klingon") == "Your refined text here"
-
-
-# ---------------------------------------------------------------------------
-# context_before / context_after are intentionally unused
-# ---------------------------------------------------------------------------
-
-def test_source_context_is_not_sent_to_the_model():
-    pair = generate_translation_prompt(
-        "Main.", "SOURCE-BEFORE", "SOURCE-AFTER", "", "English", "French",
-    )
-    for part in pair:
-        assert "SOURCE-BEFORE" not in part
-        assert "SOURCE-AFTER" not in part
-
-    pair = generate_refinement_prompt(
-        "Draft.", context_before="SOURCE-BEFORE", context_after="SOURCE-AFTER",
-    )
-    for part in pair:
-        assert "SOURCE-BEFORE" not in part
-        assert "SOURCE-AFTER" not in part

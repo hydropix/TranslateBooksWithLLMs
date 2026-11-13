@@ -7,6 +7,8 @@ was given.
 
 import pytest
 
+from tests.job_helpers import make_ctx, make_job
+
 import src.core.refine.docx_refiner as docx_refiner
 
 HTML = "".join(
@@ -36,15 +38,16 @@ async def _chunk_count(tmp_path, monkeypatch, max_tokens):
         seen["count"] = len(chunks)
         return translated_chunks
 
-    monkeypatch.setattr(docx_refiner, "build_refine_client", lambda **kw: (_Client(), None))
+    monkeypatch.setattr(docx_refiner, "build_refine_client", lambda *a, **kw: (_Client(), None))
     monkeypatch.setattr(docx_refiner, "DocxHtmlConverter", _Converter)
     monkeypatch.setattr(docx_refiner, "_refine_epub_chunks", fake_refine)
     src = tmp_path / "in.docx"
     src.write_bytes(b"x")
 
     ok = await docx_refiner.refine_docx_file(
-        str(src), str(tmp_path / f"out{max_tokens}.docx"), "French",
-        max_tokens_per_chunk=max_tokens,
+        make_job(str(src), str(tmp_path / f"out{max_tokens}.docx"), operation="refine",
+                 target_language="French", max_tokens_per_chunk=max_tokens),
+        make_ctx(),
     )
     assert ok is True
     return seen["count"]

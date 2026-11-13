@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.core.adapters import scan_file, term_fix_file
 from src.core.adapters.exceptions import UnsupportedFormatError
+from src.core.job import JobStatus
 from src.core.term_fix import STATUS_FIXED, parse_rules_text
+from tests.job_helpers import make_ctx, make_job
 
 
 class _Response:
@@ -46,6 +48,37 @@ class FakeLLM:
         pass
 
 
+async def _fix(src, out, rules, mode="literal", target_language="", log_callback=None):
+    """Run term_fix_file on a hand-built job; return its TermFixResult."""
+    result = await term_fix_file(
+        make_job(src, out, term_fix={"mode": mode, "rules_text": ""},
+                 target_language=target_language),
+        make_ctx(log_callback=log_callback),
+        rules,
+    )
+    assert result.status is JobStatus.COMPLETED
+    assert result.output_path == out
+    return result.detail
+
+
+@pytest.mark.asyncio
+async def test_result_carries_output_report_and_detail(tmp_path):
+    src = tmp_path / "book.txt"
+    src.write_text("Ashe came.", encoding="utf-8")
+    out = tmp_path / "out.txt"
+    result = await term_fix_file(
+        make_job(str(src), str(out), term_fix={"mode": "literal", "rules_text": ""},
+                 input_filename="Original Name.txt"),
+        make_ctx(),
+        parse_rules_text("Ashe -> Askan"),
+    )
+    report = tmp_path / "out.term-fix.md"
+    assert result.ok
+    assert result.output_paths == (str(out), str(report))
+    assert len(result.detail.occurrences) == 1
+    assert "Original Name.txt" in report.read_text(encoding="utf-8")
+
+
 @pytest.mark.asyncio
 async def test_txt_bytes_outside_matches_are_preserved(tmp_path):
     src = tmp_path / "book.txt"
@@ -54,7 +87,7 @@ async def test_txt_bytes_outside_matches_are_preserved(tmp_path):
     out = tmp_path / "book (term-fix).txt"
     logs = []
 
-    result = await term_fix_file(
+    result = await _fix(
         str(src), str(out), parse_rules_text("Ashe -> Askan"),
         log_callback=lambda key, msg: logs.append(key),
     )
@@ -72,7 +105,7 @@ async def test_srt_keeps_timings(tmp_path):
     raw = "1\n00:00:01,000 --> 00:00:02,000\nAshe runs.\n\n2\n00:00:03,000 --> 00:00:04,000\nHi\n"
     src.write_text(raw, encoding="utf-8")
     out = tmp_path / "out.srt"
-    await term_fix_file(str(src), str(out), parse_rules_text("Ashe -> Askan"))
+    await _fix(str(src), str(out), parse_rules_text("Ashe -> Askan"))
     assert out.read_text(encoding="utf-8") == raw.replace("Ashe", "Askan")
 
 
@@ -98,7 +131,7 @@ async def test_epub_edits_text_only_and_copies_other_entries(tmp_path):
     src, out = tmp_path / "book.epub", tmp_path / "out.epub"
     _make_epub(src, {"OEBPS/ch1.xhtml": chapter, "OEBPS/ch2.xhtml": untouched})
 
-    result = await term_fix_file(str(src), str(out), parse_rules_text("Ashe -> Askan"))
+    result = await _fix(str(src), str(out), parse_rules_text("Ashe -> Askan"))
 
     assert [o.location for o in result.occurrences] == ["OEBPS/ch1.xhtml"] * 2
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out) as zout:
@@ -133,7 +166,7 @@ async def test_docx_edits_runs_in_place(tmp_path):
     src, out = tmp_path / "book.docx", tmp_path / "out.docx"
     _make_docx(src)
 
-    result = await term_fix_file(str(src), str(out), parse_rules_text("Ashe -> Askan"))
+    result = await _fix(str(src), str(out), parse_rules_text("Ashe -> Askan"))
 
     assert len(result.occurrences) == 3
     doc = Document(str(out))
@@ -150,7 +183,7 @@ async def test_docx_edits_runs_in_place(tmp_path):
 async def test_docx_without_match_is_copied_verbatim(tmp_path):
     src, out = tmp_path / "book.docx", tmp_path / "out.docx"
     _make_docx(src)
-    await term_fix_file(str(src), str(out), parse_rules_text("Zorro -> Zed"))
+    await _fix(str(src), str(out), parse_rules_text("Zorro -> Zed"))
     assert out.read_bytes() == src.read_bytes()
 
 
@@ -158,11 +191,11 @@ async def test_docx_without_match_is_copied_verbatim(tmp_path):
 async def test_smart_mode_inflects_through_llm(tmp_path, monkeypatch):
     fake = FakeLLM(lambda found: "Eldsdrakens" if found.endswith("s") else "Eldsdraken")
     import src.core.refine.client_setup as client_setup
-    monkeypatch.setattr(client_setup, "build_refine_client", lambda **kw: (fake, None))
+    monkeypatch.setattr(client_setup, "build_refine_client", lambda *a, **kw: (fake, None))
 
     src, out = tmp_path / "bok.txt", tmp_path / "out.txt"
     src.write_text("Drakbranden vaknade. Drakbrandens eld brann.\n", encoding="utf-8")
-    result = await term_fix_file(
+    result = await _fix(
         str(src), str(out), parse_rules_text("Drakbrand* -> Eldsdraken"),
         mode="smart", target_language="Swedish",
     )
@@ -177,7 +210,7 @@ async def test_literal_mode_refuses_wildcards(tmp_path):
     src = tmp_path / "bok.txt"
     src.write_text("x", encoding="utf-8")
     with pytest.raises(ValueError, match="wildcard"):
-        await term_fix_file(str(src), str(tmp_path / "o.txt"),
+        await _fix(str(src), str(tmp_path / "o.txt"),
                             parse_rules_text("Drakbrand* -> Eldsdraken"))
 
 
@@ -203,11 +236,11 @@ async def test_unsupported_format(tmp_path):
     src = tmp_path / "book.pdf"
     src.write_bytes(b"%PDF-1.4 Ashe")
     with pytest.raises(UnsupportedFormatError):
-        await term_fix_file(str(src), str(tmp_path / "o.pdf"), parse_rules_text("Ashe -> Askan"))
+        await _fix(str(src), str(tmp_path / "o.pdf"), parse_rules_text("Ashe -> Askan"))
 
 
 @pytest.mark.asyncio
 async def test_missing_input(tmp_path):
     with pytest.raises(FileNotFoundError):
-        await term_fix_file(str(tmp_path / "nope.txt"), str(tmp_path / "o.txt"),
+        await _fix(str(tmp_path / "nope.txt"), str(tmp_path / "o.txt"),
                             parse_rules_text("Ashe -> Askan"))

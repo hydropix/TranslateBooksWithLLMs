@@ -44,6 +44,7 @@ from tests.unit.epub.conftest import (
     _write,
     _zip_dir_as_epub,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 XHTML_NS = "http://www.w3.org/1999/xhtml"
@@ -276,17 +277,20 @@ async def test_calibre_div_text_survives_the_full_plain_text_pipeline(
 ):
     """With an echo LLM, every sentence of the chapter must be in the output."""
     monkeypatch.setattr(
-        translator_module, "_create_llm_client", lambda **kwargs: _echo_llm_client()
+        translator_module, "_create_llm_client", lambda *args, **kwargs: _echo_llm_client()
     )
     _disable_attribution(monkeypatch)
 
     output_epub = tmp_path / "output_plain.epub"
     await translate_epub_file(
-        input_filepath=str(calibre_chapter_epub),
-        output_filepath=str(output_epub),
-        source_language="English",
-        target_language="French",
-        prompt_options={"plain_text_mode": True},
+        make_job(
+            input_path=str(calibre_chapter_epub),
+            output_path=str(output_epub),
+            source_language="English",
+            target_language="French",
+            prompt_options={"plain_text_mode": True},
+        ),
+        make_ctx(),
     )
 
     with zipfile.ZipFile(output_epub) as archive:

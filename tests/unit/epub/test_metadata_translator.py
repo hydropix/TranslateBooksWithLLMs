@@ -43,6 +43,7 @@ from src.core.llm.base import LLMResponse
 from src.core.llm.utils.extraction import TranslationExtractor
 
 from tests.unit.epub.conftest import _disable_attribution, _echo_llm_client, _read
+from tests.job_helpers import make_ctx, make_job
 
 
 SOURCE_TITLE = "被渣后和前夫破镜重圆了"
@@ -555,7 +556,7 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, client,
     exercise the real `_update_epub_metadata` signature interplay.
     """
     monkeypatch.setattr(translator_module, "_create_llm_client",
-                        lambda **kwargs: client)
+                        lambda *args, **kwargs: client)
     if attribution:
         monkeypatch.setattr(translator_module, "ATTRIBUTION_ENABLED", True)
         monkeypatch.setattr(
@@ -569,11 +570,13 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, client,
         events.append((event, message))
 
     await translate_epub_file(
-        input_filepath=str(input_path),
-        output_filepath=str(output_path),
-        source_language="Chinese",
-        target_language="French",
-        log_callback=log_callback,
+        make_job(
+            input_path=str(input_path),
+            output_path=str(output_path),
+            source_language="Chinese",
+            target_language="French",
+        ),
+        make_ctx(log_callback=log_callback),
     )
     return events
 

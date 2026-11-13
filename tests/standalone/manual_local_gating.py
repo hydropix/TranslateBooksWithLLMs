@@ -30,6 +30,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 from src import config  # noqa: F401
 from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 
 FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "sample.txt"
@@ -64,16 +65,20 @@ async def run() -> int:
                 # Ollama daemon. We just need translate_file to reach (and log)
                 # the gating step, which happens before the LLM client is built.
                 await translate_file(
-                    input_filepath=str(FIXTURE),
-                    output_filepath=str(output_path),
-                    source_language="English",
-                    target_language="French",
-                    model_name="any-model",
-                    llm_provider="ollama",
-                    checkpoint_manager=checkpoint_manager,
-                    translation_id=translation_id,
-                    log_callback=log_callback,
-                    parallel_requests=4,
+                    make_job(
+                        input_path=str(FIXTURE),
+                        output_path=str(output_path),
+                        source_language="English",
+                        target_language="French",
+                        model="any-model",
+                        provider="ollama",
+                        parallel_workers=4,
+                    ),
+                    make_ctx(
+                        checkpoint_manager=checkpoint_manager,
+                        translation_id=translation_id,
+                        log_callback=log_callback,
+                    ),
                 )
             except Exception as e:
                 print(f"(translate_file raised, expected without ollama running: {type(e).__name__})")

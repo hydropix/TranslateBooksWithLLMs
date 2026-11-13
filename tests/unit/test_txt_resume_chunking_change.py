@@ -14,6 +14,7 @@ import src.core.translator as translator_module
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.txt_adapter import TxtAdapter
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 PARAGRAPHS = [f"Paragraph number {k} tells a short story about item {k}." for k in range(12)]
 TEXT = "\n\n".join(PARAGRAPHS) + "\n"
@@ -40,7 +41,7 @@ async def _run(tmp_path, cm, monkeypatch, max_tokens, fail_marker=None):
             return None
         return main_content.upper()
 
-    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_Client))
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(_Client))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
     adapter = TxtAdapter(
         str(tmp_path / "in.txt"), str(tmp_path / "out.txt"),
@@ -48,8 +49,8 @@ async def _run(tmp_path, cm, monkeypatch, max_tokens, fail_marker=None):
     )
     translator = GenericTranslator(adapter=adapter, checkpoint_manager=cm, translation_id="job")
     ok = await translator.translate(
-        source_language="English", target_language="French",
-        model_name="m", llm_provider="openai",
+        make_job(source_language="English", target_language="French", model="m", provider="openai"),
+        make_ctx(),
     )
     return ok, adapter
 
@@ -90,7 +91,8 @@ async def test_txt_adapter_does_not_restore_onto_other_source(tmp_path):
 
 
 def _fake_factory(client_cls):
-    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
-    def build(llm_provider, model=None, endpoint=None, **kwargs):
-        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
     return build

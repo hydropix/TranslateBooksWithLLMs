@@ -33,6 +33,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 from src import config  # noqa: F401  (load_dotenv side effect)
 from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 
 FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "sample.txt"
@@ -78,19 +79,21 @@ async def run() -> int:
 
             started = time.perf_counter()
             ok = await translate_file(
-                input_filepath=str(FIXTURE),
-                output_filepath=str(output_path),
-                source_language="English",
-                target_language="French",
-                model_name=model,
-                llm_provider="poe",
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                stats_callback=stats_callback,
-                poe_api_key=api_key,
-                # Force smaller chunks so we exercise the multi-chunk loop with
-                # a fixture that stays small. Default is 450 tokens.
-                max_tokens_per_chunk=120,
+                make_job(
+                    input_path=str(FIXTURE),
+                    output_path=str(output_path),
+                    source_language="English",
+                    target_language="French",
+                    model=model,
+                    provider="poe",
+                    api_key=api_key,
+                    max_tokens_per_chunk=120,
+                ),
+                make_ctx(
+                    checkpoint_manager=checkpoint_manager,
+                    translation_id=translation_id,
+                    stats_callback=stats_callback,
+                ),
             )
             elapsed_s = time.perf_counter() - started
 

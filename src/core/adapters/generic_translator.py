@@ -5,10 +5,13 @@ This module provides a unified translation workflow that works with any file for
 through the FormatAdapter interface.
 """
 
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 
 from .format_adapter import FormatAdapter
+
+if TYPE_CHECKING:
+    from src.core.job import JobConfig, JobContext
 
 
 class _ValidationFailed:
@@ -88,41 +91,40 @@ class GenericTranslator:
         self.checkpoint_manager = checkpoint_manager
         self.translation_id = translation_id
 
-    async def translate(
-        self,
-        source_language: str,
-        target_language: str,
-        model_name: str,
-        llm_provider: str,
-        log_callback: Optional[Callable] = None,
-        stats_callback: Optional[Callable] = None,
-        check_interruption_callback: Optional[Callable] = None,
-        bilingual_output: bool = False,
-        parallel_workers: int = 1,
-        **llm_kwargs
-    ) -> bool:
+    async def translate(self, job: "JobConfig", ctx: "JobContext") -> bool:
         """
         Execute the complete translation workflow.
 
         Args:
-            source_language: Source language name
-            target_language: Target language name
-            model_name: LLM model identifier
-            llm_provider: LLM provider name (ollama, gemini, openai, openrouter)
-            log_callback: Optional callback for logging (receives type and message)
-            stats_callback: Optional callback for statistics updates (receives dict with
-                total_chunks, completed_chunks, failed_chunks, unfinished_chunks)
-            check_interruption_callback: Optional callback to check if translation should be interrupted
-            bilingual_output: If True, output will contain both original and translated text
-            parallel_workers: Number of chunks translated concurrently (resolved
-                against the provider; local providers are forced back to 1). When
-                1, behavior is identical to the legacy sequential loop, including
-                cross-chunk translation context chaining.
-            **llm_kwargs: Additional LLM configuration (endpoint, api_key, etc.)
+            job: The job. Reads the languages, the provider (the client is
+                built with ``create_llm_provider(job.provider_for(...))``),
+                ``context_window``, ``auto_adjust_context``,
+                ``prompt_options``, ``bilingual_output`` (output contains both
+                original and translated text) and ``parallel_workers``
+                (resolved against the provider; local providers are forced
+                back to 1. When 1, behavior is the sequential loop, including
+                cross-chunk translation context chaining).
+            ctx: Log callback, stats callback (receives dicts with
+                total_chunks, completed_chunks, failed_chunks,
+                unfinished_chunks) and interruption check. The checkpoint
+                manager and job id are the ones given to the constructor.
 
         Returns:
             True if translation completed successfully, False otherwise
+
+        Raises:
+            RateLimitError: propagated unchanged so the caller can pause.
         """
+        source_language = job.source_language
+        target_language = job.target_language
+        model_name = job.model
+        llm_provider = job.llm_provider
+        log_callback = ctx.log_callback
+        stats_callback = ctx.stats_callback
+        check_interruption_callback = ctx.check_interruption
+        bilingual_output = job.bilingual_output
+        parallel_workers = job.parallel_workers
+
         llm_client = None
         try:
             # 1. Prepare file for translation
@@ -226,26 +228,16 @@ class GenericTranslator:
 
             # 5. Create the LLM provider (and, for Ollama, the adaptive
             # context manager: same sizing as the EPUB pipeline).
-            from src.core.llm.factory import create_provider_from_args
+            from src.core.llm.factory import create_llm_provider
             from src.core.translator import generate_translation_request, previous_context_tail
             from src.core.epub.translator import _create_context_manager, initial_context_size
 
-            context_window = llm_kwargs.get('context_window')
-            auto_adjust_context = llm_kwargs.get('auto_adjust_context', True)
+            context_window = job.context_window
+            auto_adjust_context = job.auto_adjust_context
             initial_context, is_thinking_model = initial_context_size(
                 model_name, auto_adjust_context, context_window)
-            llm_client = create_provider_from_args(
-                llm_provider, model_name, llm_kwargs.get('endpoint'),
-                gemini_api_key=llm_kwargs.get('gemini_api_key'),
-                openai_api_key=llm_kwargs.get('openai_api_key'),
-                openrouter_api_key=llm_kwargs.get('openrouter_api_key'),
-                mistral_api_key=llm_kwargs.get('mistral_api_key'),
-                deepseek_api_key=llm_kwargs.get('deepseek_api_key'),
-                poe_api_key=llm_kwargs.get('poe_api_key'),
-                nim_api_key=llm_kwargs.get('nim_api_key'),
-                context_window=initial_context,
-                log_callback=log_callback,
-            )
+            llm_client = create_llm_provider(job.provider_for(
+                context_window=initial_context, log_callback=log_callback))
             context_manager = _create_context_manager(
                 llm_provider=llm_provider,
                 auto_adjust_context=auto_adjust_context,
@@ -263,7 +255,7 @@ class GenericTranslator:
 
             workers = resolve_parallel_workers(llm_provider, parallel_workers)
             sequential = workers == 1
-            prompt_options = llm_kwargs.get('prompt_options', {})
+            prompt_options = job.engine_prompt_options()
             max_validation_attempts = 1 + max(0, UNIT_VALIDATION_RETRIES)
 
             raw_log = self._open_raw_response_log(log_callback) if SAVE_RAW_LLM_RESPONSES else None

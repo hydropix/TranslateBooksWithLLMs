@@ -829,6 +829,20 @@ export const SettingsManager = {
         this.updateEndpointBadge(endpointType, true);
     },
 
+    /**
+     * Check if an endpoint was customized by the user.
+     * Not called by the UI today; kept because
+     * tests/unit/test_endpoint_hybrid_logic.py asserts it exists.
+     * @param {string} endpointType - 'ollama' or 'openai'
+     * @returns {boolean}
+     */
+    isEndpointCustomized(endpointType) {
+        const prefs = this.getLocalPreferences();
+        return endpointType === 'openai'
+            ? prefs.openaiEndpointCustomized
+            : prefs.apiEndpointCustomized;
+    },
+
 
     /**
      * Reset endpoint to server default (.env value)

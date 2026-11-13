@@ -11,6 +11,9 @@ into separate modules for better maintainability:
 - blueprints/security_routes.py: File upload and security endpoints
 - blueprints/tts_routes.py: TTS audio generation from existing files
 """
+import logging
+import os
+
 from flask import jsonify
 
 from .blueprints import (
@@ -28,6 +31,30 @@ from .blueprints import (
 from .sample_state import SampleStateManager
 
 
+# Upper bound on any request body (uploads included). Books can be large, so
+# the default is generous; override with MAX_REQUEST_SIZE_MB in the
+# environment (or .env). Werkzeug rejects a larger body with 413 before the
+# route runs, instead of buffering it in memory. The upload validator keeps
+# its own, stricter per-file limit (SecureFileHandler.MAX_FILE_SIZE).
+DEFAULT_MAX_REQUEST_SIZE_MB = 200
+
+_logger = logging.getLogger(__name__)
+
+
+def max_request_size_bytes() -> int:
+    """MAX_REQUEST_SIZE_MB from the environment, in bytes (default 200 MB)."""
+    raw = os.getenv('MAX_REQUEST_SIZE_MB', '').strip()
+    try:
+        megabytes = int(raw) if raw else DEFAULT_MAX_REQUEST_SIZE_MB
+    except ValueError:
+        _logger.warning("Ignoring invalid MAX_REQUEST_SIZE_MB=%r; using %d MB",
+                        raw, DEFAULT_MAX_REQUEST_SIZE_MB)
+        megabytes = DEFAULT_MAX_REQUEST_SIZE_MB
+    if megabytes <= 0:
+        megabytes = DEFAULT_MAX_REQUEST_SIZE_MB
+    return megabytes * 1024 * 1024
+
+
 def configure_routes(app, state_manager, output_dir, start_translation_job, socketio=None):
     """
     Configure Flask routes by registering all blueprints
@@ -39,6 +66,9 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
         start_translation_job: Function to start translation jobs
         socketio: SocketIO instance for real-time updates (optional)
     """
+    # Cap request bodies unless the app already chose a limit.
+    if not app.config.get('MAX_CONTENT_LENGTH'):
+        app.config['MAX_CONTENT_LENGTH'] = max_request_size_bytes()
 
     # Register config and health check routes
     # Pass server_session_id from state_manager to ensure consistency
@@ -98,6 +128,14 @@ def _register_error_handlers(app):
     @app.errorhandler(404)
     def route_not_found(error):
         return jsonify({"error": "API Endpoint not found"}), 404
+
+    @app.errorhandler(413)
+    def request_too_large(error):
+        limit_mb = (app.config.get('MAX_CONTENT_LENGTH') or 0) // (1024 * 1024)
+        return jsonify({
+            "error": "Request too large",
+            "message": f"The request exceeds the {limit_mb} MB limit (MAX_REQUEST_SIZE_MB).",
+        }), 413
 
     @app.errorhandler(500)
     def internal_server_error(error):

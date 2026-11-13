@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
+from src.utils.security import is_within_directory
+
 
 class PathValidator:
     """Validates file paths and names for security"""
@@ -82,21 +84,11 @@ class PathValidator:
         """
         Return True only if `path` resolves to a location inside `directory`.
 
-        Both arguments are resolved first (following symlinks and normalizing
-        '..'), then compared component-wise via Path.relative_to — never a
-        string startswith, which would treat '/uploads-evil' as inside
-        '/uploads'.
+        Delegates to src.utils.security.is_within_directory, the one
+        containment check of the code base (resolve both sides, compare with
+        Path.relative_to, never a string startswith).
         """
-        try:
-            path_resolved = Path(path).resolve()
-            dir_resolved = Path(directory).resolve()
-        except OSError:
-            return False
-        try:
-            path_resolved.relative_to(dir_resolved)
-            return True
-        except ValueError:
-            return False
+        return is_within_directory(path, directory)
 
     @staticmethod
     def validate_upload_path(

@@ -145,15 +145,13 @@ class FileService:
         Returns:
             Tuple of (success, error_message)
         """
+        from .path_validator import PathValidator
+
         try:
             file_path = Path(file_path_str)
 
-            # Resolve to absolute paths for comparison
-            file_path_resolved = file_path.resolve()
-            upload_dir_resolved = self.uploads_dir.resolve()
-
             # Security check - ensure file is within uploads directory
-            if not str(file_path_resolved).startswith(str(upload_dir_resolved)):
+            if not PathValidator.is_within_directory(file_path, self.uploads_dir):
                 return False, "Security: File not in uploads directory"
 
             # Delete the file if it exists

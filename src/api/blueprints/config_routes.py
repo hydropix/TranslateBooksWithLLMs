@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from urllib.parse import urlparse
-from flask import Blueprint, request, jsonify, send_from_directory, render_template, make_response
+from flask import Blueprint, request, jsonify, render_template, make_response
 from pathlib import Path
 
 from src.utils.webhook_secrets import (
@@ -844,10 +844,10 @@ def create_config_blueprint(server_session_id=None):
                     "count": len(model_names)
                 })
 
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError:
             error_msg = f"Connection refused to {tags_url}. Is Ollama running?"
             print(f"❌ {error_msg}")
-        except requests.exceptions.Timeout as e:
+        except requests.exceptions.Timeout:
             error_msg = f"Timeout connecting to {tags_url} (10s)"
             print(f"❌ {error_msg}")
         except requests.exceptions.RequestException as e:
@@ -947,7 +947,6 @@ def create_config_blueprint(server_session_id=None):
 
         # Read existing content or start fresh
         existing_lines = []
-        file_is_new = not env_path.exists()
 
         if env_path.exists():
             with open(env_path, 'r', encoding='utf-8') as f:

@@ -20,7 +20,6 @@ import sys
 import logging
 import webbrowser
 import threading
-from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask
 from flask_socketio import SocketIO

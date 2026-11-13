@@ -6,17 +6,12 @@ Tests the complete flow from RTL detection to CSS injection and OPF updates.
 
 import pytest
 import sys
-import os
-import tempfile
-import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.core.epub.rtl_support import (
     is_rtl_language,
-    inject_rtl_css_to_html,
-    update_opf_for_rtl,
     apply_rtl_to_epub_directory,
 )
 

@@ -1,6 +1,5 @@
 """Unit tests for TagPreserver."""
 
-import pytest
 from src.core.epub.tag_preservation import TagPreserver
 
 

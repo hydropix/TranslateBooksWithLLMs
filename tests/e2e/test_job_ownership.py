@@ -15,7 +15,6 @@ from .helpers import (
     TERMINAL_STATUSES,
     emit_translation_update,
     force_busy_ui,
-    open_app,
     queue_files,
     register_owned_job,
     start_batch,

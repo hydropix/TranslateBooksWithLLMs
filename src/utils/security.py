@@ -8,7 +8,7 @@ import mimetypes
 import logging
 import zipfile
 from pathlib import Path
-from typing import Set, Optional, Dict, Any, Iterable, Union
+from typing import Set, Optional, Iterable, Union
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)

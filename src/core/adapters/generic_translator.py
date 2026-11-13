@@ -9,7 +9,6 @@ from typing import Callable, Optional, Dict, Any
 from pathlib import Path
 
 from .format_adapter import FormatAdapter
-from .translation_unit import TranslationUnit
 
 
 class _ValidationFailed:

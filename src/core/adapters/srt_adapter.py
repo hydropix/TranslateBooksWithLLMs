@@ -5,7 +5,6 @@ Handles SRT subtitle file format with local index renumbering.
 
 import re
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 
 from .format_adapter import FormatAdapter
 from .translation_unit import TranslationUnit

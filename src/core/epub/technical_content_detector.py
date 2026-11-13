@@ -19,7 +19,7 @@ Supported patterns:
 
 import re
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Optional
 from enum import IntEnum
 
 

@@ -25,7 +25,7 @@ class TestDetectorPerformance:
         iterations = 100
         start = time.perf_counter()
         for _ in range(iterations):
-            patterns = detector.find_all_technical_content(text)
+            detector.find_all_technical_content(text)
         elapsed = time.perf_counter() - start
 
         avg_time_ms = (elapsed / iterations) * 1000
@@ -58,7 +58,7 @@ class TestDetectorPerformance:
         iterations = 10
         start = time.perf_counter()
         for _ in range(iterations):
-            patterns = detector.find_all_technical_content(text)
+            detector.find_all_technical_content(text)
         elapsed = time.perf_counter() - start
 
         avg_time_ms = (elapsed / iterations) * 1000
@@ -81,7 +81,7 @@ class TestDetectorPerformance:
         text = "\n".join(paragraphs)  # ~100KB
 
         start = time.perf_counter()
-        patterns = detector.find_all_technical_content(text)
+        detector.find_all_technical_content(text)
         elapsed = time.perf_counter() - start
 
         print(f"\nLarge text (~100KB): {elapsed*1000:.2f}ms (target: <500ms)")

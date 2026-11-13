@@ -58,17 +58,12 @@ from .exceptions import XmlParsingError, BodyExtractionError
 from .placeholder_validator import PlaceholderValidator
 from .container import TranslationContainer
 from ..translator import generate_translation_request
-from ..context_optimizer import AdaptiveContextManager, INITIAL_CONTEXT_SIZE, CONTEXT_STEP, MAX_CONTEXT_SIZE
+from ..context_optimizer import AdaptiveContextManager
 from src.config import (
-    PLACEHOLDER_PATTERN,
     MAX_REFINE_RETRIES,
-    create_placeholder,
     detect_placeholder_format_in_text,
-    THINKING_MODELS,
-    ADAPTIVE_CONTEXT_INITIAL_THINKING,
 )
 from src.prompts.prompts import PromptPair
-from src.utils.unified_logger import LogLevel, LogType
 
 
 def _log_error(log_callback: Optional[Callable], event_name: str, message: str):

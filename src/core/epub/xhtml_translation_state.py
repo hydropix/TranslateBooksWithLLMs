@@ -7,7 +7,6 @@ enabling interruption and resume at the chunk level.
 
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
 
 
 # === Per-chunk translation statuses (issue #261) ===

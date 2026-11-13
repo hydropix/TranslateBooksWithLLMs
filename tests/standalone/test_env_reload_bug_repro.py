@@ -17,7 +17,6 @@ This script reproduces that lifecycle without booting Flask:
 The script exits 0 on success, 1 on failure. Intended to be run twice:
 once before the fix (expected to fail), once after (expected to pass).
 """
-import importlib
 import os
 import shutil
 import sys

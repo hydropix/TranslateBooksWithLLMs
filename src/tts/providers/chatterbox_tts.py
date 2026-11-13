@@ -12,7 +12,6 @@ Key Features:
 """
 import asyncio
 import logging
-import tempfile
 import os
 import re
 import unicodedata

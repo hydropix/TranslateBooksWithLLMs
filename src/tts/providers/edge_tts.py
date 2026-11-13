@@ -4,7 +4,6 @@ Edge-TTS Provider Implementation
 Uses Microsoft Edge's text-to-speech API via the edge-tts library.
 Provides high-quality neural voices for free without API key.
 """
-import asyncio
 import logging
 from typing import Optional, List, AsyncIterator
 from pathlib import Path

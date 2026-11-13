@@ -3,8 +3,7 @@ Post-processing module for cleaning translated text.
 Provides extensible cleaning operations for translation output.
 """
 import re
-from typing import List, Callable, Dict, Any
-from dataclasses import dataclass
+from typing import List, Dict
 from abc import ABC, abstractmethod
 
 from src.config import PLACEHOLDER_PATTERN

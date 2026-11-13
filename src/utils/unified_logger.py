@@ -4,7 +4,6 @@ Provides consistent logging across CLI, Web, and all file types
 """
 import sys
 import os
-import json
 from datetime import datetime
 from typing import Optional, Dict, Any, Callable
 from enum import Enum
@@ -347,7 +346,7 @@ class UnifiedLogger:
                 except Exception:
                     # Last resort: just print a generic message
                     print(f"[LOG] Unicode encoding error - message suppressed", flush=True)
-            except Exception as e:
+            except Exception:
                 # Fallback to simple message if formatting fails
                 try:
                     timestamp = datetime.now().strftime("%H:%M:%S")

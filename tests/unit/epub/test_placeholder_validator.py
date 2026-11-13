@@ -1,6 +1,5 @@
 """Unit tests for PlaceholderValidator."""
 
-import pytest
 from src.core.epub.placeholder_validator import PlaceholderValidator
 
 

@@ -6,15 +6,10 @@ including multiple XHTML files.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from pathlib import Path
-from lxml import etree
-import tempfile
-import shutil
-import os
+from unittest.mock import MagicMock
 from datetime import datetime, UTC
 
-from src.core.epub.translator import _translate_single_xhtml_file, _process_all_content_files
+from src.core.epub.translator import _translate_single_xhtml_file
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.core.llm.base import LLMResponse
 
@@ -246,14 +241,8 @@ class TestMultipleFilesInterruption:
         self, temp_epub_dir, mock_llm_client, temp_checkpoint_manager
     ):
         """Test interruption between different XHTML files."""
-        translation_id = "test_multi_file_001"
 
         # Create content files list
-        content_files = [
-            "OEBPS/chapter1.xhtml",
-            "OEBPS/chapter2.xhtml",
-            "OEBPS/chapter3.xhtml",
-        ]
 
         files_processed = []
 

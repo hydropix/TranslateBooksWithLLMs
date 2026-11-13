@@ -255,7 +255,6 @@ class OpenAICompatibleProvider(LLMProvider):
                 RESET = '\033[0m'
 
                 if self.log_callback:
-                    status_code = e.response.status_code if e.response else 'unknown'
                     self.log_callback("llm_http_error",
                         f"{YELLOW}⚠️ HTTP error from LLM server (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
                         f"{YELLOW}   Endpoint: {self.api_endpoint}{RESET}\n"

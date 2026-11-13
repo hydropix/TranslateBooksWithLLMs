@@ -6,10 +6,6 @@ in the complete translation pipeline.
 """
 
 import pytest
-import tempfile
-import shutil
-from pathlib import Path
-from lxml import etree
 
 
 def test_boundary_restoration_logic():
@@ -92,14 +88,6 @@ def test_fallback_without_fix_would_fail():
 
     This shows what the old code (line 482) was doing wrong.
     """
-    chunk_text = "Content with [[0]]tags[[1]]"
-    local_tag_map = {
-        "[[0]]": "<b>",
-        "[[1]]": "</b>",
-        "__boundary_prefix__": "<body><p>",
-        "__boundary_suffix__": "</p></body>"
-    }
-    global_indices = [10, 11]
 
     # OLD BROKEN CODE (before fix):
     # return placeholder_mgr.restore_to_global(chunk_text, global_indices)

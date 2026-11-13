@@ -105,17 +105,6 @@ class TestHTMLEntityIntegration:
 
     def test_bug_report_exact_scenario(self):
         """Test the exact scenario from the bug report."""
-        # This is the text that was being sent to translation with entities exposed
-        source_text = (
-            "[id0]Numbered headings will also work better for forward-compatibility "
-            "with older EPUB reading systems.[id1]Using an [id2]h1[id3] heading "
-            "regardless of the nesting level of the [id4]section[id5] will undoubtedly "
-            "gain traction moving forward, though.In this case, the [id6]h1[id7] becomes "
-            "more of a generic heading, as traversal of the document will occur via the "
-            "document outline and not by heading tags (the [id8]construction of this "
-            "outline[id9] is defined in HTML5)."
-        )
-
         # The problematic part (before fix) would include:
         problem_source = (
             "&lt;section epub:type=\"part\"&gt;\n"

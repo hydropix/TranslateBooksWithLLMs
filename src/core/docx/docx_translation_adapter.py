@@ -10,14 +10,10 @@ Pipeline:
 - HTML → Document (python-docx)
 """
 
-import io
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from docx import Document
 
 from ..common.translation_orchestrator import TranslationAdapter
 from .converter import DocxHtmlConverter
-from ..epub.tag_preservation import TagPreserver
-from ..epub.html_chunker import HtmlChunker
 from ..epub.container import TranslationContainer
 
 
@@ -174,8 +170,6 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         metadata = context['metadata']
 
         # Convert HTML → DOCX in memory
-        output_buffer = io.BytesIO()
-
         # Create temporary file for conversion
         # (python-docx requires a file path or file object)
         import tempfile

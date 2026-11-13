@@ -1,7 +1,7 @@
 """
 Centralized LLM client for all API communication
 """
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from src.config import API_ENDPOINT, DEFAULT_MODEL
 from src.core.llm import create_llm_provider, LLMProvider, ContextOverflowError, RepetitionLoopError, LLMResponse

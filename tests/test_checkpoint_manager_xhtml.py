@@ -259,7 +259,6 @@ class TestCheckpointManagerXHTMLPartialState:
         file_href = "OEBPS/chapter1.xhtml"
 
         # Save first time
-        original_updated_at = sample_state.updated_at
         manager.save_xhtml_partial_state(translation_id, file_href, sample_state)
 
         # Load and verify timestamp was updated

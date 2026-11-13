@@ -6,7 +6,6 @@ import os
 import pytest
 import tempfile
 from docx import Document
-from docx.shared import Pt, Inches
 
 
 @pytest.fixture

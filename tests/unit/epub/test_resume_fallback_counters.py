@@ -10,7 +10,6 @@ end-to-end at the persistence layer.
 
 import os
 import sys
-import tempfile
 
 import pytest
 

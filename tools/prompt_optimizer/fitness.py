@@ -2,10 +2,8 @@
 Fitness calculation with anti-overfitting penalties.
 """
 
-import re
 import statistics
 from dataclasses import dataclass
-from typing import Optional
 
 from tools.prompt_optimizer.config import FitnessConfig
 from tools.prompt_optimizer.llm_adapter import EvaluationResult

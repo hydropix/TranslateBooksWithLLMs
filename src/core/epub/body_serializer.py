@@ -8,7 +8,7 @@ from lxml import etree
 from typing import Tuple, Optional
 import re
 
-from src.utils.unified_logger import info, LogType
+from src.utils.unified_logger import info
 from .boilerplate_filter import strip_web_boilerplate
 from .exceptions import XmlParsingError, BodyExtractionError
 from .ruby_annotations import fold_ruby_annotations
@@ -183,7 +183,7 @@ def replace_body_content(body_element: etree._Element, new_html: str) -> None:
         temp = etree.fromstring(wrapped.encode('utf-8'), parser)
         if parser.error_log:
             parse_warnings.append(f"recovered from {len(parser.error_log)} errors")
-    except etree.XMLSyntaxError as e:
+    except etree.XMLSyntaxError:
         # Fallback: try without namespace
         wrapped_no_ns = f"<temp>{new_html}</temp>"
         try:

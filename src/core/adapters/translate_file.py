@@ -12,7 +12,6 @@ File type detection supports:
 
 import os
 from typing import Optional, Callable, Dict, Any
-from pathlib import Path
 
 from .generic_translator import GenericTranslator
 from .txt_adapter import TxtAdapter

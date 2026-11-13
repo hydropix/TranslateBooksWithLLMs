@@ -2,13 +2,15 @@
 Checkpoint manager for translation job persistence and resume functionality.
 """
 
-import os
 import re
 import shutil
-from typing import Optional, Dict, List, Any, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
 from pathlib import Path
 from .database import Database
 from src.utils.security import SecurityError, resolve_within
+
+if TYPE_CHECKING:
+    from src.core.epub.xhtml_translation_state import XHTMLTranslationState
 
 
 # Uploaded files are stored as "<16 hex chars>_<original name>"; the prefix is

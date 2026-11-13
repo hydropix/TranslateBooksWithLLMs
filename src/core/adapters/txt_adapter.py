@@ -8,7 +8,6 @@ This adapter handles plain text files by:
 4. Reconstructing the output by joining chunks
 """
 
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from src.core.chunking.reassembly import join_translated_chunks

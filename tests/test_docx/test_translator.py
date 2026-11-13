@@ -6,7 +6,7 @@ Tests the complete translate_docx_file function with mocked LLM.
 
 import os
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import Mock
 from docx import Document
 
 from src.core.docx.translator import translate_docx_file
@@ -239,7 +239,7 @@ class TestTranslateDocxFile:
         """Test that output file is valid DOCX."""
         output_path = os.path.join(temp_dir, 'translated_valid.docx')
 
-        result = await translate_docx_file(
+        await translate_docx_file(
             input_filepath=simple_docx_path,
             output_filepath=output_path,
             source_language='English',

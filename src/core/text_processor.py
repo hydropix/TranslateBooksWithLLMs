@@ -1,10 +1,8 @@
 """
 Text processing module for chunking and context management
 """
-import re
 from typing import List, Dict, Optional, TYPE_CHECKING
 
-from src.config import SENTENCE_TERMINATORS
 
 if TYPE_CHECKING:
     from src.config import TranslationConfig

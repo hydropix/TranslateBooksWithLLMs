@@ -8,7 +8,6 @@ This module ensures proper text direction and layout for RTL languages
 while protecting technical content (code, URLs) from direction reversal.
 """
 
-from pathlib import Path
 from typing import Set, Optional
 import os
 

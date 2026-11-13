@@ -307,7 +307,6 @@ class ConsoleLogger:
     def mutation_response(self, new_prompt: str, elapsed_ms: int, token_change: int):
         """Log mutation response."""
         sign = "+" if token_change > 0 else ""
-        change_color = Color.RED if token_change > 50 else (Color.GREEN if token_change < 0 else Color.WHITE)
 
         self._print(c(f"  MUTATION RESPONSE ({elapsed_ms}ms, tokens: {sign}{token_change})", Color.YELLOW, Color.BOLD))
         self._print(c("  " + "-" * 50, Color.YELLOW))

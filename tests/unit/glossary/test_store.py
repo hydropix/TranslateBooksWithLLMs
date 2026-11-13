@@ -76,7 +76,7 @@ class TestGlossaryStoreCRUD:
         """list_glossaries_with_counts returns (Glossary, count) tuples."""
         g1 = store.create_glossary(name="A", source_language="en", target_language="fr")
         g2 = store.create_glossary(name="B", source_language="en", target_language="es")
-        g3 = store.create_glossary(name="C", source_language="en", target_language="de")
+        store.create_glossary(name="C", source_language="en", target_language="de")
         store.add_term(g1.id, GlossaryTerm(source_term="hello", translated_term="bonjour"))
         store.add_term(g1.id, GlossaryTerm(source_term="cat", translated_term="chat"))
         store.add_term(g2.id, GlossaryTerm(source_term="hello", translated_term="hola"))

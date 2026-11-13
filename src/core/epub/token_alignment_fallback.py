@@ -98,7 +98,7 @@ class TokenAlignmentFallback:
 
             return result
 
-        except Exception as e:
+        except Exception:
             # Fallback to proportional insertion
             return self._fallback_proportional(
                 original_with_placeholders,

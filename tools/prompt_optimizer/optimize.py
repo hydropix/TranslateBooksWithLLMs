@@ -12,21 +12,19 @@ import argparse
 import asyncio
 import sys
 import time
-from pathlib import Path
 from typing import Optional, Callable
 
 from tools.prompt_optimizer.config import load_config, validate_config, OptimizerConfig
 from tools.prompt_optimizer.prompt_template import (
     PromptTemplate, EvaluationFeedback, MutationStrategy,
-    create_initial_population, tournament_selection,
-    select_mutation_strategy, get_mutation_prompt,
+    create_initial_population, get_mutation_prompt,
     prepare_population_for_evolution
 )
 from tools.prompt_optimizer.llm_adapter import LLMAdapter, EvaluationResult
-from tools.prompt_optimizer.fitness import FitnessCalculator, FitnessScore, fitness_summary
+from tools.prompt_optimizer.fitness import FitnessCalculator
 from tools.prompt_optimizer.cross_validator import CrossValidator, CrossValidationSplit, describe_split
 from tools.prompt_optimizer.history import HistoryManager
-from tools.prompt_optimizer.logger import get_logger, log_callback_factory, ConsoleLogger
+from tools.prompt_optimizer.logger import get_logger, log_callback_factory
 
 
 class PromptOptimizer:

@@ -17,14 +17,12 @@ Run:  pytest tests/test_epub_xhtml_lang_attributes.py -v
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
 from lxml import etree
 
 from src.core.epub.lang_support import (
-    LANGUAGE_NAME_TO_CODE,
     get_language_code,
     set_xhtml_lang_attributes,
     apply_target_language_to_xhtml_directory,

@@ -16,7 +16,6 @@ from src.core.chunking.token_chunker import TokenChunker
 from src.core.context_optimizer import (
     estimate_tokens_with_margin,
     adjust_parameters_for_context,
-    round_to_standard_context_size,
     STANDARD_CONTEXT_SIZES
 )
 from src.config import MAX_TOKENS_PER_CHUNK, API_ENDPOINT

@@ -2,7 +2,6 @@
 Translation job handlers and processing logic
 """
 import os
-import re
 import time
 import asyncio
 import logging
@@ -10,7 +9,6 @@ import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
 
 from src.utils.unified_logger import setup_web_logger, LogType
 from src.utils.file_utils import get_unique_output_path, find_partial_output_paths, generate_tts_for_translation

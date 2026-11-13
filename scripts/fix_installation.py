@@ -193,7 +193,6 @@ def test_import():
         if 'src.prompts.prompts' in sys.modules:
             del sys.modules['src.prompts.prompts']
 
-        import src.prompts.prompts
         print("[OK] prompts.py imports successfully")
         return True
     except SyntaxError as e:

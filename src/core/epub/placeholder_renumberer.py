@@ -4,7 +4,7 @@ Placeholder renumbering for HTML chunking.
 This module handles the conversion of global placeholder indices to local
 indices within chunks, enabling independent translation of each chunk.
 """
-from typing import Dict, List
+from typing import Dict
 
 from src.common.placeholder_format import PlaceholderFormat
 

@@ -8,7 +8,7 @@ corrector in one go (so the LLM batches span the whole book), then turns each
 accepted correction into minimal character edits on its unit.
 """
 import bisect
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 from src.core.term_fix.diffing import minimal_edits
 from src.core.term_fix.literal import LiteralCorrector, match_case

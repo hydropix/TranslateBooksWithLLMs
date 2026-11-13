@@ -8,7 +8,6 @@ Covers:
     - LLMProvider.api_key backwards-compat property
     - base.normalize_api_keys: comma/newline parsing
 """
-import asyncio
 import time
 
 import pytest

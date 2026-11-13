@@ -6,15 +6,14 @@ and encoding to Opus format via ffmpeg.
 """
 import asyncio
 import logging
-import os
 import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Tuple
 
-from .tts_config import TTSConfig, get_voice_for_language
+from .tts_config import TTSConfig
 from .providers.base import TTSProvider, TTSError, ProgressCallback
 from .providers.edge_tts import EdgeTTSProvider
 from .providers.chatterbox_tts import ChatterboxProvider, is_chatterbox_available, MAX_TEXT_LENGTH as CHATTERBOX_MAX_LENGTH

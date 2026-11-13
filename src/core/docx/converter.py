@@ -14,8 +14,7 @@ import re
 import tempfile
 import mammoth
 from docx import Document
-from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches
 from typing import Tuple, Dict, Any, Optional, Set
 from lxml import etree
 
@@ -84,11 +83,6 @@ class DocxHtmlConverter:
             with open(patched_path, 'rb') as docx_file:
                 result = mammoth.convert_to_html(docx_file)
                 html_content = result.value
-
-                # Log warnings if any
-                if result.messages:
-                    warnings = [msg.message for msg in result.messages]
-                    # Store warnings in metadata for potential debugging
 
             # 1c. Promote raw equation markers to HTML tags so TagPreserver
             # protects them as opaque [idN] placeholders. Without this the

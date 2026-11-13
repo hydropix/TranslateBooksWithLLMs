@@ -5,8 +5,6 @@ Integration test for SRT resume functionality with GenericTranslator and Checkpo
 import pytest
 import tempfile
 from pathlib import Path
-import asyncio
-import sqlite3
 
 from src.core.adapters import SrtAdapter, GenericTranslator
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -120,7 +118,7 @@ class TestSrtResumeIntegration:
             config={'lines_per_block': 2}
         )
 
-        translator = GenericTranslator(
+        GenericTranslator(
             adapter=adapter,
             checkpoint_manager=checkpoint_manager,
             translation_id='test_srt_001'

@@ -6,7 +6,7 @@ provider selection, voice settings, and audio encoding options.
 """
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict
 
 from src.utils.lang_normalize import normalize_lang_key

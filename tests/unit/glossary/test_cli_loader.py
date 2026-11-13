@@ -2,9 +2,7 @@
 Tests for the CLI glossary loader (JSON + CSV, rich vs back-compat shapes).
 """
 import json
-import os
 import sys
-import tempfile
 import pytest
 from pathlib import Path
 

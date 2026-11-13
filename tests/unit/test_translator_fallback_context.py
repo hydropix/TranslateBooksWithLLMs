@@ -1,7 +1,6 @@
 """
 Unit tests for translator fallback context isolation (issue #170 fix)
 """
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, Mock
 

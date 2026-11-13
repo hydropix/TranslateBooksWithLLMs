@@ -6,7 +6,6 @@ and configuration for all test modules.
 """
 
 import sys
-import os
 from pathlib import Path
 import importlib.util
 

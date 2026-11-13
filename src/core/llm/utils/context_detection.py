@@ -6,7 +6,7 @@ LLM models through API queries and heuristics.
 """
 
 import re
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 
 
 class ContextDetector:

@@ -9,9 +9,8 @@ Tests the complete interruption/resume cycle:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import MagicMock
 from lxml import etree
-from typing import List, Dict, Any
 
 from src.core.epub.xhtml_translator import translate_xhtml_simplified, _translate_all_chunks_with_checkpoint
 from src.core.epub.xhtml_translation_state import (
@@ -20,7 +19,6 @@ from src.core.epub.xhtml_translation_state import (
     untranslated_chunk_indices,
 )
 from src.persistence.checkpoint_manager import CheckpointManager
-from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.llm.base import LLMResponse
 
 
@@ -338,7 +336,6 @@ class TestPeriodicCheckpoint:
     @pytest.mark.asyncio
     async def test_checkpoint_every_5_chunks(self, temp_checkpoint_manager):
         """Test that checkpoints are saved every 5 chunks."""
-        from datetime import datetime
 
         # Create mock data with 12 chunks
         chunks = [

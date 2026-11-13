@@ -3,7 +3,6 @@ Unit tests for XHTMLTranslationState serialization and validation.
 """
 
 import pytest
-from datetime import datetime
 from src.core.epub.xhtml_translation_state import (
     CHUNK_PENDING,
     CHUNK_TOKEN_ALIGNED,

@@ -17,7 +17,6 @@ import sys
 import tempfile
 import time
 import uuid
-import zipfile
 from pathlib import Path
 
 for _stream in (sys.stdout, sys.stderr):
@@ -41,7 +40,6 @@ from manual_epub_baseline import (
     _build_minimal_epub,
     _list_epub_xhtml,
     _read_epub_chapter_text,
-    CHAPTERS,
 )
 
 

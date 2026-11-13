@@ -13,7 +13,6 @@ import pytest
 import time
 from src.core.epub.technical_content_detector import (
     TechnicalContentDetector,
-    TechnicalPattern,
     PatternPriority
 )
 
@@ -450,7 +449,7 @@ class TestPerformance:
 
         start = time.perf_counter()
         for _ in range(100):
-            patterns = self.detector.find_all_technical_content(text)
+            self.detector.find_all_technical_content(text)
         elapsed = time.perf_counter() - start
 
         # Should process 100 iterations in < 1 second

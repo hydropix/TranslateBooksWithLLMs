@@ -5,13 +5,11 @@ This test verifies that HTML entities are properly protected throughout
 the entire EPUB translation pipeline when --preserve-technical is enabled.
 """
 
-import pytest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.core.epub.tag_preservation import TagPreserver
-from src.core.epub.html_chunker import HtmlChunker
 
 
 def test_epub_entity_protection_e2e():

@@ -5,9 +5,8 @@ Uses langdetect library (based on Google's language-detection library)
 for fast and accurate language identification from text content.
 """
 import re
-from pathlib import Path
 from typing import Optional, Tuple
-from langdetect import detect, detect_langs, LangDetectException
+from langdetect import detect_langs, LangDetectException
 from lxml import etree
 
 

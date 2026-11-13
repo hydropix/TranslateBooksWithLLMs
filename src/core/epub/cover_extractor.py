@@ -7,7 +7,6 @@ Generates thumbnail images (48x64px) for display in the web interface.
 from pathlib import Path
 from typing import Optional
 import zipfile
-import tempfile
 from lxml import etree
 from PIL import Image
 import io

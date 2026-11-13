@@ -1,10 +1,9 @@
 from typing import Any, Dict, List, NamedTuple, Tuple, Optional
 
 from src.prompts.examples import (build_placeholder_section,
-                              get_output_format_example, get_subtitle_example,
                               TAG0)
 from src.config import (INPUT_TAG_IN, INPUT_TAG_OUT, TRANSLATE_TAG_IN,
-                        TRANSLATE_TAG_OUT, create_placeholder)
+                        TRANSLATE_TAG_OUT)
 
 
 class PromptPair(NamedTuple):

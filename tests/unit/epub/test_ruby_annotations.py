@@ -7,7 +7,6 @@ markup variants, and the guarantee that documents without ruby are untouched.
 Both extraction paths are exercised end to end, since the bug showed up
 differently in each.
 """
-import pytest
 from lxml import etree
 
 from src.core.epub.body_serializer import extract_body_html

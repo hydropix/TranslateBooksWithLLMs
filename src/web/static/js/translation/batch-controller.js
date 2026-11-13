@@ -5,6 +5,7 @@
  * and sequential file translation.
  */
 
+import { describeApiError } from '../core/api-errors.js';
 import { StateManager } from '../core/state-manager.js';
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
@@ -364,7 +365,7 @@ export const BatchController = {
 
         } catch (error) {
             MessageLogger.addLog(t('translation:init_error_log', { name: fileToTranslate.name, error: error.message }));
-            MessageLogger.showMessage(t('translation:init_error_msg', { name: fileToTranslate.name, error: error.message }), 'error');
+            MessageLogger.showMessage(t('translation:init_error_msg', { name: fileToTranslate.name, error: describeApiError(error) }), 'error');
             updateFileStatusInList(fileToTranslate.name, 'Initiation Error');
             StateManager.setState('translation.currentJob', null);
             this.processNextFileInQueue();

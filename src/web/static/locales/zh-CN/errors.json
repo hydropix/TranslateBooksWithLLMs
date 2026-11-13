@@ -21,5 +21,11 @@
   "api_key_required_mistral": "使用 Mistral 服务商时需要 Mistral API 密钥。",
   "api_key_required_deepseek": "使用 DeepSeek 服务商时需要 DeepSeek API 密钥。",
   "api_key_required_poe": "需要 Poe API 密钥。请在 poe.com/api_key 获取您的密钥",
-  "api_key_required_nim": "使用 NIM 服务商时需要 NVIDIA NIM API 密钥。"
+  "api_key_required_nim": "使用 NIM 服务商时需要 NVIDIA NIM API 密钥。",
+  "request_too_large": "文件超出服务器允许的大小。上限由 MAX_REQUEST_SIZE_MB 设置（默认 200 MB）。",
+  "endpoint_rejected": "服务器拒绝了此端点：{{detail}}",
+  "endpoint_override_needs_key": "自定义端点需要使用自己的 API 密钥：服务器保存的密钥绝不会发送到您选择的端点。请输入密钥，或恢复默认端点。",
+  "resume_already_running": "此翻译已在运行中（可能正在等待速率限制结束后自动恢复）。",
+  "resume_active_conflict": "另一项翻译正在进行。请等待其完成或中断后再恢复。",
+  "file_type_not_allowed": "无法在应用中打开此类型的文件。"
 }

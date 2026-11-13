@@ -21,5 +21,11 @@
   "api_key_required_mistral": "Mistral 제공자를 사용하려면 Mistral API 키가 필요합니다.",
   "api_key_required_deepseek": "DeepSeek 제공자를 사용하려면 DeepSeek API 키가 필요합니다.",
   "api_key_required_poe": "Poe API 키가 필요합니다. poe.com/api_key에서 키를 받으세요",
-  "api_key_required_nim": "NIM 제공자를 사용하려면 NVIDIA NIM API 키가 필요합니다."
+  "api_key_required_nim": "NIM 제공자를 사용하려면 NVIDIA NIM API 키가 필요합니다.",
+  "request_too_large": "파일이 서버 허용 크기를 초과합니다. 한도는 MAX_REQUEST_SIZE_MB로 설정됩니다(기본값 200 MB).",
+  "endpoint_rejected": "서버가 이 엔드포인트를 거부했습니다: {{detail}}",
+  "endpoint_override_needs_key": "사용자 지정 엔드포인트에는 자체 API 키가 필요합니다. 서버에 저장된 키는 직접 선택한 엔드포인트로 절대 전송되지 않습니다. 키를 입력하거나 기본 엔드포인트로 되돌리세요.",
+  "resume_already_running": "이 번역은 이미 실행 중입니다(속도 제한 후 자동 재개를 기다리는 중일 수 있습니다).",
+  "resume_active_conflict": "다른 번역이 진행 중입니다. 완료될 때까지 기다리거나 중단한 후 재개하세요.",
+  "file_type_not_allowed": "이 파일 형식은 앱에서 열 수 없습니다."
 }

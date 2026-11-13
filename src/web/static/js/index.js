@@ -8,6 +8,7 @@
 // ========================================
 // Core Infrastructure
 // ========================================
+import { describeApiError } from './core/api-errors.js';
 import { StateManager } from './core/state-manager.js';
 import { ApiClient } from './core/api-client.js';
 import { WebSocketManager } from './core/websocket-manager.js';
@@ -407,6 +408,11 @@ window.saveSettings = async () => {
         MessageLogger.addLog(t('translation:settings_saved_env_log', { keys }));
     } else if (result.success) {
         MessageLogger.showMessage(t('translation:preferences_saved'), 'success');
+    } else if (result.code === 'endpoint_rejected') {
+        MessageLogger.showMessage(
+            t('translation:settings_save_failed', { error: describeApiError(result.apiError) }),
+            'error'
+        );
     } else if (result.code === 'webhook_secret_unresolved') {
         MessageLogger.showMessage(t('translation:settings_webhook_secret_unresolved'), 'error');
     } else {

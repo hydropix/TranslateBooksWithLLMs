@@ -6,6 +6,7 @@
  * Translate tab), and adds the selected candidates in one bulk request.
  */
 
+import { knownApiErrorMessage } from '../core/api-errors.js';
 import { ApiClient } from '../core/api-client.js';
 import { toast } from '../ui/toast.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
@@ -187,7 +188,7 @@ async function handleNerExtract() {
         resp = await ApiClient.suggestGlossaryTerms(glossaryState.currentGlossaryId, payload);
     } catch (err) {
         console.error('NER extract failed:', err);
-        toast.error(t('glossary:ner_extract_failed', { error: err.message || t('glossary:unknown_error') }));
+        toast.error(t('glossary:ner_extract_failed', { error: knownApiErrorMessage(err) || err.message || t('glossary:unknown_error') }));
         if (extractBtn) extractBtn.disabled = false;
         _setNerLoading(false);
         return;

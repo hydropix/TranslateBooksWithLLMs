@@ -14,6 +14,7 @@
  * (translate+refine) lives in sample-diff.js.
  */
 
+import { describeApiError } from '../core/api-errors.js';
 import { ApiClient } from '../core/api-client.js';
 import { WebSocketManager } from '../core/websocket-manager.js';
 import { SettingsManager } from '../core/settings-manager.js';
@@ -784,7 +785,7 @@ async function initializeSamples() {
         await uploadFileIfNeeded();
     } catch (err) {
         console.error('[sample] upload failed', err);
-        showSampleMessage(err.message || String(err), 'error');
+        showSampleMessage(describeApiError(err), 'error');
         return;
     }
     // Reflect the detected source language in the picker right away; runs in
@@ -831,7 +832,7 @@ async function _runInitialize({ preserveContext }) {
         syncUpdateButton();
     } catch (err) {
         console.error('[sample] initialize failed', err);
-        showSampleMessage(t('sample:initialize_failed', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:initialize_failed', { error: describeApiError(err) }), 'error');
         if (!preserveContext) {
             state.lastItems = null;
             refreshResultsFromCache();
@@ -896,7 +897,7 @@ async function addSample() {
             return;
         }
         console.error('[sample] extract failed', err);
-        showSampleMessage(t('sample:add_sample_failed', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:add_sample_failed', { error: describeApiError(err) }), 'error');
     } finally {
         const btn = $('sampleAddSampleBtn');
         if (btn) btn.disabled = false;
@@ -1005,7 +1006,7 @@ async function runSample(opts = {}) {
         await uploadFileIfNeeded();
     } catch (err) {
         console.error('[sample] upload failed', err);
-        showSampleMessage(err.message || String(err), 'error');
+        showSampleMessage(describeApiError(err), 'error');
         setButtonsRunningState(false);
         return;
     }
@@ -1020,7 +1021,7 @@ async function runSample(opts = {}) {
         resp = await ApiClient.runSample(payload);
     } catch (err) {
         console.error('[sample] /api/sample/run failed', err);
-        showSampleMessage(t('sample:error_run', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:error_run', { error: describeApiError(err) }), 'error');
         setButtonsRunningState(false);
         return;
     }
@@ -1090,7 +1091,7 @@ async function runSample(opts = {}) {
         await ApiClient.dispatchSampleRun(resp.sample_id, skipCells);
     } catch (err) {
         console.error('[sample] /dispatch failed', err);
-        showSampleMessage(t('sample:error_run', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:error_run', { error: describeApiError(err) }), 'error');
         setButtonsRunningState(false);
     }
 }

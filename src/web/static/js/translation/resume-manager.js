@@ -5,6 +5,7 @@
  * Manages resumable jobs UI and state synchronization.
  */
 
+import { knownApiErrorMessage } from '../core/api-errors.js';
 import { StateManager } from '../core/state-manager.js';
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
@@ -403,15 +404,20 @@ export const ResumeManager = {
 
         } catch (error) {
             // Enhanced error message for active translation conflicts
-            if (error.status === 409 && error.data?.active_translations) {
-                const activeList = error.data.active_translations
+            // The parsed body is error.body (ApiClient); it used to be read
+            // from a non-existent error.data, so this branch never ran.
+            if (error.status === 409 && error.body?.active_translations) {
+                const activeList = error.body.active_translations
                     .map(item => `• ${item.output_filename} (${item.status})`)
                     .join('\n');
                 MessageLogger.showMessage(
                     t('translation:cannot_resume_with_list', { list: activeList }),
                     'error'
                 );
-                MessageLogger.addLog(`⚠️ ${error.data.message}`);
+                if (error.body.message) MessageLogger.addLog(`⚠️ ${error.body.message}`);
+            } else if (knownApiErrorMessage(error, { context: 'resume' })) {
+                MessageLogger.showMessage(knownApiErrorMessage(error, { context: 'resume' }), 'error');
+                MessageLogger.addLog(t('translation:resume_network_error_log', { error: error.message }));
             } else {
                 MessageLogger.showMessage(t('translation:resume_error', { error: error.message }), 'error');
                 MessageLogger.addLog(t('translation:resume_network_error_log', { error: error.message }));

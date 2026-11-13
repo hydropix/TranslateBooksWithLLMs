@@ -5,6 +5,7 @@
  * Manages output filename generation and file queue management.
  */
 
+import { describeApiError } from '../core/api-errors.js';
 import { StateManager } from '../core/state-manager.js';
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
@@ -947,7 +948,7 @@ export const FileUpload = {
 
         } catch (error) {
             MessageLogger.showMessage(
-                t('translation:file_upload_failed', { name: file.name, error: error.message }),
+                t('translation:file_upload_failed', { name: file.name, error: describeApiError(error) }),
                 'error'
             );
         }

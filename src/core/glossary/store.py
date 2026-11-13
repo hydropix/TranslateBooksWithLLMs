@@ -444,6 +444,10 @@ class GlossaryStore:
                     (name, source_language or "", target_language or ""),
                 )
             except sqlite3.IntegrityError as exc:
+                # Close the implicit transaction the failed write opened: the
+                # connection is long-lived and per-thread, and an open write
+                # transaction would block every other writer.
+                conn.rollback()
                 raise ValueError(f"Glossary name already exists: {name}") from exc
 
             new_id = cursor.lastrowid
@@ -556,6 +560,10 @@ class GlossaryStore:
                     params,
                 )
             except sqlite3.IntegrityError as exc:
+                # Close the implicit transaction the failed write opened: the
+                # connection is long-lived and per-thread, and an open write
+                # transaction would block every other writer.
+                conn.rollback()
                 raise ValueError(f"Glossary name already exists: {name}") from exc
 
             conn.commit()
@@ -593,6 +601,10 @@ class GlossaryStore:
                     ),
                 )
             except sqlite3.IntegrityError as exc:
+                # Close the implicit transaction the failed write opened: the
+                # connection is long-lived and per-thread, and an open write
+                # transaction would block every other writer.
+                conn.rollback()
                 raise ValueError(
                     f"Term already exists in glossary {glossary_id}: {term.source_term}"
                 ) from exc
@@ -726,6 +738,10 @@ class GlossaryStore:
                         params,
                     )
                 except sqlite3.IntegrityError as exc:
+                    # Close the implicit transaction the failed write opened: the
+                    # connection is long-lived and per-thread, and an open write
+                    # transaction would block every other writer.
+                    conn.rollback()
                     raise ValueError(
                         f"Term already exists in glossary {row['glossary_id']}: {source_term}"
                     ) from exc

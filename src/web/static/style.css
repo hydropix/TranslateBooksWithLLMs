@@ -172,10 +172,6 @@ html.dark .form-control::placeholder {
     color: #777777;
 }
 
-html.dark .header {
-    background: transparent;
-}
-
 html.dark .file-upload {
     background: var(--background-light);
 }
@@ -230,7 +226,7 @@ body {
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    padding: 20px;
+    padding: calc(20px * var(--ui-density-y)) 20px;
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -266,22 +262,23 @@ body {
    ======================================== */
 
 .container {
-    max-width: 900px;
+    max-width: 960px;
     margin: 0 auto;
 }
 
 /* ========================================
-   Header
+   Header (tier-4 chrome: LLM status, UI language, theme, version)
    ======================================== */
 
 .header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    padding: 1.5rem 3rem;
-    margin-bottom: 3rem;
-    background: rgba(240, 242, 245, 0.9);
-    backdrop-filter: blur(30px);
+    justify-content: flex-start;
+    gap: 0.25rem 1.5rem;
+    padding: 0.35rem 0.25rem 0;
+    margin-bottom: 0.75rem;
+    background: var(--background-outer);
     position: sticky;
     top: 0;
     z-index: 50;
@@ -289,35 +286,43 @@ body {
 }
 
 .header #themeToggleBtn {
-    min-width: 2.25rem;
-    width: 2.25rem;
-    height: 2.25rem;
+    min-width: 1.75rem;
+    width: 1.75rem;
+    height: 1.75rem;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: var(--text-faint);
     transition: all 0.3s ease;
 }
 
 .header #themeToggleBtn:hover {
-    transform: scale(1.08) rotate(15deg);
+    transform: none;
+    color: var(--text-dark);
+    background: var(--primary-tint);
 }
 
 .header #themeToggleBtn .material-symbols-outlined {
-    font-size: 1.125rem;
+    font-size: 1rem;
     transition: transform 0.3s ease;
 }
 
 .header .logo-section {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
 }
 
 .header .logo-icon {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
 }
 
 .header .logo-icon .material-symbols-outlined {
@@ -332,23 +337,20 @@ body {
 
 .header .logo-text h2 {
     color: var(--text-dark);
-    font-size: 1.5rem;
-    font-weight: 900;
-    letter-spacing: -0.025em;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     line-height: 1;
 }
 
 .header .logo-text p {
-    color: var(--text-muted-light);
-    font-size: 0.75rem;
-    font-weight: 500;
-    margin-top: 0.25rem;
+    display: none;
 }
 
 .header .logo-text .app-version {
-    color: var(--text-muted-light);
-    font-size: 0.7rem;
-    font-weight: 600;
+    color: var(--text-faint);
+    font-size: 0.6875rem;
+    font-weight: 400;
     letter-spacing: 0;
     margin-left: 0.35rem;
     vertical-align: middle;
@@ -357,30 +359,27 @@ body {
 .header .status-section {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.125rem;
+    margin-left: auto;
 }
 
 .header .status-indicator {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 0.9rem;
-    height: 2.25rem;
-    background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 1px solid var(--border-light);
+    gap: 0.4rem;
+    padding: 0 0.5rem 0 0;
 }
 
 .header .header-lang-wrapper {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0 0.55rem 0 0.7rem;
-    height: 2.25rem;
+    gap: 0.25rem;
+    padding: 0 0.4rem;
+    height: 1.75rem;
     background: transparent;
-    border: 1px solid var(--border-light);
-    color: var(--text-muted-light);
+    border: 0;
+    color: var(--text-faint);
     transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
     cursor: pointer;
 }
@@ -388,19 +387,18 @@ body {
 .header .header-lang-wrapper:hover,
 .header .header-lang-wrapper:focus-within {
     color: var(--text-dark);
-    border-color: var(--primary-light);
-    background: rgba(62, 90, 120, 0.04);
+    background: var(--primary-tint);
 }
 
 .header .header-lang-icon {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     line-height: 1;
     pointer-events: none;
 }
 
 .header .header-lang-display {
-    font-size: 0.72rem;
-    font-weight: 600;
+    font-size: 0.6875rem;
+    font-weight: 500;
     letter-spacing: 0.04em;
     line-height: 1;
     pointer-events: none;
@@ -409,10 +407,7 @@ body {
 }
 
 .header .header-lang-caret {
-    font-size: 0.95rem;
-    line-height: 1;
-    pointer-events: none;
-    opacity: 0.7;
+    display: none;
 }
 
 .header .header-lang-select {
@@ -448,21 +443,22 @@ body {
 }
 
 .header .status-indicator .status-dot {
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.4rem;
+    height: 0.4rem;
     background-color: #6b7280;
     transition: background-color 0.3s ease;
 }
 
-/* Status dot states */
+/* Status dot states. Only the two failure states pulse; the generic
+   .status-dot.checking animation must stay switched off here. */
 .header .status-indicator .status-dot.checking {
     background-color: #6b7280;
-    animation: pulse-gray 2s infinite;
+    animation: none;
 }
 
 .header .status-indicator .status-dot.connected {
     background-color: #22c55e;
-    animation: pulse-green 2s infinite;
+    animation: none;
 }
 
 .header .status-indicator .status-dot.disconnected {
@@ -477,19 +473,30 @@ body {
 
 .header .status-indicator .status-dot.waiting {
     background-color: #6b7280;
-    animation: pulse-gray 2s infinite;
+    animation: none;
 }
 
 .header .status-indicator span {
     font-size: 0.75rem;
-    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
-    color: #16a34a;
+    font-family: var(--font-ui);
+    color: var(--text-muted-light);
     transition: color 0.3s ease;
     min-width: 0;
-    max-width: 22rem;
+    max-width: 16rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Escalation: a broken connection is the one header fact worth reading. */
+.header .status-indicator:has(.status-dot.disconnected) span {
+    color: var(--danger-light-text);
+    font-weight: 600;
+}
+
+.header .status-indicator:has(.status-dot.error) span {
+    color: var(--warning-light-text);
+    font-weight: 600;
 }
 
 /* ========================================
@@ -2789,30 +2796,6 @@ html.dark .file-info {
 }
 
 /* ========================================
-   Responsive Design
-   ======================================== */
-
-@media (max-width: 768px) {
-    body {
-        padding: 1rem;
-    }
-
-    .header {
-        flex-direction: column;
-        gap: 1rem;
-        padding: 1rem;
-    }
-
-    .card-body {
-        padding: 1.5rem;
-    }
-
-    .file-upload {
-        padding: 2rem;
-    }
-}
-
-/* ========================================
    Searchable Select Component
    ======================================== */
 
@@ -4800,18 +4783,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         --ui-control-h: max(1.9rem, calc(2.75rem * var(--ui-density-y)));
     }
 
-    /* --- Page shell --- */
-    body {
-        padding-top: calc(20px * var(--ui-density-y)) !important;
-        padding-bottom: calc(20px * var(--ui-density-y)) !important;
-    }
-
-    .header {
-        padding-top: 0.35rem !important;
-        padding-bottom: 0 !important;
-        margin-bottom: 0.75rem !important;
-    }
-
     /* --- Tabs --- */
     .tab-nav .tab-btn {
         padding-top: calc(0.6rem * var(--ui-density-y)) !important;
@@ -5061,147 +5032,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    (LLM disconnected, fallback chunks), through state classes that
    already exist (.status-dot.disconnected, .stat-card-critical).
    ======================================== */
-
-body {
-    background-color: var(--background-outer);
-}
-
-.container {
-    max-width: 960px;
-}
-
-/* ---------- T4: header chrome ---------- */
-
-.header {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: 0.25rem 1.5rem;
-    padding-left: 0.25rem;
-    padding-right: 0.25rem;
-    background: var(--background-outer);
-    backdrop-filter: none;
-    border-bottom: 1px solid var(--border-light);
-}
-
-html.dark .header {
-    background: var(--background-outer);
-}
-
-.header .logo-section {
-    gap: 0.5rem;
-}
-
-.header .logo-icon {
-    width: 1.5rem;
-    height: 1.5rem;
-}
-
-.header .logo-text h2 {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-}
-
-.header .logo-text p {
-    display: none;
-}
-
-.header .logo-text .app-version {
-    color: var(--text-faint);
-    font-size: 0.6875rem;
-    font-weight: 400;
-}
-
-.header .status-section {
-    gap: 0.125rem;
-    margin-left: auto;
-}
-
-.header .status-indicator {
-    height: auto;
-    padding: 0 0.5rem 0 0;
-    gap: 0.4rem;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-}
-
-.header .status-indicator .status-dot {
-    width: 0.4rem;
-    height: 0.4rem;
-}
-
-.header .status-indicator .status-dot.connected,
-.header .status-indicator .status-dot.checking,
-.header .status-indicator .status-dot.waiting {
-    animation: none;
-}
-
-.header .status-indicator span {
-    font-family: var(--font-ui);
-    font-size: 0.75rem;
-    color: var(--text-muted-light);
-    max-width: 16rem;
-}
-
-/* Escalation: a broken connection is the one header fact worth reading. */
-.header .status-indicator:has(.status-dot.disconnected) span {
-    color: var(--danger-light-text);
-    font-weight: 600;
-}
-
-.header .status-indicator:has(.status-dot.error) span {
-    color: var(--warning-light-text);
-    font-weight: 600;
-}
-
-.header .header-lang-wrapper {
-    height: 1.75rem;
-    padding: 0 0.4rem;
-    gap: 0.25rem;
-    border: 0;
-    color: var(--text-faint);
-}
-
-.header .header-lang-wrapper:hover,
-.header .header-lang-wrapper:focus-within {
-    color: var(--text-dark);
-    background: var(--primary-tint);
-}
-
-.header .header-lang-caret {
-    display: none;
-}
-
-.header .header-lang-icon {
-    font-size: 0.9rem;
-}
-
-.header .header-lang-display {
-    font-size: 0.6875rem;
-    font-weight: 500;
-}
-
-.header #themeToggleBtn {
-    width: 1.75rem;
-    min-width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    color: var(--text-faint);
-}
-
-.header #themeToggleBtn:hover {
-    transform: none;
-    color: var(--text-dark);
-    background: var(--primary-tint);
-}
-
-.header #themeToggleBtn .material-symbols-outlined {
-    font-size: 1rem;
-}
 
 /* ---------- Cards and fields ---------- */
 

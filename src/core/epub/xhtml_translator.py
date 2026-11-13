@@ -1389,85 +1389,45 @@ async def _request_refinement_with_adaptive_context(
     prompt_pair: Any,
     model_name: str,
     log_callback: Optional[Callable],
+    *,
+    extract: bool = True,
 ) -> Any:
-    """Send one refinement request, growing the context window on overflow.
+    """Send one refinement request through the shared request core.
 
-    Mirrors the retry strategy of the translation pass: an overflow (or the
-    repetition loop a too-small window provokes) bumps the context and retries
-    until the context manager refuses. Any other error propagates.
+    Returns the provider response when it passed every guard of
+    ``request_chunk`` (the caller extracts and validates the placeholders),
+    or None when the draft must be kept. The context grows on overflow,
+    truncation or a repetition loop until the context manager refuses; the
+    call has its own growth budget, given back when it fails.
+    ``extract=False`` hands back the raw answer of callers with their own
+    response format (term-fix).
     """
-    # Each call gets its own context growth budget; a call that still fails
-    # gives back the context it grew so later chunks stay at their size.
-    if context_manager:
-        context_manager.begin_request()
-    try:
-        llm_response = await _refinement_request_loop(
-            llm_client, context_manager, prompt_pair, model_name, log_callback
+    from ..request_core import ContextBudget, REFINEMENT_LABELS, request_chunk
+    from dataclasses import replace as _replace
+
+    # The caller logs the response itself (with its execution time).
+    labels = _replace(REFINEMENT_LABELS, response=None)
+    with ContextBudget(context_manager) as budget:
+        outcome = await request_chunk(
+            llm_client, prompt_pair,
+            source_text="",
+            allow_raw_fallback=False,
+            context_manager=context_manager,
+            log_callback=log_callback,
+            labels=labels,
+            extract=extract,
         )
-    except BaseException:
-        if context_manager:
-            context_manager.abandon_request()
-        raise
-    if context_manager and (llm_response is None or not llm_response.content):
-        context_manager.abandon_request()
-    return llm_response
-
-
-async def _refinement_request_loop(
-    llm_client: Any,
-    context_manager: Optional[AdaptiveContextManager],
-    prompt_pair: Any,
-    model_name: str,
-    log_callback: Optional[Callable],
-) -> Any:
-    """Retry loop behind _request_refinement_with_adaptive_context."""
-    from ..llm import ContextOverflowError, RepetitionLoopError
-
-    while True:
-        if context_manager and hasattr(llm_client, 'context_window'):
-            new_ctx = context_manager.get_context_size()
-            if llm_client.context_window != new_ctx:
-                llm_client.context_window = new_ctx
-
-        try:
-            llm_response = await llm_client.make_request(
-                prompt_pair.user, model_name, system_prompt=prompt_pair.system
+        if not outcome.ok:
+            return None
+        budget.succeeded()
+        response = outcome.response
+        if context_manager and response is not None and response.prompt_tokens > 0:
+            context_manager.record_success(
+                response.prompt_tokens,
+                response.completion_tokens,
+                response.context_limit
             )
-        except RepetitionLoopError:
-            # Ollama also raises this for a stream that overflowed the window.
-            # One step per retry, bounded: a loop that survives larger windows
-            # is the model's, not the window's.
-            if context_manager and context_manager.should_retry_repetition_loop():
-                context_manager.increase_context()
-                if log_callback:
-                    log_callback("refinement_repetition_retry",
-                        f"Refinement repetition loop - retrying with "
-                        f"{context_manager.get_context_size()} tokens")
-                continue
-            raise
-        except ContextOverflowError:
-            if context_manager and context_manager.should_retry_with_larger_context(True, 0):
-                context_manager.increase_context()
-                if log_callback:
-                    log_callback("refinement_overflow_retry",
-                        f"Refinement context overflow - retrying with {context_manager.get_context_size()} tokens")
-                continue
-            raise
-
-        if context_manager and llm_response:
-            if llm_response.was_truncated and context_manager.should_retry_with_larger_context(
-                True, llm_response.context_used
-            ):
-                context_manager.increase_context()
-                continue
-            if llm_response.prompt_tokens > 0:
-                context_manager.record_success(
-                    llm_response.prompt_tokens,
-                    llm_response.completion_tokens,
-                    llm_response.context_limit
-                )
-
-        return llm_response
+        return response
 
 
 def _build_refine_placeholder_reminder(local_tag_map: Dict) -> str:

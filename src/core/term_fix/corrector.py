@@ -113,7 +113,7 @@ def check_correction(
 
 
 class SmartCorrector:
-    """LLM-backed corrector. `llm_client` is an LLMClient (make_request)."""
+    """LLM-backed corrector. `llm_client` is an LLM provider."""
 
     def __init__(
         self,
@@ -164,7 +164,8 @@ class SmartCorrector:
             'user_prompt': prompt.user, 'model': self.model_name,
         })
         response = await _request_refinement_with_adaptive_context(
-            self.llm_client, self.context_manager, prompt, self.model_name, self.log_callback
+            self.llm_client, self.context_manager, prompt, self.model_name, self.log_callback,
+            extract=False,
         )
         content = response.content if response else ""
         self._log("llm_response", "LLM Response received", data={

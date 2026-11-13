@@ -23,8 +23,9 @@ from src.config import (
     NAMESPACES, DEFAULT_MODEL, API_ENDPOINT,
     MAX_TOKENS_PER_CHUNK, THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING,
     MAX_TRANSLATION_ATTEMPTS, ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE,
-    EPUB_SCRIPT_NORMALIZATION_ENABLED, EPUB_TRANSLATE_METADATA_ENABLED
+    EPUB_SCRIPT_NORMALIZATION_ENABLED, EPUB_TRANSLATE_METADATA_ENABLED, OLLAMA_NUM_CTX,
 )
+from ..llm.exceptions import LLMClientConfigError
 from ..common.translation_orchestrator import GenericTranslationOrchestrator
 from .epub_translation_adapter import EpubTranslationAdapter
 from .xhtml_translation_state import (
@@ -147,32 +148,26 @@ async def translate_epub_file(
         prompt_options['bilingual'] = True
 
     # Determine initial context size based on model type
-    is_known_thinking_model = any(tm in model_name.lower() for tm in THINKING_MODELS)
-    if auto_adjust_context:
-        if is_known_thinking_model:
-            initial_context = ADAPTIVE_CONTEXT_INITIAL_THINKING
-        else:
-            initial_context = INITIAL_CONTEXT_SIZE
-    else:
-        initial_context = context_window
+    initial_context, is_known_thinking_model = initial_context_size(
+        model_name, auto_adjust_context, context_window)
 
-    # Create LLM client
-    llm_client = _create_llm_client(
-        llm_provider=llm_provider,
-        model_name=model_name,
-        gemini_api_key=gemini_api_key,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        cli_api_endpoint=cli_api_endpoint,
-        initial_context=initial_context,
-        log_callback=log_callback
-    )
-
-    if llm_client is None:
+    # Create LLM client; a configuration error stops the job (no fallback).
+    try:
+        llm_client = _create_llm_client(
+            llm_provider=llm_provider,
+            model_name=model_name,
+            gemini_api_key=gemini_api_key,
+            openai_api_key=openai_api_key,
+            openrouter_api_key=openrouter_api_key,
+            mistral_api_key=mistral_api_key,
+            deepseek_api_key=deepseek_api_key,
+            poe_api_key=poe_api_key,
+            nim_api_key=nim_api_key,
+            cli_api_endpoint=cli_api_endpoint,
+            initial_context=initial_context,
+            log_callback=log_callback
+        )
+    except LLMClientConfigError:
         return False
 
     # Resolve effective parallel workers (local providers are forced back to 1).
@@ -590,6 +585,21 @@ def _parse_epub_manifest(temp_dir: str, log_callback: Optional[Callable] = None)
     }
 
 
+def initial_context_size(model_name: str, auto_adjust_context: bool,
+                         context_window: Optional[int]) -> Tuple[int, bool]:
+    """(initial context window, model is a known thinking model) for a job.
+
+    With adaptive context the window starts small (larger for thinking
+    models) and grows on demand; otherwise it is the user's setting.
+    """
+    is_thinking_model = any(tm in (model_name or "").lower() for tm in THINKING_MODELS)
+    if auto_adjust_context:
+        initial = ADAPTIVE_CONTEXT_INITIAL_THINKING if is_thinking_model else INITIAL_CONTEXT_SIZE
+    else:
+        initial = context_window or OLLAMA_NUM_CTX
+    return initial, is_thinking_model
+
+
 def _create_llm_client(
     llm_provider: str,
     model_name: str,
@@ -604,39 +614,33 @@ def _create_llm_client(
     initial_context: int,
     log_callback: Optional[Callable] = None
 ) -> Any:
-    """Create the LLM client for this job, or None when it cannot be created.
+    """Create the LLM provider for this job.
 
-    ``create_llm_client`` raises ``LLMClientConfigError`` for an unknown
-    provider or a missing required key. The EPUB pipeline has no default
-    client to fall back to, so a creation error (or a None result from a
-    stubbed factory) is reported to the job's log and None is returned for
-    the caller to stop on; it is never passed on.
+    Raises ``LLMClientConfigError`` for an unknown provider or a missing
+    required key, after reporting it to the job's log. There is no default
+    client to fall back to.
     """
-    from ..llm_client import create_llm_client
+    from ..llm.factory import create_provider_from_args
 
     try:
-        llm_client = create_llm_client(
-            llm_provider, gemini_api_key, cli_api_endpoint, model_name,
-            openai_api_key, openrouter_api_key, mistral_api_key, deepseek_api_key,
+        return create_provider_from_args(
+            llm_provider, model_name, cli_api_endpoint,
+            gemini_api_key=gemini_api_key,
+            openai_api_key=openai_api_key,
+            openrouter_api_key=openrouter_api_key,
+            mistral_api_key=mistral_api_key,
+            deepseek_api_key=deepseek_api_key,
             poe_api_key=poe_api_key,
             nim_api_key=nim_api_key,
             context_window=initial_context,
-            log_callback=log_callback
+            log_callback=log_callback,
         )
-    except Exception as e:
+    except LLMClientConfigError as e:
         if log_callback:
             log_callback("llm_client_error",
                          f"ERROR: Could not create LLM client for provider "
                          f"'{llm_provider}': {e}")
-        return None
-
-    if llm_client is None:
-        if log_callback:
-            log_callback("llm_client_error",
-                         f"ERROR: Could not create LLM client for provider "
-                         f"'{llm_provider}' (unknown provider or missing API key).")
-
-    return llm_client
+        raise
 
 
 def _create_context_manager(

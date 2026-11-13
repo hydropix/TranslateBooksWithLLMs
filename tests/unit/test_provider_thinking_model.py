@@ -1,5 +1,5 @@
 """
-Unit tests for LLMClient's thinking-model API (issue #220).
+Unit tests for the providers' thinking-model API (issue #220).
 
 After the Ollama refactor, OllamaProvider exposes ``_detect_thinking_behavior()``
 and ``_thinking_behavior`` instead of ``_detect_thinking_model()`` and
@@ -21,13 +21,12 @@ from src.core.llm.providers.deepseek import DeepSeekProvider
 from src.core.llm.providers.gemini import GeminiProvider
 from src.core.llm.providers.ollama import OllamaProvider
 from src.core.llm.thinking.behavior import ThinkingBehavior
-from src.core.llm_client import LLMClient
 
 
-def _client_with(provider) -> LLMClient:
-    client = LLMClient(provider_type="ollama", model=provider.model)
-    client._provider = provider
-    return client
+def _client_with(provider):
+    # The thinking-status API lives on the provider itself (the LLMClient
+    # facade was folded into LLMProvider).
+    return provider
 
 
 def _ollama_with_detection(behavior: ThinkingBehavior):

@@ -27,7 +27,7 @@ class FakeLLMClient:
     sent and only changes the casing of the text.
     """
 
-    async def make_request(self, prompt, model_name, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         match = re.search(
             re.escape(INPUT_TAG_IN) + r"\n(.*?)\n" + re.escape(INPUT_TAG_OUT),
             prompt,
@@ -85,7 +85,7 @@ async def _refine(tmp_path, monkeypatch, srt_content):
     import src.core.refine.srt_refiner as srt_refiner
 
     monkeypatch.setattr(
-        srt_refiner, "create_llm_client", lambda *args, **kwargs: FakeLLMClient()
+        srt_refiner, "create_provider_from_args", lambda *args, **kwargs: FakeLLMClient()
     )
 
     input_file = tmp_path / "input.srt"

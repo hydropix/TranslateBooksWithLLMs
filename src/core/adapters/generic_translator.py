@@ -224,14 +224,34 @@ class GenericTranslator:
                     input_file_path=str(self.adapter.input_file_path)
                 )
 
-            # 5. Create LLM client
-            from src.core.llm_client import LLMClient
+            # 5. Create the LLM provider (and, for Ollama, the adaptive
+            # context manager: same sizing as the EPUB pipeline).
+            from src.core.llm.factory import create_provider_from_args
             from src.core.translator import generate_translation_request, previous_context_tail
+            from src.core.epub.translator import _create_context_manager, initial_context_size
 
-            llm_client = LLMClient(
-                provider_type=llm_provider,
-                model=model_name,
-                **llm_kwargs
+            context_window = llm_kwargs.get('context_window')
+            auto_adjust_context = llm_kwargs.get('auto_adjust_context', True)
+            initial_context, is_thinking_model = initial_context_size(
+                model_name, auto_adjust_context, context_window)
+            llm_client = create_provider_from_args(
+                llm_provider, model_name, llm_kwargs.get('endpoint'),
+                gemini_api_key=llm_kwargs.get('gemini_api_key'),
+                openai_api_key=llm_kwargs.get('openai_api_key'),
+                openrouter_api_key=llm_kwargs.get('openrouter_api_key'),
+                mistral_api_key=llm_kwargs.get('mistral_api_key'),
+                deepseek_api_key=llm_kwargs.get('deepseek_api_key'),
+                poe_api_key=llm_kwargs.get('poe_api_key'),
+                nim_api_key=llm_kwargs.get('nim_api_key'),
+                context_window=initial_context,
+                log_callback=log_callback,
+            )
+            context_manager = _create_context_manager(
+                llm_provider=llm_provider,
+                auto_adjust_context=auto_adjust_context,
+                initial_context=initial_context,
+                is_thinking_model=is_thinking_model,
+                log_callback=log_callback,
             )
 
             # 6. Translate each unit (sequentially, or with continuous concurrency)
@@ -295,6 +315,7 @@ class GenericTranslator:
                         llm_client=llm_client,
                         log_callback=log_callback,
                         prompt_options=attempt_options,
+                        context_manager=context_manager,
                         raw_response_callback=record_raw,
                         on_raw_fallback=lambda _i=i: raw_fallback_units.add(_i),
                     )

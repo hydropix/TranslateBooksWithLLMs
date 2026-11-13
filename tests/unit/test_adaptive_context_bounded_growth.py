@@ -64,7 +64,6 @@ def _looping_client():
     client = Mock()
     client.context_window = 4096
     client.generate = AsyncMock(side_effect=RepetitionLoopError("loop"))
-    client.make_request = AsyncMock(side_effect=RepetitionLoopError("loop"))
     return client
 
 
@@ -92,12 +91,13 @@ async def test_epub_refinement_request_that_always_loops_is_bounded_and_restored
     client = _looping_client()
     prompt_pair = SimpleNamespace(system="s", user="u")
 
-    with pytest.raises(RepetitionLoopError):
-        await xhtml_translator._request_refinement_with_adaptive_context(
-            client, cm, prompt_pair, "m", None
-        )
+    # The shared request core reports the loop as a failed request (the
+    # caller keeps the draft) instead of raising.
+    assert await xhtml_translator._request_refinement_with_adaptive_context(
+        client, cm, prompt_pair, "m", None
+    ) is None
 
-    assert client.make_request.await_count == 1 + MAX_REPETITION_RETRIES
+    assert client.generate.await_count == 1 + MAX_REPETITION_RETRIES
     assert cm.get_context_size() == 4096
 
 

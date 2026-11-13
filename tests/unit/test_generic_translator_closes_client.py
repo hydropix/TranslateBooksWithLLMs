@@ -6,7 +6,7 @@ connection pool per job in the long-running server.
 
 import pytest
 
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.txt_adapter import TxtAdapter
@@ -44,7 +44,7 @@ async def test_client_is_closed_on_every_exit(tmp_path, cm, monkeypatch, outcome
             raise RateLimitError("429", provider="test")
         return "Bonjour le monde."
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", _ClosingClient)
+    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_ClosingClient))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     translator = GenericTranslator(
@@ -62,3 +62,10 @@ async def test_client_is_closed_on_every_exit(tmp_path, cm, monkeypatch, outcome
         assert await run is True
 
     assert len(created) == 1 and created[0].closed
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
+    def build(llm_provider, model=None, endpoint=None, **kwargs):
+        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    return build

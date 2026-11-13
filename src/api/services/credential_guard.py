@@ -10,11 +10,11 @@ Two rules, applied together (see ``endpoint_validator`` for the threat model):
    travels to a host the client chose.
 
 Rule 2 is enforced by refusing the request rather than by quietly dropping the
-stored key, because the provider factory falls back to the environment key on
-its own when it receives none (``create_llm_provider`` for 'openai' and
-'nim'). Dropping the key at the HTTP layer would therefore not keep it from
-following the overridden endpoint. Only callers that use the resolved key
-directly, with no factory in between, may ask for the "drop" behaviour.
+stored key. The provider factory keeps an explicitly empty key empty (it
+falls back to the environment only when no key is passed at all), but
+refusing keeps the contract visible to the client and independent of how
+each caller forwards the key. Callers that use the resolved key directly may
+ask for the "drop" behaviour.
 
 Providers whose client never reads the request endpoint (Gemini, Mistral,
 DeepSeek, Poe, OpenRouter, LiteLLM) are exempt from both rules: the field is

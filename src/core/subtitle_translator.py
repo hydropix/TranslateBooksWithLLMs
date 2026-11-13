@@ -5,6 +5,7 @@ from typing import List, Dict, Optional, Tuple
 
 from src.prompts.prompts import generate_subtitle_refinement_block_prompt
 from src.config import SRT_LINES_PER_BLOCK
+from .request_core import REFINEMENT_LABELS, request_chunk
 from .translator import _build_chunk_glossary_block
 
 
@@ -32,7 +33,7 @@ async def refine_subtitle_translations(
         translations: Dict mapping subtitle index to translated text
         target_language: Target language
         model_name: LLM model name
-        llm_client: LLM client instance
+        llm_client: LLM provider instance
         log_callback: Optional logging callback
         prompt_options: Optional prompt options dict
         post_processing_instructions: Additional refinement instructions
@@ -183,27 +184,23 @@ async def refine_subtitle_translations(
                                  f"Block {block_idx + 1}: retry attempt {attempt} "
                                  f"({len(local_subtitle_tuples) - len(block_refined)} subtitles still missing)")
 
-                llm_response = await llm_client.make_request(
-                    prompt_pair.user, model_name, system_prompt=prompt_pair.system
+                # Numbered blocks: an untagged answer can never be used raw.
+                outcome = await request_chunk(
+                    llm_client, prompt_pair,
+                    source_text=block_text_for_glossary,
+                    allow_raw_fallback=False,
+                    log_callback=log_callback,
+                    labels=REFINEMENT_LABELS,
                 )
 
-                if llm_response and llm_response.content:
-                    if log_callback:
-                        log_callback("refinement_response", "Refinement response received", data={
-                            'type': 'refinement_response',
-                            'response': llm_response.content,
-                            'model': model_name,
-                        })
-
-                    refined_block_text = llm_client.extract_translation(llm_response.content)
-                    if refined_block_text:
-                        parsed = srt_processor.extract_block_translations_with_remapping(
-                            refined_block_text, local_to_global
-                        )
-                        # Merge only the newly recovered (non-empty) entries.
-                        for g_idx, text in parsed.items():
-                            if g_idx not in block_refined and text.strip():
-                                block_refined[g_idx] = text
+                if outcome.ok:
+                    parsed = srt_processor.extract_block_translations_with_remapping(
+                        outcome.text, local_to_global
+                    )
+                    # Merge only the newly recovered (non-empty) entries.
+                    for g_idx, text in parsed.items():
+                        if g_idx not in block_refined and text.strip():
+                            block_refined[g_idx] = text
 
                 # All subtitles recovered? stop retrying.
                 if len(block_refined) == len(group):

@@ -21,7 +21,7 @@ DRAFT = (
 
 def _client(content, extracted=None, **response_fields):
     client = Mock()
-    client.make_request = AsyncMock(return_value=LLMResponse(
+    client.generate = AsyncMock(return_value=LLMResponse(
         content=content, prompt_tokens=10, completion_tokens=5,
         context_used=15, context_limit=4096, was_truncated=False,
         **response_fields,
@@ -75,7 +75,7 @@ async def test_refine_chunks_keeps_draft_when_refinement_is_empty(monkeypatch):
     async def empty_refinement(**kwargs):
         return "\n\n", Mock(prompt_tokens=1, completion_tokens=1, context_limit=4096)
 
-    monkeypatch.setattr(translator, "create_llm_client", lambda *a, **k: _Client())
+    monkeypatch.setattr(translator, "create_provider_from_args", lambda *a, **k: _Client())
     monkeypatch.setattr(translator, "_make_refinement_request", empty_refinement)
 
     result = await translator.refine_chunks(

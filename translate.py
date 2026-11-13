@@ -22,7 +22,7 @@ from src.persistence.checkpoint_manager import CheckpointManager
 from src.core.adapters import translate_file, refine_file
 from src.core import auto_prep
 from src.core.auto_prep import build_auto_prompt_options
-from src.core.llm_client import create_llm_client
+from src.core.llm.factory import create_provider_from_args
 from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE
 import time
 import uuid
@@ -50,8 +50,8 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
     `source_language := args.target_lang` for the style pass.
 
     Event-loop discipline: this helper owns its own `asyncio.run(...)`, fully
-    closed before the translation starts. The `LLMClient` is created *and*
-    closed inside that single coroutine — an `LLMClient` built in one event
+    closed before the translation starts. The provider is created *and*
+    closed inside that single coroutine — a provider built in one event
     loop and closed in another would leak httpx state.
 
     The whole body is wrapped in try/except so a failure here only logs a
@@ -86,11 +86,11 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
         target_language = args.target_lang
 
         async def _run():
-            client = create_llm_client(
+            client = create_provider_from_args(
                 args.provider,
-                args.gemini_api_key,
-                args.api_endpoint,
                 args.model,
+                args.api_endpoint,
+                gemini_api_key=args.gemini_api_key,
                 openai_api_key=args.openai_api_key,
                 openrouter_api_key=args.openrouter_api_key,
                 mistral_api_key=args.mistral_api_key,
@@ -99,12 +99,6 @@ def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
                 nim_api_key=args.nim_api_key,
                 context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
             )
-            if client is None:
-                logger.warning(
-                    f"⚠️ Auto mode: unknown LLM provider '{args.provider}' — "
-                    "translating without an auto glossary or style."
-                )
-                return {}
             try:
                 return await build_auto_prompt_options(
                     source_text=source_text,

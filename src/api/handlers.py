@@ -18,8 +18,9 @@ from src.utils.custom_instructions import (
 )
 from src.core import auto_prep
 from src.core.llm.cost_tracker import begin_job_cost_tracking, end_job_cost_tracking
-from src.core.llm.exceptions import RateLimitError
-from src.core.llm_client import create_llm_client
+from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
+from src.core.llm.factory import create_provider_from_args
+from src.core.llm.policy import RetryPolicy, begin_job_retry_policy, end_job_retry_policy
 from src.config import AUTO_PAUSE_ON_RATE_LIMIT, RATE_LIMIT_AUTO_RESUME_DELAY
 from src.core.adapters import translate_file, refine_file
 from src.core.progress import snapshot_from_legacy_stats
@@ -276,24 +277,25 @@ async def _apply_auto_prep(config, log_callback, progress_callback=None):
                 source_language = target_language
 
             llm_provider = config.get('llm_provider', 'ollama')
-            client = create_llm_client(
-                llm_provider,
-                config.get('gemini_api_key', ''),
-                config['llm_api_endpoint'],
-                config['model'],
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
-                context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
-            )
-            if client is None:
+            try:
+                client = create_provider_from_args(
+                    llm_provider,
+                    config['model'],
+                    config['llm_api_endpoint'],
+                    gemini_api_key=config.get('gemini_api_key'),
+                    openai_api_key=config.get('openai_api_key'),
+                    openrouter_api_key=config.get('openrouter_api_key'),
+                    mistral_api_key=config.get('mistral_api_key'),
+                    deepseek_api_key=config.get('deepseek_api_key'),
+                    poe_api_key=config.get('poe_api_key'),
+                    nim_api_key=config.get('nim_api_key'),
+                    context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
+                )
+            except LLMClientConfigError as exc:
                 log_callback(
                     "auto_prep_client_warning",
                     f"⚠️ Auto mode: no LLM client could be built for provider "
-                    f"'{llm_provider}' — translating without an auto glossary or style."
+                    f"'{llm_provider}' ({exc}) — translating without an auto glossary or style."
                 )
                 return
 
@@ -702,6 +704,11 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
     if config.get('llm_provider') == 'openrouter':
         _, cost_tracking_token = begin_job_cost_tracking(_openrouter_cost_callback)
 
+    # Per-job retry/timeout policy (ContextVar): the request timeout, attempt
+    # count and retry delay set in the web UI apply to every provider built
+    # during this job.
+    retry_policy_token = begin_job_retry_policy(RetryPolicy.from_job_config(config))
+
     # Get checkpoint manager and handle resume
     checkpoint_manager = state_manager.get_checkpoint_manager()
     resume_from_index = config.get('resume_from_index', 0)
@@ -857,13 +864,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 model_name=config['model'],
                 llm_provider=config.get('llm_provider', 'ollama'),
                 llm_api_endpoint=config['llm_api_endpoint'],
-                gemini_api_key=config.get('gemini_api_key', ''),
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
+                gemini_api_key=config.get('gemini_api_key'),
+                openai_api_key=config.get('openai_api_key'),
+                openrouter_api_key=config.get('openrouter_api_key'),
+                mistral_api_key=config.get('mistral_api_key'),
+                deepseek_api_key=config.get('deepseek_api_key'),
+                poe_api_key=config.get('poe_api_key'),
+                nim_api_key=config.get('nim_api_key'),
                 context_window=config.get('context_window', 2048),
                 auto_adjust_context=config.get('auto_adjust_context', True),
                 parallel_workers=config.get('parallel_workers', 1),
@@ -899,13 +906,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 check_interruption_callback=should_interrupt_current_task,
                 resume_from_index=resume_from_index,
                 llm_api_endpoint=config['llm_api_endpoint'],
-                gemini_api_key=config.get('gemini_api_key', ''),
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
+                gemini_api_key=config.get('gemini_api_key'),
+                openai_api_key=config.get('openai_api_key'),
+                openrouter_api_key=config.get('openrouter_api_key'),
+                mistral_api_key=config.get('mistral_api_key'),
+                deepseek_api_key=config.get('deepseek_api_key'),
+                poe_api_key=config.get('poe_api_key'),
+                nim_api_key=config.get('nim_api_key'),
                 context_window=config.get('context_window', 2048),
                 auto_adjust_context=config.get('auto_adjust_context', True),
                 max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
@@ -929,13 +936,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 check_interruption_callback=should_interrupt_current_task,
                 resume_from_index=resume_from_index,
                 llm_api_endpoint=config['llm_api_endpoint'],
-                gemini_api_key=config.get('gemini_api_key', ''),
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
+                gemini_api_key=config.get('gemini_api_key'),
+                openai_api_key=config.get('openai_api_key'),
+                openrouter_api_key=config.get('openrouter_api_key'),
+                mistral_api_key=config.get('mistral_api_key'),
+                deepseek_api_key=config.get('deepseek_api_key'),
+                poe_api_key=config.get('poe_api_key'),
+                nim_api_key=config.get('nim_api_key'),
                 context_window=config.get('context_window', 2048),
                 auto_adjust_context=config.get('auto_adjust_context', True),
                 min_chunk_size=config.get('min_chunk_size', 5),
@@ -989,13 +996,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     check_interruption_callback=should_interrupt_current_task,
                     resume_from_index=0,
                     llm_api_endpoint=config['llm_api_endpoint'],
-                    gemini_api_key=config.get('gemini_api_key', ''),
-                    openai_api_key=config.get('openai_api_key', ''),
-                    openrouter_api_key=config.get('openrouter_api_key', ''),
-                    mistral_api_key=config.get('mistral_api_key', ''),
-                    deepseek_api_key=config.get('deepseek_api_key', ''),
-                    poe_api_key=config.get('poe_api_key', ''),
-                    nim_api_key=config.get('nim_api_key', ''),
+                    gemini_api_key=config.get('gemini_api_key'),
+                    openai_api_key=config.get('openai_api_key'),
+                    openrouter_api_key=config.get('openrouter_api_key'),
+                    mistral_api_key=config.get('mistral_api_key'),
+                    deepseek_api_key=config.get('deepseek_api_key'),
+                    poe_api_key=config.get('poe_api_key'),
+                    nim_api_key=config.get('nim_api_key'),
                     context_window=config.get('context_window', 2048),
                     auto_adjust_context=config.get('auto_adjust_context', True),
                     max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
@@ -1361,6 +1368,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
     finally:
         if cost_tracking_token is not None:
             end_job_cost_tracking(cost_tracking_token)
+        end_job_retry_policy(retry_policy_token)
         if temp_txt_file_path:
             try:
                 os.remove(temp_txt_file_path)

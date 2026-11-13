@@ -16,7 +16,7 @@ class FakeClient:
         self.replies = list(replies)
         self.prompts = []
 
-    async def make_request(self, user, model, system_prompt=None):
+    async def generate(self, user, system_prompt=None, **kwargs):
         self.prompts.append(user)
         content = self.replies.pop(0)
         return SimpleNamespace(content=content, prompt_tokens=1, completion_tokens=1,

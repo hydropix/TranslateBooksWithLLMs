@@ -20,7 +20,7 @@ import asyncio
 import pytest
 
 import src.core.llm as llm_package
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as factory_module
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.utils.file_detector import detect_file_type
 
@@ -59,9 +59,9 @@ def _patch_boundaries(monkeypatch):
     """Stub the network edge and record the factory kwargs of the real calls.
 
     The DOCX path resolves `create_llm_provider` from the `src.core.llm`
-    package at call time; the TXT/SRT path reaches it through `LLMClient` in
-    `src.core.llm_client`. Both attributes point at the recorded wrapper, and
-    the real factory still runs (its `_require_key` gate is the oracle).
+    package at call time; the TXT/SRT path builds its provider with
+    `create_provider_from_args`. Both are recorded, and the real factory
+    still runs (its missing-key gate is the oracle).
     """
     from src.core.llm.base import LLMResponse
     from src.core.llm.providers.openai import OpenAICompatibleProvider
@@ -73,22 +73,25 @@ def _patch_boundaries(monkeypatch):
 
     monkeypatch.setattr(OpenAICompatibleProvider, "generate", fake_generate)
     monkeypatch.delenv("NIM_API_KEY", raising=False)
-    # The factory falls back to the import-time constant read from `.env`;
-    # blank it so a developer's local NIM key cannot mask a dropped kwarg.
-    import src.core.llm.factory as factory_module
-    monkeypatch.setattr(factory_module, "NIM_API_KEY", "")
+    # The factory falls back to the `.env` value kept in src.config; blank it
+    # so a developer's local NIM key cannot mask a dropped kwarg.
+    import src.config as config_module
+    monkeypatch.setattr(config_module, "NIM_API_KEY", "")
 
-    real_create = llm_client_module.create_llm_provider
+    real_create = llm_package.create_llm_provider
+    real_from_args = factory_module.create_provider_from_args
     factory_calls = []
 
     def recording_create(provider_type, **kwargs):
         factory_calls.append((provider_type, kwargs))
         return real_create(provider_type, **kwargs)
 
-    monkeypatch.setattr(
-        llm_client_module, "create_llm_provider", recording_create
-    )
+    def recording_from_args(llm_provider, model=None, endpoint=None, **kwargs):
+        factory_calls.append((llm_provider, kwargs))
+        return real_from_args(llm_provider, model, endpoint, **kwargs)
+
     monkeypatch.setattr(llm_package, "create_llm_provider", recording_create)
+    monkeypatch.setattr(factory_module, "create_provider_from_args", recording_from_args)
     return factory_calls
 
 

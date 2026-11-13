@@ -10,7 +10,7 @@ import pytest
 
 import src.core.epub.translator as translator_module
 from src.core.epub.translator import _create_llm_client, translate_epub_file
-from src.core.llm.exceptions import RateLimitError
+from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
 
 from tests.unit.epub.conftest import _disable_attribution, _echo_llm_client
 
@@ -47,8 +47,10 @@ async def test_missing_input_returns_false(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_client_creation_failure_returns_false(tmp_path, input_epub, monkeypatch):
-    result, _ = await _run(input_epub, tmp_path, monkeypatch,
-                           client_factory=lambda **kwargs: None)
+    def failing_factory(**kwargs):
+        raise LLMClientConfigError("Gemini provider ('gemini') requires an API key.")
+
+    result, _ = await _run(input_epub, tmp_path, monkeypatch, client_factory=failing_factory)
     assert result is False
     assert not (tmp_path / "out.epub").exists()
 
@@ -86,14 +88,14 @@ async def test_rate_limit_still_propagates(tmp_path, input_epub, monkeypatch):
 
 def test_create_llm_client_reports_unknown_provider():
     events = []
-    client = _create_llm_client(
-        llm_provider="no-such-provider", model_name="m",
-        gemini_api_key=None, openai_api_key=None, openrouter_api_key=None,
-        mistral_api_key=None, deepseek_api_key=None, poe_api_key=None,
-        nim_api_key=None, cli_api_endpoint="http://localhost:1",
-        initial_context=2048,
+    with pytest.raises(LLMClientConfigError):
+        _create_llm_client(
+            llm_provider="no-such-provider", model_name="m",
+            gemini_api_key=None, openai_api_key=None, openrouter_api_key=None,
+            mistral_api_key=None, deepseek_api_key=None, poe_api_key=None,
+            nim_api_key=None, cli_api_endpoint="http://localhost:1",
+            initial_context=2048,
         log_callback=lambda event, message: events.append((event, message)),
-    )
-    assert client is None
+        )
     assert events and events[0][0] == "llm_client_error"
     assert "no-such-provider" in events[0][1]

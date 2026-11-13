@@ -9,7 +9,7 @@ as translated).
 
 import pytest
 
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.pgn_adapter import PgnAdapter
@@ -47,7 +47,7 @@ async def test_reconstruct_failure_does_not_write_the_source(
     async def fake_request(main_content=None, **kwargs):
         return main_content.upper()
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", _FakeLLMClient)
+    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_FakeLLMClient))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     def broken(*args, **kwargs):
@@ -96,3 +96,10 @@ async def test_resume_failure_is_not_swallowed(tmp_path):
                        "chunk_data": {"local_to_global": {"not-an-int": 0}}}]}
     with pytest.raises(Exception):
         await adapter.resume_from_checkpoint(bad)
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
+    def build(llm_provider, model=None, endpoint=None, **kwargs):
+        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    return build

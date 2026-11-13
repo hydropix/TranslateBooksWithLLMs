@@ -44,7 +44,7 @@ class FakeLLMClient:
         self.calls = 0
         self.seen = []
 
-    async def make_request(self, prompt, model_name, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         call = self.calls
         self.calls += 1
         if call == self.fail_at_call:
@@ -99,7 +99,7 @@ def _parse(path):
 async def _refine(tmp_path, monkeypatch, client, **kwargs):
     import src.core.refine.srt_refiner as srt_refiner
 
-    monkeypatch.setattr(srt_refiner, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(srt_refiner, "create_provider_from_args", lambda *a, **kw: client)
     monkeypatch.setattr(srt_refiner, "SRT_LINES_PER_BLOCK", BLOCK_SIZE)
 
     input_file = tmp_path / "input.srt"

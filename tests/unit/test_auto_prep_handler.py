@@ -2,7 +2,7 @@
 Unit tests for the auto-mode wiring in `src.api.handlers`
 (Phase 2 of plan/PLAN_AutoGlossaryStyle.md).
 
-Fully offline: `auto_prep.build_auto_prompt_options` and `create_llm_client`
+Fully offline: `auto_prep.build_auto_prompt_options` and `create_provider_from_args`
 are monkeypatched on the `handlers` module, so no provider is contacted and no
 Flask app is needed. The two call-site regressions (the suppressed
 "📖 Loaded glossary" line and the resume guard) are exercised by driving
@@ -38,7 +38,7 @@ FRAGMENT = {
 # Fakes
 # ---------------------------------------------------------------------------
 class FakeClient:
-    """Stand-in for `LLMClient`: only `close()` is ever reached from handlers."""
+    """Stand-in for an LLM provider: only `close()` is ever reached from handlers."""
 
     def __init__(self):
         self.closed = 0
@@ -48,7 +48,7 @@ class FakeClient:
 
 
 class ClientFactory:
-    """Monkeypatched `create_llm_client`: records its calls, hands back a client."""
+    """Monkeypatched `create_provider_from_args`: records its calls, hands back a client."""
 
     def __init__(self, client=None):
         self.client = FakeClient() if client is None else client
@@ -92,7 +92,7 @@ def _base_config(prompt_options=None, **overrides):
 def patched(monkeypatch):
     """Patch the two seams `_apply_auto_prep` reaches out through.
 
-    Returns a small namespace: `.factory` (the fake `create_llm_client`),
+    Returns a small namespace: `.factory` (the fake `create_provider_from_args`),
     `.builder_calls` (kwargs each `build_auto_prompt_options` call received)
     and `.fragment` / `.raises` to steer what the builder does.
     """
@@ -112,7 +112,7 @@ def patched(monkeypatch):
             raise state.raises
         return dict(state.fragment)
 
-    monkeypatch.setattr(handlers, 'create_llm_client', state.factory)
+    monkeypatch.setattr(handlers, 'create_provider_from_args', state.factory)
     monkeypatch.setattr(auto_prep, 'build_auto_prompt_options', fake_build)
     return state
 
@@ -240,7 +240,10 @@ async def test_unreadable_source_logs_and_returns(patched):
 
 @pytest.mark.asyncio
 async def test_unknown_provider_yields_no_llm_call(monkeypatch, patched):
-    monkeypatch.setattr(handlers, 'create_llm_client', lambda *a, **k: None)
+    def unknown_provider(*args, **kwargs):
+        raise handlers.LLMClientConfigError("Unknown LLM provider 'nope'.")
+
+    monkeypatch.setattr(handlers, 'create_provider_from_args', unknown_provider)
     config = _base_config({'glossary_auto': True})
     log = LogRecorder()
 
@@ -268,8 +271,9 @@ async def test_client_is_built_with_the_jobs_own_keys(patched):
     await handlers._apply_auto_prep(config, LogRecorder())
 
     args, kwargs = patched.factory.calls[0]
-    assert args == ('openrouter', 'gk', config['llm_api_endpoint'], 'test-model')
+    assert args == ('openrouter', 'test-model', config['llm_api_endpoint'])
     assert kwargs == {
+        'gemini_api_key': 'gk',
         'openai_api_key': 'ok',
         'openrouter_api_key': 'ork',
         'mistral_api_key': 'mk',

@@ -1,9 +1,9 @@
 """No silent fallback to the module-global Ollama client.
 
 The request helpers used `llm_client or default_client`, so a job whose
-client was missing (e.g. create_llm_client returned None for a cloud
-provider) silently talked to the import-time Ollama default. Client creation
-failures must now fail the pass clearly.
+client was missing silently talked to the import-time Ollama default. Both
+the global client and the None convention are gone: the factory raises, and
+client creation failures fail the pass clearly.
 """
 
 import pytest
@@ -21,14 +21,11 @@ async def test_translation_request_without_client_fails_clearly():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("factory_result", ["raise", None])
-async def test_refine_chunks_fails_when_the_client_cannot_be_created(monkeypatch, factory_result):
+async def test_refine_chunks_fails_when_the_client_cannot_be_created(monkeypatch):
     def factory(*args, **kwargs):
-        if factory_result == "raise":
-            raise ValueError("NVIDIA NIM provider requires an API key")
-        return None
+        raise ValueError("NVIDIA NIM provider requires an API key")
 
-    monkeypatch.setattr(translator, "create_llm_client", factory)
+    monkeypatch.setattr(translator, "create_provider_from_args", factory)
     logs = []
     with pytest.raises(RuntimeError, match="Could not create the LLM client"):
         await translator.refine_chunks(
@@ -47,7 +44,7 @@ async def test_srt_refine_fails_when_the_client_cannot_be_created(tmp_path, monk
     def factory(*args, **kwargs):
         raise ValueError("missing key")
 
-    monkeypatch.setattr(srt_refiner, "create_llm_client", factory)
+    monkeypatch.setattr(srt_refiner, "create_provider_from_args", factory)
     logs = []
     ok = await srt_refiner.refine_srt_file(
         input_filepath=str(src), output_filepath=str(tmp_path / "out.srt"),

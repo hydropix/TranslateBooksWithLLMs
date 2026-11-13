@@ -10,7 +10,7 @@ every unit is genuinely translated.
 
 import pytest
 
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters.format_adapter import FormatAdapter
 from src.core.adapters.generic_translator import GenericTranslator
@@ -90,7 +90,7 @@ def _patch_llm(monkeypatch, fail_contents, calls):
             return None
         return f"translated {main_content}"
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", FakeLLMClient)
+    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(FakeLLMClient))
     monkeypatch.setattr(
         translator_module, "generate_translation_request", fake_request
     )
@@ -168,3 +168,10 @@ async def test_resume_with_persistent_failure_stays_partial(
     assert job is not None
     assert job["status"] == "partial"
     assert cm.load_checkpoint("job")["failed_chunk_indices"] == [1]
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
+    def build(llm_provider, model=None, endpoint=None, **kwargs):
+        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    return build

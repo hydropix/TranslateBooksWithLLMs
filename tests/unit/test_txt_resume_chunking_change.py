@@ -9,7 +9,7 @@ unit is only restored onto the same source text.
 
 import pytest
 
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.txt_adapter import TxtAdapter
@@ -40,7 +40,7 @@ async def _run(tmp_path, cm, monkeypatch, max_tokens, fail_marker=None):
             return None
         return main_content.upper()
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", _Client)
+    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(_Client))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
     adapter = TxtAdapter(
         str(tmp_path / "in.txt"), str(tmp_path / "out.txt"),
@@ -87,3 +87,10 @@ async def test_txt_adapter_does_not_restore_onto_other_source(tmp_path):
     }]}
     await adapter.resume_from_checkpoint(stale)
     assert adapter.translated_chunks[0] is None
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
+    def build(llm_provider, model=None, endpoint=None, **kwargs):
+        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    return build

@@ -12,7 +12,7 @@ import re
 import pytest
 
 import src.config as config_module
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters import PgnAdapter
 from src.core.adapters.generic_translator import GenericTranslator
@@ -295,7 +295,7 @@ async def _run_translation(tmp_path, cm, monkeypatch, translate_by_attempt):
         calls.append(kwargs.get("prompt_options") or {})
         return _translate_lines(main_content, translate_by_attempt(len(calls) - 1))
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", FakeLLMClient)
+    monkeypatch.setattr(llm_factory_module, "create_provider_from_args", _fake_factory(FakeLLMClient))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     adapter = PgnAdapter(str(_write(tmp_path)), str(tmp_path / "out.pgn"),
@@ -431,3 +431,10 @@ async def test_block_size_ignores_the_subtitle_setting(tmp_path, monkeypatch):
     adapter = await _prepared(tmp_path)
     sizes = [len(u.metadata['local_to_global']) for u in adapter.get_translation_units()]
     assert sizes == [6, 2]
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_provider_from_args` that builds the test's fake client."""
+    def build(llm_provider, model=None, endpoint=None, **kwargs):
+        return client_cls(provider_type=llm_provider, model=model, **kwargs)
+    return build

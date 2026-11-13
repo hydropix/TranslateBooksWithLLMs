@@ -2,7 +2,7 @@
 Unit tests for `_apply_cli_auto_prep` in `translate.py` (Phase 4 of
 plan/PLAN_AutoGlossaryStyle.md — CLI parity for auto glossary / auto style).
 
-Fully offline: `translate.create_llm_client` and
+Fully offline: `translate.create_provider_from_args` and
 `translate.build_auto_prompt_options` are monkeypatched, and
 `translate.auto_prep.extract_source_text` is stubbed so no file I/O or
 network call happens. `args` is a plain `argparse.Namespace` built by
@@ -88,7 +88,7 @@ def test_auto_glossary_skipped_when_glossary_given(monkeypatch):
         captured.update(kwargs)
         return {"custom_instructions": "be terse"}
 
-    monkeypatch.setattr(translate, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(translate, "create_provider_from_args", lambda *a, **kw: client)
     monkeypatch.setattr(translate, "build_auto_prompt_options", fake_build)
 
     translate._apply_cli_auto_prep(args, prompt_options, logger)
@@ -118,7 +118,7 @@ def test_auto_glossary_skipped_in_refine_only_mode(monkeypatch):
         captured.update(kwargs)
         return {"refinement_instructions": "polish it"}
 
-    monkeypatch.setattr(translate, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(translate, "create_provider_from_args", lambda *a, **kw: client)
     monkeypatch.setattr(translate, "build_auto_prompt_options", fake_build)
 
     translate._apply_cli_auto_prep(args, prompt_options, logger)
@@ -143,7 +143,7 @@ def test_auto_style_alone_merges_fragment(monkeypatch):
     async def fake_build(**kwargs):
         return {"custom_instructions": "keep it dry"}
 
-    monkeypatch.setattr(translate, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(translate, "create_provider_from_args", lambda *a, **kw: client)
     monkeypatch.setattr(translate, "build_auto_prompt_options", fake_build)
 
     translate._apply_cli_auto_prep(args, prompt_options, logger)
@@ -167,7 +167,7 @@ def test_raising_build_leaves_prompt_options_untouched(monkeypatch):
     async def fake_build(**kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(translate, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(translate, "create_provider_from_args", lambda *a, **kw: client)
     monkeypatch.setattr(translate, "build_auto_prompt_options", fake_build)
 
     # Must not raise.
@@ -186,7 +186,7 @@ def test_neither_flag_never_creates_client(monkeypatch):
     prompt_options = {}
     calls = []
 
-    monkeypatch.setattr(translate, "create_llm_client", lambda *a, **kw: calls.append("client"))
+    monkeypatch.setattr(translate, "create_provider_from_args", lambda *a, **kw: calls.append("client"))
     monkeypatch.setattr(translate, "build_auto_prompt_options", lambda **kw: calls.append("build"))
 
     translate._apply_cli_auto_prep(args, prompt_options, logger)
@@ -207,7 +207,7 @@ def test_close_awaited_even_when_extraction_raises(monkeypatch):
     async def fake_build(**kwargs):
         raise ValueError("kaboom")
 
-    monkeypatch.setattr(translate, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(translate, "create_provider_from_args", lambda *a, **kw: client)
     monkeypatch.setattr(translate, "build_auto_prompt_options", fake_build)
 
     translate._apply_cli_auto_prep(args, prompt_options, logger)

@@ -19,7 +19,7 @@ from src.config import (
 # (every block holds exactly SRT_LINES_PER_BLOCK subtitles).
 _NO_CHAR_CAP = 10 ** 12
 from src.core.llm.exceptions import RateLimitError
-from src.core.llm_client import create_llm_client
+from src.core.llm.factory import create_provider_from_args
 from src.core.srt_processor import SRTProcessor
 from src.core.subtitle_translator import refine_subtitle_translations
 
@@ -188,8 +188,9 @@ async def refine_srt_file(
     subtitle_positions = {id(sub): idx for idx, sub in enumerate(subtitles)}
 
     try:
-        llm_client = create_llm_client(
-            llm_provider, gemini_api_key, cli_api_endpoint, model_name,
+        llm_client = create_provider_from_args(
+            llm_provider, model_name, cli_api_endpoint,
+            gemini_api_key=gemini_api_key,
             openai_api_key=openai_api_key,
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
@@ -199,14 +200,9 @@ async def refine_srt_file(
             log_callback=log_callback,
         )
     except Exception as e:
-        llm_client = None
-        client_error = f": {e}"
-    else:
-        client_error = ""
-    if llm_client is None:
         if log_callback:
             log_callback("srt_refine_client_failed",
-                         f"❌ Could not create the LLM client for '{llm_provider}'{client_error}")
+                         f"❌ Could not create the LLM client for '{llm_provider}': {e}")
         return False
 
     # Fixed-count grouping for refine (no char cap): every block sent to

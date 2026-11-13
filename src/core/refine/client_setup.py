@@ -7,12 +7,13 @@ provider arg or tweaking the context heuristic is a one-place change.
 
 from typing import Any, Optional, Tuple
 
-from src.config import (
-    THINKING_MODELS,
-    ADAPTIVE_CONTEXT_INITIAL_THINKING,
+from src.core.context_optimizer import REFINEMENT_MIN_CONTEXT
+from src.core.epub.translator import (
+    _create_context_manager,
+    _create_llm_client,
+    initial_context_size,
 )
-from src.core.context_optimizer import INITIAL_CONTEXT_SIZE, REFINEMENT_MIN_CONTEXT
-from src.core.epub.translator import _create_llm_client, _create_context_manager
+from src.core.llm.exceptions import LLMClientConfigError
 
 
 def build_refine_client(
@@ -36,31 +37,28 @@ def build_refine_client(
     Returns ``(llm_client, context_manager)``. ``llm_client`` is ``None`` when
     creation failed (callers should bail out).
     """
-    is_thinking_model = any(tm in model_name.lower() for tm in THINKING_MODELS)
-    if auto_adjust_context:
-        initial_context = (
-            ADAPTIVE_CONTEXT_INITIAL_THINKING if is_thinking_model else INITIAL_CONTEXT_SIZE
-        )
-    else:
-        initial_context = context_window
+    initial_context, is_thinking_model = initial_context_size(
+        model_name, auto_adjust_context, context_window)
     # Same floor as the TXT/SRT refine path (refine_chunks in translator.py).
     initial_context = max(initial_context, REFINEMENT_MIN_CONTEXT)
 
-    llm_client = _create_llm_client(
-        llm_provider=llm_provider,
-        model_name=model_name,
-        gemini_api_key=gemini_api_key,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        cli_api_endpoint=cli_api_endpoint,
-        initial_context=initial_context,
-        log_callback=log_callback,
-    )
-    if llm_client is None:
+    try:
+        llm_client = _create_llm_client(
+            llm_provider=llm_provider,
+            model_name=model_name,
+            gemini_api_key=gemini_api_key,
+            openai_api_key=openai_api_key,
+            openrouter_api_key=openrouter_api_key,
+            mistral_api_key=mistral_api_key,
+            deepseek_api_key=deepseek_api_key,
+            poe_api_key=poe_api_key,
+            nim_api_key=nim_api_key,
+            cli_api_endpoint=cli_api_endpoint,
+            initial_context=initial_context,
+            log_callback=log_callback,
+        )
+    except LLMClientConfigError:
+        # Already reported to the job log by _create_llm_client.
         return None, None
 
     context_manager = _create_context_manager(

@@ -385,6 +385,8 @@ async def translate_file(
         'deepseek_api_key': deepseek_api_key,
         'poe_api_key': poe_api_key,
         'nim_api_key': nim_api_key,
+        'context_window': context_window,
+        'auto_adjust_context': auto_adjust_context,
         'prompt_options': prompt_options,
     }
 

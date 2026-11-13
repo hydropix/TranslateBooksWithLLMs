@@ -37,8 +37,9 @@ class _OverflowOnceClient:
         self.context_window = context_window
         self.calls = []  # context_window seen by each request
 
-    async def make_request(self, prompt, model, system_prompt=None):
-        self.calls.append(self.context_window)
+    async def generate(self, prompt, system_prompt=None, **kwargs):
+        # The context size travels with each request (the provider is never mutated).
+        self.calls.append(kwargs.get("context_window", self.context_window))
         if len(self.calls) == 1:
             raise self.error
         return _FakeResponse("<TRANSLATION>Refined text.</TRANSLATION>")
@@ -52,11 +53,13 @@ def _chunks():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [
-    ContextOverflowError("overflow"),
-    RepetitionLoopError("Context overflow detected during streaming."),
+@pytest.mark.parametrize("error, grown_context", [
+    (ContextOverflowError("overflow"), 4096),
+    # A repetition loop grows the window two steps, as in every pass (shared
+    # request core).
+    (RepetitionLoopError("Context overflow detected during streaming."), 6144),
 ])
-async def test_refine_retries_with_larger_context_on_overflow(error):
+async def test_refine_retries_with_larger_context_on_overflow(error, grown_context):
     translated, chunks = _chunks()
     client = _OverflowOnceClient(error)
     manager = AdaptiveContextManager(initial_context=2048, context_step=2048, max_context=8192)
@@ -74,7 +77,7 @@ async def test_refine_retries_with_larger_context_on_overflow(error):
     )
 
     assert refined == ["Refined text."]
-    assert client.calls == [2048, 4096]
+    assert client.calls == [2048, grown_context]
 
 
 @pytest.mark.asyncio

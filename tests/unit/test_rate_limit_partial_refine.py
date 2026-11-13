@@ -78,7 +78,7 @@ def _install_fakes(monkeypatch, fail_at_index: int):
 
     monkeypatch.setattr(translator, "_make_refinement_request", fake_request)
     monkeypatch.setattr(
-        translator, "create_llm_client", lambda *a, **kw: _StubLLMClient()
+        translator, "create_provider_from_args", lambda *a, **kw: _StubLLMClient()
     )
     return seen
 

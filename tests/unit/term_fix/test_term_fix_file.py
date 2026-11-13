@@ -33,7 +33,7 @@ class FakeLLM:
         self.answer = answer
         self.calls = 0
 
-    async def make_request(self, prompt, model=None, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         self.calls += 1
         items = re.findall(r'<snippet id="(\d+)">(.*?)</snippet>', prompt, re.DOTALL)
         out = []

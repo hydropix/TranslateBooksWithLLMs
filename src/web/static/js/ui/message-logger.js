@@ -224,10 +224,10 @@ export const MessageLogger = {
             // Format multi-line summary with proper line breaks and styling
             formattedMessage = DomHelpers.escapeHtml(message)
                 .replace(/\n/g, '<br>')
-                .replace(/=== (.*?) ===/g, '<strong style="color: #3b82f6;">$1</strong>')
-                .replace(/⚠️/g, '<span style="color: #f59e0b;">⚠️</span>')
-                .replace(/✓/g, '<span style="color: #22c55e;">✓</span>')
-                .replace(/✗/g, '<span style="color: #ef4444;">✗</span>')
+                .replace(/=== (.*?) ===/g, '<strong style="color: var(--primary-light);">$1</strong>')
+                .replace(/⚠️/g, '<span style="color: var(--warning-light);">⚠️</span>')
+                .replace(/✓/g, '<span style="color: var(--success-light);">✓</span>')
+                .replace(/✗/g, '<span style="color: var(--danger-light);">✗</span>')
                 .replace(/•/g, '<span style="margin-left: 10px;">•</span>');
         } else {
             formattedMessage = DomHelpers.escapeHtml(message);
@@ -424,7 +424,7 @@ export const MessageLogger = {
         let summaryHtml = `<span class="log-timestamp">[${timestamp}]</span> `;
 
         if (fileName) {
-            summaryHtml += `<strong style="color: #22c55e;">✅ ${DomHelpers.escapeHtml(fileName)}</strong><br>`;
+            summaryHtml += `<strong style="color: var(--success-light);">✅ ${DomHelpers.escapeHtml(fileName)}</strong><br>`;
         }
 
         // Group messages by type
@@ -471,7 +471,7 @@ export const MessageLogger = {
         // Add cleanup message if batch complete
         const batchComplete = cleanup.find(c => c.includes('All files in the batch'));
         if (batchComplete) {
-            parts.push(`<span style="margin-left: 10px; color: #6366f1;">${DomHelpers.escapeHtml(batchComplete)}</span>`);
+            parts.push(`<span style="margin-left: 10px; color: var(--primary-light);">${DomHelpers.escapeHtml(batchComplete)}</span>`);
         }
 
         summaryHtml += parts.join('<br>');
@@ -533,7 +533,7 @@ export const MessageLogger = {
             translatedText = translatedText.trim();
         }
 
-        const previewHtml = `<div style="background: #ffffff; border-left: 3px solid #22c55e; padding: 15px; color: #000000; white-space: pre-wrap; line-height: 1.6;">${DomHelpers.escapeHtml(translatedText)}</div>`;
+        const previewHtml = `<div style="background: var(--background-light); border-left: 3px solid var(--success-light); padding: 15px; color: var(--text-dark); white-space: pre-wrap; line-height: 1.6;">${DomHelpers.escapeHtml(translatedText)}</div>`;
 
         DomHelpers.setHtml(previewElement, previewHtml);
 

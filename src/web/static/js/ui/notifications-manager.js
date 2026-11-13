@@ -159,7 +159,7 @@ export const NotificationsManager = {
 
         const showFailure = (err) => {
             if (resultEl) {
-                resultEl.style.color = '#ef4444';
+                resultEl.style.color = 'var(--danger-light)';
                 resultEl.textContent = err;
             }
             MessageLogger.showMessage(t('common:notification_test_failed', { error: err }), 'error');
@@ -170,7 +170,7 @@ export const NotificationsManager = {
 
             if (data && data.success) {
                 if (resultEl) {
-                    resultEl.style.color = '#10b981';
+                    resultEl.style.color = 'var(--success-light)';
                     resultEl.textContent = data.message || t('common:test_sent_default');
                 }
                 MessageLogger.showMessage(t('common:notification_test_sent', { event }), 'success');
@@ -185,7 +185,7 @@ export const NotificationsManager = {
                 showFailure(e.body?.error || `HTTP ${e.status}`);
             } else {
                 if (resultEl) {
-                    resultEl.style.color = '#ef4444';
+                    resultEl.style.color = 'var(--danger-light)';
                     resultEl.textContent = t('errors:network_error', { error: e.message });
                 }
                 MessageLogger.showMessage(t('common:notification_test_failed', { error: e.message }), 'error');

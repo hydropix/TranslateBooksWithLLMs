@@ -1,6 +1,5 @@
 /* ========================================
-   Neumorphic Design System
-   Light Mode - Inspired by reference design
+   Design tokens (light theme)
    ======================================== */
 
 :root {
@@ -43,11 +42,6 @@
     --warning-light-border: #f59e0b;
     --warning-light-text: #92400e;
 
-    /* Neumorphic shadows, retired. Every legacy relief rule reads these two
-       tokens, so making them transparent flattens the whole app at once;
-       separation now comes from hairline borders. */
-    --shadow-dark: transparent;
-    --shadow-light: transparent;
     --shadow-soft: 0 10px 24px -20px rgba(40, 50, 60, 0.35);
 
     /* Active-option chips in the pre-flight summary (settings-summary.js).
@@ -140,9 +134,6 @@ html.dark {
     --warning-light-border: #f59e0b;
     --warning-light-text: #fbbf24;
 
-    /* Relief retired in dark mode too (see :root). */
-    --shadow-dark: transparent;
-    --shadow-light: transparent;
     --shadow-soft: 0 10px 24px -20px rgba(0, 0, 0, 0.6);
 
     /* No --option-chip-* override here on purpose: the chips are defined in
@@ -229,17 +220,18 @@ body {
 }
 
 /* ========================================
-   Neumorphic Card Styles
+   Surfaces
+   The neu-* class names are historical (the app used to draw neumorphic
+   relief); they now only paint a flat surface and a hairline border.
    ======================================== */
 
+/* Raised card surface (JS: sample column cards). */
 .neu-card-light {
     background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
     border: 1px solid var(--border-light);
 }
 
-/* Field frame: the hairline box around every form control. (The class
-   name is historical; it no longer draws a neumorphic inset.) */
+/* Field frame: the hairline box around every form control. */
 .neu-inset-light {
     background: var(--background-light);
     box-shadow: none;
@@ -1285,11 +1277,6 @@ select.form-control {
 .preflight-zone--locked .preflight-panel * {
     pointer-events: none;
 }
-.preflight-zone--locked .preflight-panel {
-    /* Flatten the inset shadow so the panel reads as an inert plate instead
-       of a still-raised, still-inviting surface. */
-    box-shadow: none;
-}
 
 /* Advised-options row */
 .preflight-advice {
@@ -1484,10 +1471,8 @@ select.form-control {
    explicit companion — same pattern as the other containers in this block. */
 .preflight-toggle[hidden] { display: none; }
 
-/* Expandable panel. Mirrors .neu-inset-light's shadow recipe (the recessed
-   surface used inside .main-card) via --background-outer rather than that
-   rule's literal #ffffff / #222222, so it reads as one more inner surface of
-   the same card rather than a new floating card. */
+/* Expandable panel: an inset surface inside .main-card, so it reads as one
+   more inner surface of the same card rather than a new floating card. */
 .preflight-panel {
     margin-top: 10px;
     padding: 1.25rem 1.5rem;
@@ -1629,7 +1614,6 @@ select.form-control {
     min-height: 200px;
     overflow-y: auto;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     border: 1px solid var(--border-light);
     padding: 2rem;
     padding-right: 1.5rem; /* Réduit pour faire de la place à la scrollbar */
@@ -1637,7 +1621,7 @@ select.form-control {
     font-size: 0.875rem;
     margin-top: 1rem;
     scrollbar-width: thin;
-    scrollbar-color: var(--shadow-dark) transparent;
+    scrollbar-color: transparent transparent;
 }
 
 /* Last Translation Preview - Dynamic height based on MAX_TOKENS_PER_CHUNK.
@@ -1660,7 +1644,7 @@ select.form-control {
 }
 
 .log-container::-webkit-scrollbar-thumb {
-    background: var(--shadow-dark);
+    background: transparent;
     border-radius: 4px;
     transition: background 0.3s ease;
 }
@@ -1770,12 +1754,8 @@ select.form-control {
 .prompt-options-toggle:has(+ div:not(.hidden)) {
     margin-bottom: 0;
     border-bottom: 1px solid var(--border-light);
-    box-shadow: -5px -5px 10px var(--shadow-light), 5px 0 10px var(--shadow-dark);
 }
 
-.prompt-options-toggle:has(+ div:not(.hidden)):hover {
-    box-shadow: -5px -5px 10px var(--shadow-light), 5px 0 10px var(--shadow-dark);
-}
 
 .prompt-options-toggle + div:not(.hidden) {
     padding: 1.5rem;
@@ -1783,7 +1763,6 @@ select.form-control {
     border: 1px solid var(--border-light);
     border-top: none;
     margin-bottom: 1rem;
-    box-shadow: -5px 0 10px var(--shadow-light), 5px 5px 10px var(--shadow-dark);
 }
 
 /* ========================================
@@ -1817,7 +1796,7 @@ input[type="checkbox"] {
     max-height: calc(6 * 3rem); /* 6 rows * ~3rem height per row (compact) */
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: var(--shadow-dark) transparent;
+    scrollbar-color: transparent transparent;
 }
 
 .file-table thead,
@@ -1842,7 +1821,7 @@ input[type="checkbox"] {
 }
 
 .file-table tbody::-webkit-scrollbar-thumb {
-    background: var(--shadow-dark);
+    background: transparent;
     border-radius: 3px;
 }
 
@@ -1914,7 +1893,6 @@ input[type="checkbox"] {
 .file-action-btn {
     padding: 0;
     background: var(--background-light);
-    box-shadow: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
     border: 1px solid var(--border-light);
     color: var(--text-dark);
     cursor: pointer;
@@ -1931,7 +1909,6 @@ input[type="checkbox"] {
 
 .file-action-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 .file-action-btn.download {
@@ -1987,7 +1964,6 @@ input[type="checkbox"] {
     padding: 1rem 2.75rem 1rem 1.5rem;
     margin: 1rem 0;
     font-weight: 600;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 .message .message-dismiss {
@@ -2203,7 +2179,6 @@ input[type="checkbox"] {
     width: 100%;
     height: 8px;
     background: var(--background-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
     outline: none;
     cursor: pointer;
     margin-top: 0.5rem;
@@ -2217,7 +2192,6 @@ input[type="checkbox"] {
     border-radius: 50%;
     background: var(--primary-light);
     cursor: pointer;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
     transition: all 0.2s;
 }
 
@@ -2232,7 +2206,6 @@ input[type="checkbox"] {
     background: var(--primary-light);
     cursor: pointer;
     border: none;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
     transition: all 0.2s;
 }
 
@@ -2349,7 +2322,6 @@ input[type="checkbox"] {
     background: var(--background-light);
     border: 1px solid var(--success-light);
     border-left: 4px solid var(--success-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
@@ -2597,7 +2569,7 @@ input[type="checkbox"] {
 }
 
 /* Inside the completion card the panel sits on the blue warning block, and the
-   neumorphic .form-control / .btn styles are built against the light surface:
+   .form-control / .btn styles are built against the light surface:
    on blue a <select> loses its box entirely and .btn-primary loses its fill, so
    the panel read as a paragraph with a bold heading instead of a form with a
    submit button.
@@ -2639,7 +2611,6 @@ input[type="range"] {
     width: 100%;
     height: 6px;
     background: var(--background-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
     outline: none;
     cursor: pointer;
 }
@@ -2652,7 +2623,6 @@ input[type="range"]::-webkit-slider-thumb {
     background: var(--primary-light);
     cursor: pointer;
     border-radius: 50%;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -2662,7 +2632,6 @@ input[type="range"]::-moz-range-thumb {
     cursor: pointer;
     border-radius: 50%;
     border: none;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 /* ========================================
@@ -2680,7 +2649,6 @@ input[type="range"]::-moz-range-thumb {
     padding: 1rem;
     margin: 0;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     border: 1px solid var(--border-light);
 }
 
@@ -2851,19 +2819,16 @@ html.dark .file-info {
     padding: 20px;
     margin-bottom: 15px;
     background: var(--background-light) !important;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .resumable-job-card:hover {
     transform: translateY(-2px);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
 }
 
 #resumableJobsList {
     padding: 1rem;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     border: 1px solid var(--border-light);
 }
 
@@ -3944,8 +3909,6 @@ html.dark .ner-warnings {
     font-size: 0.85rem;
     line-height: 1.2;
     border: 1px solid var(--border-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark),
-                inset -2px -2px 4px var(--shadow-light);
     user-select: none;
     transition: background 0.15s ease, color 0.15s ease;
 }
@@ -4051,7 +4014,6 @@ html.dark .cost-badge.cost-error {
     border: 1px solid var(--info-light);
     color: var(--text-dark);
     font-size: 0.9rem;
-    box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
 }
 .update-banner.hidden { display: none; }
 .update-banner__text { flex: 1 1 auto; }
@@ -4159,10 +4121,8 @@ html.dark .update-overlay__error { color: #fca5a5; }
 }
 
 .sample-column-card {
-    /* Use the recessed surface tone (not pure white) so the white input wells
-       inside the card stand out. The neumorphic shadow keeps it raised. */
+    /* Card surface tone, so the input wells inside the card stand out. */
     background: var(--background-light);
-    box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
 }
 
 /* While a Run is in flight, lock the column editor: editing a provider/model
@@ -4170,10 +4130,6 @@ html.dark .update-overlay__error { color: #fca5a5; }
 #sampleColumns.is-running {
     pointer-events: none;
     opacity: 0.6;
-}
-html.dark .sample-column-card {
-    background: var(--background-light);
-    border-color: var(--border-light) !important;
 }
 
 /* Give the provider/model searchable-selects and the endpoint input a clear
@@ -4246,7 +4202,6 @@ html.dark .sample-warning-info {
 .sample-card {
     background: var(--background-outer);
     padding: 16px;
-    box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -4261,7 +4216,6 @@ html.dark .sample-card {
     padding: 12px 14px;
     padding-right: 42px;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     position: relative;
 }
 .sample-file-card {
@@ -4272,7 +4226,6 @@ html.dark .sample-card {
     margin: 12px 0;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
     position: relative;
 }
 .sample-file-cover {
@@ -4283,7 +4236,6 @@ html.dark .sample-card {
     align-items: center;
     justify-content: center;
     background: var(--background-outer);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
     color: var(--primary-light);
     overflow: hidden;
 }

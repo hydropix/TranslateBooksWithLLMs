@@ -238,10 +238,17 @@ async def translate_epub_file(
 
             # 4.5. Update NCX table-of-contents labels from translated XHTML
             # headings. This preserves <content src="..."> jump targets while
-            # localizing the reader's side-panel TOC for EPUB2 books.
+            # localizing the reader's side-panel TOC for EPUB2 books. Files
+            # whose translation failed keep the source text, so their TOC
+            # entries keep the original label.
+            failed_doc_paths = results.get('failed_doc_paths') or set()
+            toc_source_docs = {
+                path: doc for path, doc in results['parsed_docs'].items()
+                if path not in failed_doc_paths
+            }
             _update_ncx_toc_labels_from_translated_docs(
                 opf_dir=manifest_data['opf_dir'],
-                parsed_xhtml_docs=results['parsed_docs'],
+                parsed_xhtml_docs=toc_source_docs,
                 log_callback=log_callback
             )
 
@@ -252,7 +259,7 @@ async def translate_epub_file(
             _update_nav_toc_labels_from_translated_docs(
                 opf_dir=manifest_data['opf_dir'],
                 opf_tree=manifest_data['opf_tree'],
-                parsed_xhtml_docs=results['parsed_docs'],
+                parsed_xhtml_docs=toc_source_docs,
                 log_callback=log_callback
             )
 
@@ -1153,6 +1160,8 @@ async def _process_all_content_files(
     total_files = len(content_files)
     completed_files = len(parsed_xhtml_docs)
     failed_files = 0
+    # Files kept in their source language because translating them failed.
+    failed_doc_paths: set = set()
     was_interrupted = False
 
     # Accumulate translation statistics. On resume, rehydrate the cross-file
@@ -1527,11 +1536,13 @@ async def _process_all_content_files(
         # Save the document if translation succeeded
         if success and doc_root is not None:
             parsed_xhtml_docs[file_path] = doc_root
+            failed_doc_paths.discard(file_path)
             if not already_translated:
                 completed_files += 1
         elif not success and doc_root is not None:
             # Save original document if translation failed
             parsed_xhtml_docs[file_path] = doc_root
+            failed_doc_paths.add(file_path)
             failed_files += 1
             if log_callback:
                 log_callback("epub_file_translate_failed",
@@ -1560,6 +1571,7 @@ async def _process_all_content_files(
         'parsed_docs': parsed_xhtml_docs,
         'completed_files': completed_files,
         'failed_files': failed_files,
+        'failed_doc_paths': failed_doc_paths,
         'total_chunks': effective_total_chunks,
         'completed_chunks': completed_chunks_global,
         'failed_chunks': accumulated_stats.failed_chunks,
@@ -1940,11 +1952,13 @@ def _get_translated_title_for_src(
         return None
 
     if fragment:
+        # A fragment names one place in the file: resolve it or keep the
+        # original label. Falling back to the file's first heading would give
+        # every section of a multi-section file the same label.
         anchor = _find_element_by_id_or_name(doc_root, fragment)
-        if anchor is not None:
-            title = _extract_heading_text_near_anchor(anchor)
-            if title:
-                return title
+        if anchor is None:
+            return None
+        return _extract_heading_text_near_anchor(anchor)
 
     return _extract_first_heading_text(doc_root)
 
@@ -2081,14 +2095,64 @@ def _find_element_by_id_or_name(doc_root: etree._Element, fragment: str) -> Opti
     return None
 
 
+_HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+
 def _extract_heading_text_near_anchor(anchor: etree._Element) -> Optional[str]:
+    """Heading text a TOC fragment points at, or None when unsure.
+
+    Resolution order:
+    1. the anchor is a heading, or sits inside one: that heading;
+    2. the anchor wraps a heading (``<section id="ch2"><h2>``): the first
+       heading it contains;
+    3. the anchor holds no text (``<a id="ch2"/><h2>``): the next heading in
+       document order, provided no other text comes before it;
+    otherwise None, so the caller keeps the original label instead of using a
+    whole section's text or an unrelated heading.
+    """
     current = anchor
     while current is not None:
-        if _local_name(current) in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+        if _local_name(current) in _HEADING_TAGS:
             return _normalized_element_text(current)
         current = current.getparent()
 
-    return _normalized_element_text(anchor)
+    for element in anchor.iterdescendants():
+        if _local_name(element) in _HEADING_TAGS:
+            return _normalized_element_text(element)
+
+    if _normalized_element_text(anchor):
+        return None
+
+    return _next_heading_text_after(anchor)
+
+
+def _document_events(element: etree._Element):
+    """Yield ("start", el) and ("text", str) events in document order."""
+    if not isinstance(element.tag, str):
+        return
+    yield ("start", element)
+    if element.text:
+        yield ("text", element.text)
+    for child in element:
+        yield from _document_events(child)
+        if child.tail:
+            yield ("text", child.tail)
+
+
+def _next_heading_text_after(anchor: etree._Element) -> Optional[str]:
+    """Text of the first heading after an empty anchor, if no text precedes it."""
+    root = anchor.getroottree().getroot()
+    seen_anchor = False
+    for kind, value in _document_events(root):
+        if not seen_anchor:
+            seen_anchor = kind == "start" and value is anchor
+            continue
+        if kind == "text":
+            if value.strip():
+                return None
+        elif _local_name(value) in _HEADING_TAGS:
+            return _normalized_element_text(value)
+    return None
 
 
 def _extract_first_heading_text(doc_root: etree._Element) -> Optional[str]:

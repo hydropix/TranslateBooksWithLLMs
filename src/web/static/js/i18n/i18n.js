@@ -58,9 +58,11 @@ export function initI18n() {
         .then(() => {
             ready = true;
             applyToDOM(document.body);
+            applyDocumentTitle();
             window.i18next.on('languageChanged', () => {
                 document.documentElement.setAttribute('lang', window.i18next.language);
                 applyToDOM(document.body);
+                applyDocumentTitle();
                 window.dispatchEvent(new CustomEvent('localeChanged', {
                     detail: { locale: window.i18next.language }
                 }));
@@ -72,6 +74,15 @@ export function initI18n() {
         });
 
     return readyPromise;
+}
+
+/**
+ * The template's static <title> cannot carry a data-i18n marker that
+ * applyToDOM() reaches (it only walks document.body), so set it here.
+ */
+function applyDocumentTitle() {
+    const title = t('common:app_subtitle');
+    if (title && title !== 'common:app_subtitle') document.title = title;
 }
 
 /**

@@ -21,6 +21,7 @@ build/TranslateBookWithLLM/
 .wiki_repo/
 /prompt_optimization_results
 tests/.placeholder_tests/
+/tests/prompt_eval/runs/
 /plan/
 /experiments
 /benchmark_results/
@@ -42,3 +43,4 @@ credentials.*
 *_secret.*
 *_credentials.*
 .wiki_repo_archive/
+TODO.md

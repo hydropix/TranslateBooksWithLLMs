@@ -354,7 +354,17 @@ For consistency and natural flow, here's what came immediately before:
     # stable and cacheable across chunks.
     glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
 
-    user_prompt = f"""{previous_translation_block_text}{glossary_section}# TEXT TO TRANSLATE
+    # Retry after an answer that left source text behind (issue #270). Kept in
+    # the user prompt so the cacheable system prompt never changes.
+    residue_retry_section = ""
+    if prompt_options.get('source_residue_retry'):
+        residue_retry_section = f"""# IMPORTANT - PREVIOUS ATTEMPT INCOMPLETE
+
+A previous attempt left part of this text in {source_language}. Translate EVERY sentence into {target_language}, including short, repeated or quoted ones. Do not skip, summarize or copy any {source_language} passage.
+
+"""
+
+    user_prompt = f"""{previous_translation_block_text}{glossary_section}{residue_retry_section}# TEXT TO TRANSLATE
 
 {INPUT_TAG_IN}
 {main_content}
@@ -738,6 +748,7 @@ Your job is to REWRITE it with perfect literary {target_language} style.
 - Awkward literal translations → Natural {target_language} expressions
 - Repetitive or dull vocabulary → Rich, varied word choices
 - Unnatural word order → Proper {target_language} syntax
+- **Passages left in another language** → Translate them into {target_language}; the draft must not keep any sentence in its source language
 - **Lexical repetitions and cacophony** → Use synonyms to avoid same-root word repetition
   (e.g., "the singer sang a song" → "the singer performed a song" or "the vocalist sang a melody")
 
@@ -751,8 +762,9 @@ Your job is to REWRITE it with perfect literary {target_language} style.
 
 # CRITICAL REMINDER
 
-You are NOT translating - you are REWRITING in {target_language.upper()}.
-The input is already in {target_language}, but poorly written.
+You are REWRITING in {target_language.upper()}, not translating from scratch.
+The input is meant to be in {target_language}, but poorly written. If a passage
+was left in another language, translate it into {target_language} as part of the rewrite.
 Your output must be polished, literary-quality {target_language}.
 
 **⚠️ PLACEHOLDER PRESERVATION IS ABSOLUTELY CRITICAL:**

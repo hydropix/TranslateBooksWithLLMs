@@ -39,6 +39,8 @@ from .lang_support import apply_target_language_to_xhtml_directory, get_language
 from .attribution_page import add_attribution_page
 from .cjk_typography import apply_script_normalization_to_epub_directory
 from .metadata_translator import translate_opf_metadata
+from .head_title import snapshot_source_title, translate_head_title
+from ..translator import generate_translation_request
 from src.utils.security import safe_extract_zip
 
 
@@ -733,6 +735,7 @@ async def _translate_single_xhtml_file(
     global_completed_chunks: Optional[int] = None,
     parallel_workers: int = 1,
     retry_token_aligned: bool = False,
+    head_title_cache: Optional[Dict[str, str]] = None,
 ) -> Tuple[Optional[etree._Element], bool, Any]:
     """
     Translate a single XHTML file using GenericTranslationOrchestrator.
@@ -785,6 +788,10 @@ async def _translate_single_xhtml_file(
         parser = etree.XMLParser(encoding='utf-8', recover=True, remove_blank_text=False)
         doc_root = etree.fromstring(content.encode('utf-8'), parser)
 
+        # The body pipeline never sees <head><title> (issue #270): note it now,
+        # while the first heading is still in the source language.
+        title_snapshot = snapshot_source_title(doc_root)
+
         # Create adapter and orchestrator
         adapter = EpubTranslationAdapter()
         orchestrator = GenericTranslationOrchestrator(adapter)
@@ -813,6 +820,19 @@ async def _translate_single_xhtml_file(
             global_completed_chunks=global_completed_chunks,
             parallel_workers=parallel_workers,
         )
+
+        interrupted = bool(check_interruption_callback and check_interruption_callback())
+        if success and not interrupted:
+            await translate_head_title(
+                doc_root, title_snapshot,
+                source_language=source_language,
+                target_language=target_language,
+                model_name=model_name,
+                llm_client=llm_client,
+                cache=head_title_cache if head_title_cache is not None else {},
+                translate=generate_translation_request,
+                log_callback=log_callback,
+            )
 
         return doc_root, success, stats
 
@@ -1151,6 +1171,9 @@ async def _process_all_content_files(
     # Start with restored documents
     parsed_xhtml_docs: Dict[str, etree._Element] = restored_docs.copy() if restored_docs else {}
     total_files = len(content_files)
+    # Source title -> translated title, shared by every file of the job so a
+    # title repeated on each page costs a single request (issue #270).
+    head_title_cache: Dict[str, str] = {}
     completed_files = len(parsed_xhtml_docs)
     failed_files = 0
     was_interrupted = False
@@ -1456,6 +1479,7 @@ async def _process_all_content_files(
             global_completed_chunks=completed_chunks_global,
             parallel_workers=parallel_workers,
             retry_token_aligned=retry_token_aligned,
+            head_title_cache=head_title_cache,
         )
 
         # Update global chunk counter. A fully-translated file contributes all

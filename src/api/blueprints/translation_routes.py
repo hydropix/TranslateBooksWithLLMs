@@ -421,9 +421,6 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'parallel_workers': _clamp_parallel_workers(data.get('parallel_workers')),
             'output_filename': data['output_filename'],
             'llm_provider': data.get('llm_provider', 'ollama'),
-            'gemini_api_key': _resolve_api_key(data.get('gemini_api_key'), 'GEMINI_API_KEY'),
-            'openai_api_key': _resolve_api_key(data.get('openai_api_key'), 'OPENAI_API_KEY'),
-            'openrouter_api_key': _resolve_api_key(data.get('openrouter_api_key'), 'OPENROUTER_API_KEY'),
             # Prompt options (optional instructions to include in the system prompt)
             'prompt_options': data.get('prompt_options', {}),
             # Auto-pause on rate limit toggle (request overrides .env default)
@@ -440,6 +437,13 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'tts_enabled': data.get('tts_enabled', False),
             'tts_config': TTSConfig.from_web_request(data).to_dict() if data.get('tts_enabled') else None
         }
+        # Every provider key the frontend may send, resolved the same way
+        # ('__USE_ENV__' or empty falls back to .env). Listing only a subset
+        # here silently dropped keys typed in the UI for the others.
+        for key_provider in _KEY_PROVIDERS:
+            config[f'{key_provider}_api_key'] = _resolve_api_key(
+                data.get(f'{key_provider}_api_key'), _provider_env_var(key_provider)
+            )
 
         if data.get('term_fix') is not None:
             term_fix, term_fix_error = _parse_term_fix_request(data.get('term_fix'))

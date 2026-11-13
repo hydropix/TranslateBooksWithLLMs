@@ -88,6 +88,7 @@ def filter_glossary(
     chunk: str,
     glossary_terms: Dict[str, str],
     config: GlossaryConfig = None,
+    prefix: bool = False,
 ) -> Tuple[Dict[str, str], bool]:
     """
     Return only the glossary entries that appear in the chunk.
@@ -97,6 +98,8 @@ def filter_glossary(
         glossary_terms: {source_term: translated_term}. A source_term may
             declare alternative inflected forms separated by '|'.
         config: GlossaryConfig (max_entries cap, case sensitivity).
+        prefix: also match a non-CJK term followed by more word characters
+            (an inflected ending), e.g. when matching target-language forms.
 
     Returns:
         (filtered_terms, capped) where filtered_terms preserves order
@@ -122,7 +125,7 @@ def filter_glossary(
     candidates: List[Tuple[int, int, int]] = []  # (start, end, entry_index)
     for entry_index, (source, _target) in enumerate(sorted_terms):
         for alt in _split_alternatives(source):
-            for m in re.finditer(term_pattern(alt), chunk, flags):
+            for m in re.finditer(term_pattern(alt, prefix=prefix), chunk, flags):
                 if m.end() > m.start():
                     candidates.append((m.start(), m.end(), entry_index))
 

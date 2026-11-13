@@ -104,6 +104,60 @@ def build_glossary_block(
     return "\n".join(lines) + "\n"
 
 
+def build_refinement_glossary_block(
+    filtered_terms: Dict[str, str],
+    target_language: str = "",
+    term_metadata: Optional[Dict[str, Dict[str, str]]] = None,
+) -> str:
+    """
+    Render the glossary block for the refinement pass. Empty string if no terms.
+
+    The refinement input is the target-language draft, so the terms were
+    matched on their target forms, and the instruction is to keep those
+    renderings rather than to translate a source term.
+
+    Args:
+        filtered_terms: {source: target} of the terms whose target form
+            appears in the draft.
+        target_language: selects the inflection instruction, as in
+            ``build_glossary_block``.
+        term_metadata: optional {source: {category, gender}} hints.
+    """
+    if not filtered_terms:
+        return ""
+
+    metadata = term_metadata or {}
+
+    lines = [
+        "# GLOSSARY - KEEP THESE EXACT FORMS",
+        "",
+        "MANDATORY: the draft uses the required glossary renderings listed below "
+        "(source term -> required rendering). Keep these exact forms while refining.",
+        "Do NOT replace them with a synonym, a different transliteration, or a "
+        "more familiar variant.",
+        *([TARGET_INFLECTION_INSTRUCTION.format(target_language=target_language)]
+          if target_language_is_inflected(target_language) else []),
+        "Bracketed hints after a rendering (e.g. [character, female]) describe the entity "
+        "type and, where known, its gender — never part of the text.",
+        "",
+    ]
+
+    for source, target in filtered_terms.items():
+        meta = metadata.get(source) or {}
+        category = (meta.get("category") or "").strip()
+        gender = normalize_gender(meta.get("gender"))
+        display_source = ", ".join(
+            a.strip() for a in source.split("|") if a.strip()
+        ) or source
+        hints = [h for h in (category, gender) if h]
+        if hints:
+            lines.append(f"  - {display_source} -> {target}  [{', '.join(hints)}]")
+        else:
+            lines.append(f"  - {display_source} -> {target}")
+
+    return "\n".join(lines) + "\n"
+
+
 def build_cast_block(
     glossary_terms: Dict[str, str],
     term_metadata: Optional[Dict[str, Dict[str, str]]] = None,

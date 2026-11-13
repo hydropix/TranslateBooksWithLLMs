@@ -97,7 +97,7 @@ export const LifecycleManager = {
 
             } catch (error) {
                 MessageLogger.showMessage(
-                    t('common:server_unavailable', { url: ApiClient.API_BASE_URL, error: error.message }),
+                    t('common:server_unavailable', { url: ApiClient.getBaseUrl(), error: error.message }),
                     'error'
                 );
                 MessageLogger.addLog(t('common:server_connect_failed_log', { error: error.message }));
@@ -196,20 +196,20 @@ export const LifecycleManager = {
             const currentJob = StateManager.getState('translation.currentJob');
 
             if (isBatchActive && currentJob && currentJob.translationId) {
-                const interruptUrl = `${ApiClient.API_BASE_URL}/api/translation/${currentJob.translationId}/interrupt`;
-
-                if (navigator.sendBeacon) {
-                    const blob = new Blob(['{}'], { type: 'application/json' });
-                    navigator.sendBeacon(interruptUrl, blob);
-                } else {
-                    try {
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('POST', interruptUrl, false);
-                        xhr.setRequestHeader('Content-Type', 'application/json');
-                        xhr.send('{}');
-                    } catch (error) {
-                        console.error('Error interrupting translation on page close:', error);
-                    }
+                // sendBeacon cannot carry the X-API-Token header the server
+                // requires, so use a keepalive fetch: it survives page unload
+                // and goes through the globally patched fetch that adds the
+                // token header.
+                const interruptUrl = `${ApiClient.getBaseUrl()}/api/translation/${encodeURIComponent(currentJob.translationId)}/interrupt`;
+                try {
+                    fetch(interruptUrl, {
+                        method: 'POST',
+                        keepalive: true,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}'
+                    }).catch(() => { /* page is going away; nothing to report */ });
+                } catch (error) {
+                    console.error('Error interrupting translation on page close:', error);
                 }
             }
         });
@@ -248,7 +248,7 @@ export const LifecycleManager = {
                 });
             }
         } catch (error) {
-            if (error.message && error.message.includes('404')) {
+            if (error.status === 404) {
                 MessageLogger.addLog(t('common:translation_job_missing'));
                 this._desyncHandlers?.onJobMissing();
             } else {

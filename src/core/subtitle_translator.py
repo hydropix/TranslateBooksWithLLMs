@@ -144,6 +144,7 @@ async def refine_subtitle_translations(
         glossary_block = _build_chunk_glossary_block(
             block_text_for_glossary, prompt_options, log_callback=log_callback,
             runtime_state=runtime_state, target_language=target_language,
+            match_target_forms=True,
         )
 
         block_refined: Dict[int, str] = {}

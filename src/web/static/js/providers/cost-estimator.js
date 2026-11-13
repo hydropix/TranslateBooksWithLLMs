@@ -11,6 +11,7 @@
  * (overrides persist in localStorage).
  */
 
+import { ModalStack } from '../ui/modal-stack.js';
 import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { StateManager } from '../core/state-manager.js';
@@ -515,7 +516,12 @@ export const CostEstimator = {
         `;
         document.body.appendChild(modal);
 
-        const close = () => modal.remove();
+        let releaseEscape = null;
+        const close = () => {
+            modal.remove();
+            if (releaseEscape) releaseEscape();
+        };
+        releaseEscape = ModalStack.push(close);
 
         modal.addEventListener('click', (event) => {
             if (event.target === modal) close();
@@ -543,13 +549,5 @@ export const CostEstimator = {
                 this.refresh();
             }
         });
-
-        const onEsc = (e) => {
-            if (e.key === 'Escape') {
-                close();
-                document.removeEventListener('keydown', onEsc);
-            }
-        };
-        document.addEventListener('keydown', onEsc);
     },
 };

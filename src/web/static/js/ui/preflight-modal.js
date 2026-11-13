@@ -13,6 +13,7 @@
  * add a click to a run that has nothing to be told.
  */
 
+import { ModalStack } from './modal-stack.js';
 import { DomHelpers } from './dom-helpers.js';
 import { StateManager } from '../core/state-manager.js';
 import { t } from '../i18n/i18n.js';
@@ -27,6 +28,9 @@ let visibleRules = new Map();
 // open; every closing path settles it exactly once, so a caller awaiting the
 // answer can never be left hanging.
 let pendingResolve = null;
+
+// Release callback from ModalStack while the dialog is open (Escape abandons).
+let releaseEscape = null;
 
 function isOpen() {
     const modal = DomHelpers.getElement('preflightModal');
@@ -91,6 +95,7 @@ function renderList(rules) {
 function openDialog(rules) {
     renderList(rules);
     DomHelpers.show('preflightModal');
+    if (!releaseEscape) releaseEscape = ModalStack.push(abandon);
     // Land on the confirm button: the user already asked to start, so Enter
     // should mean "launch as is" rather than re-trigger the first suggestion.
     DomHelpers.getElement('preflightModalLaunch')?.focus();
@@ -98,6 +103,10 @@ function openDialog(rules) {
 
 function closeDialog() {
     DomHelpers.hide('preflightModal');
+    if (releaseEscape) {
+        releaseEscape();
+        releaseEscape = null;
+    }
     visibleRules = new Map();
     // Hand focus back to the button that opened the dialog so keyboard users are
     // not dropped at the top of the document. Callers that navigate elsewhere
@@ -170,19 +179,11 @@ function handleClick(event) {
     }
 }
 
-// Guarded on the open state so this listener cannot swallow Escape for the other
-// overlays, which use the same document-level convention.
-function handleKeydown(event) {
-    if (event.key !== 'Escape' || !isOpen()) return;
-    abandon();
-}
-
 export const PreflightModal = {
     /** Wire the dialog. Called from index.js right after PreflightZone.initialize(). */
     initialize() {
         const modal = DomHelpers.getElement('preflightModal');
         if (modal) modal.addEventListener('click', handleClick);
-        document.addEventListener('keydown', handleKeydown);
 
         // Only while open: the rows are JS-owned text with no data-i18n
         // attribute, so applyToDOM() cannot re-translate them.

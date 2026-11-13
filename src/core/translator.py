@@ -213,11 +213,45 @@ def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple
         target_ratio: Target position for split (0.5 = middle)
 
     Returns:
-        Tuple of (first_half, second_half)
+        Tuple of (first_half, second_half), both stripped. Use
+        split_chunk_preserving_separator to also get the whitespace between them.
     """
-    if not main_content.strip():
-        return main_content, ""
+    first, _, second = split_chunk_preserving_separator(main_content, target_ratio)
+    return first, second
 
+
+def split_chunk_preserving_separator(
+    main_content: str, target_ratio: float = 0.5
+) -> Tuple[str, str, str]:
+    """
+    Split a chunk in two for a context-overflow retry, keeping the separator.
+
+    Returns (first, separator, second) with first + separator + second equal
+    to main_content minus its outer whitespace, so the two translations can be
+    joined back with the original separator (a space inside a paragraph, a
+    blank line between paragraphs) instead of reflowing the text. Whenever the
+    content holds more than one character of text, both parts are non-empty.
+    """
+    content = main_content.strip()
+    if not content:
+        return content, "", ""
+    pos = _split_position(content, target_ratio)
+    # A split at either edge would leave one side empty and lose nothing only
+    # by luck; force a real split so the overflow loop always makes progress.
+    if pos <= 0 or pos >= len(content):
+        pos = max(1, min(len(content) - 1, len(content) // 2))
+    first = content[:pos].rstrip()
+    second = content[pos:].lstrip()
+    if not first or not second:
+        # Whitespace on one side only: split in the middle of the text instead.
+        mid = max(1, len(content) // 2)
+        first, second = content[:mid].rstrip(), content[mid:].lstrip()
+    separator = content[len(first):len(content) - len(second)]
+    return first, separator, second
+
+
+def _split_position(main_content: str, target_ratio: float) -> int:
+    """Index in main_content where split_chunk_preserving_separator cuts."""
     lines = main_content.split('\n')
     if len(lines) <= 1:
         # For single line, split at sentence boundary or middle
@@ -237,7 +271,7 @@ def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple
                 if abs(actual_pos - target_pos) < abs(best_split - target_pos):
                     best_split = actual_pos
 
-        return main_content[:best_split].strip(), main_content[best_split:].strip()
+        return best_split
 
     # For multi-line content, split at line boundaries
     target_line = int(len(lines) * target_ratio)
@@ -250,13 +284,21 @@ def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple
             best_line = i + 1
             break
 
-    first_half = '\n'.join(lines[:best_line])
-    second_half = '\n'.join(lines[best_line:])
+    # Never cut before the first or after the last non-empty line.
+    non_empty = [k for k, line in enumerate(lines) if line.strip()]
+    if len(non_empty) >= 2:
+        best_line = max(non_empty[0] + 1, min(best_line, non_empty[-1]))
+    return len('\n'.join(lines[:best_line]))
 
-    return first_half.strip(), second_half.strip()
 
 
 
+
+def _join_split_translations(parts: List[Tuple[str, str]]) -> Optional[str]:
+    """Join (separator_before, translation) pieces back into one text."""
+    if not parts:
+        return None
+    return parts[0][1] + "".join(sep + text for sep, text in parts[1:])
 
 
 async def _make_llm_request_with_adaptive_context(
@@ -305,8 +347,12 @@ async def _make_llm_request_with_adaptive_context(
         Tuple of (translated_text or None, actual_content_translated, LLMResponse)
     """
     current_content = main_content
-    remaining_content = ""
-    all_translations = []
+    # Pieces still to translate after a context-overflow split, each with the
+    # source whitespace that separated it from the piece before it.
+    remaining: List[Tuple[str, str]] = []
+    current_sep = ""
+    # (separator_before, translation) per translated piece.
+    all_translations: List[Tuple[str, str]] = []
     reduction_attempt = 0
     last_response: Optional[LLMResponse] = None
     used_raw_fallback = False
@@ -435,7 +481,7 @@ async def _make_llm_request_with_adaptive_context(
             translated_text = client.extract_translation(full_raw_response)
 
             if translated_text:
-                all_translations.append(translated_text)
+                all_translations.append((current_sep, translated_text))
             else:
                 # Extraction failed - tags not found or malformed
                 if log_callback:
@@ -486,7 +532,7 @@ async def _make_llm_request_with_adaptive_context(
                         log_callback("using_raw_response_fallback",
                             "⚠️ Translation tags missing: using the raw response as the "
                             "translation (plain text mode)")
-                    all_translations.append(candidate)
+                    all_translations.append((current_sep, candidate))
                     used_raw_fallback = True
                 else:
                     # Response contains input - this is an error
@@ -496,19 +542,17 @@ async def _make_llm_request_with_adaptive_context(
                     return None, main_content, last_response
 
             # If we had remaining content from a previous split, translate it
-            if remaining_content.strip():
-                current_content = remaining_content
-                remaining_content = ""
+            if remaining:
+                current_sep, current_content = remaining.pop(0)
                 # Update context for continuity
                 if all_translations:
-                    words = all_translations[-1].split()
-                    previous_translation_context = " ".join(words[-25:]) if len(words) > 25 else all_translations[-1]
+                    words = all_translations[-1][1].split()
+                    previous_translation_context = " ".join(words[-25:]) if len(words) > 25 else all_translations[-1][1]
                 reduction_attempt = 0  # Reset for new content
                 continue
 
             # Success - combine all translations
-            combined = "\n".join(all_translations) if all_translations else None
-            return _finish(combined)
+            return _finish(_join_split_translations(all_translations))
 
         except RepetitionLoopError as e:
             # Repetition loop detected - this typically happens with thinking models
@@ -567,9 +611,10 @@ async def _make_llm_request_with_adaptive_context(
                 tqdm.write(f"\n⚠️ Context overflow - reducing chunk (attempt {reduction_attempt})")
 
             # Split the content
-            first_part, second_part = split_chunk_for_retry(current_content, reduction_factor)
+            first_part, separator, second_part = split_chunk_preserving_separator(
+                current_content, reduction_factor)
 
-            if len(first_part) < MIN_CHUNK_CHARACTERS and not all_translations:
+            if not first_part or (len(first_part) < MIN_CHUNK_CHARACTERS and not all_translations):
                 # Can't reduce further without losing too much content
                 if log_callback:
                     log_callback("context_overflow_fatal",
@@ -577,12 +622,14 @@ async def _make_llm_request_with_adaptive_context(
                 return None, main_content, last_response
 
             current_content = first_part
-            # Accumulate remaining content for later
-            if second_part.strip():
-                remaining_content = second_part + ("\n" + remaining_content if remaining_content else "")
+            # The second part goes first in the queue: it precedes every piece
+            # already waiting there. Its separator travels with it, so the
+            # translations are joined back exactly as the source was.
+            if second_part:
+                remaining.insert(0, (separator, second_part))
 
     # Shouldn't reach here normally
-    return _finish("\n".join(all_translations) if all_translations else None)
+    return _finish(_join_split_translations(all_translations))
 
 
 # Legacy wrapper for backward compatibility

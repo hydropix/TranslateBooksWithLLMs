@@ -12,8 +12,46 @@ import { DomHelpers } from '../ui/dom-helpers.js';
 import { StatusManager } from '../utils/status-manager.js';
 import { QuickTestManager } from '../translation/quick-test.js';
 import { t } from '../i18n/i18n.js';
+import { getFileIcon, createCompactEPUBIcon } from './file-icons.js';
 
 const FILE_QUEUE_STORAGE_KEY = 'tbl_file_queue';
+
+/**
+ * Internal file-queue statuses (written by batch-controller.js and
+ * translation-tracker.js, persisted in localStorage) mapped to their locale
+ * keys. Keyed by the lower-cased status so the lower-case server statuses
+ * that `finishCurrentFileTranslation` stores on the file object map too.
+ */
+const FILE_STATUS_KEYS = {
+    'queued': 'translation:file_status_queued',
+    'preparing...': 'translation:file_status_preparing',
+    'submitted': 'translation:file_status_submitted',
+    'processing': 'translation:file_status_processing',
+    'running': 'translation:file_status_processing',
+    'completed': 'translation:file_status_completed',
+    'partial': 'translation:file_status_partial',
+    'interrupted': 'translation:file_status_interrupted',
+    'rate limited': 'translation:file_status_rate_limited',
+    'rate_limited': 'translation:file_status_rate_limited',
+    'error': 'translation:file_status_error',
+    'unknown_error': 'translation:file_status_error',
+    'error: missing api key': 'translation:file_status_missing_api_key',
+    'path error': 'translation:file_status_path_error',
+    'initiation error': 'translation:file_status_initiation_error',
+};
+
+/**
+ * Localized label for an internal file-queue status. Must be called at render
+ * time (never cached) so the label follows the current UI language. An
+ * unknown status is shown as-is rather than hidden.
+ * @param {string} status - Internal status ('Queued', 'Processing', ...)
+ * @returns {string} Localized label
+ */
+export function getFileStatusLabel(status) {
+    if (status === null || status === undefined) return '';
+    const key = FILE_STATUS_KEYS[String(status).trim().toLowerCase()];
+    return key ? t(key) : String(status);
+}
 
 // Track the last uploaded file for language synchronization
 let lastUploadedFileName = null;
@@ -1019,13 +1057,13 @@ export const FileUpload = {
 
                     // Fallback to generic SVG on error
                     img.onerror = () => {
-                        iconContainer.innerHTML = this._createGenericEPUBIcon();
+                        iconContainer.innerHTML = createCompactEPUBIcon();
                     };
 
                     iconContainer.appendChild(img);
                 } else {
                     // Generic icons
-                    iconContainer.innerHTML = this._getFileIcon(file.fileType);
+                    iconContainer.innerHTML = getFileIcon(file.fileType, { compact: true });
                 }
 
                 header.appendChild(iconContainer);
@@ -1058,7 +1096,7 @@ export const FileUpload = {
 
                 const statusSpan = document.createElement('span');
                 statusSpan.className = 'file-status';
-                statusSpan.textContent = `(${file.status})`;
+                statusSpan.textContent = `(${getFileStatusLabel(file.status)})`;
 
                 infoSpan.appendChild(statusSpan);
 
@@ -1346,42 +1384,5 @@ export const FileUpload = {
         StateManager.setState('files.toProcess', []);
         lastUploadedFileName = null;
         this.notifyFileListChanged();
-    },
-
-    /**
-     * Get file icon based on file type
-     * @param {string} fileType - File type ('txt', 'epub', 'srt')
-     * @returns {string} HTML string for icon
-     */
-    _getFileIcon(fileType) {
-        if (fileType === 'epub') {
-            return this._createGenericEPUBIcon();
-        } else if (fileType === 'srt') {
-            return '🎬';
-        }
-        return '📄';
-    },
-
-    /**
-     * Create generic EPUB icon as SVG
-     * @returns {string} SVG HTML string
-     */
-    _createGenericEPUBIcon() {
-        return `
-            <svg class="generic-epub-icon" viewBox="0 0 48 64" xmlns="http://www.w3.org/2000/svg">
-                <!-- Book cover -->
-                <rect x="8" y="4" width="32" height="56" rx="2"
-                      fill="#5a8ee8" stroke="#3676d8" stroke-width="2"/>
-                <!-- Book spine line -->
-                <path d="M8 12 L40 12" stroke="#3676d8" stroke-width="1.5"/>
-                <!-- Text lines -->
-                <path d="M12 20 L36 20 M12 28 L36 28 M12 36 L30 36"
-                      stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
-                <!-- EPUB badge -->
-                <circle cx="24" cy="48" r="4" fill="white" opacity="0.9"/>
-                <text x="24" y="51" text-anchor="middle" font-size="5"
-                      fill="#3676d8" font-weight="bold">E</text>
-            </svg>
-        `;
     }
 };

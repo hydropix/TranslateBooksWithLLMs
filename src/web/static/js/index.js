@@ -325,7 +325,16 @@ function wireModuleEvents() {
     });
 
     // WebSocket events -> module handlers
+    let hasConnectedOnce = false;
     WebSocketManager.on('connect', () => {
+        // After a RE-connect, pushes sent while the socket was down are lost:
+        // pull the current job's status so progress is not stale until the
+        // next update arrives.
+        if (hasConnectedOnce) {
+            TranslationTracker.resyncCurrentJob();
+        }
+        hasConnectedOnce = true;
+
         // Only refresh models if we don't have any loaded yet
         const hasModels = StateManager.getState('models.availableModels')?.length > 0;
         if (!hasModels) {

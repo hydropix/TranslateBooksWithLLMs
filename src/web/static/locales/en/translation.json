@@ -298,5 +298,17 @@
   "quicktest_error_no_model": "No model selected. Pick a provider and model first.",
   "quicktest_error_no_target": "Set a target language for this file before testing.",
   "quicktest_error_empty": "This file is too small to sample.",
-  "quicktest_error_run": "Quick test failed: {{error}}"
+  "quicktest_error_run": "Quick test failed: {{error}}",
+  "file_status_queued": "Queued",
+  "file_status_preparing": "Preparing...",
+  "file_status_submitted": "Submitted",
+  "file_status_processing": "Processing",
+  "file_status_completed": "Completed",
+  "file_status_partial": "Partial",
+  "file_status_interrupted": "Interrupted",
+  "file_status_rate_limited": "Rate limited",
+  "file_status_error": "Error",
+  "file_status_missing_api_key": "Error: missing API key",
+  "file_status_path_error": "Path error",
+  "file_status_initiation_error": "Failed to start"
 }

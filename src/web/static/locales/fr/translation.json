@@ -298,5 +298,17 @@
   "quicktest_error_no_model": "Aucun modèle sélectionné. Choisis d'abord un fournisseur et un modèle.",
   "quicktest_error_no_target": "Définis une langue cible pour ce fichier avant de tester.",
   "quicktest_error_empty": "Ce fichier est trop petit pour être échantillonné.",
-  "quicktest_error_run": "Échec du test rapide : {{error}}"
+  "quicktest_error_run": "Échec du test rapide : {{error}}",
+  "file_status_queued": "En attente",
+  "file_status_preparing": "Préparation...",
+  "file_status_submitted": "Envoyé",
+  "file_status_processing": "En cours",
+  "file_status_completed": "Terminé",
+  "file_status_partial": "Partiel",
+  "file_status_interrupted": "Interrompu",
+  "file_status_rate_limited": "Limite de débit atteinte",
+  "file_status_error": "Erreur",
+  "file_status_missing_api_key": "Erreur : clé API manquante",
+  "file_status_path_error": "Erreur de chemin",
+  "file_status_initiation_error": "Échec du démarrage"
 }

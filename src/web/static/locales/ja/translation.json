@@ -298,5 +298,17 @@
   "quicktest_error_no_model": "モデルが選択されていません。先にプロバイダーとモデルを選択してください。",
   "quicktest_error_no_target": "テストの前にこのファイルの対象言語を設定してください。",
   "quicktest_error_empty": "このファイルは小さすぎてサンプリングできません。",
-  "quicktest_error_run": "クイックテストに失敗しました：{{error}}"
+  "quicktest_error_run": "クイックテストに失敗しました：{{error}}",
+  "file_status_queued": "待機中",
+  "file_status_preparing": "準備中...",
+  "file_status_submitted": "送信済み",
+  "file_status_processing": "処理中",
+  "file_status_completed": "完了",
+  "file_status_partial": "一部完了",
+  "file_status_interrupted": "中断",
+  "file_status_rate_limited": "レート制限中",
+  "file_status_error": "エラー",
+  "file_status_missing_api_key": "エラー: APIキーがありません",
+  "file_status_path_error": "パスエラー",
+  "file_status_initiation_error": "開始に失敗しました"
 }

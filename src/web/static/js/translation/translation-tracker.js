@@ -10,10 +10,11 @@ import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { StatusManager } from '../utils/status-manager.js';
-import { FileUpload } from '../files/file-upload.js';
+import { FileUpload, getFileStatusLabel } from '../files/file-upload.js';
 import { FileActions } from '../files/file-actions.js';
 import { ProgressManager, formatElapsedTime, deriveRateContext, buildRecommendationContent } from './progress-manager.js';
-import { renderTranslationTitle, getFileIcon, createGenericEPUBIcon } from './progress-title.js';
+import { renderTranslationTitle } from './progress-title.js';
+import { getFileIcon, createGenericEPUBIcon } from '../files/file-icons.js';
 import { LifecycleManager } from '../utils/lifecycle-manager.js';
 import { t } from '../i18n/i18n.js';
 import {
@@ -31,11 +32,25 @@ const TRANSLATION_STATE_STORAGE_KEY = `${STORAGE_KEY_PREFIX}_v${STORAGE_VERSION}
 
 // Statuses that end a job server-side. Only these can reset the UI to idle.
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'error', 'interrupted', 'rate_limited']);
+// Statuses of a job that is still being worked on server-side.
+const ACTIVE_STATUSES = new Set(['running', 'queued']);
 const MAX_OWNED_JOB_IDS = 50;
 
 // Debounce timer for discovering a job started on another device (issue #271).
 let foreignDiscoveryTimer = null;
 const FOREIGN_DISCOVERY_DELAY_MS = 1000;
+
+/**
+ * Last segment of a path, split on both `/` and `\` so a Windows path
+ * matches as well as a POSIX one.
+ * @param {string|null|undefined} path
+ * @returns {string} Basename, or '' when there is no path
+ */
+function basenameOf(path) {
+    if (typeof path !== 'string' || !path) return '';
+    const parts = path.split(/[\\/]/);
+    return parts[parts.length - 1] || '';
+}
 
 /**
  * Validate translation state structure
@@ -278,14 +293,11 @@ export const TranslationTracker = {
                 try {
                     const serverState = await ApiClient.getTranslationStatus(currentJob.translationId);
 
-                    if (serverState.status === 'completed' ||
-                        serverState.status === 'error' ||
-                        serverState.status === 'interrupted' ||
-                        serverState.status === 'rate_limited') {
+                    if (TERMINAL_STATUSES.has(serverState.status)) {
 
                         MessageLogger.addLog(t('translation:session_sync_log', { status: serverState.status }));
                         this.resetUIToIdle();
-                    } else if (serverState.status === 'running' || serverState.status === 'queued') {
+                    } else if (ACTIVE_STATUSES.has(serverState.status)) {
                         // Calculate progress from stats if available
                         if (serverState.stats) {
                             this.updateStats(currentJob.fileRef.fileType, serverState.stats);
@@ -410,84 +422,228 @@ export const TranslationTracker = {
     },
 
     /**
-     * Restore active translation state if there's one running on the server
+     * Build the stats payload ProgressManager expects from a record of
+     * `/api/translations` (a job summary, not a full stats object).
+     * @param {Object} job - Active-job record from ApiClient.getActiveTranslations()
+     * @returns {Object|null} Stats object, or null when the job has not
+     *   reported a chunk total yet (nothing meaningful to display).
+     */
+    _buildStatsFromActiveJob(job) {
+        if (!job || !(job.total_chunks > 0)) return null;
+        return {
+            total_chunks: job.total_chunks,
+            completed_chunks: job.completed_chunks || 0,
+            failed_chunks: job.failed_chunks || 0,
+            elapsed_time: job.elapsed_time,
+            progress_percent: job.progress_percent,
+            current_phase: job.current_phase,
+            enable_refinement: job.enable_refinement || false
+        };
+    },
+
+    /**
+     * Push an active-job record into the progress panel: stats (when the job
+     * has a chunk total) and the last translated segment preview.
+     * @param {string} fileType - File type of the job ('txt', 'epub', ...)
+     * @param {Object} job - Active-job record from ApiClient.getActiveTranslations()
+     */
+    _applyActiveJobSnapshot(fileType, job) {
+        const stats = this._buildStatsFromActiveJob(job);
+        if (stats) {
+            this.updateStats(fileType, stats);
+        }
+        if (job.last_translation) {
+            MessageLogger.updateTranslationPreview(job.last_translation);
+        }
+    },
+
+    /**
+     * Restore active translation state if there's one running on the server.
+     *
+     * Only ONE job is restored, on purpose. BatchController runs a batch
+     * strictly one job at a time through the single `translation.currentJob`
+     * slot, so at most one active job belongs to this tab's batch; any other
+     * active job was started elsewhere (another tab or device). The rest of
+     * the batch needs no restoring here: the files still waiting are persisted
+     * by FileUpload as 'Queued' entries of `files.toProcess`, and when the
+     * restored job reports a terminal status, finishCurrentFileTranslation
+     * dispatches `processNextFile`, which makes BatchController pick the next
+     * 'Queued' file.
+     *
+     * Limitation: closing or reloading the page interrupts the running job
+     * (LifecycleManager pagehide handler), so after a reload the restored job
+     * usually ends 'interrupted', which stops the batch by design and leaves
+     * the remaining files queued until the user restarts it. A job that
+     * already finished while the page was closed is not followed by the next
+     * file either (reconcileStateWithServer resets to idle), so a new job is
+     * never started on page load without a user action.
      */
     async restoreActiveTranslation() {
         try {
             const response = await ApiClient.getActiveTranslations();
             const activeJobs = (response.translations || []).filter(
-                t => t.status === 'running' || t.status === 'queued'
+                job => ACTIVE_STATUSES.has(job.status)
             );
 
             if (activeJobs.length === 0) return;
 
-            // Find matching file in our queue
             const filesToProcess = StateManager.getState('files.toProcess') || [];
+            const persistedJob = StateManager.getState('translation.currentJob');
 
-            for (const job of activeJobs) {
-                let matchingFile = filesToProcess.find(f =>
-                    f.translationId === job.translation_id ||
-                    f.filePath === job.input_file ||
-                    f.name === job.input_file?.split('/').pop()
-                );
+            // Prefer the job this tab persisted, then any job it owns, and only
+            // then the server's order (most recent first). Without this, a job
+            // started on another device could be restored in place of ours.
+            const rank = (job) => {
+                if (persistedJob && job.translation_id === persistedJob.translationId) return 0;
+                if (this.ownsJob(job.translation_id)) return 1;
+                return 2;
+            };
+            const candidates = [...activeJobs].sort((a, b) => rank(a) - rank(b));
+
+            for (const job of candidates) {
+                // `input_filename` is what /api/translations returns (a display
+                // basename); `input_file` is kept for older payloads. Either
+                // may carry a Windows path, hence basenameOf.
+                const jobFileName = basenameOf(job.input_filename || job.input_file);
+
+                let matchingFile = filesToProcess.find(f => f.translationId === job.translation_id);
+                let inQueue = !!matchingFile;
+
+                // The submitted file is removed from files.toProcess, so the
+                // persisted fileRef (thumbnail, languages, operation) is usually
+                // the best description of the job this tab was running.
+                if (!matchingFile && persistedJob?.fileRef
+                    && persistedJob.translationId === job.translation_id) {
+                    matchingFile = persistedJob.fileRef;
+                }
+
+                if (!matchingFile && jobFileName) {
+                    matchingFile = filesToProcess.find(f =>
+                        (job.input_file && f.filePath === job.input_file) ||
+                        f.name === jobFileName
+                    );
+                    inQueue = !!matchingFile;
+                }
 
                 // If no matching file found, create a virtual file reference from server data
                 // This allows restoration after browser refresh even if filesToProcess is empty
                 if (!matchingFile && job.input_filename) {
+                    const fileType = job.file_type || 'txt';
                     matchingFile = {
-                        name: job.input_filename,
+                        name: jobFileName || job.input_filename,
                         translationId: job.translation_id,
                         status: 'Processing',
-                        type: job.file_type || 'txt',
+                        // `fileType` is what every renderer reads; `type` is
+                        // kept for backward compatibility.
+                        fileType,
+                        type: fileType,
                         isVirtual: true
                     };
                 }
 
-                if (matchingFile) {
-                    StateManager.setState('translation.currentJob', {
-                        fileRef: matchingFile,
-                        translationId: job.translation_id
-                    });
-                    this.registerOwnedJob(job.translation_id);
-                    StateManager.setState('translation.isBatchActive', true);
+                if (!matchingFile) continue;
 
-                    DomHelpers.show('progressSection');
-                    this.updateTranslationTitle(matchingFile);
+                StateManager.setState('translation.currentJob', {
+                    fileRef: matchingFile,
+                    translationId: job.translation_id
+                });
+                this.registerOwnedJob(job.translation_id);
+                StateManager.setState('translation.isBatchActive', true);
 
-                    // Calculate progress from stats (job contains total_chunks, completed_chunks, etc.)
-                    if (job.total_chunks > 0) {
-                        const stats = {
-                            total_chunks: job.total_chunks,
-                            completed_chunks: job.completed_chunks || 0,
-                            failed_chunks: job.failed_chunks || 0,
-                            elapsed_time: job.elapsed_time,
-                            progress_percent: job.progress_percent,
-                            current_phase: job.current_phase,
-                            enable_refinement: job.enable_refinement || false
-                        };
-                        this.updateStats(matchingFile.fileType, stats);
-                    }
+                DomHelpers.show('progressSection');
+                this.updateTranslationTitle(matchingFile);
 
-                    if (job.last_translation) {
-                        MessageLogger.updateTranslationPreview(job.last_translation);
-                    }
+                this._applyActiveJobSnapshot(matchingFile.fileType, job);
 
-                    const translateBtn = DomHelpers.getElement('translateBtn');
-                    if (translateBtn) {
-                        translateBtn.disabled = true;
-                        translateBtn.innerHTML = t('translation:batch_in_progress');
-                    }
-                    DomHelpers.show('interruptBtn');
-
-                    if (!matchingFile.isVirtual) {
-                        this.updateFileStatusInList(matchingFile.name, 'Processing', job.translation_id);
-                    }
-
-                    break;
+                const translateBtn = DomHelpers.getElement('translateBtn');
+                if (translateBtn) {
+                    translateBtn.disabled = true;
+                    translateBtn.innerHTML = t('translation:batch_in_progress');
                 }
+                DomHelpers.show('interruptBtn');
+
+                if (inQueue && !matchingFile.isVirtual) {
+                    this.updateFileStatusInList(matchingFile.name, 'Processing', job.translation_id);
+                }
+
+                // One job only: see the method comment.
+                return;
             }
         } catch (error) {
             console.warn('Failed to restore active translation:', error);
+        }
+    },
+
+    /**
+     * Re-synchronize the current job with the server after a WebSocket
+     * reconnect, since any update emitted while the socket was down is lost.
+     *
+     * - Still running/queued: refresh the stats and preview from the active
+     *   list, exactly as restoreActiveTranslation does.
+     * - Gone from the active list: read its final status and, if terminal,
+     *   replay it through handleTranslationUpdate (completion card, queue
+     *   advance, ...).
+     * - Unknown to the server (404): reset the UI to idle.
+     *
+     * Never throws.
+     */
+    async resyncCurrentJob() {
+        try {
+            const currentJob = StateManager.getState('translation.currentJob');
+            const translationId = currentJob?.translationId;
+            if (!translationId) return;
+
+            // The awaits below can race a live update (or the user) changing
+            // the current job; only act if it is still the same one.
+            const isStillCurrent = () =>
+                StateManager.getState('translation.currentJob')?.translationId === translationId;
+
+            let activeRecord = null;
+            try {
+                const response = await ApiClient.getActiveTranslations();
+                activeRecord = (response.translations || [])
+                    .find(job => job.translation_id === translationId) || null;
+            } catch (error) {
+                console.warn('Resync: failed to list active translations:', error);
+            }
+
+            if (!isStillCurrent()) return;
+
+            if (activeRecord && ACTIVE_STATUSES.has(activeRecord.status)) {
+                this._applyActiveJobSnapshot(currentJob.fileRef?.fileType, activeRecord);
+                return;
+            }
+
+            let data;
+            try {
+                data = await ApiClient.getTranslationStatus(translationId);
+            } catch (error) {
+                if (error?.status === 404) {
+                    if (isStillCurrent()) this.resetUIToIdle();
+                } else {
+                    console.warn('Resync: failed to read translation status:', error);
+                }
+                return;
+            }
+
+            if (!data || !isStillCurrent()) return;
+
+            const status = data.status;
+            if (TERMINAL_STATUSES.has(status)) {
+                this.handleTranslationUpdate({
+                    translation_id: translationId,
+                    status,
+                    result: data.result_preview || `[${status}]`,
+                    error: data.error,
+                    stats: data.stats
+                });
+            } else if (ACTIVE_STATUSES.has(status) && data.stats) {
+                // Listed as inactive a moment ago but running now (or the
+                // list call failed): still refresh the counters we have.
+                this.updateStats(currentJob.fileRef?.fileType, data.stats);
+            }
+        } catch (error) {
+            console.warn('Failed to resync current job:', error);
         }
     },
 
@@ -691,13 +847,13 @@ export const TranslationTracker = {
      * @param {string} [translationId] - Translation ID
      */
     updateFileStatusInList(fileName, newStatus, translationId = null) {
-        const fileListItem = DomHelpers.getOne(`#fileListContainer li[data-filename="${fileName}"] .file-status`);
+        const fileListItem = DomHelpers.getOne(`#fileListContainer li[data-filename="${CSS.escape(fileName)}"] .file-status`);
         if (fileListItem) {
-            DomHelpers.setText(fileListItem, `(${newStatus})`);
+            DomHelpers.setText(fileListItem, `(${getFileStatusLabel(newStatus)})`);
         }
 
         // Update in state
-        const filesToProcess = StateManager.getState('files.toProcess');
+        const filesToProcess = StateManager.getState('files.toProcess') || [];
         const fileObj = filesToProcess.find(f => f.name === fileName);
         if (fileObj) {
             fileObj.status = newStatus;

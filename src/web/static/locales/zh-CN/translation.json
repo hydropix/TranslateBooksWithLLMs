@@ -298,5 +298,17 @@
   "quicktest_error_no_model": "未选择模型。请先选择提供方和模型。",
   "quicktest_error_no_target": "测试前请为此文件设置目标语言。",
   "quicktest_error_empty": "此文件太小，无法采样。",
-  "quicktest_error_run": "快速测试失败：{{error}}"
+  "quicktest_error_run": "快速测试失败：{{error}}",
+  "file_status_queued": "排队中",
+  "file_status_preparing": "准备中...",
+  "file_status_submitted": "已提交",
+  "file_status_processing": "处理中",
+  "file_status_completed": "已完成",
+  "file_status_partial": "部分完成",
+  "file_status_interrupted": "已中断",
+  "file_status_rate_limited": "已达速率限制",
+  "file_status_error": "错误",
+  "file_status_missing_api_key": "错误：缺少 API 密钥",
+  "file_status_path_error": "路径错误",
+  "file_status_initiation_error": "启动失败"
 }

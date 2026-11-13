@@ -20,6 +20,7 @@ from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from ..utils.error_classification import is_context_overflow_error
 
 
 class MistralProvider(LLMProvider):
@@ -298,12 +299,7 @@ class MistralProvider(LLMProvider):
                     print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
 
                 # Detect context overflow errors
-                context_overflow_keywords = [
-                    "context_length", "maximum context", "token limit",
-                    "too many tokens", "reduce the length", "max_tokens",
-                    "context window", "exceeds"
-                ]
-                if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
+                if is_context_overflow_error(error_message, e.response.status_code):
                     raise ContextOverflowError(f"Mistral context overflow: {error_message}")
 
                 # Client errors (404 model, 401 key, 402 credits, 400) won't

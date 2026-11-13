@@ -25,15 +25,8 @@ from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from ..utils.error_classification import is_context_overflow_error
 
-
-# Substrings that mark a provider-side context/length overflow, surfaced as
-# ContextOverflowError so the chunking layer can react (shrink and retry).
-_CONTEXT_OVERFLOW_KEYWORDS = (
-    "context_length", "maximum context", "token limit",
-    "too many tokens", "reduce the length", "max_tokens",
-    "context window", "exceeds", "context window exceeded",
-)
 
 # Raised by LiteLLM on a provider 429; routed to the key pool when there is one.
 _RATE_LIMIT_EXCEPTION = "litellm.exceptions.RateLimitError"
@@ -188,9 +181,9 @@ class LiteLLMProvider(LLMProvider):
 
             except Exception as e:
                 qualnames = _qualnames(e)
-                error_str = str(e).lower()
+                status = getattr(e, "status_code", None)
                 if (_CONTEXT_WINDOW_EXCEPTION in qualnames
-                        or any(kw in error_str for kw in _CONTEXT_OVERFLOW_KEYWORDS)):
+                        or is_context_overflow_error(str(e), status if isinstance(status, int) else None)):
                     raise ContextOverflowError(f"LiteLLM context overflow: {e}") from e
 
                 qualname = qualnames[0]

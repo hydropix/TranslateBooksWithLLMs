@@ -13,6 +13,7 @@ import httpx
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import compute_wait_time, handle_rate_limit, is_retryable_http_status
+from ..utils.error_classification import is_context_overflow_error
 from ..utils.context_detection import ContextDetector
 
 from src.config import (
@@ -227,10 +228,8 @@ class OpenAICompatibleProvider(LLMProvider):
                     continue
 
                 # Detect context overflow errors
-                context_overflow_keywords = ["context_length", "maximum context", "token limit",
-                                              "too many tokens", "reduce the length", "max_tokens",
-                                              "context", "truncate", "length", "too long"]
-                if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
+                status_code = e.response.status_code if e.response is not None else None
+                if is_context_overflow_error(error_message, status_code):
                     RED = '\033[91m'
                     YELLOW = '\033[93m'
                     RESET = '\033[0m'

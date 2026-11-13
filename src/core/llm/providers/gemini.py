@@ -23,6 +23,7 @@ from src.config import (
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from ..utils.error_classification import is_context_overflow_error
 
 # Four harm categories returned by the Gemini API. By default Gemini blocks
 # anything at MEDIUM and above on all four, which strips a significant portion
@@ -298,10 +299,9 @@ class GeminiProvider(LLMProvider):
                     if error_body:
                         print(f"Response details: Status {e.response.status_code}, Body: {error_body[:200]}...")
 
-                    # Detect context overflow errors (Gemini uses "RESOURCE_EXHAUSTED" or token limits)
-                    context_overflow_keywords = ["resource_exhausted", "token limit", "input too long",
-                                                  "maximum input", "context length", "too many tokens"]
-                    if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
+                    # Detect context overflow errors (Gemini may also report RESOURCE_EXHAUSTED)
+                    if is_context_overflow_error(error_message, e.response.status_code,
+                                                 extra_keywords=("resource_exhausted",)):
                         raise ContextOverflowError(f"Gemini context overflow: {error_message}")
 
                     # Client errors (404 model retired, 400/401/403) won't recover

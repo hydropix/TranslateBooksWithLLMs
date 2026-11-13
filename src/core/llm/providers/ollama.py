@@ -13,6 +13,7 @@ import httpx
 
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
 from ..exceptions import ContextOverflowError, RateLimitError, RepetitionLoopError
+from ..utils.error_classification import is_context_overflow_error
 from ..rate_limit_handler import compute_wait_time
 from ..thinking.cache import get_thinking_cache
 from ..thinking.detection import detect_repetition_loop
@@ -589,8 +590,8 @@ class OllamaProvider(LLMProvider):
                     raise RateLimitError(error_message, retry_after=retry_after, provider="ollama")
 
                 # Handle context overflow errors
-                if any(keyword in error_message.lower()
-                       for keyword in ["context", "truncate", "length", "too long"]):
+                status_code = e.response.status_code if e.response is not None else None
+                if is_context_overflow_error(error_message, status_code):
                     if self.log_callback:
                         self.log_callback("llm_context_overflow",
                             f"{RED}❌ Context size exceeded!{RESET}\n"

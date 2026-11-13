@@ -699,30 +699,35 @@ select.form-control {
 .btn {
     padding: 0.75rem 1.25rem;
     border: none;
-    font-size: 1rem;
-    font-weight: 700;
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    letter-spacing: 0.025em;
+    letter-spacing: 0;
+}
+
+/* Compact vertical rhythm for regular buttons. Kept !important on purpose:
+   many buttons in the template and in the JS modules carry an inline
+   padding that this must override. .btn-sm, the glossary toolbar buttons
+   and the theme toggle size themselves. */
+.btn:not(.btn-sm):not(.glossary-toolbar-btn):not(#themeToggleBtn) {
+    padding-top: calc(0.75rem * var(--ui-density-y)) !important;
+    padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
 }
 
 .btn-primary {
     background: var(--primary-light);
     color: white;
-    box-shadow: 0 8px 20px rgba(62, 90, 120, 0.25);
+    box-shadow: none;
 }
 
-.btn-primary:hover {
-    box-shadow: 0 12px 30px rgba(62, 90, 120, 0.35);
-    transform: scale(1.02);
-}
-
-.btn-primary:active {
-    transform: scale(0.98);
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-light-hover);
 }
 
 .btn-primary:disabled {
@@ -734,24 +739,37 @@ select.form-control {
 .btn-secondary {
     background: var(--background-light);
     color: var(--text-dark);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
-    border: 1px solid var(--border-light);
+    box-shadow: none;
+    border: 1px solid var(--border-strong);
 }
 
 .btn-secondary:hover {
-    transform: translateY(-1px);
-    box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+    border-color: var(--text-faint);
 }
 
+/* T2 destructive: outlined, findable without competing with Start. */
 .btn-danger {
-    background: var(--danger-light);
-    color: white;
-    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
+    background: transparent;
+    color: var(--danger-light-text);
+    border: 1px solid var(--danger-light);
+    box-shadow: none;
 }
 
 .btn-danger:hover {
-    background: var(--danger-light-hover);
-    box-shadow: 0 12px 30px rgba(239, 68, 68, 0.35);
+    background: var(--danger-light-bg);
+}
+
+/* T1: the one filled, raised button of the screen. */
+#translateBtn {
+    min-height: 2.75rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    font-size: 0.9375rem;
+    box-shadow: 0 6px 14px -8px rgba(40, 58, 82, 0.6);
+}
+
+#translateBtn:disabled {
+    box-shadow: none;
 }
 
 /* Compact variant, for buttons that sit inside a row of text rather than in a
@@ -760,9 +778,6 @@ select.form-control {
    values still win here, this only gives the class a sane default. */
 .btn-sm {
     padding: 0.35rem 0.7rem;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0;
 }
 
 /* ========================================
@@ -4797,13 +4812,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
     }
 
-    /* .btn-sm and the glossary toolbar buttons are already compact and
-       carry their own padding; leave them where they are. */
-    .btn:not(.btn-sm):not(.glossary-toolbar-btn):not(#themeToggleBtn) {
-        padding-top: calc(0.75rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
-    }
-
     /* --- Dropdowns (searchable-select) --- */
     .searchable-select-display {
         padding-top: calc(0.75rem * var(--ui-density-y)) !important;
@@ -4936,7 +4944,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    what keeps a dense interface legible at 0.75rem. Reverting is the
    same single line.
    ======================================== */
-.btn,
 .tab-nav .tab-btn,
 .file-table thead th,
 .searchable-select-badge,
@@ -5082,65 +5089,6 @@ html.dark .file-upload.file-upload-secondary {
 .post-mode-btn.active {
     background: var(--llm-chip-bg);
     color: var(--text-dark);
-}
-
-/* ---------- Buttons ---------- */
-
-.btn {
-    font-family: var(--font-ui);
-    font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: 0;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.btn-primary,
-.btn-primary:hover,
-.btn-primary:active {
-    box-shadow: none;
-    transform: none;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: var(--primary-light-hover);
-}
-
-.btn-secondary {
-    background: var(--background-light);
-    border: 1px solid var(--border-strong);
-    box-shadow: none;
-}
-
-.btn-secondary:hover {
-    transform: none;
-    box-shadow: none;
-    border-color: var(--text-faint);
-}
-
-/* T2 destructive: outlined, findable without competing with Start. */
-.btn-danger {
-    background: transparent;
-    color: var(--danger-light-text);
-    border: 1px solid var(--danger-light);
-    box-shadow: none;
-}
-
-.btn-danger:hover {
-    background: var(--danger-light-bg);
-    box-shadow: none;
-}
-
-/* T1: the one filled, raised button of the screen. */
-#translateBtn {
-    min-height: 2.75rem;
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    font-size: 0.9375rem;
-    box-shadow: 0 6px 14px -8px rgba(40, 58, 82, 0.6);
-}
-
-#translateBtn:disabled {
-    box-shadow: none;
 }
 
 /* ---------- T3: pre-flight options ---------- */

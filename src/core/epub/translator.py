@@ -72,7 +72,7 @@ async def translate_epub_file(
     bilingual: bool = False,
     parallel_workers: int = 1,
     retry_token_aligned: bool = False,
-) -> None:
+) -> bool:
     """
     Translate an EPUB file using LLM with generic orchestrator.
 
@@ -118,13 +118,23 @@ async def translate_epub_file(
         retry_token_aligned: Explicit, user-initiated retry of the chunks token
             alignment translated with approximate tag positions. Off by default;
             it is the only thing that widens the work set to them (D3).
+
+    Returns:
+        True only when the whole book was translated and written: no failed
+        file, no chunk left unfinished, not interrupted. False when the input
+        is missing, the LLM client cannot be created, an error aborts the job,
+        or the result is partial (a partial EPUB and the checkpoint are still
+        written as before, so the job can be resumed or retried).
+
+    Raises:
+        RateLimitError: propagated unchanged so the caller can auto-pause.
     """
     # Validate input file
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input EPUB file '{input_filepath}' not found."
         if log_callback:
             log_callback("epub_input_file_not_found", err_msg)
-        return
+        return False
 
     # Use default MAX_TRANSLATION_ATTEMPTS if not provided
     if max_attempts is None:
@@ -163,7 +173,7 @@ async def translate_epub_file(
     )
 
     if llm_client is None:
-        return
+        return False
 
     # Resolve effective parallel workers (local providers are forced back to 1).
     # translate_file() already logged the effective count; this re-resolve is
@@ -422,6 +432,11 @@ async def translate_epub_file(
                                          f"⚠️ Could not remove stale partial {os.path.basename(stale)}: {e}")
 
             # 7. Final summary
+            book_complete = (
+                not results.get('was_interrupted')
+                and not results.get('failed_files')
+                and not any(results.get('unfinished_units') or {})
+            )
             if log_callback:
                 log_callback("epub_save_success",
                              f"✅ EPUB translation complete: {results['completed_files']} files translated, {results['failed_files']} failed")
@@ -444,6 +459,9 @@ async def translate_epub_file(
                 log_callback("epub_major_error", err_msg)
                 import traceback
                 log_callback("epub_major_error_traceback", traceback.format_exc())
+            return False
+
+    return book_complete
 
 
 # === Private Helper Functions ===
@@ -586,21 +604,36 @@ def _create_llm_client(
     initial_context: int,
     log_callback: Optional[Callable] = None
 ) -> Any:
-    """Create LLM client with specified configuration."""
+    """Create the LLM client for this job, or None when it cannot be created.
+
+    ``create_llm_client`` returns None for an unknown provider or a missing
+    required key ("use the default client"). The EPUB pipeline has no default
+    client to fall back to, so None, like a creation error, is reported to the
+    job's log and returned for the caller to stop on; it is never passed on.
+    """
     from ..llm_client import create_llm_client
 
-    llm_client = create_llm_client(
-        llm_provider, gemini_api_key, cli_api_endpoint, model_name,
-        openai_api_key, openrouter_api_key, mistral_api_key, deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        context_window=initial_context,
-        log_callback=log_callback
-    )
+    try:
+        llm_client = create_llm_client(
+            llm_provider, gemini_api_key, cli_api_endpoint, model_name,
+            openai_api_key, openrouter_api_key, mistral_api_key, deepseek_api_key,
+            poe_api_key=poe_api_key,
+            nim_api_key=nim_api_key,
+            context_window=initial_context,
+            log_callback=log_callback
+        )
+    except Exception as e:
+        if log_callback:
+            log_callback("llm_client_error",
+                         f"ERROR: Could not create LLM client for provider "
+                         f"'{llm_provider}': {e}")
+        return None
 
     if llm_client is None:
         if log_callback:
-            log_callback("llm_client_error", "ERROR: Could not create LLM client.")
+            log_callback("llm_client_error",
+                         f"ERROR: Could not create LLM client for provider "
+                         f"'{llm_provider}' (unknown provider or missing API key).")
 
     return llm_client
 

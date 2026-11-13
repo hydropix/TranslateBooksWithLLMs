@@ -704,6 +704,11 @@ def create_config_blueprint(server_session_id=None):
             headers = {}
             if api_key:
                 headers['Authorization'] = f'Bearer {api_key}'
+            # Anthropic's OpenAI compatibility layer serves chat completions
+            # without extra headers, but its /v1/models endpoint answers
+            # HTTP 400 unless the anthropic-version header is present.
+            if parsed_base.hostname == 'api.anthropic.com':
+                headers['anthropic-version'] = '2023-06-01'
 
             response = requests.get(models_url, headers=headers, timeout=10)
 

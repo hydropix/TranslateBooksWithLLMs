@@ -32,6 +32,38 @@ class TranslationStateManager:
         )
         self.glossary_store: Optional["GlossaryStore"] = None
         self._glossary_lock = threading.Lock()
+        # Jobs with a live worker thread (running, or asleep waiting to
+        # auto-resume after a rate limit). Guards against two workers on one
+        # job; see try_claim_worker().
+        self._active_workers: set = set()
+        self._workers_lock = threading.Lock()
+
+    def try_claim_worker(self, translation_id: str) -> bool:
+        """Atomically reserve the job for one new worker.
+
+        Returns False when a worker already owns it (a double-clicked resume,
+        or a manual resume while the job waits to auto-resume). The caller
+        must call release_worker() if it ends up not starting the worker.
+        """
+        with self._workers_lock:
+            if translation_id in self._active_workers:
+                return False
+            self._active_workers.add(translation_id)
+            return True
+
+    def mark_worker_active(self, translation_id: str) -> None:
+        """Record a live worker without the exclusivity check (fresh jobs)."""
+        with self._workers_lock:
+            self._active_workers.add(translation_id)
+
+    def release_worker(self, translation_id: str) -> None:
+        """Forget the job's worker. Called when the worker thread exits."""
+        with self._workers_lock:
+            self._active_workers.discard(translation_id)
+
+    def is_worker_active(self, translation_id: str) -> bool:
+        with self._workers_lock:
+            return translation_id in self._active_workers
     
     def create_translation(self, translation_id: str, config: Dict[str, Any]) -> None:
         """Create a new translation entry"""

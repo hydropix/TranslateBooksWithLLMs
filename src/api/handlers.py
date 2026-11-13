@@ -473,8 +473,24 @@ def run_translation_async_wrapper(translation_id, config, state_manager, output_
         output_dir (str): Output directory path
         socketio: SocketIO instance
     """
+    # The worker registry keeps a second worker off this job for as long as
+    # this thread lives, including an auto-resume sleep after a rate limit.
+    # The resume route claims the slot before starting us; a fresh job is
+    # recorded here. Released in the outer finally whatever happens.
+    mark_active = getattr(state_manager, 'mark_worker_active', None)
+    if mark_active is not None:
+        mark_active(translation_id)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    try:
+        _run_worker_loop(loop, translation_id, config, state_manager, output_dir, socketio)
+    finally:
+        release = getattr(state_manager, 'release_worker', None)
+        if release is not None:
+            release(translation_id)
+
+
+def _run_worker_loop(loop, translation_id, config, state_manager, output_dir, socketio):
     try:
         loop.run_until_complete(perform_actual_translation(translation_id, config, state_manager, output_dir, socketio))
     except Exception as e:

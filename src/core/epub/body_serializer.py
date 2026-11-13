@@ -87,6 +87,14 @@ def normalize_whitespace(html: str) -> str:
     return html
 
 
+def find_body(doc_root: etree._Element) -> Optional[etree._Element]:
+    """The document's <body>: XHTML namespace first, then no namespace."""
+    body = doc_root.find('.//{http://www.w3.org/1999/xhtml}body')
+    if body is None:
+        body = doc_root.find('.//body')
+    return body
+
+
 def extract_body_html(
     doc_root: etree._Element,
     normalize: bool = True,
@@ -114,11 +122,7 @@ def extract_body_html(
     translation paths replace the body content afterwards, so the removed
     elements simply never appear in the output.
     """
-    # Try XHTML namespace first, then fallback to no namespace
-    body = doc_root.find('.//{http://www.w3.org/1999/xhtml}body')
-    if body is None:
-        body = doc_root.find('.//body')
-
+    body = find_body(doc_root)
     if body is None:
         return "", None
 

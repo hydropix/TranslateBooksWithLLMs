@@ -5,8 +5,31 @@ This module provides utilities for extracting translations from LLM responses,
 handling various response formats including thinking blocks.
 """
 
+import logging
 import re
-from typing import Optional
+from typing import List, Optional
+
+logger = logging.getLogger(__name__)
+
+# Reasoning tag names some models emit around their chain of thought.
+_THINKING_TAG_NAMES = ("think", "thinking", "reasoning")
+_THINKING_NAMES_RE = "|".join(_THINKING_TAG_NAMES)
+
+_COMPLETE_THINKING_BLOCK = re.compile(
+    rf"<({_THINKING_NAMES_RE})>.*?</\1>", re.DOTALL | re.IGNORECASE
+)
+_THINKING_OPEN = re.compile(rf"<(?:{_THINKING_NAMES_RE})>", re.IGNORECASE)
+_THINKING_CLOSE = re.compile(rf"</(?:{_THINKING_NAMES_RE})>", re.IGNORECASE)
+
+# Placeholder contents of the example blocks embedded in the prompts
+# (src/prompts/prompts.py). When a model echoes the prompt, these blocks
+# appear in the response next to the real translation and must never win.
+_PROMPT_EXAMPLE_CONTENTS = frozenset({
+    "text...",
+    "your translation here",
+    "your translated text here",
+    "your refined text here",
+})
 
 
 class TranslationExtractor:
@@ -15,9 +38,12 @@ class TranslationExtractor:
 
     Handles:
         - Extraction between custom tags (e.g., <Translated>...</Translated>)
-        - Removal of <think>...</think> blocks
-        - Fallback to raw response if tags not found
-        - Various edge cases and malformed responses
+        - Removal of <think>, <thinking> and <reasoning> blocks, including
+          unclosed ones and orphan closing tags
+        - Responses with several tagged blocks (e.g. the model echoed the
+          prompt's example blocks): the last real block wins and the
+          returned text never contains a literal tag
+        - Malformed closing tags (fuzzy match on the tag prefix)
 
     Example:
         >>> extractor = TranslationExtractor("<Translated>", "</Translated>")
@@ -36,31 +62,16 @@ class TranslationExtractor:
         """
         self._tag_in = tag_in
         self._tag_out = tag_out
-        # Pre-compile regex for efficiency
-        self._compiled_regex = self._compile_extraction_regex()
-
-    def _compile_extraction_regex(self) -> re.Pattern:
-        """
-        Compile regex pattern for extraction.
-
-        Returns:
-            Compiled regex pattern
-        """
-        return re.compile(
-            rf"{re.escape(self._tag_in)}(.*?){re.escape(self._tag_out)}",
-            re.DOTALL
-        )
 
     def extract(self, response: str) -> Optional[str]:
         """
-        Extract translation from response using configured tags with strict validation.
+        Extract the translation from a raw LLM response.
 
-        Returns the content between tag_in and tag_out.
-        Prefers responses where tags are at exact boundaries for better reliability.
-
-        NOTE: This method completely ignores content within <think></think> tags,
-        as these are used by certain LLMs for internal reasoning and should not
-        be searched for translation tags.
+        Reasoning blocks are removed first, so translation tags quoted inside
+        a model's chain of thought are ignored. When the response holds more
+        than one complete block, the last block whose content is not one of
+        the prompt's example placeholders is returned: models that echo the
+        prompt reproduce its example blocks before the real answer.
 
         Args:
             response: Raw LLM response text
@@ -71,66 +82,66 @@ class TranslationExtractor:
         if not response:
             return None
 
-        # Trim whitespace from response
         response = response.strip()
-        original_length = len(response)
-
-        # Remove all <think>...</think> blocks completely
         response = self._remove_think_blocks(response)
+        # Some providers (e.g. Gemini) wrap the whole answer in ``` fences
+        response = self._remove_markdown_code_blocks(response).strip()
 
-        # Remove markdown code block wrappers (some providers like Gemini may wrap in ```)
-        response = self._remove_markdown_code_blocks(response)
+        blocks = self._find_blocks(response)
+        if blocks:
+            if len(blocks) > 1:
+                logger.debug("Response contains %d translation blocks; using the last real one",
+                             len(blocks))
+            return self._pick_block(blocks)
 
-        response = response.strip()
-
-        if len(response) < original_length:
-            print(f"[DEBUG] Think blocks removed: {original_length} -> {len(response)} chars (-{original_length - len(response)})")
-            print(f"[DEBUG] Response after think removal (first 200 chars): {response[:200]}")
-
-        # STRICT VALIDATION: Check if response starts and ends with correct tags
-        starts_correctly = response.startswith(self._tag_in)
-        ends_correctly = response.endswith(self._tag_out)
-
-        if starts_correctly and ends_correctly:
-            # Perfect format - extract content between boundary tags
-            content = response[len(self._tag_in):-len(self._tag_out)]
-            return content.strip()
-
-        # FALLBACK: Try regex search for tags anywhere in response (less strict)
-        match = self._compiled_regex.search(response)
-        if match:
-            extracted = match.group(1).strip()
-
-            # Warn if extraction was from middle of response (indicates LLM didn't follow instructions)
-            if not starts_correctly or not ends_correctly:
-                print(f"⚠️  Warning: Translation tags found but not at response boundaries.")
-                print(f"   Response started with tags: {starts_correctly}")
-                print(f"   Response ended with tags: {ends_correctly}")
-                print(f"   This may indicate the LLM added extra text. Using extracted content anyway.")
-
-            return extracted
-
-        # FUZZY FALLBACK: Opening tag found but closing tag is malformed
-        # Some models (e.g. Gemini without thinking) write </TRANATION> instead of </TRANSLATION>
-        if starts_correctly:
-            # Extract tag name from closing tag (e.g. "TRANSLATION" from "</TRANSLATION>")
+        # FUZZY FALLBACK: opening tag present but closing tag is malformed.
+        # Some models (e.g. Gemini without thinking) write </TRANATION>
+        # instead of </TRANSLATION>.
+        if response.startswith(self._tag_in):
             closing_tag_match = re.match(r'</(\w+)>', self._tag_out)
             if closing_tag_match:
-                tag_name = closing_tag_match.group(1)
-                # Look for any closing tag that starts with the same prefix (at least 3 chars)
-                prefix = tag_name[:3]
-                fuzzy_pattern = re.compile(
-                    rf'{re.escape(self._tag_in)}(.*?)</\w*{re.escape(prefix)}\w*>',
-                    re.DOTALL
-                )
-                fuzzy_match = fuzzy_pattern.search(response)
+                prefix = closing_tag_match.group(1)[:3]
+                fuzzy_close = re.compile(rf'</\w*{re.escape(prefix)}\w*>')
+                fuzzy_match = fuzzy_close.search(response, len(self._tag_in))
                 if fuzzy_match:
-                    extracted = fuzzy_match.group(1).strip()
-                    print(f"[WARN] Fuzzy tag match: closing tag was malformed, extracted content using prefix '</{prefix}...'")
-                    return extracted
+                    content = response[:fuzzy_match.start()]
+                    content = content[content.rfind(self._tag_in) + len(self._tag_in):]
+                    logger.warning("Fuzzy tag match: closing tag was malformed, extracted "
+                                   "content using prefix '</%s...'", prefix)
+                    return content.strip()
 
-        # No tags found at all
         return None
+
+    def _find_blocks(self, text: str) -> List[str]:
+        """Return the content of every complete tag_in ... tag_out block.
+
+        Each block runs from the opening tag nearest to its closing tag, so
+        an unbalanced opening tag earlier in the text can never leak into a
+        block's content.
+        """
+        blocks = []
+        cursor = 0
+        while True:
+            close = text.find(self._tag_out, cursor)
+            if close < 0:
+                break
+            segment = text[cursor:close]
+            open_idx = segment.rfind(self._tag_in)
+            if open_idx >= 0:
+                blocks.append(segment[open_idx + len(self._tag_in):].strip())
+            cursor = close + len(self._tag_out)
+        return blocks
+
+    def _has_block(self, text: str) -> bool:
+        return bool(self._find_blocks(text))
+
+    @staticmethod
+    def _pick_block(blocks: List[str]) -> str:
+        """Pick the last block that is not a prompt example placeholder."""
+        for content in reversed(blocks):
+            if content and content.lower() not in _PROMPT_EXAMPLE_CONTENTS:
+                return content
+        return blocks[-1]
 
     def _remove_markdown_code_blocks(self, response: str) -> str:
         """
@@ -138,14 +149,7 @@ class TranslationExtractor:
 
         Some providers (notably Gemini) may wrap responses in markdown code blocks
         like ```xml\\n...\\n``` which prevents tag extraction.
-
-        Args:
-            response: Text potentially wrapped in markdown code blocks
-
-        Returns:
-            Text with markdown code block wrappers removed
         """
-        # Match ```lang\n...\n``` wrapping the entire response
         match = re.match(r'^```\w*\s*\n(.*?)\n```\s*$', response, re.DOTALL)
         if match:
             return match.group(1)
@@ -153,35 +157,41 @@ class TranslationExtractor:
 
     def _remove_think_blocks(self, response: str) -> str:
         """
-        Remove all <think>...</think> blocks from response.
+        Remove reasoning blocks (<think>, <thinking>, <reasoning>) from response.
 
-        IMPORTANT: These blocks contain LLM's internal reasoning and should be completely ignored.
-        Do NOT search for translation tags inside these blocks!
+        These blocks contain the model's internal reasoning; translation tags
+        inside them must never be extracted.
 
-        Args:
-            response: Text potentially containing think blocks
-
-        Returns:
-            Text with think blocks removed
-
-        Note:
-            Handles nested tags and various formatting styles
+        Handles:
+            - Complete blocks
+            - Orphan closing tags (the opening tag was truncated, e.g. by
+              Ollama), including reasoning that itself quotes the closing tag
+            - Unclosed opening tags (reasoning that never ended)
         """
-        # Case 1: Complete <think>...</think> blocks
-        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+        response = _COMPLETE_THINKING_BLOCK.sub('', response)
 
-        # Case 2: Orphan closing tag </think> (when Ollama truncates the opening tag)
-        # Remove everything from the beginning up to and including </think>,
-        # BUT only if the prefix does not contain the opening translation tag.
-        before_orphan_removal = response
-        think_match = re.search(r'</think>', response, flags=re.IGNORECASE)
-        if think_match:
-            prefix = response[:think_match.end()]
-            if self._tag_in.lower() not in prefix.lower():
-                response = response[think_match.end():].lstrip()
+        # Orphan closing tags: everything before them is reasoning. Prefer the
+        # last closing tag that is followed by a complete translation block
+        # (reasoning may quote the closing tag). Without such a block, keep
+        # the legacy rule: strip only if the prefix holds no opening
+        # translation tag, so a truncated answer stays inspectable (#170).
+        closes = list(_THINKING_CLOSE.finditer(response))
+        if closes:
+            for match in reversed(closes):
+                if self._has_block(response[match.end():]):
+                    return response[match.end():].lstrip()
+            first = closes[0]
+            if self._tag_in.lower() not in response[:first.end()].lower():
+                response = response[first.end():].lstrip()
 
-        if before_orphan_removal != response:
-            removed_length = len(before_orphan_removal) - len(response)
-            print(f"[DEBUG] Orphan </think> detected - removed {removed_length} characters from beginning")
+        # Unclosed opening tag: the reasoning runs up to the last opening
+        # translation tag after it (if any), else to the end of the text.
+        opening = _THINKING_OPEN.search(response)
+        if opening:
+            last_tag_in = response.rfind(self._tag_in)
+            if last_tag_in > opening.start():
+                response = response[:opening.start()] + response[last_tag_in:]
+            else:
+                response = response[:opening.start()]
 
         return response

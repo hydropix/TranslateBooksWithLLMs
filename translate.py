@@ -183,6 +183,156 @@ def _run_term_fix(args, parser, logger) -> int:
     return 0
 
 
+def _run_job(args, logger, prompt_options, log_callback, stats_callback) -> int:
+    """Run the translation (or refine-only) job and return the process exit code.
+
+    The adapters return True only when every unit was translated and the
+    output was written; a False result (failed or partial translation) is a
+    failure here too: it is logged as such, triggers the failure notification
+    and yields a non-zero exit code, just like a raised exception.
+    """
+    start_time = time.time()
+    try:
+        # Create checkpoint manager for resume capability
+        checkpoint_manager = CheckpointManager()
+
+        # Generate unique translation ID
+        translation_id = f"cli_{uuid.uuid4().hex[:8]}"
+
+        if args.refine_only:
+            ok = asyncio.run(refine_file(
+                input_filepath=args.input,
+                output_filepath=args.output,
+                target_language=args.target_lang,
+                model_name=args.model,
+                llm_provider=args.provider,
+                checkpoint_manager=checkpoint_manager,
+                translation_id=translation_id,
+                log_callback=log_callback,
+                stats_callback=stats_callback,
+                check_interruption_callback=None,
+                llm_api_endpoint=args.api_endpoint,
+                gemini_api_key=args.gemini_api_key,
+                openai_api_key=args.openai_api_key,
+                openrouter_api_key=args.openrouter_api_key,
+                mistral_api_key=args.mistral_api_key,
+                deepseek_api_key=args.deepseek_api_key,
+                poe_api_key=args.poe_api_key,
+                nim_api_key=args.nim_api_key,
+                prompt_options=prompt_options,
+            ))
+        else:
+            ok = asyncio.run(translate_file(
+                input_filepath=args.input,
+                output_filepath=args.output,
+                source_language=args.source_lang,
+                target_language=args.target_lang,
+                model_name=args.model,
+                llm_provider=args.provider,
+                checkpoint_manager=checkpoint_manager,
+                translation_id=translation_id,
+                log_callback=log_callback,
+                stats_callback=stats_callback,
+                check_interruption_callback=None,
+                llm_api_endpoint=args.api_endpoint,
+                gemini_api_key=args.gemini_api_key,
+                openai_api_key=args.openai_api_key,
+                openrouter_api_key=args.openrouter_api_key,
+                mistral_api_key=args.mistral_api_key,
+                deepseek_api_key=args.deepseek_api_key,
+                poe_api_key=args.poe_api_key,
+                nim_api_key=args.nim_api_key,
+                prompt_options=prompt_options,
+                parallel_workers=args.parallel
+            ))
+
+        if ok is not True:
+            label = "Refine-only" if args.refine_only else "Translation"
+            reason = (f"{label} did not complete: one or more units failed or the "
+                      f"output could not be written. Check the log above; "
+                      f"'{args.output}' may be missing or partial.")
+            logger.error(reason, LogType.ERROR_DETAIL, {
+                'details': reason,
+                'input_file': args.input,
+            })
+            notify(EVENT_FAILURE, {
+                'file': args.input,
+                'output': args.output,
+                'duration_seconds': time.time() - start_time,
+                'provider': args.provider,
+                'model': args.model,
+                'error': reason,
+            })
+            return 1
+
+        if args.refine_only:
+            logger.info("Refine-Only Completed Successfully", LogType.TRANSLATION_END, {
+                'output_file': args.output,
+                'mode': 'refine-only',
+            })
+        else:
+            logger.info("Translation Completed Successfully", LogType.TRANSLATION_END, {
+                'output_file': args.output
+            })
+
+        notify(EVENT_SUCCESS, {
+            'file': args.input,
+            'output': args.output,
+            'duration_seconds': time.time() - start_time,
+            'provider': args.provider,
+            'model': args.model,
+            'source_lang': None if args.refine_only else args.source_lang,
+            'target_lang': args.target_lang,
+            'mode': 'refine-only' if args.refine_only else 'translate',
+        })
+
+        # TTS Generation (if enabled)
+        if args.tts:
+            logger.info("Starting TTS Generation", LogType.INFO, {
+                'voice': args.tts_voice or 'auto',
+                'rate': args.tts_rate,
+                'format': args.tts_format
+            })
+
+            # Create TTS config from CLI arguments
+            tts_config = TTSConfig.from_cli_args(args)
+
+            # Generate audio from translated file
+            success, message, audio_path = asyncio.run(generate_tts_for_translation(
+                translated_filepath=args.output,
+                target_language=args.target_lang,
+                tts_config=tts_config,
+                log_callback=log_callback
+            ))
+
+            if success:
+                logger.info("TTS Generation Completed", LogType.INFO, {
+                    'audio_file': audio_path
+                })
+            else:
+                logger.error(f"TTS generation failed: {message}", LogType.ERROR_DETAIL, {
+                    'details': message
+                })
+
+    except Exception as e:
+        logger.error(f"Translation failed: {str(e)}", LogType.ERROR_DETAIL, {
+            'details': str(e),
+            'input_file': args.input
+        })
+
+        notify(EVENT_FAILURE, {
+            'file': args.input,
+            'output': args.output,
+            'duration_seconds': time.time() - start_time,
+            'provider': args.provider,
+            'model': args.model,
+            'error': str(e),
+        })
+        return 1
+
+    return 0
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Translate a text, EPUB, SRT, PGN, DOCX or PDF file using an LLM.",
@@ -435,119 +585,4 @@ if __name__ == "__main__":
     # input document itself, with one extra LLM call per requested pass.
     _apply_cli_auto_prep(args, prompt_options, logger)
 
-    start_time = time.time()
-    try:
-        # Create checkpoint manager for resume capability
-        checkpoint_manager = CheckpointManager()
-
-        # Generate unique translation ID
-        translation_id = f"cli_{uuid.uuid4().hex[:8]}"
-
-        if args.refine_only:
-            asyncio.run(refine_file(
-                input_filepath=args.input,
-                output_filepath=args.output,
-                target_language=args.target_lang,
-                model_name=args.model,
-                llm_provider=args.provider,
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                log_callback=log_callback,
-                stats_callback=stats_callback,
-                check_interruption_callback=None,
-                llm_api_endpoint=args.api_endpoint,
-                gemini_api_key=args.gemini_api_key,
-                openai_api_key=args.openai_api_key,
-                openrouter_api_key=args.openrouter_api_key,
-                mistral_api_key=args.mistral_api_key,
-                deepseek_api_key=args.deepseek_api_key,
-                poe_api_key=args.poe_api_key,
-                nim_api_key=args.nim_api_key,
-                prompt_options=prompt_options,
-            ))
-            logger.info("Refine-Only Completed Successfully", LogType.TRANSLATION_END, {
-                'output_file': args.output,
-                'mode': 'refine-only',
-            })
-        else:
-            asyncio.run(translate_file(
-                input_filepath=args.input,
-                output_filepath=args.output,
-                source_language=args.source_lang,
-                target_language=args.target_lang,
-                model_name=args.model,
-                llm_provider=args.provider,
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                log_callback=log_callback,
-                stats_callback=stats_callback,
-                check_interruption_callback=None,
-                llm_api_endpoint=args.api_endpoint,
-                gemini_api_key=args.gemini_api_key,
-                openai_api_key=args.openai_api_key,
-                openrouter_api_key=args.openrouter_api_key,
-                mistral_api_key=args.mistral_api_key,
-                deepseek_api_key=args.deepseek_api_key,
-                poe_api_key=args.poe_api_key,
-                nim_api_key=args.nim_api_key,
-                prompt_options=prompt_options,
-                parallel_workers=args.parallel
-            ))
-
-            logger.info("Translation Completed Successfully", LogType.TRANSLATION_END, {
-                'output_file': args.output
-            })
-
-        notify(EVENT_SUCCESS, {
-            'file': args.input,
-            'output': args.output,
-            'duration_seconds': time.time() - start_time,
-            'provider': args.provider,
-            'model': args.model,
-            'source_lang': None if args.refine_only else args.source_lang,
-            'target_lang': args.target_lang,
-            'mode': 'refine-only' if args.refine_only else 'translate',
-        })
-
-        # TTS Generation (if enabled)
-        if args.tts:
-            logger.info("Starting TTS Generation", LogType.INFO, {
-                'voice': args.tts_voice or 'auto',
-                'rate': args.tts_rate,
-                'format': args.tts_format
-            })
-
-            # Create TTS config from CLI arguments
-            tts_config = TTSConfig.from_cli_args(args)
-
-            # Generate audio from translated file
-            success, message, audio_path = asyncio.run(generate_tts_for_translation(
-                translated_filepath=args.output,
-                target_language=args.target_lang,
-                tts_config=tts_config,
-                log_callback=log_callback
-            ))
-
-            if success:
-                logger.info("TTS Generation Completed", LogType.INFO, {
-                    'audio_file': audio_path
-                })
-            else:
-                logger.error(f"TTS generation failed: {message}", LogType.ERROR_DETAIL, {
-                    'details': message
-                })
-
-    except Exception as e:
-        logger.error(f"Translation failed: {str(e)}", LogType.ERROR_DETAIL, {
-            'details': str(e),
-            'input_file': args.input
-        })
-
-        notify(EVENT_FAILURE, {
-            'file': args.input,
-            'output': args.output,
-            'duration_seconds': time.time() - start_time,
-            'provider': args.provider,
-            'model': args.model,
-            'error': str(e),
-        })
+    raise SystemExit(_run_job(args, logger, prompt_options, log_callback, stats_callback))

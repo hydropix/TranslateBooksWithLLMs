@@ -218,7 +218,7 @@ async def translate_file(
 
     if detected_type == 'epub':
         from src.core.epub.translator import translate_epub_file
-        await translate_epub_file(
+        epub_ok = await translate_epub_file(
             input_filepath=input_filepath,
             output_filepath=output_filepath,
             source_language=source_language,
@@ -249,7 +249,9 @@ async def translate_file(
             retry_token_aligned=retry_token_aligned,
             **additional_config
         )
-        return True  # Legacy function doesn't return success status
+        # translate_epub_file returns True only on full success (False on a
+        # client failure, an exception or a partial result).
+        return epub_ok is True
 
     # DOCX translation using EPUB pipeline (Phase 1 implementation)
     # Similar to EPUB, DOCX requires HTML chunking, tag preservation, etc.

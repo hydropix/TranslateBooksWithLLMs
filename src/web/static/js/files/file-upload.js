@@ -676,12 +676,13 @@ export const FileUpload = {
      * Set up drag and drop event handlers
      */
     setupDragDrop() {
+        // The secondary zone's operation follows its mode switch, so it is
+        // read at drop time rather than fixed here.
         const zones = [
-            { id: 'fileUpload', operation: 'translate' },
-            { id: 'fileUploadRefine', operation: 'refine' },
-            { id: 'fileUploadTermFix', operation: 'term_fix' }
+            { id: 'fileUpload', getOperation: () => 'translate' },
+            { id: 'fileUploadRefine', getOperation: () => this.getPostMode() }
         ];
-        zones.forEach(({ id, operation }) => {
+        zones.forEach(({ id, getOperation }) => {
             const uploadArea = DomHelpers.getElement(id);
             if (!uploadArea) return;
 
@@ -696,6 +697,7 @@ export const FileUpload = {
             uploadArea.addEventListener('drop', (e) => {
                 e.preventDefault();
                 DomHelpers.removeClass(uploadArea, 'dragging');
+                const operation = getOperation();
                 if (uploadArea.classList.contains('zone-disabled')) {
                     MessageLogger.showMessage(
                         t('translation:zone_locked', { operation }),
@@ -724,15 +726,55 @@ export const FileUpload = {
         const fileInputRefine = DomHelpers.getElement('fileInputRefine');
         if (fileInputRefine) {
             fileInputRefine.addEventListener('change', (e) => {
-                this.handleFileSelectRefine(e);
+                this.handleFileSelectPost(e);
             });
         }
-        const fileInputTermFix = DomHelpers.getElement('fileInputTermFix');
-        if (fileInputTermFix) {
-            fileInputTermFix.addEventListener('change', (e) => {
-                this.handleFileSelectTermFix(e);
+        this.setupPostModeSwitch();
+    },
+
+    /**
+     * Wire the mode switch of the "already translated" zone. Clicks on the
+     * switch must not bubble to the zone, which would open the file picker.
+     */
+    setupPostModeSwitch() {
+        const zone = DomHelpers.getElement('fileUploadRefine');
+        if (!zone) return;
+        zone.querySelectorAll('.post-mode-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (btn.disabled) return;
+                this.setPostMode(btn.dataset.mode);
             });
-        }
+        });
+    },
+
+    /**
+     * Current operation of the "already translated" zone.
+     * @returns {'refine'|'term_fix'}
+     */
+    getPostMode() {
+        const zone = DomHelpers.getElement('fileUploadRefine');
+        return zone?.dataset.zone === 'term_fix' ? 'term_fix' : 'refine';
+    },
+
+    /**
+     * Switch the "already translated" zone between refine and term_fix.
+     * @param {'refine'|'term_fix'} mode
+     */
+    setPostMode(mode) {
+        const zone = DomHelpers.getElement('fileUploadRefine');
+        if (!zone || (mode !== 'refine' && mode !== 'term_fix')) return;
+        zone.dataset.zone = mode;
+        zone.querySelectorAll('.post-mode-btn').forEach(btn => {
+            const active = btn.dataset.mode === mode;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-checked', active ? 'true' : 'false');
+        });
+        zone.querySelectorAll('.post-mode-help').forEach(p => {
+            p.classList.toggle('hidden', p.dataset.mode !== mode);
+        });
+        const icon = DomHelpers.getElement('postZoneIcon');
+        if (icon) icon.textContent = mode === 'term_fix' ? 'spellcheck' : 'auto_fix_high';
     },
 
     /**
@@ -748,26 +790,15 @@ export const FileUpload = {
     },
 
     /**
-     * Handle file selection from input (Refine zone)
+     * Handle file selection from input ("already translated" zone): the
+     * operation is whatever the zone's mode switch currently shows.
      * @param {Event} event - Change event from file input
      */
-    handleFileSelectRefine(event) {
+    handleFileSelectPost(event) {
         const files = event.target.files;
         if (files.length > 0) {
-            this.handleFiles(Array.from(files), 'refine');
+            this.handleFiles(Array.from(files), this.getPostMode());
             DomHelpers.setValue('fileInputRefine', '');
-        }
-    },
-
-    /**
-     * Handle file selection from input (Term fix zone)
-     * @param {Event} event - Change event from file input
-     */
-    handleFileSelectTermFix(event) {
-        const files = event.target.files;
-        if (files.length > 0) {
-            this.handleFiles(Array.from(files), 'term_fix');
-            DomHelpers.setValue('fileInputTermFix', '');
         }
     },
 
@@ -787,14 +818,19 @@ export const FileUpload = {
      */
     refreshZoneLocking() {
         const op = this.getQueueOperation();
-        const zones = {
-            translate: DomHelpers.getElement('fileUpload'),
-            refine: DomHelpers.getElement('fileUploadRefine'),
-            term_fix: DomHelpers.getElement('fileUploadTermFix'),
-        };
-        for (const [zoneOp, zone] of Object.entries(zones)) {
-            if (zone) zone.classList.toggle('zone-disabled', !!op && op !== zoneOp);
-        }
+        const translateZone = DomHelpers.getElement('fileUpload');
+        if (translateZone) translateZone.classList.toggle('zone-disabled', !!op && op !== 'translate');
+
+        // The "already translated" zone stays usable for its queued operation:
+        // pin the switch to that mode and lock the other one.
+        const postZone = DomHelpers.getElement('fileUploadRefine');
+        if (!postZone) return;
+        const postOpQueued = op === 'refine' || op === 'term_fix';
+        postZone.classList.toggle('zone-disabled', !!op && !postOpQueued);
+        if (postOpQueued) this.setPostMode(op);
+        postZone.querySelectorAll('.post-mode-btn').forEach(btn => {
+            btn.disabled = postOpQueued && btn.dataset.mode !== op;
+        });
     },
 
     /**

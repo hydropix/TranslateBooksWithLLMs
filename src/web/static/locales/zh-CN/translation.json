@@ -13,9 +13,11 @@
 
   "drop_files_title": "拖放文件以进行翻译",
   "drop_files_support": "支持 TXT、EPUB、SRT、PGN、DOCX 和 PDF",
-  "drop_files_refine_title": "拖放文件以润色（已翻译）",
+  "drop_files_post_title": "拖放已翻译的文件",
+  "post_mode_label": "如何处理该文件",
+  "post_mode_refine": "润色",
+  "post_mode_term_fix": "修正术语",
   "drop_files_refine_support": "润色已有的译文 — 同一语言输入，同一语言输出",
-  "drop_files_term_fix_title": "拖入文件以修正术语（已翻译）",
   "drop_files_term_fix_support": "替换术语表遗漏的术语，无需重新翻译",
   "browse_files": "浏览文件",
   "selected_files": "已选择的文件：",

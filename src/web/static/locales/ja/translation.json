@@ -13,9 +13,11 @@
 
   "drop_files_title": "翻訳するファイルをここにドロップ",
   "drop_files_support": "TXT、EPUB、SRT、PGN、DOCX、PDF に対応",
-  "drop_files_refine_title": "推敲するファイルをここにドロップ（翻訳済み）",
+  "drop_files_post_title": "翻訳済みのファイルをドロップ",
+  "post_mode_label": "ファイルの処理方法",
+  "post_mode_refine": "推敲",
+  "post_mode_term_fix": "用語を修正",
   "drop_files_refine_support": "既存の翻訳を磨く — 同じ言語入力、同じ言語出力",
-  "drop_files_term_fix_title": "用語を修正するファイルをドロップ（翻訳済み）",
   "drop_files_term_fix_support": "用語集が見落とした用語を、再翻訳せずに置き換えます",
   "browse_files": "ファイルを選択",
   "selected_files": "選択されたファイル:",

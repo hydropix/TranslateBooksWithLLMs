@@ -480,24 +480,26 @@
                     <input type="file" id="fileInput" accept=".txt,.epub,.srt,.pgn,.docx,.pdf" style="display: none;" onchange="handleFileSelect(event)" multiple>
                 </div>
 
-                <!-- File Upload Area (Refine, secondary) -->
+                <!-- File Upload Area (already translated files, secondary): the mode
+                     switch picks the operation, refine (polish style) or term_fix -->
                 <div class="file-upload file-upload-secondary" id="fileUploadRefine" data-zone="refine" onclick="document.getElementById('fileInputRefine').click()">
                     <div class="upload-icon">
-                        <span class="material-symbols-outlined">auto_fix_high</span>
+                        <span class="material-symbols-outlined" id="postZoneIcon">auto_fix_high</span>
                     </div>
-                    <h4 data-i18n="translation:drop_files_refine_title">Drop files to refine (already translated)</h4>
-                    <p data-i18n="translation:drop_files_refine_support">Polish an existing translation — same language in, same language out</p>
-                    <input type="file" id="fileInputRefine" accept=".txt,.epub,.srt,.docx" style="display: none;" onchange="handleFileSelectRefine(event)" multiple>
-                </div>
-
-                <!-- File Upload Area (Term fix, secondary) -->
-                <div class="file-upload file-upload-secondary" id="fileUploadTermFix" data-zone="term_fix" onclick="document.getElementById('fileInputTermFix').click()">
-                    <div class="upload-icon">
-                        <span class="material-symbols-outlined">spellcheck</span>
+                    <h4 data-i18n="translation:drop_files_post_title">Drop files that are already translated</h4>
+                    <div class="post-mode-switch" role="radiogroup" data-i18n-attr="aria-label:translation:post_mode_label" aria-label="What to do with the file">
+                        <button type="button" class="post-mode-btn active" data-mode="refine" role="radio" aria-checked="true">
+                            <span class="material-symbols-outlined">auto_fix_high</span>
+                            <span data-i18n="translation:post_mode_refine">Refine</span>
+                        </button>
+                        <button type="button" class="post-mode-btn" data-mode="term_fix" role="radio" aria-checked="false">
+                            <span class="material-symbols-outlined">spellcheck</span>
+                            <span data-i18n="translation:post_mode_term_fix">Fix a term</span>
+                        </button>
                     </div>
-                    <h4 data-i18n="translation:drop_files_term_fix_title">Drop files to fix a term (already translated)</h4>
-                    <p data-i18n="translation:drop_files_term_fix_support">Replace a term the glossary missed, without translating again</p>
-                    <input type="file" id="fileInputTermFix" accept=".txt,.epub,.srt,.docx" style="display: none;" onchange="handleFileSelectTermFix(event)" multiple>
+                    <p class="post-mode-help" data-mode="refine" data-i18n="translation:drop_files_refine_support">Polish an existing translation — same language in, same language out</p>
+                    <p class="post-mode-help hidden" data-mode="term_fix" data-i18n="translation:drop_files_term_fix_support">Replace a term the glossary missed, without translating again</p>
+                    <input type="file" id="fileInputRefine" accept=".txt,.epub,.srt,.docx" style="display: none;" multiple>
                 </div>
 
                 <!-- Term fix rules (shown while the queue holds term-fix files) -->
@@ -2180,6 +2182,6 @@
 
     <!-- Scripts -->
     <script src="/static/js/vendor/socket.io.min.js"></script>
-    <script type="module" src="/static/js/index.js?v=20261103-termfix1"></script>
+    <script type="module" src="/static/js/index.js?v=20261113-postzone1"></script>
 </body>
 </html>

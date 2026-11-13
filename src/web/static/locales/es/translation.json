@@ -13,9 +13,11 @@
 
   "drop_files_title": "Suelta archivos para traducir",
   "drop_files_support": "Compatible con TXT, EPUB, SRT, PGN, DOCX y PDF",
-  "drop_files_refine_title": "Suelta archivos para refinar (ya traducidos)",
+  "drop_files_post_title": "Suelta archivos ya traducidos",
+  "post_mode_label": "Qué hacer con el archivo",
+  "post_mode_refine": "Refinar",
+  "post_mode_term_fix": "Corregir un término",
   "drop_files_refine_support": "Pule una traducción existente — misma lengua de entrada y salida",
-  "drop_files_term_fix_title": "Suelta archivos para corregir un término (ya traducidos)",
   "drop_files_term_fix_support": "Sustituye un término que el glosario pasó por alto, sin volver a traducir",
   "browse_files": "Explorar archivos",
   "selected_files": "Archivos seleccionados:",

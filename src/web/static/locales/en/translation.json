@@ -13,9 +13,11 @@
 
   "drop_files_title": "Drop files to translate",
   "drop_files_support": "Support for TXT, EPUB, SRT, PGN, DOCX, and PDF",
-  "drop_files_refine_title": "Drop files to refine (already translated)",
+  "drop_files_post_title": "Drop files that are already translated",
+  "post_mode_label": "What to do with the file",
+  "post_mode_refine": "Refine",
+  "post_mode_term_fix": "Fix a term",
   "drop_files_refine_support": "Polish an existing translation — same language in, same language out",
-  "drop_files_term_fix_title": "Drop files to fix a term (already translated)",
   "drop_files_term_fix_support": "Replace a term the glossary missed, without translating again",
   "browse_files": "Browse Files",
   "selected_files": "Selected Files:",

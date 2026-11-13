@@ -828,6 +828,51 @@ select.form-control {
     font-size: 0.875rem;
 }
 
+/* Mode switch of the "already translated" zone (refine / fix a term) */
+.post-mode-switch {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    margin: 0.5rem 0 0.75rem;
+    border-radius: 9999px;
+    background: var(--background-light);
+    box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+}
+
+.post-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 1rem;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.file-upload .post-mode-btn .material-symbols-outlined {
+    font-size: 1.1rem;
+    color: inherit;
+}
+
+.post-mode-btn:hover:not(:disabled) {
+    color: var(--text-dark);
+}
+
+.post-mode-btn.active {
+    background: var(--primary-light);
+    color: white;
+}
+
+.post-mode-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .file-upload.zone-disabled {
     opacity: 0.4;
     pointer-events: none;

@@ -13,9 +13,11 @@
 
   "drop_files_title": "Dateien zum Übersetzen hier ablegen",
   "drop_files_support": "Unterstützung für TXT, EPUB, SRT, PGN, DOCX und PDF",
-  "drop_files_refine_title": "Dateien zum Überarbeiten ablegen (bereits übersetzt)",
+  "drop_files_post_title": "Bereits übersetzte Dateien ablegen",
+  "post_mode_label": "Was mit der Datei geschehen soll",
+  "post_mode_refine": "Überarbeiten",
+  "post_mode_term_fix": "Begriff korrigieren",
   "drop_files_refine_support": "Bestehende Übersetzung polieren — gleiche Sprache rein, gleiche Sprache raus",
-  "drop_files_term_fix_title": "Dateien ablegen, um einen Begriff zu korrigieren (bereits übersetzt)",
   "drop_files_term_fix_support": "Einen vom Glossar übersehenen Begriff ersetzen, ohne neu zu übersetzen",
   "browse_files": "Dateien durchsuchen",
   "selected_files": "Ausgewählte Dateien:",

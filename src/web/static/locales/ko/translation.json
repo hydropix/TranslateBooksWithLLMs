@@ -13,9 +13,11 @@
 
   "drop_files_title": "번역할 파일을 여기에 놓으세요",
   "drop_files_support": "TXT, EPUB, SRT, PGN, DOCX, PDF 지원",
-  "drop_files_refine_title": "다듬을 파일을 여기에 놓으세요 (이미 번역됨)",
+  "drop_files_post_title": "이미 번역된 파일을 놓으세요",
+  "post_mode_label": "파일 처리 방법",
+  "post_mode_refine": "다듬기",
+  "post_mode_term_fix": "용어 수정",
   "drop_files_refine_support": "기존 번역을 다듬기 — 같은 언어 입력, 같은 언어 출력",
-  "drop_files_term_fix_title": "용어를 수정할 파일을 놓으세요 (이미 번역됨)",
   "drop_files_term_fix_support": "용어집이 놓친 용어를 다시 번역하지 않고 바꿉니다",
   "browse_files": "파일 찾아보기",
   "selected_files": "선택된 파일:",

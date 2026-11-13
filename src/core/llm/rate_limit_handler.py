@@ -3,7 +3,7 @@ Centralized HTTP 429 handling with API key rotation support.
 
 Used by cloud LLM providers to deduplicate the rate-limit retry/backoff logic
 that was previously copy-pasted across all providers (gemini, openai-compatible,
-openrouter, mistral, deepseek, poe).
+openrouter, mistral, deepseek, poe, opencode).
 
 Behavior on 429:
     1. Compute wait time from response headers (Retry-After or X-RateLimit-Reset)
@@ -11,7 +11,7 @@ Behavior on 429:
     3. If another key is available: rotate without sleeping (caller's next
        acquire() returns the new key)
     4. Else if rate-limit budget remains: sleep until the next key becomes
-       available
+       available, unless that wait exceeds MAX_RATE_LIMIT_SLEEP
     5. Else: raise RateLimitError to trigger upstream auto-pause
 
 Rate-limit handling has its own budget, separate from the caller's transient
@@ -26,6 +26,15 @@ from typing import Callable, Mapping, Optional
 
 from .exceptions import RateLimitError
 from .key_pool import KeyPool
+
+
+# Longest wait handle_rate_limit() will sleep through in-process. Quota-style
+# 429s (e.g. a subscription's weekly limit) can carry a Retry-After of hours or
+# days; sleeping that long stalls the job with no visible progress, so past
+# this cap we raise RateLimitError and let the pipeline auto-pause instead.
+# Kept at an hour so ordinary throttles (minutes) still wait in place: the CLI
+# and one-shot web endpoints have no auto-pause and would fail outright.
+MAX_RATE_LIMIT_SLEEP = 3600
 
 
 def is_retryable_http_status(status_code: int) -> bool:
@@ -155,6 +164,13 @@ async def handle_rate_limit(
     # All keys throttled (or single-key pool) — wait for the earliest recovery.
     remaining = await pool.time_until_next_available()
     sleep_for = max(int(remaining) if remaining > 0 else wait_time, 1)
+    if sleep_for > MAX_RATE_LIMIT_SLEEP:
+        raise RateLimitError(
+            f"{provider} rate limit resets in {sleep_for}s, longer than the "
+            f"{MAX_RATE_LIMIT_SLEEP}s the translator waits in place",
+            retry_after=sleep_for,
+            provider=provider,
+        )
     _log(
         log_callback,
         "llm_rate_limit",

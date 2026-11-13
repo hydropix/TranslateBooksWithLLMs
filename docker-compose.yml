@@ -37,7 +37,7 @@ services:
 
       # -----------------------------------------------------------------------
       # LLM provider selection
-      # Options: ollama | gemini | openai | openrouter | mistral | deepseek | poe | nim
+      # Options: ollama | gemini | openai | openrouter | mistral | deepseek | poe | nim | opencode
       # -----------------------------------------------------------------------
       - LLM_PROVIDER=ollama
       - DEFAULT_MODEL=qwen3:14b
@@ -76,6 +76,9 @@ services:
 
       # - NIM_API_KEY=
       # - NIM_MODEL=meta/llama-3.1-8b-instruct
+
+      # - OPENCODE_API_KEY=
+      # - OPENCODE_MODEL=
 
       # -----------------------------------------------------------------------
       # Translation defaults

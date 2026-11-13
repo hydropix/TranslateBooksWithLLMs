@@ -34,7 +34,7 @@
       "successful_after_retry": 0,
       "successful_first_try": 0,
       "token_alignment_used": 0,
-      "total_chunks": 2
+      "total_chunks": 3
     },
     {
       "completed_chunks": 1,
@@ -48,7 +48,7 @@
       "successful_after_retry": 0,
       "successful_first_try": 1,
       "token_alignment_used": 0,
-      "total_chunks": 2
+      "total_chunks": 3
     },
     {
       "completed_chunks": 2,
@@ -62,7 +62,21 @@
       "successful_after_retry": 0,
       "successful_first_try": 2,
       "token_alignment_used": 0,
-      "total_chunks": 2
+      "total_chunks": 3
+    },
+    {
+      "completed_chunks": 3,
+      "enable_refinement": false,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 3,
+      "refinement_chunks_completed": 0,
+      "refinement_phase": false,
+      "successful_after_retry": 0,
+      "successful_first_try": 3,
+      "token_alignment_used": 0,
+      "total_chunks": 3
     }
   ]
 }

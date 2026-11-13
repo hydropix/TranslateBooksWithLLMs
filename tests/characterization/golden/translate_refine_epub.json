@@ -32,7 +32,7 @@
       "processed_chunks": 0,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -43,7 +43,7 @@
       "processed_chunks": 1,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -54,7 +54,7 @@
       "processed_chunks": 1,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -65,7 +65,7 @@
       "processed_chunks": 1,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -76,7 +76,7 @@
       "processed_chunks": 1,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -87,7 +87,7 @@
       "processed_chunks": 2,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -98,7 +98,7 @@
       "processed_chunks": 2,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -109,7 +109,7 @@
       "processed_chunks": 2,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -120,7 +120,7 @@
       "processed_chunks": 2,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -131,7 +131,7 @@
       "processed_chunks": 3,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -142,7 +142,7 @@
       "processed_chunks": 3,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -153,7 +153,7 @@
       "processed_chunks": 3,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -164,7 +164,7 @@
       "processed_chunks": 3,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -175,40 +175,7 @@
       "processed_chunks": 4,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 4,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 4,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 10,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 4,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 4,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 10,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 4,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 4,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -219,7 +186,7 @@
       "processed_chunks": 5,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -230,7 +197,7 @@
       "processed_chunks": 5,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -241,7 +208,7 @@
       "processed_chunks": 5,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -252,7 +219,18 @@
       "processed_chunks": 5,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 5,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 5,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -263,7 +241,7 @@
       "processed_chunks": 6,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -274,7 +252,7 @@
       "processed_chunks": 6,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -285,7 +263,7 @@
       "processed_chunks": 6,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -296,7 +274,7 @@
       "processed_chunks": 6,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -307,7 +285,7 @@
       "processed_chunks": 7,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -318,7 +296,7 @@
       "processed_chunks": 7,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -329,7 +307,7 @@
       "processed_chunks": 7,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -340,7 +318,7 @@
       "processed_chunks": 7,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -351,40 +329,7 @@
       "processed_chunks": 8,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 8,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 8,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 10,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 8,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 8,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 10,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 8,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 8,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -395,7 +340,7 @@
       "processed_chunks": 9,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -406,7 +351,7 @@
       "processed_chunks": 9,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -417,7 +362,7 @@
       "processed_chunks": 9,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -428,7 +373,18 @@
       "processed_chunks": 9,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 9,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 9,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -439,7 +395,7 @@
       "processed_chunks": 10,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -450,7 +406,7 @@
       "processed_chunks": 10,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
       "total_tokens": 0
     },
     {
@@ -461,7 +417,95 @@
       "processed_chunks": 10,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
-      "total_chunks": 10,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 10,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 10,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 11,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 11,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 11,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 11,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 11,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 11,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 11,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 11,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 12,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 12,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 12,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 12,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
+      "total_tokens": 0
+    },
+    {
+      "completed_chunks": 12,
+      "failed_chunks": 0,
+      "fallback_used": 0,
+      "placeholder_errors": 0,
+      "processed_chunks": 12,
+      "successful_after_retry": 0,
+      "token_alignment_used": 0,
+      "total_chunks": 12,
       "total_tokens": 0
     }
   ]

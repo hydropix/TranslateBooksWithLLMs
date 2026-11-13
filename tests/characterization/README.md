@@ -39,6 +39,17 @@ UPDATE_CHARACTERIZATION=1 python -m pytest tests/characterization/
 A missing golden is bootstrapped automatically (the test `skip`s with a
 notice); re-run to compare.
 
+## Hermetic environment
+
+`conftest.py` runs every test with `tmp_path` as the working directory (so
+nothing is written under the repository's `data/`) and pins the config knobs
+`src.config` reads from a local `.env` that shape the trace:
+`SRT_LINES_PER_BLOCK=20`, `PARALLEL_TRANSLATIONS=1`, and the DOCX/EPUB HTML
+chunk budget at the shipped `MAX_TOKENS_PER_CHUNK` default (450). DOCX/EPUB
+build their chunker from `TranslationConfig`'s import-time default and ignore
+the `max_tokens_per_chunk=60` the recorder passes, so before the pin a
+developer `.env` silently changed their chunk counts.
+
 ## Divergences this net locks in (the refactor targets)
 
 These are the per-format inconsistencies the goldens make executable. The

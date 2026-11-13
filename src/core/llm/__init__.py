@@ -4,7 +4,7 @@ LLM Provider System
 This package provides a modular system for interacting with various LLM providers.
 
 Public API:
-    - Exceptions: ContextOverflowError, RepetitionLoopError
+    - Exceptions: ContextOverflowError, RepetitionLoopError, RateLimitError, LLMClientConfigError
     - Base classes: LLMProvider, LLMResponse
     - Thinking system: ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message, detect_repetition_loop
     - Utilities: ContextDetector, TranslationExtractor
@@ -18,7 +18,9 @@ Example usage:
 """
 
 # Exceptions
-from .exceptions import ContextOverflowError, RepetitionLoopError, RateLimitError
+from .exceptions import (
+    ContextOverflowError, RepetitionLoopError, RateLimitError, LLMClientConfigError,
+)
 
 # Base classes
 from .base import LLMProvider, LLMResponse
@@ -49,6 +51,7 @@ __all__ = [
     'ContextOverflowError',
     'RepetitionLoopError',
     'RateLimitError',
+    'LLMClientConfigError',
 
     # Base
     'LLMProvider',

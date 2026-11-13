@@ -4,11 +4,20 @@ Centralized LLM client for all API communication
 from typing import Optional
 
 from src.config import API_ENDPOINT, DEFAULT_MODEL
-from src.core.llm import create_llm_provider, LLMProvider, ContextOverflowError, RepetitionLoopError, LLMResponse
+from src.core.llm import (
+    create_llm_provider, LLMProvider, ContextOverflowError, RepetitionLoopError, LLMResponse,
+    LLMClientConfigError,
+)
 from src.core.llm.thinking.behavior import ThinkingBehavior
 
 # Re-export for convenience
-__all__ = ['LLMClient', 'default_client', 'create_llm_client', 'ContextOverflowError', 'RepetitionLoopError', 'LLMResponse']
+__all__ = ['LLMClient', 'default_client', 'create_llm_client', 'LLMClientConfigError',
+           'SUPPORTED_CLIENT_PROVIDERS', 'ContextOverflowError', 'RepetitionLoopError', 'LLMResponse']
+
+# Providers create_llm_client() can build (all those create_llm_provider() supports).
+SUPPORTED_CLIENT_PROVIDERS = (
+    'ollama', 'openai', 'gemini', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'litellm',
+)
 
 
 class LLMClient:
@@ -182,14 +191,21 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                       poe_api_key: Optional[str] = None,
                       nim_api_key: Optional[str] = None,
                       context_window: Optional[int] = None,
-                      log_callback: Optional[callable] = None) -> Optional[LLMClient]:
+                      log_callback: Optional[callable] = None) -> LLMClient:
     """
-    Factory function to create LLM client based on provider or custom endpoint
+    Build an LLMClient for a provider, delegating to create_llm_provider().
+
+    The provider is instantiated eagerly so a bad configuration fails here,
+    with a clear message, instead of at the first request (or, as before,
+    by silently falling back to the module-level Ollama client).
 
     Args:
-        llm_provider: Provider type ('ollama', 'gemini', 'openai', 'openrouter', 'mistral', 'deepseek', or 'poe', or 'nim')
+        llm_provider: One of SUPPORTED_CLIENT_PROVIDERS ('ollama', 'openai',
+            'gemini', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim',
+            'litellm'). Case-insensitive.
         gemini_api_key: API key for Gemini provider
-        api_endpoint: API endpoint for custom Ollama instance or OpenAI-compatible API
+        api_endpoint: Endpoint for Ollama or an OpenAI-compatible API
+            (ignored by the other providers)
         model_name: Model name to use
         openai_api_key: API key for OpenAI provider
         openrouter_api_key: API key for OpenRouter provider
@@ -197,29 +213,44 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
         deepseek_api_key: API key for DeepSeek provider
         poe_api_key: API key for Poe provider
         nim_api_key: API key for NVIDIA NIM provider
-        context_window: Context window size for the model
-        log_callback: Callback function for logging
+        context_window: Context window size (Ollama and OpenAI-compatible)
+        log_callback: Logging callback (Ollama and OpenAI-compatible)
+
+    Empty keys fall back to the provider's environment variable, as in
+    create_llm_provider(). LiteLLM reads credentials from each upstream
+    provider's own environment variable.
 
     Returns:
-        LLMClient instance or None if using default client
+        A ready LLMClient (never None).
+
+    Raises:
+        LLMClientConfigError: Unknown provider, or no usable API key for a
+            provider that requires one.
     """
-    if llm_provider == "gemini" and gemini_api_key:
-        return LLMClient(provider_type="gemini", api_key=gemini_api_key, model=model_name)
-    if llm_provider == "openai":
-        return LLMClient(provider_type="openai", api_endpoint=api_endpoint, model=model_name,
-                         api_key=openai_api_key, context_window=context_window, log_callback=log_callback)
-    if llm_provider == "openrouter":
-        return LLMClient(provider_type="openrouter", model=model_name, api_key=openrouter_api_key)
-    if llm_provider == "mistral":
-        return LLMClient(provider_type="mistral", model=model_name, api_key=mistral_api_key)
-    if llm_provider == "deepseek":
-        return LLMClient(provider_type="deepseek", model=model_name, api_key=deepseek_api_key)
-    if llm_provider == "poe":
-        return LLMClient(provider_type="poe", model=model_name, api_key=poe_api_key)
-    if llm_provider == "nim":
-        return LLMClient(provider_type="nim", model=model_name, api_key=nim_api_key)
-    if llm_provider == "ollama":
-        # Always create a new client for Ollama to ensure proper configuration
-        return LLMClient(provider_type="ollama", api_endpoint=api_endpoint, model=model_name,
-                         context_window=context_window, log_callback=log_callback)
-    return None
+    provider = (llm_provider or "").strip().lower()
+    per_provider_kwargs = {
+        "ollama": dict(api_endpoint=api_endpoint, model=model_name,
+                       context_window=context_window, log_callback=log_callback),
+        "openai": dict(api_endpoint=api_endpoint, model=model_name, api_key=openai_api_key,
+                       context_window=context_window, log_callback=log_callback),
+        "gemini": dict(api_key=gemini_api_key, model=model_name),
+        "openrouter": dict(api_key=openrouter_api_key, model=model_name),
+        "mistral": dict(api_key=mistral_api_key, model=model_name),
+        "deepseek": dict(api_key=deepseek_api_key, model=model_name),
+        "poe": dict(api_key=poe_api_key, model=model_name),
+        "nim": dict(api_key=nim_api_key, model=model_name),
+        "litellm": dict(model=model_name),
+    }
+    if provider not in per_provider_kwargs:
+        raise LLMClientConfigError(
+            f"Unknown LLM provider '{llm_provider}'. "
+            f"Supported providers: {', '.join(SUPPORTED_CLIENT_PROVIDERS)}."
+        )
+
+    kwargs = per_provider_kwargs[provider]
+    client = LLMClient(provider_type=provider, **kwargs)
+    try:
+        client._provider = create_llm_provider(provider, **kwargs)
+    except ValueError as e:
+        raise LLMClientConfigError(f"Cannot create the '{provider}' LLM client: {e}") from e
+    return client

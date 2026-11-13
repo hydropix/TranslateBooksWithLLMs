@@ -222,9 +222,10 @@ function closeOverlay() {
 async function stopRun() {
     if (!state.sampleId) return;
     try {
-        await fetch(`/api/sample/${encodeURIComponent(state.sampleId)}/stop`, { method: 'POST' });
+        await ApiClient.stopSampleRun(state.sampleId);
     } catch (err) {
-        console.warn('[quick-test] stop failed', err);
+        // A 404 means the run already ended; stopping is best-effort either way.
+        if (!err.status) console.warn('[quick-test] stop failed', err);
     }
     setRunningUi(false);
 }
@@ -288,13 +289,7 @@ async function open(file) {
     };
 
     try {
-        const r = await fetch('/api/sample/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        const resp = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(resp.error || `HTTP ${r.status}`);
+        const resp = await ApiClient.runSample(payload);
 
         state.sampleId = resp.sample_id;
         renderSkeletons(resp.items || []);

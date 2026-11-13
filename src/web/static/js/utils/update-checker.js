@@ -8,6 +8,7 @@
  *   GET  /api/version/update/status (polled while update runs)
  */
 
+import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
 import { t } from '../i18n/i18n.js';
 
@@ -74,9 +75,15 @@ export const UpdateChecker = {
     },
 
     async checkOnce() {
-        const resp = await fetch('/api/version/check');
-        if (!resp.ok) return null;
-        const data = await resp.json();
+        let data;
+        try {
+            data = await ApiClient.checkForUpdate();
+        } catch (e) {
+            // An error status (e.g. GitHub unreachable -> 500) is a silent
+            // "no info"; a network failure propagates to the caller.
+            if (e.status) return null;
+            throw e;
+        }
         this._applyCheckResult(data);
         return data;
     },
@@ -160,34 +167,29 @@ export const UpdateChecker = {
         this._setOverlayStep(t('common:update_status_send'));
 
         try {
-            const resp = await fetch('/api/version/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ install_deps: true, restart: true }),
-            });
-            const data = await resp.json().catch(() => ({}));
-
-            if (!resp.ok) {
-                const reason = data.message || data.error || `HTTP ${resp.status}`;
-                this._setOverlayError(reason);
-                if (installBtn) installBtn.disabled = false;
-                MessageLogger.addLog(t('common:update_refused', { reason }));
-                return;
-            }
-
-            MessageLogger.addLog(t('common:update_started'));
-            this._captureCurrentSessionId();
-            this._startPolling();
+            await ApiClient.startUpdate({ installDeps: true, restart: true });
         } catch (e) {
-            this._setOverlayError(t('common:update_contact_failed', { error: e.message }));
             if (installBtn) installBtn.disabled = false;
+            if (e.status) {
+                // The server refused the update (not a git checkout, already
+                // running, active translations): prefer its human message.
+                const reason = e.body?.message || e.body?.error || `HTTP ${e.status}`;
+                this._setOverlayError(reason);
+                MessageLogger.addLog(t('common:update_refused', { reason }));
+            } else {
+                this._setOverlayError(t('common:update_contact_failed', { error: e.message }));
+            }
+            return;
         }
+
+        MessageLogger.addLog(t('common:update_started'));
+        this._captureCurrentSessionId();
+        this._startPolling();
     },
 
     async _captureCurrentSessionId() {
         try {
-            const r = await fetch('/api/health');
-            const j = await r.json();
+            const j = await ApiClient.healthCheck();
             this._initialHealthSessionId = String(j.session_id || j.startup_time || '');
         } catch {
             this._initialHealthSessionId = null;
@@ -198,9 +200,8 @@ export const UpdateChecker = {
         this._stopPolling();
         const tick = async () => {
             try {
-                const r = await fetch('/api/version/update/status');
-                if (!r.ok) return;
-                const status = await r.json();
+                // An error status throws and is swallowed below, like a network blip.
+                const status = await ApiClient.getUpdateStatus();
                 this._applyStatus(status);
 
                 if (status.state === 'failed') {
@@ -237,20 +238,18 @@ export const UpdateChecker = {
         const deadline = Date.now() + RESTART_WAIT_MAX_MS;
         const probe = async () => {
             try {
-                const r = await fetch('/api/health', { cache: 'no-store' });
-                if (r.ok) {
-                    const j = await r.json();
-                    const newSession = String(j.session_id || j.startup_time || '');
-                    if (newSession && newSession !== this._initialHealthSessionId) {
-                        this._setOverlayStep(t('common:update_status_restarted', { version: j.version }));
-                        clearInterval(this._restartWaiter);
-                        this._restartWaiter = null;
-                        setTimeout(() => window.location.reload(), 700);
-                        return;
-                    }
+                const j = await ApiClient.healthCheck({ noCache: true });
+                const newSession = String(j.session_id || j.startup_time || '');
+                if (newSession && newSession !== this._initialHealthSessionId) {
+                    this._setOverlayStep(t('common:update_status_restarted', { version: j.version }));
+                    clearInterval(this._restartWaiter);
+                    this._restartWaiter = null;
+                    setTimeout(() => window.location.reload(), 700);
+                    return;
                 }
             } catch {
-                // server is down during restart, keep probing
+                // server is down (network error) or not ready yet (error
+                // status) during restart, keep probing
             }
             if (Date.now() > deadline) {
                 clearInterval(this._restartWaiter);

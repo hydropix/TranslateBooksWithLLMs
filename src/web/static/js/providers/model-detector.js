@@ -5,6 +5,7 @@
  * Also checks for uncontrollable thinking models and displays warnings.
  */
 
+import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 
 /**
@@ -48,8 +49,7 @@ async function checkThinkingModelWarning(modelName) {
         // Get API endpoint for cache differentiation
         const endpoint = DomHelpers.getValue('apiEndpoint') || '';
 
-        const response = await fetch(`/api/model/warning?model=${encodeURIComponent(modelName)}&endpoint=${encodeURIComponent(endpoint)}`);
-        const data = await response.json();
+        const data = await ApiClient.getModelWarning(modelName, endpoint);
 
         if (data.warning && data.is_uncontrollable) {
             warningText.textContent = data.warning;

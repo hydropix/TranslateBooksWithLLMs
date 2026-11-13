@@ -814,18 +814,12 @@ async function _runInitialize({ preserveContext }) {
     const maxChars = parseInt($('sampleMaxChars')?.value, 10) || SAMPLE_DEFAULT_MAX_CHARS;
 
     try {
-        const r = await fetch('/api/sample/initialize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_path: state.uploadedPath,
-                file_type: state.fileType,
-                n_samples: nSamples,
-                max_chars: maxChars,
-            }),
+        const body = await ApiClient.initializeSamples({
+            file_path: state.uploadedPath,
+            file_type: state.fileType,
+            n_samples: nSamples,
+            max_chars: maxChars,
         });
-        const body = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
         state.lastItems = body.items || [];
         state.appliedNSamples = nSamples;
         state.appliedMaxChars = maxChars;
@@ -885,27 +879,22 @@ async function addSample() {
     if (addBtn) addBtn.disabled = true;
 
     try {
-        const r = await fetch('/api/sample/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_path: state.uploadedPath,
-                file_type: state.fileType,
-                max_chars: maxChars,
-                exclude_indices: excludeIndices,
-            }),
+        const body = await ApiClient.extractSample({
+            file_path: state.uploadedPath,
+            file_type: state.fileType,
+            max_chars: maxChars,
+            exclude_indices: excludeIndices,
         });
-        const body = await r.json().catch(() => ({}));
-        if (r.status === 409) {
-            showSampleMessage(t('sample:no_more_indices'), 'info');
-            return;
-        }
-        if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
 
         if (!Array.isArray(state.lastItems)) state.lastItems = [];
         state.lastItems.push(body.item);
         refreshResultsFromCache();
     } catch (err) {
+        if (err.status === 409) {
+            // Every index of the document is already in the sample set.
+            showSampleMessage(t('sample:no_more_indices'), 'info');
+            return;
+        }
         console.error('[sample] extract failed', err);
         showSampleMessage(t('sample:add_sample_failed', { error: err.message || String(err) }), 'error');
     } finally {
@@ -1028,15 +1017,7 @@ async function runSample(opts = {}) {
 
     let resp;
     try {
-        const r = await fetch('/api/sample/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        resp = await r.json().catch(() => ({}));
-        if (!r.ok) {
-            throw new Error(resp.error || `HTTP ${r.status}`);
-        }
+        resp = await ApiClient.runSample(payload);
     } catch (err) {
         console.error('[sample] /api/sample/run failed', err);
         showSampleMessage(t('sample:error_run', { error: err.message || String(err) }), 'error');
@@ -1106,15 +1087,7 @@ async function runSample(opts = {}) {
     // Phase 3 — kick off the LLM work for non-cached cells. Server will emit
     // sample_done once finished (including when every cell is skipped).
     try {
-        const r = await fetch(`/api/sample/${encodeURIComponent(resp.sample_id)}/dispatch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ skip_cells: skipCells }),
-        });
-        if (!r.ok) {
-            const errBody = await r.json().catch(() => ({}));
-            throw new Error(errBody.error || `HTTP ${r.status}`);
-        }
+        await ApiClient.dispatchSampleRun(resp.sample_id, skipCells);
     } catch (err) {
         console.error('[sample] /dispatch failed', err);
         showSampleMessage(t('sample:error_run', { error: err.message || String(err) }), 'error');
@@ -1125,9 +1098,10 @@ async function runSample(opts = {}) {
 async function stopSample() {
     if (!state.currentSampleId) return;
     try {
-        await fetch(`/api/sample/${encodeURIComponent(state.currentSampleId)}/stop`, { method: 'POST' });
+        await ApiClient.stopSampleRun(state.currentSampleId);
     } catch (err) {
-        console.warn('stop sample failed', err);
+        // A 404 means the run already ended; stopping is best-effort either way.
+        if (!err.status) console.warn('stop sample failed', err);
     }
 }
 

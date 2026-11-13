@@ -6,6 +6,7 @@
  * and the "Send test" button. Persistence is handled by SettingsManager.
  */
 
+import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from './dom-helpers.js';
 import { MessageLogger } from './message-logger.js';
 import { t } from '../i18n/i18n.js';
@@ -156,34 +157,39 @@ export const NotificationsManager = {
         }
         if (btn) btn.disabled = true;
 
-        try {
-            const response = await fetch('/api/notifications/test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ event })
-            });
-            const data = await response.json().catch(() => ({}));
+        const showFailure = (err) => {
+            if (resultEl) {
+                resultEl.style.color = '#ef4444';
+                resultEl.textContent = err;
+            }
+            MessageLogger.showMessage(t('common:notification_test_failed', { error: err }), 'error');
+        };
 
-            if (response.ok && data.success) {
+        try {
+            const data = await ApiClient.testNotification(event);
+
+            if (data && data.success) {
                 if (resultEl) {
                     resultEl.style.color = '#10b981';
                     resultEl.textContent = data.message || t('common:test_sent_default');
                 }
                 MessageLogger.showMessage(t('common:notification_test_sent', { event }), 'success');
             } else {
-                const err = data.error || `HTTP ${response.status}`;
-                if (resultEl) {
-                    resultEl.style.color = '#ef4444';
-                    resultEl.textContent = err;
-                }
-                MessageLogger.showMessage(t('common:notification_test_failed', { error: err }), 'error');
+                // 2xx without success (not emitted by the current route).
+                showFailure((data && data.error) || 'HTTP 200');
             }
         } catch (e) {
-            if (resultEl) {
-                resultEl.style.color = '#ef4444';
-                resultEl.textContent = t('errors:network_error', { error: e.message });
+            if (e.status) {
+                // The server answered (empty URL, disabled event, webhook
+                // failure): show its reason.
+                showFailure(e.body?.error || `HTTP ${e.status}`);
+            } else {
+                if (resultEl) {
+                    resultEl.style.color = '#ef4444';
+                    resultEl.textContent = t('errors:network_error', { error: e.message });
+                }
+                MessageLogger.showMessage(t('common:notification_test_failed', { error: e.message }), 'error');
             }
-            MessageLogger.showMessage(t('common:notification_test_failed', { error: e.message }), 'error');
         } finally {
             if (btn) btn.disabled = false;
         }

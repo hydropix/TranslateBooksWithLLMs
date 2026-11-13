@@ -294,7 +294,7 @@ export const BatchController = {
 
         const lastTranslationPreview = DomHelpers.getElement('lastTranslationPreview');
         if (lastTranslationPreview) {
-            lastTranslationPreview.innerHTML = `<div style="color: #6b7280; font-style: italic; padding: 10px;">${t('translation:no_translation_yet')}</div>`;
+            lastTranslationPreview.innerHTML = `<div style="color: var(--text-muted-light); font-style: italic; padding: 10px;">${t('translation:no_translation_yet')}</div>`;
         }
 
         if (fileToTranslate.fileType === 'epub') {

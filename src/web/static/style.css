@@ -170,10 +170,6 @@ html.dark .form-control::placeholder {
     color: #777777;
 }
 
-html.dark .file-upload {
-    background: var(--background-light);
-}
-
 html.dark .file-table thead tr {
     background: rgba(136, 136, 136, 0.1);
 }
@@ -785,11 +781,10 @@ select.form-control {
    ======================================== */
 
 .file-upload {
-    margin: 2rem 0;
-    padding: 4rem;
-    border: 2px dashed rgba(62, 90, 120, 0.3);
-    background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    margin: 1rem 0 0.5rem;
+    padding: 1.75rem 1.25rem;
+    border: 1.5px dashed var(--primary-tint-border);
+    background: var(--primary-tint);
     text-align: center;
     cursor: pointer;
     transition: all 0.3s;
@@ -797,28 +792,23 @@ select.form-control {
 }
 
 .file-upload:hover {
-    border-color: rgba(62, 90, 120, 0.6);
-    transform: scale(1.01);
+    border-color: var(--primary-light);
 }
 
 .file-upload.dragging {
     border-color: var(--primary-light);
-    background: linear-gradient(135deg, rgba(62, 90, 120, 0.05), rgba(62, 90, 120, 0.1));
+    background: rgba(62, 90, 120, 0.12);
 }
 
 .file-upload .upload-icon {
-    background: rgba(62, 90, 120, 0.1);
-    width: 5rem;
-    height: 5rem;
+    background: var(--primary-light);
+    width: 2.5rem;
+    height: 2.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 1.5rem;
+    margin: 0 auto 0.6rem;
     transition: transform 0.3s;
-}
-
-.file-upload:hover .upload-icon {
-    transform: scale(1.1);
 }
 
 .file-upload .material-symbols-outlined {
@@ -826,77 +816,89 @@ select.form-control {
     color: var(--primary-light);
 }
 
+.file-upload .upload-icon .material-symbols-outlined {
+    font-size: 1.35rem;
+    color: #ffffff;
+}
+
 .file-upload h3 {
     color: var(--text-dark);
-    font-size: 1.5rem;
-    font-weight: 900;
-    margin-bottom: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
 }
 
 .file-upload p {
     color: var(--text-muted-light);
-    font-size: 1rem;
+    font-size: 0.8125rem;
 }
 
 .file-upload .browse-btn {
-    margin-top: 1rem;
-    padding: 0.75rem 2rem;
-    background: var(--primary-light);
-    color: white;
-    font-weight: 700;
-    font-size: 0.875rem;
-    letter-spacing: 0.05em;
+    margin-top: 0.35rem;
+    padding: 0;
+    background: transparent;
+    color: var(--primary-light);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0;
     display: inline-block;
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
-/* Secondary (refinement) drop zone — same elevated rendering as the primary, just more compact */
-.file-upload-secondary {
-    margin: 0.75rem 0 1rem;
-    padding: 2rem;
+/* T3: the "already translated" zone is an alternative path, so it is a
+   compact single row instead of a second hero drop zone. */
+.file-upload.file-upload-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem 0.75rem;
+    margin: 0 0 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px dashed var(--border-strong);
+    background: transparent;
+}
+
+.file-upload.file-upload-secondary:hover {
+    border-color: var(--text-faint);
 }
 
 .file-upload-secondary .upload-icon {
-    width: 3.5rem;
-    height: 3.5rem;
-    margin: 0 auto 1rem;
-}
-
-.file-upload-secondary .upload-icon .material-symbols-outlined {
-    font-size: 2rem;
+    display: none;
 }
 
 .file-upload-secondary h4 {
-    color: var(--text-dark);
-    font-size: 1.125rem;
-    font-weight: 900;
-    margin-bottom: 0.25rem;
+    margin: 0;
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
+    font-weight: 500;
 }
 
 .file-upload-secondary p {
+    flex-basis: 100%;
     color: var(--text-muted-light);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
 }
 
 /* Mode switch of the "already translated" zone (refine / fix a term) */
 .post-mode-switch {
     display: inline-flex;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    margin: 0.5rem 0 0.75rem;
-    background: var(--background-light);
-    box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+    gap: 0.2rem;
+    padding: 0;
+    margin: 0;
 }
 
 .post-mode-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.4rem 1rem;
+    padding: 0.2rem 0.55rem;
     border: none;
     background: transparent;
     color: var(--text-muted-light);
-    font-size: 0.8125rem;
-    font-weight: 700;
+    font-size: 0.75rem;
+    font-weight: 500;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
 }
@@ -911,8 +913,8 @@ select.form-control {
 }
 
 .post-mode-btn.active {
-    background: var(--primary-light);
-    color: white;
+    background: var(--llm-chip-bg);
+    color: var(--text-dark);
 }
 
 .post-mode-btn:disabled {
@@ -4864,21 +4866,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         margin-bottom: calc(1.5rem * var(--ui-density-y)) !important;
     }
 
-    /* --- Drop zone: the biggest single block of empty space --- */
-    .file-upload {
-        padding-top: 1.75rem !important;
-        padding-bottom: 1.75rem !important;
-        margin-top: 1rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-
-    /* The "already translated" zone is a tier-3 alternative path. */
-    .file-upload.file-upload-secondary {
-        padding-top: 0.75rem !important;
-        padding-bottom: 0.75rem !important;
-        margin-top: 0 !important;
-        margin-bottom: 0.75rem !important;
-    }
 }
 
 /* ========================================
@@ -4977,119 +4964,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    ======================================== */
 
 /* ---------- Cards and fields ---------- */
-
-/* ---------- T1: drop zone ---------- */
-
-.file-upload,
-html.dark .file-upload {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
-    border: 1.5px dashed var(--primary-tint-border);
-    background: var(--primary-tint);
-    box-shadow: none;
-}
-
-.file-upload:hover {
-    transform: none;
-    border-color: var(--primary-light);
-}
-
-.file-upload.dragging {
-    border-color: var(--primary-light);
-    background: rgba(62, 90, 120, 0.12);
-}
-
-.file-upload .upload-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    margin: 0 auto 0.6rem;
-    background: var(--primary-light);
-}
-
-.file-upload:hover .upload-icon {
-    transform: none;
-}
-
-.file-upload .upload-icon .material-symbols-outlined {
-    font-size: 1.35rem;
-    color: #ffffff;
-}
-
-.file-upload h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 0.15rem;
-}
-
-.file-upload p {
-    font-size: 0.8125rem;
-}
-
-.file-upload .browse-btn {
-    margin-top: 0.35rem;
-    padding: 0;
-    background: transparent;
-    color: var(--primary-light);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-/* ---------- T3: "already translated" zone ---------- */
-
-.file-upload.file-upload-secondary,
-html.dark .file-upload.file-upload-secondary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem 0.75rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
-    border: 1px dashed var(--border-strong);
-    background: transparent;
-}
-
-.file-upload.file-upload-secondary:hover {
-    border-color: var(--text-faint);
-}
-
-.file-upload-secondary .upload-icon {
-    display: none;
-}
-
-.file-upload-secondary h4 {
-    margin: 0;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--text-muted-light);
-}
-
-.file-upload-secondary p {
-    flex-basis: 100%;
-    font-size: 0.75rem;
-}
-
-.post-mode-switch {
-    margin: 0;
-    padding: 0;
-    gap: 0.2rem;
-    background: transparent;
-    box-shadow: none;
-}
-
-.post-mode-btn {
-    padding: 0.2rem 0.55rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.post-mode-btn.active {
-    background: var(--llm-chip-bg);
-    color: var(--text-dark);
-}
 
 /* ---------- T3: pre-flight options ---------- */
 

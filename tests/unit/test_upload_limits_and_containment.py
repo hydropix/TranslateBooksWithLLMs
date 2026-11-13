@@ -45,6 +45,51 @@ def test_oversized_request_gets_413(monkeypatch):
     resp = client.post('/echo', data=b'x' * (2 * 1024 * 1024))
     assert resp.status_code == 413
     assert resp.get_json()['error'] == 'Request too large'
+    assert resp.get_json()['max_request_size_mb'] == 1
+
+
+@pytest.fixture
+def capped_api_client(tmp_path):
+    """Upload + file blueprints behind a 1 MB request cap."""
+    from src.api.blueprints.file_routes import create_file_blueprint
+
+    app = Flask(__name__)
+    app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
+    app.register_blueprint(create_security_blueprint(str(tmp_path)))
+    app.register_blueprint(create_file_blueprint(str(tmp_path)))
+    routes._register_error_handlers(app)
+    return app.test_client()
+
+
+def _assert_json_413(resp):
+    assert resp.status_code == 413
+    assert resp.is_json, resp.data[:200]
+    body = resp.get_json()
+    assert body['error'] == 'Request too large'
+    assert '1 MB' in body['message']
+    assert body['max_request_size_mb'] == 1
+
+
+def test_oversized_upload_gets_json_413(capped_api_client):
+    import io
+
+    resp = capped_api_client.post(
+        '/api/upload',
+        data={'file': (io.BytesIO(b'x' * (2 * 1024 * 1024)), 'book.txt')},
+        content_type='multipart/form-data',
+    )
+    _assert_json_413(resp)
+
+
+def test_oversized_json_body_gets_json_413_not_route_500(capped_api_client):
+    # /api/files/batch/delete reads the body inside a broad try/except, which
+    # used to turn the 413 into its own 500 "Batch delete failed" body.
+    resp = capped_api_client.post(
+        '/api/files/batch/delete',
+        data=b'x' * (2 * 1024 * 1024),
+        content_type='application/json',
+    )
+    _assert_json_413(resp)
 
 
 # ---------------------------------------------------------------------------

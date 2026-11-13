@@ -14,7 +14,7 @@ into separate modules for better maintainability:
 import logging
 import os
 
-from flask import jsonify
+from flask import abort, jsonify, request
 
 from .blueprints import (
     create_config_blueprint,
@@ -125,6 +125,19 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
 def _register_error_handlers(app):
     """Register global error handlers"""
 
+    @app.before_request
+    def reject_oversized_body():
+        # Many routes read the body inside a broad ``try/except Exception``,
+        # which turns Werkzeug's RequestEntityTooLarge into their own 500 body
+        # and bypasses the JSON 413 handler below. Refuse a declared oversized
+        # body here, before any route code runs. A body sent without a
+        # Content-Length (chunked) is still capped by Werkzeug while reading.
+        limit = app.config.get('MAX_CONTENT_LENGTH')
+        length = request.content_length
+        if limit and length is not None and length > limit:
+            abort(413)
+        return None
+
     @app.errorhandler(404)
     def route_not_found(error):
         return jsonify({"error": "API Endpoint not found"}), 404
@@ -135,11 +148,11 @@ def _register_error_handlers(app):
         return jsonify({
             "error": "Request too large",
             "message": f"The request exceeds the {limit_mb} MB limit (MAX_REQUEST_SIZE_MB).",
+            "max_request_size_mb": limit_mb,
         }), 413
 
     @app.errorhandler(500)
     def internal_server_error(error):
-        import traceback
-        tb_str = traceback.format_exc()
-        print(f"INTERNAL SERVER ERROR: {error}\nTRACEBACK:\n{tb_str}")
+        # exc_info picks up the exception being handled, as format_exc() did.
+        _logger.error("Internal server error: %s", error, exc_info=True)
         return jsonify({"error": "Internal server error", "details": str(error)}), 500

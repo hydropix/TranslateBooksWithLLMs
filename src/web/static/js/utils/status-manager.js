@@ -195,13 +195,5 @@ export const StatusManager = {
     setWaiting(message = null) {
         const text = message || t('settings:llm_waiting_default');
         this.setStatus('waiting', text);
-    },
-
-    /**
-     * Get current status
-     * @returns {string} Current status type
-     */
-    getCurrentStatus() {
-        return currentStatus;
     }
 };

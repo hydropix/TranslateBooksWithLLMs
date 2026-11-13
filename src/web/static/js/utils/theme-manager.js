@@ -10,6 +10,9 @@ class ThemeManager {
         this.themeIcon = document.getElementById('themeIcon');
         this.STORAGE_KEY = 'tbl-theme-preference';
 
+        document.getElementById('themeToggleBtn')
+            ?.addEventListener('click', () => this.toggleTheme());
+
         // Initialize theme from localStorage or system preference
         this.initializeTheme();
     }
@@ -99,8 +102,8 @@ function getThemeManager() {
 }
 
 /**
- * Global function for onclick handler
- * Called from HTML template
+ * Global toggle, kept for callers that use the window API. The header button
+ * is wired by ThemeManager itself.
  */
 window.toggleTheme = function() {
     const manager = getThemeManager();

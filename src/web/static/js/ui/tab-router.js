@@ -9,8 +9,9 @@
  * Styles tabs still go through the window.refreshFileList /
  * window.refreshStyleList globals that index.js installs.
  *
- * window.switchTopTab is kept for the template's inline onclick handlers
- * and for modules that call it through the global.
+ * The tab buttons (#topTabNav [data-tab]) are wired here with one delegated
+ * listener. window.switchTopTab is kept for modules that call it through
+ * the global.
  */
 
 const _tabShownCallbacks = new Map();
@@ -61,3 +62,19 @@ export function switchTopTab(name) {
 }
 
 window.switchTopTab = switchTopTab;
+
+function wireTabButtons() {
+    const nav = $('topTabNav');
+    if (!nav) return;
+    nav.addEventListener('click', (event) => {
+        const btn = event.target.closest('.tab-btn[data-tab]');
+        if (btn && nav.contains(btn)) switchTopTab(btn.dataset.tab);
+    });
+}
+
+// Module scripts run after parsing, but stay safe if loaded earlier.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireTabButtons);
+} else {
+    wireTabButtons();
+}

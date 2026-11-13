@@ -818,13 +818,6 @@ export const SettingsManager = {
         envModelApplied = false;
     },
 
-    /**
-     * Check if .env model was already applied
-     * @returns {boolean}
-     */
-    isEnvModelApplied() {
-        return envModelApplied;
-    },
 
     /**
      * Mark an endpoint as customized by the user
@@ -836,17 +829,6 @@ export const SettingsManager = {
         this.updateEndpointBadge(endpointType, true);
     },
 
-    /**
-     * Check if an endpoint was customized by the user
-     * @param {string} endpointType - 'ollama' or 'openai'
-     * @returns {boolean}
-     */
-    isEndpointCustomized(endpointType) {
-        const prefs = this.getLocalPreferences();
-        return endpointType === 'openai' 
-            ? prefs.openaiEndpointCustomized 
-            : prefs.apiEndpointCustomized;
-    },
 
     /**
      * Reset endpoint to server default (.env value)
@@ -899,30 +881,6 @@ export const SettingsManager = {
         }
     },
 
-    /**
-     * Initialize endpoint badges on page load
-     * Call this after server config is loaded
-     * @param {Object} serverConfig - The config from /api/config
-     */
-    initializeEndpointBadges(serverConfig) {
-        const prefs = this.getLocalPreferences();
-        
-        // Check Ollama endpoint
-        if (prefs.apiEndpointCustomized && prefs.lastApiEndpoint) {
-            const serverEndpoint = serverConfig.ollama_api_endpoint || serverConfig.api_endpoint;
-            if (prefs.lastApiEndpoint !== serverEndpoint) {
-                this.updateEndpointBadge('ollama', true);
-            }
-        }
-        
-        // Check OpenAI endpoint
-        if (prefs.openaiEndpointCustomized && prefs.lastOpenaiEndpoint) {
-            const serverEndpoint = serverConfig.openai_api_endpoint;
-            if (prefs.lastOpenaiEndpoint !== serverEndpoint) {
-                this.updateEndpointBadge('openai', true);
-            }
-        }
-    }
 };
 
 // Auto-save preferences when leaving page (local only: a fetch fired during

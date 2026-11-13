@@ -89,22 +89,7 @@ export const ModelDetector = {
         checkThinkingModelWarning(modelName);
     },
 
-    /**
-     * Check for thinking model warning only (called on model change)
-     * @param {string} modelName - Model name to check
-     */
-    async checkThinkingWarning(modelName) {
-        await checkThinkingModelWarning(modelName);
-    },
 
-    /**
-     * Get model size in billions of parameters
-     * @param {string} modelName - Model name
-     * @returns {number|null} Size in billions, or null if unknown
-     */
-    getModelSize(modelName) {
-        return extractModelSize(modelName);
-    },
 
     /**
      * Check if a model is small (≤12B parameters)

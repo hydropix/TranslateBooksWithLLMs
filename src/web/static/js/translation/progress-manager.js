@@ -129,7 +129,7 @@ function updateProgressBar(percent) {
  *   enable_refinement, current_phase, refine_only.
  * @returns {string} Label to show in the progress section title.
  */
-export function resolveOperationLabel(stats) {
+function resolveOperationLabel(stats) {
     if (!stats) return t('translation:translating');
 
     // Auto glossary/style run before the first chunk exists: the bar has
@@ -630,18 +630,4 @@ export const ProgressManager = {
         updateProgressBar(100);
     },
 
-    /**
-     * Get current progress percentage
-     * @returns {number} Current progress (0-100)
-     */
-    getCurrentProgress() {
-        const progressBar = DomHelpers.getElement('progressBar');
-
-        if (!progressBar) return 0;
-
-        const widthStyle = progressBar.style.width;
-        const match = widthStyle.match(/(\d+(?:\.\d+)?)/);
-
-        return match ? parseFloat(match[1]) : 0;
-    }
 };

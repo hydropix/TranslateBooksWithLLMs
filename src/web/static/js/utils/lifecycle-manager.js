@@ -39,7 +39,6 @@ export const LifecycleManager = {
         this.cleanupOldStorageVersions();
 
         this.setupPageLoadHandler();
-        this.setupBeforeUnloadHandler();
         this.setupPageHideHandler();
         this.setupVisibilityChangeHandler();
         this.startStateConsistencyCheck();
@@ -175,8 +174,6 @@ export const LifecycleManager = {
         }
     },
 
-    setupBeforeUnloadHandler() {
-    },
 
     setupPageHideHandler() {
         window.addEventListener('pagehide', (e) => {

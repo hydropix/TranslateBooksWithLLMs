@@ -792,11 +792,4 @@ export const SearchableSelectFactory = {
         }
     },
 
-    /**
-     * Destroy all instances
-     */
-    destroyAll() {
-        this.instances.forEach(instance => instance.destroy());
-        this.instances.clear();
-    }
 };

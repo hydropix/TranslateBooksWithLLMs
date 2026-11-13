@@ -8,7 +8,6 @@
 
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
-import { DomHelpers } from '../ui/dom-helpers.js';
 import { t } from '../i18n/i18n.js';
 
 const ACTION_DEFS = {

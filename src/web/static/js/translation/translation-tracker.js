@@ -1629,14 +1629,6 @@ export const TranslationTracker = {
         return block;
     },
 
-    /**
-     * Remove all completion cards. Currently unused — cards are dismissed
-     * individually by the user via the card's close button.
-     */
-    clearCompletionCards() {
-        const container = DomHelpers.getElement('completionCardsContainer');
-        if (container) container.innerHTML = '';
-    },
 
     /**
      * Process next file in queue (delegates to batch-controller when available)

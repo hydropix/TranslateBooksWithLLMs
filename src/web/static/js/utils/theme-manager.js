@@ -4,7 +4,7 @@
  * Handles dark/light mode theme switching and persistence.
  */
 
-export class ThemeManager {
+class ThemeManager {
     constructor() {
         this.htmlElement = document.documentElement;
         this.themeIcon = document.getElementById('themeIcon');
@@ -94,7 +94,7 @@ export function initializeThemeManager() {
  * Get theme manager instance
  * @returns {ThemeManager}
  */
-export function getThemeManager() {
+function getThemeManager() {
     return themeManagerInstance;
 }
 

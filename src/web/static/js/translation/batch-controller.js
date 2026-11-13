@@ -9,7 +9,6 @@ import { StateManager } from '../core/state-manager.js';
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
-import { Validators } from '../utils/validators.js';
 import { ApiKeyUtils } from '../utils/api-key-utils.js';
 import { StatusManager } from '../utils/status-manager.js';
 import { ProgressManager } from './progress-manager.js';
@@ -380,30 +379,6 @@ export const BatchController = {
         renderTranslationTitle(file);
     },
 
-    /**
-     * Stop batch translation
-     */
-    stopBatch() {
-        StateManager.setState('translation.isBatchActive', false);
-        StateManager.setState('translation.currentJob', null);
-
-        // Clear saved translation state from localStorage
-        if (TranslationTracker && TranslationTracker.clearTranslationState) {
-            TranslationTracker.clearTranslationState();
-        }
-
-        const translateBtn = DomHelpers.getElement('translateBtn');
-        const filesToProcess = StateManager.getState('files.toProcess') || [];
-        if (translateBtn) {
-            translateBtn.disabled = filesToProcess.length === 0 || !StatusManager.isConnected();
-            translateBtn.innerHTML = t('translation:start_batch_with_icon');
-        }
-
-        DomHelpers.hide('interruptBtn');
-
-        MessageLogger.addLog(t('translation:batch_stopped_log'));
-        MessageLogger.showMessage(t('translation:batch_stopped'), 'info');
-    },
 
     /**
      * Remove file from processing list

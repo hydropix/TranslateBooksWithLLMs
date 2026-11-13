@@ -15,9 +15,7 @@ import { ApiKeyUtils } from '../utils/api-key-utils.js';
 import { StatusManager } from '../utils/status-manager.js';
 import { SearchableSelectFactory } from '../ui/searchable-select.js';
 import { t } from '../i18n/i18n.js';
-import {
-    PROVIDER_LOGOS,
-    PROVIDER_META,
+import {
     populateModelSelectInto,
     setPlaceholderOption as setPlaceholderOptionShared,
     renderProviderOption,
@@ -942,13 +940,4 @@ export const ProviderManager = {
         return StateManager.getState('ui.currentModel') || DomHelpers.getValue('model');
     },
 
-    /**
-     * Set current model
-     * @param {string} modelName - Model name to set
-     */
-    setCurrentModel(modelName) {
-        DomHelpers.setValue('model', modelName);
-        StateManager.setState('ui.currentModel', modelName);
-        ModelDetector.checkAndShowRecommendation();
-    }
 };

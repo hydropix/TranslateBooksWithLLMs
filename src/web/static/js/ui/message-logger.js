@@ -548,19 +548,4 @@ export const MessageLogger = {
         }
     },
 
-    /**
-     * Reset translation preview
-     */
-    resetTranslationPreview() {
-        const previewElement = DomHelpers.getElement('lastTranslationPreview');
-        if (previewElement) {
-            const placeholderHtml = `<div style="color: #6b7280; font-style: italic; padding: 10px;">${t('translation:no_translation_yet')}</div>`;
-            DomHelpers.setHtml(previewElement, placeholderHtml);
-        }
-        // Clear language indicator
-        const languagesElement = DomHelpers.getElement('previewLanguages');
-        if (languagesElement) {
-            languagesElement.textContent = '';
-        }
-    }
 };

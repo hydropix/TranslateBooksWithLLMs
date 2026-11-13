@@ -5,7 +5,6 @@
  */
 
 import { MessageLogger } from '../ui/message-logger.js';
-import { DomHelpers } from '../ui/dom-helpers.js';
 import { t } from '../i18n/i18n.js';
 
 export const Validators = {
@@ -90,20 +89,6 @@ export const Validators = {
         return true;
     },
 
-    /**
-     * Validate number in range
-     */
-    validateRange(value, min, max, fieldName) {
-        if (isNaN(value)) {
-            return this.showError(t('errors:value_not_number', { field: fieldName }));
-        }
-
-        if (value < min || value > max) {
-            return this.showError(t('errors:value_out_of_range', { field: fieldName, min, max }));
-        }
-
-        return true;
-    },
 
     /**
      * Validate file selection
@@ -115,28 +100,4 @@ export const Validators = {
         return true;
     },
 
-    /**
-     * Validate batch configuration before starting translation
-     */
-    validateBatchConfig(formValues, files) {
-        if (!this.validateFileSelection(files)) return false;
-
-        if (!this.validateLanguages(formValues.sourceLanguage, formValues.targetLanguage)) {
-            return false;
-        }
-
-        if (!this.validateModel(formValues.model)) return false;
-
-        if (!this.validateProviderApiKey(formValues.provider, formValues.apiKey)) {
-            return false;
-        }
-
-        if (formValues.provider === 'ollama' || formValues.provider === 'openai') {
-            if (!this.validateApiEndpoint(formValues.apiEndpoint)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 };

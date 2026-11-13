@@ -374,20 +374,7 @@ export const FileUpload = {
         }
     },
 
-    /**
-     * Get the name of the last uploaded file
-     * @returns {string|null} Last uploaded filename
-     */
-    getLastUploadedFileName() {
-        return lastUploadedFileName;
-    },
 
-    /**
-     * Clear the last uploaded file tracking
-     */
-    clearLastUploadedFile() {
-        lastUploadedFileName = null;
-    },
 
     /**
      * Set a file as the active file for editing
@@ -645,46 +632,6 @@ export const FileUpload = {
         }
     },
 
-    /**
-     * Restore file queue from localStorage and verify files exist
-     * @deprecated Use restoreFileQueueSync() followed by verifyAndCleanupFileQueue() instead
-     */
-    async restoreFileQueue() {
-        try {
-            const stored = localStorage.getItem(FILE_QUEUE_STORAGE_KEY);
-            if (!stored) return;
-
-            const savedFiles = JSON.parse(stored);
-            if (!Array.isArray(savedFiles) || savedFiles.length === 0) return;
-
-            // Get file paths to verify
-            const filePaths = savedFiles.map(f => f.filePath);
-
-            // Verify which files still exist on the server
-            const verification = await ApiClient.verifyUploadedFiles(filePaths);
-
-            // Filter to only existing files
-            const existingFilePaths = new Set(verification.existing || []);
-            const restoredFiles = savedFiles.filter(f => existingFilePaths.has(f.filePath));
-
-            if (restoredFiles.length > 0) {
-                // Restore files to state (reset status to Queued for non-completed files)
-                const filesToRestore = restoredFiles.map(f => ({
-                    ...f,
-                    status: f.status === 'Completed' ? 'Completed' : 'Queued'
-                }));
-
-                StateManager.setState('files.toProcess', filesToRestore);
-                this.notifyFileListChanged();
-            }
-
-            // Update localStorage with only existing files
-            this._saveFileQueue();
-
-        } catch {
-            // Failed to restore file queue
-        }
-    },
 
     /**
      * Get current source language from form

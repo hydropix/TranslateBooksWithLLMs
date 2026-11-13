@@ -92,13 +92,6 @@ async function apiRequest(endpoint, options = {}) {
  * API Client interface
  */
 export const ApiClient = {
-    /**
-     * Set the base URL for API requests
-     * @param {string} url - Base URL
-     */
-    setBaseUrl(url) {
-        API_BASE_URL = url;
-    },
 
     /**
      * Get current base URL
@@ -348,17 +341,6 @@ export const ApiClient = {
         });
     },
 
-    /**
-     * Clear uploaded files
-     * @param {string[]} filePaths - Array of file paths to delete
-     * @returns {Promise<Object>} Clear result
-     */
-    async clearUploadedFiles(filePaths) {
-        return await apiRequest('/api/uploads/clear', {
-            method: 'POST',
-            body: JSON.stringify({ file_paths: filePaths })
-        });
-    },
 
     /**
      * Verify which uploaded files still exist on the server
@@ -567,13 +549,6 @@ export const ApiClient = {
     // Settings Management
     // ========================================
 
-    /**
-     * Get current user settings
-     * @returns {Promise<Object>} Current settings
-     */
-    async getSettings() {
-        return await apiRequest('/api/settings');
-    },
 
     /**
      * Save user settings to .env file
@@ -750,22 +725,7 @@ export const ApiClient = {
         });
     },
 
-    /**
-     * Get TTS job status
-     * @param {string} jobId - TTS job ID
-     * @returns {Promise<Object>} Job status
-     */
-    async getTTSStatus(jobId) {
-        return await apiRequest(`/api/tts/status/${jobId}`);
-    },
 
-    /**
-     * Get available TTS voices
-     * @returns {Promise<Object>} Available voices by language
-     */
-    async getTTSVoices() {
-        return await apiRequest('/api/tts/voices');
-    },
 
     /**
      * Get available TTS providers and their status
@@ -775,13 +735,6 @@ export const ApiClient = {
         return await apiRequest('/api/tts/providers');
     },
 
-    /**
-     * Get available Chatterbox voices/languages
-     * @returns {Promise<Object>} Chatterbox languages and availability
-     */
-    async getChatterboxVoices() {
-        return await apiRequest('/api/tts/voices/chatterbox');
-    },
 
     /**
      * Get GPU status for TTS

@@ -10,7 +10,7 @@
 import { DomHelpers } from '../ui/dom-helpers.js';
 
 export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko'];
-export const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'tts', 'errors', 'sample', 'style'];
+const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'tts', 'errors', 'sample', 'style'];
 
 let ready = false;
 let readyPromise = null;
@@ -205,8 +205,4 @@ function parseParams(raw) {
         return undefined;
     }
 }
-
-/** Convenience: await initI18n then call cb. Useful for late-bound modules. */
-export function whenReady(cb) {
-    initI18n().then(cb);
-}
+

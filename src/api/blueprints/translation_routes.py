@@ -47,17 +47,19 @@ def _clamp_parallel_workers(value):
 # '<PROVIDER>_API_KEY'. The mapping is mechanical, so supporting a new provider
 # in the resume-override path requires only adding it here (and nowhere else in
 # this file).
-_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim')
+_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'opencode')
 
 # Providers that talk to a user-supplied endpoint; the others use a built-in one.
 _ENDPOINT_PROVIDERS = ('ollama', 'openai')
 
 # Providers whose client actually reads config['llm_api_endpoint'].
-# Source: src/core/llm/factory.py:87 (ollama), :93 (openai), :170 (nim).
-# The others use a constant or a .env endpoint and ignore the request field,
-# so an endpoint sent alongside them is inert and must not be treated as an
-# override — the frontend sends llm_api_endpoint unconditionally.
-_ENDPOINT_CONSUMING_PROVIDERS = ('ollama', 'openai', 'nim')
+# Source: src/core/llm/factory.py:87 (ollama), :93 (openai).
+# NIM is deliberately absent: create_llm_client() builds it without an
+# api_endpoint, so it always uses NIM_API_ENDPOINT from .env. The frontend
+# sends the Ollama endpoint field unconditionally, so treating it as an
+# override rejected valid NIM jobs ("Endpoint override requires its own API
+# key") over a value that never reached an HTTP client.
+_ENDPOINT_CONSUMING_PROVIDERS = ('ollama', 'openai')
 
 
 def _server_default_endpoint(provider):
@@ -70,8 +72,6 @@ def _server_default_endpoint(provider):
         return _config.API_ENDPOINT
     if provider == 'openai':
         return _config.OPENAI_API_ENDPOINT
-    if provider == 'nim':
-        return _config.NIM_API_ENDPOINT
     return ''
 
 
@@ -424,6 +424,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'gemini_api_key': _resolve_api_key(data.get('gemini_api_key'), 'GEMINI_API_KEY'),
             'openai_api_key': _resolve_api_key(data.get('openai_api_key'), 'OPENAI_API_KEY'),
             'openrouter_api_key': _resolve_api_key(data.get('openrouter_api_key'), 'OPENROUTER_API_KEY'),
+            'opencode_api_key': _resolve_api_key(data.get('opencode_api_key'), 'OPENCODE_API_KEY'),
             # Prompt options (optional instructions to include in the system prompt)
             'prompt_options': data.get('prompt_options', {}),
             # Auto-pause on rate limit toggle (request overrides .env default)

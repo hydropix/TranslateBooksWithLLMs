@@ -342,6 +342,28 @@ def test_gemini_endpoint_field_is_inert(translate_app, monkeypatch):
     assert len(state_manager.created) == 1
 
 
+def test_nim_endpoint_field_is_inert(translate_app, monkeypatch):
+    """NIM ignores llm_api_endpoint: create_llm_client() builds it without one.
+
+    The frontend sends the Ollama endpoint field unconditionally, so a stale
+    value used to trigger the pairing rule and reject valid NIM jobs with
+    "Endpoint override requires its own API key" — over a value that never
+    reached an HTTP client.
+    """
+    client, state_manager, _started = translate_app
+    monkeypatch.setenv('NIM_API_KEY', 'env-nim-key')
+    resp = client.post('/api/translate', json=_payload(
+        llm_provider='nim',
+        model='nvidia/nemotron-3-ultra-550b-a55b',
+        llm_api_endpoint='http://localhost:11434/api/generate',
+        nim_api_key='__USE_ENV__',
+    ))
+    assert resp.status_code == 200
+    assert len(state_manager.created) == 1
+    _translation_id, config = state_manager.created[0]
+    assert config['llm_provider'] == 'nim'
+
+
 @pytest.mark.parametrize('endpoint', [
     'https://ollama.example.com/api/generate',  # not allowlisted
     'ollama.local:11434',                       # not even a URL

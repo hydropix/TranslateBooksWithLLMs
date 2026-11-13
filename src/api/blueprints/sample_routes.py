@@ -334,12 +334,13 @@ async def _execute_cell(
         latency_ms = int((time.perf_counter() - started) * 1000)
 
         if response is None or not response.content:
+            error_message = getattr(provider, "last_error", None) or "LLM returned an empty response"
             _emit_cell(
                 socketio, state, sample_id, row, col, phase,
                 status="error",
                 output=None,
                 metrics={"latency_ms": latency_ms},
-                error="LLM returned an empty response",
+                error=error_message,
             )
             return None
 

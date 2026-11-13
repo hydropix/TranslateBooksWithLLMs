@@ -185,6 +185,7 @@ export const SettingsManager = {
             { id: 'deepseekApiKey', event: 'input' },
             { id: 'poeApiKey', event: 'input' },
             { id: 'nimApiKey', event: 'input' },
+            { id: 'opencodeApiKey', event: 'input' },
             { id: 'disableAutoPause', event: 'change' },
             { id: 'parallelWorkers', event: 'input' },
             { id: 'maxTokensPerChunk', event: 'input' }
@@ -340,7 +341,10 @@ export const SettingsManager = {
             DomHelpers.setValue('outputFilenamePattern', prefs.outputFilenamePattern);
         }
 
-        // Apply last provider AFTER endpoints are set
+        // Apply last provider AFTER endpoints are set.
+        // This is only a fallback: once /api/config arrives,
+        // ProviderManager.applyConfiguredProvider() overwrites it with the
+        // .env LLM_PROVIDER, which is the single owner of provider selection.
         // NOTE: We set the provider value but DON'T trigger the change event here.
         // The change event would trigger model loading, but we need to wait for
         // FormManager.loadDefaultConfig() to complete and update the endpoint
@@ -639,6 +643,9 @@ export const SettingsManager = {
             } else if (provider === 'nim') {
                 const key = DomHelpers.getValue('nimApiKey');
                 if (key) envSettings['NIM_API_KEY'] = key;
+            } else if (provider === 'opencode') {
+                const key = DomHelpers.getValue('opencodeApiKey');
+                if (key) envSettings['OPENCODE_API_KEY'] = key;
             }
 
             // Save endpoints to .env
@@ -715,6 +722,8 @@ export const SettingsManager = {
                     envSettings['POE_MODEL'] = model;
                 } else if (provider === 'nim') {
                     envSettings['NIM_MODEL'] = model;
+                } else if (provider === 'opencode') {
+                    envSettings['OPENCODE_MODEL'] = model;
                 } else {
                     // Ollama and OpenAI use DEFAULT_MODEL
                     envSettings['DEFAULT_MODEL'] = model;

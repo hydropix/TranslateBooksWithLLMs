@@ -56,7 +56,8 @@ All commands below are run from the repository root, inside this virtualenv.
    source `English`, target `Chinese`; always confirm the target.
 3. **Provider** — pick based on the user's hardware and privacy needs:
    - **Cloud (no local hardware needed)**: OpenRouter, OpenAI, Gemini, Mistral,
-     DeepSeek, Poe, or NVIDIA NIM. Best quality and works on any machine.
+     DeepSeek, Poe, NVIDIA NIM, or Opencode. Best quality and works on any
+     machine.
      Several offer a **free tier** (e.g. Gemini, some OpenRouter models, Poe),
      so even a user without a GPU can translate at no cost. Requires the user's
      own API key, configured securely (see step 3 — never pasted into chat).
@@ -115,7 +116,7 @@ python translate.py -i "book.epub" -sl English -tl French \
 
 Recognized environment variables: `OPENROUTER_API_KEY`, `GEMINI_API_KEY`,
 `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `POE_API_KEY`,
-`NIM_API_KEY`. (The CLI also accepts matching `--*_api_key` flags, but avoid
+`NIM_API_KEY`, `OPENCODE_API_KEY`. (The CLI also accepts matching `--*_api_key` flags, but avoid
 them: a key on the command line leaks into the process list and shell history.)
 For a local OpenAI-compatible server (llama.cpp, LM Studio, vLLM), use
 `--provider openai --api_endpoint http://localhost:8080/v1/chat/completions`.

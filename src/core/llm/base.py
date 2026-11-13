@@ -84,6 +84,10 @@ class LLMProvider(ABC):
         self.model = model
         self._extractor = TranslationExtractor(TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT)
         self._client = None
+        # Human-readable description of the most recent generate() failure.
+        # Callers use this to surface provider/API errors instead of a generic
+        # "empty response" message. Reset at the start of each generate() call.
+        self.last_error: Optional[str] = None
         self._key_pool: Optional[KeyPool] = None
         keys_iter = normalize_api_keys(api_keys)
         if keys_iter:

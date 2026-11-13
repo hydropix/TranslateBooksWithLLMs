@@ -505,35 +505,35 @@ body {
 
 .main-card {
     background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    box-shadow: var(--shadow-soft);
     border: 1px solid var(--border-light);
     overflow: hidden;
-    margin-bottom: 2rem;
+    margin-bottom: calc(2rem * var(--ui-density-y));
 }
 
 .card-header {
     background: var(--background-light);
-    padding: 2rem;
+    padding: calc(2rem * var(--ui-density-y)) 1.25rem;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.6rem;
     border-bottom: 1px solid var(--border-light);
 }
 
 .card-header .material-symbols-outlined {
-    color: var(--primary-light);
-    font-size: 1.5rem;
+    color: var(--text-muted-light);
+    font-size: 1.15rem;
 }
 
 .card-header h2 {
     color: var(--text-dark);
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0;
 }
 
 .card-body {
-    padding: 2rem;
+    padding: calc(2rem * var(--ui-density-y)) 1.25rem;
     color: var(--text-dark);
 }
 
@@ -3497,7 +3497,6 @@ html.dark .glossary-info-card .glossary-info-warn {
    live in their own row below. */
 .style-editor-header {
     flex-wrap: wrap;
-    padding: 1.25rem 2rem;
     /* The toolbar row right below shares the same background and carries the
        separator, so the header must not draw a second rule between them. */
     border-bottom: none;
@@ -4789,21 +4788,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
     }
 
-    /* --- Cards --- */
-    .main-card {
-        margin-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    .card-header {
-        padding-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    .card-body {
-        padding-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
     /* --- Form rows --- */
     .form-group {
         gap: calc(0.5rem * var(--ui-density-y)) !important;
@@ -4957,35 +4941,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 
 /* ========================================
-   Flat outer frames
-
-   The neumorphic elevation is one declaration holding two halves —
-   a dark drop shadow plus a light halo on the opposite side:
-
-       5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light)
-
-   Both halves come from the same property, so `none` removes shadow
-   and halo at once. In dark mode the halo was the visible offender
-   (--shadow-light is #3a3a3a against a #2a2a2a card); in light mode
-   the drop shadow goes too, so the frame reads the same way in both
-   themes.
-
-   Scoped to .main-card only — the outer frames. Every card sits at
-   `.container > [id^=tab-] > .main-card`, none is nested, so inner
-   surfaces (stat cards, progress section, drop zone, buttons,
-   insets, job cards) are untouched and keep their relief. The frames
-   stay separated from the background by their 1px border.
-
-   No !important and no cascade layer here, unlike the blocks above:
-   nothing else styles the shadow of .main-card, so specificity alone
-   already wins. Minimum force, so a future hover state can still
-   override it normally.
-   ======================================== */
-.main-card {
-    box-shadow: none;
-}
-
-/* ========================================
    Interface chrome typeface
 
    Everything on the page inherits --font-text from <body>. The
@@ -5034,34 +4989,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    ======================================== */
 
 /* ---------- Cards and fields ---------- */
-
-.main-card {
-    background: var(--background-light);
-    border: 1px solid var(--border-light);
-    box-shadow: var(--shadow-soft);
-}
-
-.card-header {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
-    gap: 0.6rem;
-}
-
-.card-header h2 {
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: 0;
-}
-
-.card-header .material-symbols-outlined {
-    color: var(--text-muted-light);
-    font-size: 1.15rem;
-}
-
-.card-body {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
-}
 
 .form-group label {
     font-size: 0.75rem;

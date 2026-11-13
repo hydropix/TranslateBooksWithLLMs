@@ -11,7 +11,8 @@ from typing import Optional, Callable, Dict
 
 from src.config import DEFAULT_MODEL, API_ENDPOINT
 from src.core.epub.xhtml_translator import _refine_epub_chunks, _escape_stray_angle_brackets
-from src.core.epub.container import TranslationConfig, TranslationContainer
+from src.core.epub.container import TranslationContainer
+from src.core.epub.html_chunker import HtmlChunker
 from src.core.docx.converter import DocxHtmlConverter
 from .client_setup import build_refine_client
 from .epub_refiner import _globalize_chunk_text
@@ -76,11 +77,7 @@ async def refine_docx_file(
             log_callback("docx_refine_start", "✨ Starting DOCX refine pass...")
 
         converter = DocxHtmlConverter()
-        # An explicit config: the default one sizes chunks with the
-        # MAX_TOKENS_PER_CHUNK frozen at import and ignores the caller's value.
-        container = TranslationContainer(
-            TranslationConfig(max_tokens_per_chunk=max_tokens_per_chunk)
-        )
+        container = TranslationContainer()
         tag_preserver = container.tag_preserver
 
         html_content, metadata = converter.to_html(input_filepath)
@@ -97,7 +94,10 @@ async def refine_docx_file(
             log_callback("docx_tags_preserved",
                          f"Preserved {len(tag_map)} tag groups")
 
-        chunks = container.chunker.chunk_html_with_placeholders(
+        # The container's chunker is sized with the MAX_TOKENS_PER_CHUNK
+        # frozen at import; build one with the caller's value instead.
+        chunker = HtmlChunker(max_tokens=max_tokens_per_chunk)
+        chunks = chunker.chunk_html_with_placeholders(
             text_with_placeholders, tag_map
         )
         if not chunks:

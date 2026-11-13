@@ -167,15 +167,34 @@ class GenericTranslator:
             checkpoint_data = self.checkpoint_manager.load_checkpoint(self.translation_id)
 
             if checkpoint_data:
+                # Re-chunk with the parameters the job was started with, so a
+                # chunk-size change between pause and resume cannot shift the
+                # indices the stored translations were written against.
+                units = await self._align_chunking_with_checkpoint(
+                    checkpoint_data, units, log_callback
+                )
+                total_units = len(units)
                 await self.adapter.resume_from_checkpoint(checkpoint_data)
                 # Pending work is derived from per-chunk statuses, not from the
                 # progress pointer: the pointer advances past failed units, so
                 # resuming from it alone would skip them forever (issue #204).
-                restored_completed = {
-                    c['chunk_index'] for c in checkpoint_data.get('chunks', [])
-                    if c.get('status') == 'completed'
-                    and 0 <= c.get('chunk_index', -1) < total_units
-                }
+                # A stored unit only counts when its source text still matches
+                # the unit at that index; anything else is re-translated.
+                restored_completed = set()
+                mismatched = 0
+                for c in checkpoint_data.get('chunks', []):
+                    idx = c.get('chunk_index', -1)
+                    if c.get('status') != 'completed' or not 0 <= idx < total_units:
+                        continue
+                    stored_source = c.get('original_text')
+                    if stored_source is not None and stored_source != units[idx].content:
+                        mismatched += 1
+                        continue
+                    restored_completed.add(idx)
+                if mismatched and log_callback:
+                    log_callback("checkpoint_mismatch",
+                        f"⚠️ {mismatched} checkpointed unit(s) no longer match the source "
+                        f"text at their position - they will be translated again")
                 if log_callback:
                     log_callback("checkpoint_resumed",
                         f"Resuming: {len(restored_completed)}/{total_units} units already translated")
@@ -529,6 +548,33 @@ class GenericTranslator:
                     await llm_client.close()
                 except Exception:
                     pass
+
+    # Adapter config keys that decide how the input is cut into units.
+    CHUNKING_CONFIG_KEYS = ('max_tokens_per_chunk', 'soft_limit_ratio', 'lines_per_block')
+
+    async def _align_chunking_with_checkpoint(self, checkpoint_data, units, log_callback):
+        """Re-prepare the adapter with the chunking parameters stored with the job.
+
+        The job config persisted at start_job holds the adapter config the
+        units were built with. When the current run was given different
+        values (e.g. a changed MAX_TOKENS_PER_CHUNK), the stored ones win,
+        exactly like plain_text_pipeline replays its stored segmentation.
+        """
+        stored = ((checkpoint_data.get('job') or {}).get('config') or {})
+        changed = {
+            key: stored[key] for key in self.CHUNKING_CONFIG_KEYS
+            if key in stored and stored[key] is not None
+            and stored[key] != self.adapter.config.get(key)
+        }
+        if not changed:
+            return units
+        if log_callback:
+            log_callback("checkpoint_chunking_restored",
+                f"Resuming with the chunking parameters the job was started with: {changed}")
+        self.adapter.config.update(changed)
+        if not await self.adapter.prepare_for_translation():
+            raise RuntimeError("Could not re-split the input with the checkpoint's chunking parameters")
+        return self.adapter.get_translation_units()
 
     def _open_raw_response_log(self, log_callback: Optional[Callable]):
         """Open the job's raw-response file next to the checkpoint database.

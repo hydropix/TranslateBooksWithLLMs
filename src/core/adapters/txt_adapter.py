@@ -231,6 +231,12 @@ class TxtAdapter(FormatAdapter):
 
                     if chunk_index is not None and translated_text is not None:
                         if 0 <= chunk_index < len(self.translated_chunks):
+                            # Only restore onto the same source text: after a
+                            # re-chunking the index may point at another chunk.
+                            stored_source = chunk_data.get('original_text')
+                            if (stored_source is not None
+                                    and stored_source != self.chunks[chunk_index]['main_content']):
+                                continue
                             self.translated_chunks[chunk_index] = translated_text
 
             # Return resume index

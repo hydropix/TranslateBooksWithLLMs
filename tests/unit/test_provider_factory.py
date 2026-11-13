@@ -11,10 +11,11 @@ layer drops a stored key when a request picks its own endpoint.
 import pytest
 
 from src.core.llm import LLMClientConfigError
-from src.core.llm.factory import create_llm_provider, create_provider_from_args
+from src.core.llm.credentials import resolve_provider_key
+from src.core.llm.factory import create_llm_provider
 from src.core.llm.policy import RetryPolicy
 from src.core.llm.provider_config import (
-    SUPPORTED_PROVIDERS, ProviderConfig, provider_config_from_args,
+    SUPPORTED_PROVIDERS, ProviderConfig,
 )
 from src.core.llm.providers.deepseek import DeepSeekProvider
 from src.core.llm.providers.gemini import GeminiProvider
@@ -41,16 +42,12 @@ def no_env_keys(monkeypatch):
         monkeypatch.setattr(config, var, "", raising=False)
 
 
-def _build(provider, **overrides):
-    kwargs = dict(
-        gemini_api_key=FAKE_KEY, openai_api_key=FAKE_KEY, openrouter_api_key=FAKE_KEY,
-        mistral_api_key=FAKE_KEY, deepseek_api_key=FAKE_KEY, poe_api_key=FAKE_KEY,
-        nim_api_key=FAKE_KEY, context_window=4096,
-    )
-    kwargs.update(overrides)
-    model = kwargs.pop("model_name", "some-model")
-    endpoint = kwargs.pop("api_endpoint", ENDPOINT)
-    return create_provider_from_args(provider, model, endpoint, **kwargs)
+def _build(provider, api_key=FAKE_KEY, model_name="some-model", api_endpoint=ENDPOINT,
+           context_window=4096):
+    return create_llm_provider(ProviderConfig(
+        provider=provider, model=model_name, endpoint=api_endpoint, api_key=api_key,
+        context_window=context_window,
+    ))
 
 
 EXPECTED_PROVIDER_CLASS = {
@@ -99,20 +96,24 @@ def test_provider_name_is_case_insensitive():
 
 
 def test_key_left_out_falls_back_to_the_environment(monkeypatch, no_env_keys):
+    """The .env fallback lives in the credential resolver the job builders use."""
     monkeypatch.setenv("GEMINI_API_KEY", FAKE_KEY)
-    assert isinstance(_build("gemini", gemini_api_key=None), GeminiProvider)
+    key = resolve_provider_key("gemini", None)
+    assert key == FAKE_KEY
+    assert isinstance(_build("gemini", api_key=key), GeminiProvider)
+    assert resolve_provider_key("gemini", None, allow_env_fallback=False) == ""
 
 
 def test_key_left_empty_on_purpose_is_not_refilled(monkeypatch, no_env_keys):
     """An explicit empty key stays empty even when .env holds one."""
     monkeypatch.setenv("GEMINI_API_KEY", FAKE_KEY)
     with pytest.raises(LLMClientConfigError, match="gemini"):
-        _build("gemini", gemini_api_key="")
+        _build("gemini", api_key="")
 
 
 def test_dropped_openai_key_never_follows_an_overridden_endpoint(monkeypatch, no_env_keys):
     monkeypatch.setenv("OPENAI_API_KEY", FAKE_KEY)
-    built = _build("openai", openai_api_key="",
+    built = _build("openai", api_key="",
                    api_endpoint="http://192.168.1.20:8080/v1/chat/completions")
     assert built.api_key is None
 
@@ -129,7 +130,7 @@ def test_legacy_kwargs_keep_empty_keys_empty(monkeypatch, no_env_keys):
 @pytest.mark.parametrize("provider", ["gemini", "openrouter", "mistral", "deepseek", "poe", "nim"])
 def test_missing_key_raises(no_env_keys, provider):
     with pytest.raises(LLMClientConfigError, match=provider):
-        _build(provider, **{f"{provider}_api_key": ""})
+        _build(provider, api_key="")
 
 
 def test_unknown_provider_raises():
@@ -141,11 +142,9 @@ def test_config_error_is_a_value_error():
     assert issubclass(LLMClientConfigError, ValueError)
 
 
-def test_provider_config_only_keeps_the_selected_providers_key(no_env_keys):
-    cfg = provider_config_from_args("mistral", "m", None, mistral_api_key="k-m",
-                                    gemini_api_key="k-g")
-    assert cfg.api_key == "k-m"
-    assert "k-m" not in repr(cfg) and "k-g" not in repr(cfg)
+def test_provider_config_never_prints_its_key():
+    cfg = ProviderConfig(provider="mistral", model="m", api_key="k-m")
+    assert "k-m" not in repr(cfg)
 
 
 def test_provider_config_carries_retry_policy_and_sampling():

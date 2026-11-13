@@ -6,11 +6,11 @@ This package provides a modular system for interacting with various LLM provider
 Public API:
     - Exceptions: ContextOverflowError, RepetitionLoopError, RateLimitError, LLMClientConfigError
     - Base classes: LLMProvider (owns the shared request loop), LLMRequest, LLMResponse
-    - Configuration: ProviderConfig, provider_config_from_args, RetryPolicy
+    - Configuration: ProviderConfig, RetryPolicy
     - Thinking system: ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message, detect_repetition_loop
     - Utilities: ContextDetector, TranslationExtractor
     - Providers: OllamaProvider, OpenAICompatibleProvider, OpenRouterProvider, GeminiProvider
-    - Factory: create_llm_provider (the only construction path), create_provider_from_args
+    - Factory: create_llm_provider (the only construction path)
 
 Example usage:
     >>> from src.core.llm import create_llm_provider, OllamaProvider
@@ -26,7 +26,7 @@ from .exceptions import (
 # Base classes, configuration and policy
 from .base import LLMProvider, LLMRequest, LLMResponse
 from .policy import RetryPolicy, begin_job_retry_policy, current_retry_policy, end_job_retry_policy
-from .provider_config import ProviderConfig, provider_config_from_args
+from .provider_config import ProviderConfig
 
 # Thinking system
 from .thinking.behavior import ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message
@@ -49,7 +49,7 @@ from .providers.poe import PoeProvider
 from .providers.litellm import LiteLLMProvider
 
 # Factory
-from .factory import create_llm_provider, create_provider_from_args
+from .factory import create_llm_provider
 
 __all__ = [
     # Exceptions
@@ -67,7 +67,6 @@ __all__ = [
     'current_retry_policy',
     'end_job_retry_policy',
     'ProviderConfig',
-    'provider_config_from_args',
 
     # Thinking
     'ThinkingBehavior',
@@ -94,5 +93,4 @@ __all__ = [
 
     # Factory
     'create_llm_provider',
-    'create_provider_from_args',
 ]

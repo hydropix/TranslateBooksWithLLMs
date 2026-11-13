@@ -20,18 +20,13 @@ back to the ``.env`` key when the caller passed ``None`` (no opinion).
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Optional
 
-from .credentials import KEY_PROVIDERS, KEY_REQUIRED_PROVIDERS, env_key as _env_key  # noqa: F401
+from .credentials import KEY_REQUIRED_PROVIDERS, env_key as _env_key  # noqa: F401
 from .policy import RetryPolicy
 
 #: Every provider type ``create_llm_provider`` can build.
 SUPPORTED_PROVIDERS = (
     "ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm",
 )
-
-#: Name of the loose ``*_api_key`` argument of the transitional
-#: ``provider_config_from_args`` bridge.
-_KEY_ARG = {name: f"{name}_api_key" for name in KEY_PROVIDERS}
-
 
 @dataclass(frozen=True)
 class ProviderConfig:
@@ -74,50 +69,3 @@ class ProviderConfig:
         return (f"ProviderConfig(provider={self.provider!r}, model={self.model!r}, "
                 f"endpoint={self.endpoint!r}, api_key={'<set>' if self.api_key else None}, "
                 f"context_window={self.context_window!r})")
-
-
-def provider_config_from_args(
-    llm_provider: str,
-    model: Optional[str] = None,
-    endpoint: Optional[str] = None,
-    *,
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: Optional[int] = None,
-    retry: Optional[RetryPolicy] = None,
-    temperature: Optional[float] = None,
-    log_callback: Optional[Callable] = None,
-    env_fallback: bool = True,
-    **options: Any,
-) -> ProviderConfig:
-    """Build a ``ProviderConfig`` from the loose per-provider arguments.
-
-    Only the key of the selected provider is kept. When that key argument is
-    ``None`` and ``env_fallback`` is true, the ``.env`` key is used (resume
-    paths carry no keys, issue #213). An explicit empty string stays empty.
-    """
-    provider = (llm_provider or "").strip().lower()
-    keys = {
-        "gemini": gemini_api_key, "openai": openai_api_key,
-        "openrouter": openrouter_api_key, "mistral": mistral_api_key,
-        "deepseek": deepseek_api_key, "poe": poe_api_key, "nim": nim_api_key,
-    }
-    api_key = keys.get(provider)
-    if api_key is None and env_fallback and provider in _KEY_ARG:
-        api_key = _env_key(provider)
-    return ProviderConfig(
-        provider=provider,
-        model=model or "",
-        endpoint=endpoint,
-        api_key=api_key,
-        context_window=context_window,
-        retry=retry,
-        temperature=temperature,
-        options={k: v for k, v in options.items() if v is not None},
-        log_callback=log_callback,
-    )

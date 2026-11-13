@@ -21,5 +21,5 @@ def test_provider_default_model_is_not_retired():
 
 
 def test_factory_default_model_is_not_retired():
-    provider = create_llm_provider("gemini", gemini_api_key="test-key")
+    provider = create_llm_provider("gemini", api_key="test-key")
     assert provider.model != RETIRED_MODEL

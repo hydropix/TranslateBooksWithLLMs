@@ -13,7 +13,7 @@ absent). The web layer relies on this to keep a stored key from following a
 request-chosen endpoint (``src/api/services/credential_guard.py``).
 """
 
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from src import config as _config
 
@@ -57,10 +57,7 @@ def _config_from_kwargs(provider_type: str, kwargs: dict) -> ProviderConfig:
     if provider == "ollama" and model.startswith("gemini"):
         provider = "gemini"
 
-    if "api_key" in kwargs and kwargs["api_key"] is not None:
-        api_key = kwargs["api_key"]
-    else:
-        api_key = kwargs.get(f"{provider}_api_key")
+    api_key = kwargs.get("api_key")
     if api_key is None:
         api_key = _env_key(provider) or None
 
@@ -105,7 +102,7 @@ def create_llm_provider(
         provider: A ``ProviderConfig`` (preferred), or a provider type
             ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek",
             "poe", "nim", "litellm") followed by keyword arguments: ``model``,
-            ``api_endpoint``/``endpoint``, ``api_key`` (or ``<provider>_api_key``),
+            ``api_endpoint``/``endpoint``, ``api_key``,
             ``context_window``, ``log_callback``, ``retry_policy``,
             ``temperature``, ``<provider>_disable_thinking``,
             ``poe_disable_web_search``, ``litellm_api_base``.
@@ -224,13 +221,3 @@ def create_llm_provider(
         log_callback=cfg.log_callback,
         **common,
     )
-
-
-def create_provider_from_args(llm_provider: str, model: Optional[str] = None,
-                              endpoint: Optional[str] = None, **kwargs: Any) -> LLMProvider:
-    """One-line bridge for the upper layers' loose arguments.
-
-    Equivalent to ``create_llm_provider(provider_config_from_args(...))``.
-    """
-    from .provider_config import provider_config_from_args
-    return create_llm_provider(provider_config_from_args(llm_provider, model, endpoint, **kwargs))

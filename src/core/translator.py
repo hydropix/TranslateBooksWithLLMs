@@ -10,7 +10,7 @@ from src.config import (
     THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING
 )
 from src.prompts.prompts import generate_translation_prompt, generate_refinement_prompt
-from .llm_client import default_client, create_llm_client, LLMResponse
+from .llm_client import create_llm_client, LLMResponse
 from .llm import ContextOverflowError, RepetitionLoopError, RateLimitError
 from .post_processor import clean_translated_text
 from .context_optimizer import (
@@ -354,6 +354,21 @@ def _split_position(main_content: str, target_ratio: float) -> int:
 
 
 
+def _require_client(llm_client):
+    """Return llm_client, or fail clearly when none was given.
+
+    These request helpers used to fall back to the module-global Ollama
+    default_client, so a cloud job whose client was lost silently sent its
+    text to a local Ollama endpoint (or failed with a misleading error).
+    """
+    if llm_client is None:
+        raise ValueError(
+            "No LLM client was provided for this request. Create one with "
+            "create_llm_client() for the job's provider."
+        )
+    return llm_client
+
+
 def _join_split_translations(parts: List[Tuple[str, str]]) -> Optional[str]:
     """Join (separator_before, translation) pieces back into one text."""
     if not parts:
@@ -456,7 +471,7 @@ async def _make_llm_request_with_adaptive_context(
                 })
 
             start_time = time.time()
-            client = llm_client or default_client
+            client = _require_client(llm_client)
 
             # Set context from manager if available
             if context_manager and hasattr(client, 'context_window'):
@@ -840,7 +855,7 @@ async def _refinement_request_attempt(
         glossary_block=glossary_block,
     )
 
-    client = llm_client or default_client
+    client = _require_client(llm_client)
     last_response: Optional[LLMResponse] = None
 
     # Retry loop with adaptive context (mirrors translation logic)
@@ -1098,17 +1113,29 @@ async def refine_chunks(
     else:
         initial_context = max(context_window, REFINEMENT_MIN_CONTEXT)
 
-    # Create LLM client
-    llm_client = create_llm_client(
-        llm_provider, gemini_api_key, api_endpoint, model_name,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        context_window=initial_context, log_callback=log_callback
-    )
+    # Create LLM client. A failure must stop the pass: there is no safe
+    # fallback client for an arbitrary provider.
+    try:
+        llm_client = create_llm_client(
+            llm_provider, gemini_api_key, api_endpoint, model_name,
+            openai_api_key=openai_api_key,
+            openrouter_api_key=openrouter_api_key,
+            mistral_api_key=mistral_api_key,
+            deepseek_api_key=deepseek_api_key,
+            poe_api_key=poe_api_key,
+            nim_api_key=nim_api_key,
+            context_window=initial_context, log_callback=log_callback
+        )
+    except Exception as e:
+        if log_callback:
+            log_callback("refinement_client_failed",
+                f"❌ Could not create the LLM client for '{llm_provider}': {e}")
+        raise RuntimeError(f"Could not create the LLM client for '{llm_provider}': {e}") from e
+    if llm_client is None:
+        if log_callback:
+            log_callback("refinement_client_failed",
+                f"❌ Could not create the LLM client for '{llm_provider}'")
+        raise RuntimeError(f"Could not create the LLM client for '{llm_provider}'")
 
     # Create adaptive context manager for Ollama
     context_manager = None

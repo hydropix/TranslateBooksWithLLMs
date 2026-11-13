@@ -56,6 +56,7 @@ from .xhtml_translation_state import (
 )
 from .exceptions import XmlParsingError, BodyExtractionError
 from .placeholder_validator import PlaceholderValidator
+from .text_survival import text_survival_problem
 from .container import TranslationContainer
 from ..translator import generate_translation_request
 from ..context_optimizer import AdaptiveContextManager
@@ -241,6 +242,15 @@ async def translate_chunk_with_fallback(
         # Validate placeholders
         validation_result = validate_placeholders(translated, local_tag_map)
 
+        # Placeholders alone do not prove the text came back: "[id0][id1]"
+        # passes them for a whole paragraph. Route such replies to a retry.
+        survival_problem = text_survival_problem(chunk_text, translated) if validation_result else None
+        if survival_problem:
+            _log_error(log_callback, "chunk_text_lost",
+                       f"Attempt {attempt + 1}/{max_retries}: rejected translation, {survival_problem}")
+            stats.retry_attempts += 1
+            continue
+
         if validation_result:
             # Success - restore to global indices
             if attempt == 0:
@@ -299,6 +309,10 @@ async def translate_chunk_with_fallback(
 
             if translated_clean is None:
                 raise Exception("LLM returned None for clean translation")
+
+            survival_problem = text_survival_problem(clean_text, translated_clean)
+            if survival_problem:
+                raise Exception(f"rejected clean translation, {survival_problem}")
 
             # 3. Initialize aligner (lazy loading, cached on function)
             if not hasattr(translate_chunk_with_fallback, '_aligner'):

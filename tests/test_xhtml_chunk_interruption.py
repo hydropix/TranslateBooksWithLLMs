@@ -22,6 +22,14 @@ from src.persistence.checkpoint_manager import CheckpointManager
 from src.core.llm.base import LLMResponse
 
 
+# The text-survival guard rejects a reply far shorter than its source, so the
+# mock translations carry roughly a paragraph of text.
+PLAUSIBLE_TRANSLATION = (
+    "Ceci est un paragraphe traduit. Il contient assez de texte pour remplacer "
+    "un paragraphe source. Le renard brun rapide saute par-dessus le chien paresseux."
+)
+
+
 def create_mock_llm_response(content: str) -> LLMResponse:
     """Create a proper LLMResponse object for testing."""
     return LLMResponse(
@@ -52,7 +60,7 @@ def create_mock_llm_client(default_response: str = "Texte traduit"):
 @pytest.fixture
 def mock_llm_client():
     """Create a mock LLM client that returns simple translations."""
-    return create_mock_llm_client("Texte traduit")
+    return create_mock_llm_client("Texte traduit. " + PLAUSIBLE_TRANSLATION)
 
 
 @pytest.fixture(autouse=True)
@@ -121,7 +129,7 @@ class TestChunkLevelInterruption:
         # Override LLM client to track chunks
         async def track_chunks(*args, **kwargs):
             chunks_processed.append(len(chunks_processed) + 1)
-            return create_mock_llm_response(f"Translated chunk {len(chunks_processed)}")
+            return create_mock_llm_response(f"Translated chunk {len(chunks_processed)}. {PLAUSIBLE_TRANSLATION}")
 
         mock_llm_client.generate = track_chunks
         mock_llm_client.extract_translation = lambda response: response
@@ -257,7 +265,7 @@ class TestChunkLevelInterruption:
 
         async def track_chunks(*args, **kwargs):
             total_chunks_processed.append(len(total_chunks_processed) + 1)
-            return create_mock_llm_response(f"Translated chunk {len(total_chunks_processed)}")
+            return create_mock_llm_response(f"Translated chunk {len(total_chunks_processed)}. {PLAUSIBLE_TRANSLATION}")
 
         mock_llm_client.generate = track_chunks
         mock_llm_client.extract_translation = lambda response: response

@@ -20,7 +20,13 @@ sys.path.insert(0, str(project_root))
 @pytest.fixture
 def make_client(monkeypatch):
     """Build a test client for the config blueprint with LLM_PROVIDER set."""
+    import dotenv
     from src import config
+
+    # Reloading config re-runs load_dotenv(), so a developer's own .env
+    # (e.g. LLM_PROVIDER=openai) would leak into these tests. Keep them
+    # driven by the environment variables set here only.
+    monkeypatch.setattr(dotenv, 'load_dotenv', lambda *args, **kwargs: False)
 
     def _make(provider):
         if provider is None:

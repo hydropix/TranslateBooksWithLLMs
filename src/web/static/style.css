@@ -4783,19 +4783,18 @@ html.dark .file-test-btn { color: #a5b4fc; }
    Bold is the affordance marker for "this is clickable". Fields and
    dropdowns display data, so they run at normal weight.
 
-   Written as a subtree reset rather than as edits to the dozen
-   scattered `font-weight` declarations that feed these widgets
-   (.form-control, .searchable-select-group, the selected option
-   label, the trigger badge, …): one rule per widget family, and any
-   markup added later inherits the rule for free.
+   Written as a subtree reset: one rule per widget family is the
+   single source of field weight (no other rule in this file sets
+   font-weight on .form-control or inside a searchable-select), and
+   any markup added later inherits the rule for free.
 
    Buttons are simply not in the selector list, so .btn, .btn-sm and
    .glossary-toolbar-btn keep their own weights — nothing is
    re-asserted here, which means their styling stays the single
    source of truth for button weight.
 
-   Layered for the usual reason: `!important` in a layer outranks
-   every unlayered declaration, including the inline
+   Layered for the same reason as the shape scale: `!important` in a
+   layer outranks every unlayered declaration, including the inline
    `style="font-weight: 600"` strings the JS modules inject.
    ======================================== */
 @layer input-weight {
@@ -4827,7 +4826,7 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 
 /* ========================================
-   Calm theme — phone and small tablet layout
+   Phone and small tablet layout
 
    Same tiers, re-flowed for a narrow screen:
    - Header: logo and display controls share the first row; the tab nav

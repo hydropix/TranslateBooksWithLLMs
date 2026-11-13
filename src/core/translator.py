@@ -778,6 +778,15 @@ async def _refinement_request_attempt(
 
             full_raw_response = llm_response.content
 
+            # Same guards as the translation path. On each of them the caller
+            # keeps the draft: an empty, cut-off or unclosed answer saved as
+            # the refinement would erase or truncate the chunk.
+            if not full_raw_response or not full_raw_response.strip():
+                if log_callback:
+                    log_callback("refinement_empty_response",
+                        "⚠️ Refinement returned an empty response. Keeping the draft.")
+                return None, llm_response
+
             # Log the response
             if log_callback:
                 log_callback("refinement_response", "Refinement response received", data={
@@ -793,20 +802,52 @@ async def _refinement_request_attempt(
                     }
                 })
 
+            if getattr(llm_response, "output_truncated", False) is True:
+                if log_callback:
+                    log_callback("refinement_output_truncated",
+                        f"⚠️ Refinement hit the output token limit "
+                        f"(finish_reason: {llm_response.finish_reason}). Keeping the draft.")
+                return None, llm_response
+
             # Extract refined text
             refined_text = client.extract_translation(full_raw_response)
 
-            if refined_text:
+            if refined_text and refined_text.strip():
                 return refined_text, llm_response
-            else:
-                # Fallback to raw response if no tags found
-                if draft_translation not in full_raw_response:
-                    return full_raw_response.strip(), llm_response
-                else:
+
+            stripped_response = full_raw_response.strip()
+            if (stripped_response.startswith(TRANSLATE_TAG_IN)
+                    and not stripped_response.endswith(TRANSLATE_TAG_OUT)):
+                if context_manager and context_manager.should_retry_with_larger_context(
+                        True, llm_response.context_used):
+                    context_manager.increase_context()
+                    continue  # Retry with larger context
+                if log_callback:
+                    log_callback("refinement_unclosed_tag",
+                        "⚠️ Refinement opened the translation tag but never closed it: "
+                        "the output was cut off. Keeping the draft.")
+                return None, llm_response
+            if TRANSLATE_TAG_IN in stripped_response and TRANSLATE_TAG_OUT in stripped_response:
+                # Tags present, nothing usable inside them.
+                if log_callback:
+                    log_callback("refinement_empty_response",
+                        "⚠️ Refinement returned empty translation tags. Keeping the draft.")
+                return None, llm_response
+
+            # Fallback to raw response if no tags found
+            if draft_translation not in full_raw_response:
+                candidate = strip_raw_preamble(full_raw_response)
+                rejection = raw_fallback_rejection_reason(candidate, draft_translation)
+                if rejection:
                     if log_callback:
-                        log_callback("refinement_warning",
-                            "WARNING: Refinement response contains input. Using original.")
+                        log_callback("refinement_fallback_rejected",
+                            f"⚠️ Untagged refinement rejected ({rejection}). Keeping the draft.")
                     return None, llm_response
+                return candidate, llm_response
+            if log_callback:
+                log_callback("refinement_warning",
+                    "WARNING: Refinement response contains input. Using original.")
+            return None, llm_response
 
         except RepetitionLoopError as e:
             # Repetition loop detected - try increasing context (double increase),
@@ -1068,8 +1109,12 @@ async def refine_chunks(
             chunk_elapsed = time.time() - chunk_start_time
 
             if refined_text is not None:
-                # Clean the refined text
                 refined_text = clean_translated_text(refined_text)
+                if not refined_text.strip():
+                    # Never let an empty refinement erase the chunk.
+                    refined_text = None
+
+            if refined_text is not None:
                 refined_parts.append(refined_text)
                 progress_tracker.mark_completed(i, chunk_elapsed)
 

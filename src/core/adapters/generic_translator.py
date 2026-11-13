@@ -123,6 +123,7 @@ class GenericTranslator:
         Returns:
             True if translation completed successfully, False otherwise
         """
+        llm_client = None
         try:
             # 1. Prepare file for translation
             if log_callback:
@@ -521,6 +522,13 @@ class GenericTranslator:
                 await self.adapter.cleanup()
             except Exception:
                 pass
+            # The client owns an httpx connection pool; the server runs many
+            # jobs in one process, so it must be closed on every exit path.
+            if llm_client is not None and hasattr(llm_client, 'close'):
+                try:
+                    await llm_client.close()
+                except Exception:
+                    pass
 
     def _open_raw_response_log(self, log_callback: Optional[Callable]):
         """Open the job's raw-response file next to the checkpoint database.

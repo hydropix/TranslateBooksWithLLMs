@@ -114,12 +114,12 @@ export const FormManager = {
 
         // Custom instructions manage button — jumps to the Styles tab, which owns
         // the Custom_Instructions CRUD flows. Mirrors #glossaryManageBtn, which
-        // does the same for the Glossaries tab (glossary-manager.js).
+        // does the same for the Glossaries tab (glossary/glossary-dropdown.js).
         const customInstructionsManageBtn = DomHelpers.getElement('customInstructionsManageBtn');
         if (customInstructionsManageBtn) {
             customInstructionsManageBtn.addEventListener('click', () => {
-                // Global rather than imported: switchTopTab lives in
-                // glossary-manager.js and importing it here would close a cycle.
+                // Global rather than imported, like the template's tab
+                // buttons: switchTopTab lives in ui/tab-router.js.
                 if (typeof window.switchTopTab === 'function') {
                     window.switchTopTab('styles');
                 }

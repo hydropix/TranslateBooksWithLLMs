@@ -24,6 +24,8 @@ import { PreflightZone } from './ui/preflight-zone.js';
 import { PreflightModal } from './ui/preflight-modal.js';
 import { NotificationsManager } from './ui/notifications-manager.js';
 import { GlossaryManager } from './glossary/glossary-manager.js';
+// Installs window.switchTopTab, used by the template's tab buttons.
+import './ui/tab-router.js';
 import { StyleManager } from './style/style-manager.js';
 
 // ========================================
@@ -424,7 +426,7 @@ window.toggleSelectAll = FileManager.toggleSelectAll.bind(FileManager);
 window.openOutputFolder = () => FileActions.openOutputFolder();
 
 // Style Manager (Styles tab — mirrors the window.refreshFileList hook so
-// glossary-manager.js's switchTopTab() can refresh the list without
+// ui/tab-router.js's switchTopTab() can refresh the list without
 // importing style-manager.js and creating a cycle)
 window.refreshStyleList = StyleManager.refreshList.bind(StyleManager);
 

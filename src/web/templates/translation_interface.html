@@ -57,57 +57,41 @@
     <!-- Custom Styles -->
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        /* Top tabs sit flush with the card below. Active tab is marked
-           by an accent stripe on top so it stays visible in light + dark. */
-        #topTabNav { margin-bottom: 0 !important; padding: 0; }
+        /* Top tabs are tier-4 chrome: plain text in the header, the active
+           one marked by weight and an accent underline (works in light and
+           dark). Icons are dropped to keep the row quiet. */
+        #topTabNav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0 1.1rem;
+            margin: 0;
+            padding: 0;
+            flex: 1 1 22rem;
+        }
         .tab-nav .tab-btn {
-            padding: 0.6rem 1.25rem;
-            border: 1px solid var(--border-light);
-            border-bottom: none;
-            border-radius: 10px 10px 0 0;
+            padding: 0.45rem 0.1rem;
+            border: 0;
+            border-bottom: 2px solid transparent;
             background: transparent;
             color: var(--text-muted-light);
             cursor: pointer;
-            font-size: 0.95rem;
-            font-weight: 600;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            transition: color 0.15s, border-color 0.15s;
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            position: relative;
+            gap: 0.35rem;
         }
-        .tab-nav .tab-btn::before {
-            content: '';
-            position: absolute;
-            left: 0; right: 0; bottom: 0;
-            height: 3px;
-            background: transparent;
-            transition: background 0.15s;
+        .tab-nav .tab-btn .material-symbols-outlined {
+            display: none;
         }
         .tab-nav .tab-btn:hover {
             color: var(--text-dark);
-            border-color: var(--primary-light);
         }
         .tab-nav .tab-btn-active {
-            background: var(--background-light);
             color: var(--text-dark);
-            border-color: var(--border-light);
-            z-index: 2;
-        }
-        .tab-nav .tab-btn-active::before {
-            background: var(--primary-light);
-        }
-        /* Cards directly under the tab nav have flat top corners so they
-           visually merge with the active tab. The Glossaries tab swaps
-           between list and editor cards, so both must be flat-topped. */
-        #tab-translate > .main-card:first-child,
-        #tab-sample > .main-card:first-child,
-        #tab-settings > .main-card,
-        #tab-glossaries > .main-card,
-        #tab-styles > .main-card,
-        #tab-files > .main-card {
-            border-top-left-radius: 0;
-            border-top-right-radius: 0;
+            font-weight: 600;
+            border-bottom-color: var(--primary-light);
         }
         /* Compact toolbar buttons used inside the glossary editor card.
            Override the heavy default .btn (padding, font-weight, shadow). */
@@ -120,7 +104,7 @@
             gap: 0.35rem;
         }
         .glossary-toolbar-btn.btn-primary {
-            box-shadow: 0 4px 10px rgba(54, 118, 216, 0.2);
+            box-shadow: 0 4px 10px rgba(62, 90, 120, 0.2);
         }
         .glossary-toolbar-btn.btn-secondary {
             box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
@@ -225,7 +209,7 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header with Neumorphic Style -->
+        <!-- Header: logo, tab nav, LLM status and display preferences -->
         <header class="header">
             <div class="logo-section">
                 <div class="logo-icon">
@@ -235,6 +219,34 @@
                     <h2>TBL <span class="app-version" id="appVersion" title="TBL v{{ app_version|default('dev') }}">v{{ app_version|default('dev') }}</span></h2>
                     <p data-i18n="common:app_subtitle">Translate Books with LLMs</p>
                 </div>
+            </div>
+
+            <!-- Top-level Tab Navigation (tier 4 chrome, lives in the header) -->
+            <div class="tab-nav" id="topTabNav">
+                <button type="button" class="tab-btn tab-btn-active" data-tab="translate" onclick="switchTopTab('translate')">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">translate</span>
+                    <span data-i18n="common:tab_translate">Translate</span>
+                </button>
+                <button type="button" class="tab-btn" data-tab="sample" onclick="switchTopTab('sample')">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">science</span>
+                    <span data-i18n="common:tab_sample">Sample</span>
+                </button>
+                <button type="button" class="tab-btn" data-tab="settings" onclick="switchTopTab('settings')">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">tune</span>
+                    <span data-i18n="common:tab_settings">Settings</span>
+                </button>
+                <button type="button" class="tab-btn" data-tab="glossaries" onclick="switchTopTab('glossaries')">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">menu_book</span>
+                    <span data-i18n="common:tab_glossaries">Glossaries</span>
+                </button>
+                <button type="button" class="tab-btn" data-tab="styles" onclick="switchTopTab('styles')">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">brush</span>
+                    <span data-i18n="common:tab_styles">Styles</span>
+                </button>
+                <button type="button" class="tab-btn" data-tab="files" onclick="switchTopTab('files')">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">folder_open</span>
+                    <span data-i18n="common:tab_files">Files</span>
+                </button>
             </div>
 
             <div class="status-section">
@@ -291,34 +303,6 @@
                     <button type="button" id="updateOverlayCloseBtn" class="btn btn-secondary" data-i18n="common:update_close" style="display: none;">Close</button>
                 </div>
             </div>
-        </div>
-
-        <!-- Top-level Tab Navigation -->
-        <div class="tab-nav" id="topTabNav" style="display: flex; gap: 8px; margin-bottom: 20px;">
-            <button type="button" class="tab-btn tab-btn-active" data-tab="translate" onclick="switchTopTab('translate')">
-                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">translate</span>
-                <span data-i18n="common:tab_translate">Translate</span>
-            </button>
-            <button type="button" class="tab-btn" data-tab="sample" onclick="switchTopTab('sample')">
-                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">science</span>
-                <span data-i18n="common:tab_sample">Sample</span>
-            </button>
-            <button type="button" class="tab-btn" data-tab="settings" onclick="switchTopTab('settings')">
-                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">tune</span>
-                <span data-i18n="common:tab_settings">Settings</span>
-            </button>
-            <button type="button" class="tab-btn" data-tab="glossaries" onclick="switchTopTab('glossaries')">
-                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">menu_book</span>
-                <span data-i18n="common:tab_glossaries">Glossaries</span>
-            </button>
-            <button type="button" class="tab-btn" data-tab="styles" onclick="switchTopTab('styles')">
-                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">brush</span>
-                <span data-i18n="common:tab_styles">Styles</span>
-            </button>
-            <button type="button" class="tab-btn" data-tab="files" onclick="switchTopTab('files')">
-                <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.1rem;">folder_open</span>
-                <span data-i18n="common:tab_files">Files</span>
-            </button>
         </div>
 
         <!-- Tab: Translate -->

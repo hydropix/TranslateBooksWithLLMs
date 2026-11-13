@@ -4,13 +4,21 @@
    ======================================== */
 
 :root {
-    /* Light mode colors from reference */
-    --primary-light: #3676d8;
-    --background-light: #f0f2f5;
-    --background-outer: #ffffff;
-    --text-dark: #1f2a3a;
-    --text-muted-light: #6b7a90;
-    --border-light: #e0e4e9;
+    /* Calm palette: warm paper page, white card surface, slate-ink accent.
+       The accent is the only saturated colour and is reserved for tier-1
+       surfaces (see "Calm theme — importance tiers" at the end of the file). */
+    --primary-light: #3e5a78;
+    --primary-light-hover: #2c405a;
+    --background-light: #fffdf9;
+    --background-outer: #f4efe8;
+    --background-inset: #faf7f2;
+    --text-dark: #1f2a33;
+    --text-muted-light: #6a6760;
+    --text-faint: #8c877e;
+    --border-light: #e4dcd0;
+    --border-strong: #d6cdbf;
+    --primary-tint: rgba(62, 90, 120, 0.06);
+    --primary-tint-border: rgba(62, 90, 120, 0.45);
     --success-light: #28a745;
     --success-light-bg: #e6faed;
     --info-light: #0d6efd;
@@ -35,9 +43,12 @@
     --warning-light-border: #f59e0b;
     --warning-light-text: #92400e;
 
-    /* Neumorphic shadows */
-    --shadow-dark: #d8dbdf;
-    --shadow-light: #ffffff;
+    /* Neumorphic shadows, retired. Every legacy relief rule reads these two
+       tokens, so making them transparent flattens the whole app at once;
+       separation now comes from hairline borders. */
+    --shadow-dark: transparent;
+    --shadow-light: transparent;
+    --shadow-soft: 0 10px 24px -20px rgba(40, 50, 60, 0.35);
 
     /* Active-option chips in the pre-flight summary (settings-summary.js).
        A single treatment for all of them: every chip says "this run uses X",
@@ -46,17 +57,17 @@
        .btn-primary's clothes (white on solid primary), at chip size.
        Written against --primary-light rather than a literal, so the dark
        theme's lighter blue applies with no separate override. */
-    --option-chip-bg: var(--primary-light);
-    --option-chip-fg: #ffffff;
-    --option-chip-border: var(--primary-light);
+    --option-chip-bg: transparent;
+    --option-chip-fg: var(--text-muted-light);
+    --option-chip-border: var(--border-strong);
 
     /* Provider / model / languages chips, same row. Ink instead of blue so
        what the run *is* stays ahead of what the run *uses*. A slate charcoal
        rather than a flat black: it carries the same blue cast as --text-dark
        (#1f2a3a), so the row belongs to the palette instead of punching a hole
        in it. */
-    --llm-chip-bg: #2e353f;
-    --llm-chip-fg: #ffffff;
+    --llm-chip-bg: #ece6dc;
+    --llm-chip-fg: var(--text-dark);
 
     /* Typography.
        --font-text  reading face, inherited by the whole page.
@@ -66,8 +77,10 @@
        read, Inter for what is operated. */
     --font-sans: "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-serif: "Spectral", Georgia, 'Times New Roman', serif;
-    --font-text: var(--font-serif);
-    --font-ui: var(--font-serif);
+    --font-text: var(--font-sans);
+    --font-ui: var(--font-sans);
+    /* Book content only (translation preview, completion excerpts). */
+    --font-reading: var(--font-serif);
 
     /* Translation preview height (based on MAX_TOKENS_PER_CHUNK) */
     /* Default: 300px for 450 tokens. Formula: (tokens / 450) * 300 */
@@ -80,13 +93,20 @@
    ======================================== */
 
 html.dark {
-    /* Dark mode colors - neutral grays */
-    --primary-light: #5a8ee8;
-    --background-light: #2a2a2a;
-    --background-outer: #121212;
-    --text-dark: #e8e8e8;
-    --text-muted-light: #999999;
-    --border-light: #444444;
+    /* Dark calm palette: warm charcoal page, slightly lifted card, a lighter
+       slate accent that still carries white button text. */
+    --primary-light: #557599;
+    --primary-light-hover: #6a8bb0;
+    --background-light: #1f2328;
+    --background-outer: #16191d;
+    --background-inset: #1a1d21;
+    --text-dark: #e7e3dc;
+    --text-muted-light: #a39e95;
+    --text-faint: #7d786f;
+    --border-light: #343a42;
+    --border-strong: #454c55;
+    --primary-tint: rgba(120, 155, 195, 0.08);
+    --primary-tint-border: rgba(140, 170, 205, 0.5);
     --success-light: #34d399;
     --success-light-bg: #1a2a1a;
     --info-light: #60a5fa;
@@ -109,20 +129,21 @@ html.dark {
     --warning-light-border: #f59e0b;
     --warning-light-text: #fbbf24;
 
-    /* Neumorphic shadows for dark mode */
-    --shadow-dark: #1a1a1a;
-    --shadow-light: #3a3a3a;
+    /* Relief retired in dark mode too (see :root). */
+    --shadow-dark: transparent;
+    --shadow-light: transparent;
+    --shadow-soft: 0 10px 24px -20px rgba(0, 0, 0, 0.6);
 
     /* No --option-chip-* override here on purpose: the chips are defined in
        terms of --primary-light, which this block already re-points.
        The LLM chip does need one: the light-theme charcoal is a hair darker
        than the #2a2a2a card it would sit on, so it would read as a hole
        rather than as a chip. Lifted just above the card instead. */
-    --llm-chip-bg: #3b434f;
+    --llm-chip-bg: #2b3037;
 }
 
 html.dark .neu-inset-light {
-    background: #222222;
+    background: var(--background-inset);
     border: 2px solid rgba(136, 136, 136, 0.15);
 }
 
@@ -135,16 +156,16 @@ html.dark .neu-inset-light:focus-within {
 }
 
 html.dark .form-control {
-    background: #222222;
+    background: var(--background-inset);
     color: #e8e8e8;
 }
 
 html.dark .neu-inset-light .form-control {
-    background: #222222;
+    background: var(--background-inset);
 }
 
 html.dark .form-control:focus {
-    background: #222222;
+    background: var(--background-inset);
 }
 
 html.dark .form-control::placeholder {
@@ -152,7 +173,7 @@ html.dark .form-control::placeholder {
 }
 
 html.dark .header {
-    background: rgba(42, 42, 42, 0.9);
+    background: transparent;
 }
 
 html.dark .file-upload {
@@ -191,7 +212,7 @@ html.dark #ttsOptions {
 }
 
 html.dark .log-entry.log-summary-detailed {
-    background: #222222;
+    background: var(--background-inset);
     border-color: rgba(136, 136, 136, 0.3);
     border-left-color: var(--primary-light);
 }
@@ -227,19 +248,19 @@ body {
 .neu-inset-light {
     background: #ffffff;
     box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 2px solid rgba(54, 118, 216, 0.15);
+    border: 2px solid rgba(62, 90, 120, 0.15);
     border-radius: 1rem;
     transition: all 0.3s ease;
 }
 
 .neu-inset-light:hover {
-    border-color: rgba(54, 118, 216, 0.35);
+    border-color: rgba(62, 90, 120, 0.35);
     box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
 }
 
 .neu-inset-light:focus-within {
     border-color: var(--primary-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light), 0 0 0 3px rgba(54, 118, 216, 0.1);
+    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light), 0 0 0 3px rgba(62, 90, 120, 0.1);
 }
 
 /* ========================================
@@ -373,7 +394,7 @@ body {
 .header .header-lang-wrapper:focus-within {
     color: var(--text-dark);
     border-color: var(--primary-light);
-    background: rgba(54, 118, 216, 0.04);
+    background: rgba(62, 90, 120, 0.04);
 }
 
 .header .header-lang-icon {
@@ -674,11 +695,11 @@ select.form-control {
 .btn-primary {
     background: var(--primary-light);
     color: white;
-    box-shadow: 0 8px 20px rgba(54, 118, 216, 0.25);
+    box-shadow: 0 8px 20px rgba(62, 90, 120, 0.25);
 }
 
 .btn-primary:hover {
-    box-shadow: 0 12px 30px rgba(54, 118, 216, 0.35);
+    box-shadow: 0 12px 30px rgba(62, 90, 120, 0.35);
     transform: scale(1.02);
 }
 
@@ -734,7 +755,7 @@ select.form-control {
 .file-upload {
     margin: 2rem 0;
     padding: 4rem;
-    border: 2px dashed rgba(54, 118, 216, 0.3);
+    border: 2px dashed rgba(62, 90, 120, 0.3);
     border-radius: 3rem;
     background: var(--background-light);
     box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
@@ -745,17 +766,17 @@ select.form-control {
 }
 
 .file-upload:hover {
-    border-color: rgba(54, 118, 216, 0.6);
+    border-color: rgba(62, 90, 120, 0.6);
     transform: scale(1.01);
 }
 
 .file-upload.dragging {
     border-color: var(--primary-light);
-    background: linear-gradient(135deg, rgba(54, 118, 216, 0.05), rgba(54, 118, 216, 0.1));
+    background: linear-gradient(135deg, rgba(62, 90, 120, 0.05), rgba(62, 90, 120, 0.1));
 }
 
 .file-upload .upload-icon {
-    background: rgba(54, 118, 216, 0.1);
+    background: rgba(62, 90, 120, 0.1);
     width: 5rem;
     height: 5rem;
     border-radius: 9999px;
@@ -918,7 +939,7 @@ select.form-control {
 }
 
 .file-item-controls .file-op-badge.op-translate {
-    background: rgba(54, 118, 216, 0.12);
+    background: rgba(62, 90, 120, 0.12);
     color: #2c5fb0;
 }
 
@@ -1811,7 +1832,7 @@ input[type="checkbox"] {
 }
 
 .file-table thead tr {
-    background: rgba(54, 118, 216, 0.05);
+    background: rgba(62, 90, 120, 0.05);
 }
 
 .file-table th {
@@ -1830,7 +1851,7 @@ input[type="checkbox"] {
 }
 
 .file-table tbody tr:hover {
-    background: rgba(54, 118, 216, 0.03);
+    background: rgba(62, 90, 120, 0.03);
 }
 
 .file-table td {
@@ -2697,13 +2718,13 @@ input[type="range"]::-moz-range-thumb {
 
 /* Clickable file items (Queued status) */
 .file-item[style*="cursor: pointer"]:hover {
-    box-shadow: 0 2px 8px rgba(54, 118, 216, 0.15);
+    box-shadow: 0 2px 8px rgba(62, 90, 120, 0.15);
     transform: translateY(-1px);
     border-color: var(--primary-light);
 }
 
 .file-item[style*="cursor: pointer"]:hover:not(.file-active) {
-    background: rgba(54, 118, 216, 0.03);
+    background: rgba(62, 90, 120, 0.03);
 }
 
 /* Non-clickable file items (Processing/Completed) */
@@ -2715,7 +2736,7 @@ input[type="range"]::-moz-range-thumb {
 .file-item.file-active {
     border-color: var(--primary-light);
     border-width: 2px;
-    background: linear-gradient(135deg, rgba(54, 118, 216, 0.05) 0%, rgba(54, 118, 216, 0.02) 100%);
+    background: linear-gradient(135deg, rgba(62, 90, 120, 0.05) 0%, rgba(62, 90, 120, 0.02) 100%);
 }
 
 .file-item.file-active::before {
@@ -2739,7 +2760,7 @@ input[type="range"]::-moz-range-thumb {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--primary-light);
-    background: rgba(54, 118, 216, 0.1);
+    background: rgba(62, 90, 120, 0.1);
     border-radius: 4px;
     margin-left: 8px;
 }
@@ -2753,7 +2774,7 @@ input[type="range"]::-moz-range-thumb {
     justify-content: center;
     overflow: hidden;
     border-radius: 4px;
-    background: rgba(54, 118, 216, 0.05);
+    background: rgba(62, 90, 120, 0.05);
     font-size: 2rem;
 }
 
@@ -2909,11 +2930,11 @@ html.dark .file-info {
 }
 
 .searchable-select-display:hover {
-    background: rgba(54, 118, 216, 0.05);
+    background: rgba(62, 90, 120, 0.05);
 }
 
 .searchable-select.open .searchable-select-display {
-    background: rgba(54, 118, 216, 0.08);
+    background: rgba(62, 90, 120, 0.08);
 }
 
 .searchable-select-value {
@@ -2934,7 +2955,7 @@ html.dark .file-info {
     font-size: 0.7rem;
     font-weight: 600;
     padding: 0.2rem 0.5rem;
-    background: rgba(54, 118, 216, 0.12);
+    background: rgba(62, 90, 120, 0.12);
     color: var(--primary-light);
     border-radius: 9999px;
     white-space: nowrap;
@@ -2985,7 +3006,7 @@ html.dark .file-info {
     gap: 0.5rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border-light);
-    background: rgba(54, 118, 216, 0.03);
+    background: rgba(62, 90, 120, 0.03);
     flex: 0 0 auto; /* never shrink when dropdown height is tight */
 }
 
@@ -3053,11 +3074,11 @@ html.dark .file-info {
 
 .searchable-select-option:hover,
 .searchable-select-option.highlighted {
-    background: rgba(54, 118, 216, 0.08);
+    background: rgba(62, 90, 120, 0.08);
 }
 
 .searchable-select-option.selected {
-    background: rgba(54, 118, 216, 0.12);
+    background: rgba(62, 90, 120, 0.12);
 }
 
 .searchable-select-option .option-check {
@@ -3365,7 +3386,7 @@ html.dark .searchable-select-group {
 .glossary-search-row input:focus {
     outline: none;
     border-color: var(--primary-light);
-    box-shadow: 0 0 0 3px rgba(54, 118, 216, 0.15);
+    box-shadow: 0 0 0 3px rgba(62, 90, 120, 0.15);
 }
 .glossary-search-count {
     color: var(--text-muted-light);
@@ -3510,7 +3531,7 @@ html.dark .glossary-info-card .glossary-info-warn {
 .glossary-drop-target.is-drag-over {
     outline: 2px dashed var(--primary-light);
     outline-offset: -6px;
-    background: rgba(54, 118, 216, 0.06);
+    background: rgba(62, 90, 120, 0.06);
 }
 
 /* NER status dots animation */
@@ -3549,7 +3570,7 @@ html.dark .glossary-info-card .glossary-info-warn {
 }
 .glossary-ner-dropzone.is-drag-over {
     border-color: var(--primary-light);
-    background: rgba(54, 118, 216, 0.08);
+    background: rgba(62, 90, 120, 0.08);
 }
 .glossary-ner-dropzone .ner-dropzone-primary {
     display: flex;
@@ -3885,7 +3906,7 @@ html.dark .glossary-info-card .glossary-info-warn {
 .ner-settings-input:focus {
     outline: none;
     border-color: var(--primary-light);
-    box-shadow: 0 0 0 3px rgba(54, 118, 216, 0.12);
+    box-shadow: 0 0 0 3px rgba(62, 90, 120, 0.12);
 }
 .ner-status {
     margin-left: auto;
@@ -4242,7 +4263,7 @@ html.dark .sample-column-card .searchable-select,
 html.dark .sample-column-card .sample-endpoint-input,
 html.dark .sample-column-card .sample-instructions-select,
 html.dark .sample-column-card .sample-glossary-select {
-    background: #222222;
+    background: var(--background-inset);
     border-color: #444444;
 }
 
@@ -4806,50 +4827,93 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 
 /* ========================================
-   Square UI — global corner reset
+   Shape scale — global corner radii
 
-   Single source of truth for corner shape: every rounded corner in
-   the app is flattened here instead of being edited at ~180 call
-   sites. The rules live in a cascade layer on purpose — for
+   Single source of truth for corner shape: instead of editing ~180
+   call sites, every corner in the app is set here from a three-step
+   scale. The rules live in a cascade layer on purpose: for
    `!important` declarations the layer order is inverted, so a
    layered `!important` beats every unlayered one whatever its
    specificity. That covers the `!important` radii in this file, the
    inline <style> block in translation_interface.html, and the
-   `style="border-radius: …"` strings injected by the JS modules,
-   without touching any of them.
+   `style="border-radius: …"` strings injected by the JS modules.
 
-   To bring the rounded look back, delete this block — nothing else
-   depends on it.
+   Scale:  --r-sm  chips, badges, small controls
+           --r-md  buttons, fields, dropdowns, inner panels
+           --r-lg  outer cards and modals
+   Full circles are kept only where roundness carries meaning:
+   status dots, spinners, range thumbs.
    ======================================== */
 @layer square-ui {
+    :root {
+        --r-sm: 5px;
+        --r-md: 8px;
+        --r-lg: 14px;
+    }
+
     *,
     *::before,
     *::after {
+        border-radius: var(--r-sm) !important;
+    }
+
+    /* Structural elements that only draw a single edge or sit inside a
+       table: a radius there bends the line ends instead of rounding a box. */
+    .header,
+    table, thead, tbody, tr, th, td,
+    hr,
+    .tab-nav .tab-btn,
+    .tab-nav .tab-btn::before,
+    .card-header,
+    .card-body {
         border-radius: 0 !important;
     }
 
-    /* SVG rects carry their radius as a geometry attribute, which the
-       rule above cannot reach. */
+    .btn,
+    .form-control,
+    .neu-inset-light,
+    .searchable-select-display,
+    .searchable-select-dropdown,
+    .file-upload,
+    .progress-section,
+    .progress-bar-container,
+    .stat-card,
+    .log-container,
+    .preflight-panel,
+    .recommendation-panel,
+    .term-fix-panel,
+    .message,
+    .toast {
+        border-radius: var(--r-md) !important;
+    }
+
+    .main-card,
+    .modal-content,
+    .update-overlay__panel {
+        border-radius: var(--r-lg) !important;
+    }
+
+    .status-dot,
+    .key-status,
+    .glossary-ner-loading .dot,
+    .quick-test-spinner,
+    .inline-spinner {
+        border-radius: 50% !important;
+    }
+
     svg rect {
         rx: 0 !important;
         ry: 0 !important;
     }
 
     /* Range thumbs live in the native shadow tree, which `*` does not
-       reach either. Kept in separate rules: an unknown vendor
-       pseudo-element invalidates a whole selector list. */
+       reach. Kept in separate rules: an unknown vendor pseudo-element
+       invalidates a whole selector list. */
     input[type="range"]::-webkit-slider-thumb {
-        border-radius: 0 !important;
+        border-radius: 50% !important;
     }
 
     input[type="range"]::-moz-range-thumb {
-        border-radius: 0 !important;
-    }
-
-    /* Only exception: a rotating square ring reads as a rendering bug,
-       not as a design choice. */
-    .quick-test-spinner,
-    .inline-spinner {
         border-radius: 50% !important;
     }
 }
@@ -4893,9 +4957,9 @@ html.dark .file-test-btn { color: #a5b4fc; }
     }
 
     .header {
-        padding-top: calc(1.5rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(3rem * var(--ui-density-y)) !important;
+        padding-top: 0.35rem !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 0.75rem !important;
     }
 
     /* --- Tabs --- */
@@ -4942,7 +5006,19 @@ html.dark .file-test-btn { color: #a5b4fc; }
 
     /* .btn-sm and the glossary toolbar buttons are already compact and
        carry their own padding; leave them where they are. */
-    .btn:not(.btn-sm):not(.glossary-toolbar-btn) {
+    /* Tier 1: the two language pickers are the first decision of a run,
+       so they get a taller box and larger type than ordinary fields. */
+    #sourceLang,
+    #targetLang {
+        height: 2.75rem !important;
+        min-height: 2.75rem !important;
+        max-height: 2.75rem !important;
+        line-height: 2.75rem !important;
+        font-size: 1.0625rem !important;
+        font-weight: 500 !important;
+    }
+
+    .btn:not(.btn-sm):not(.glossary-toolbar-btn):not(#themeToggleBtn) {
         padding-top: calc(0.75rem * var(--ui-density-y)) !important;
         padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
     }
@@ -4989,7 +5065,7 @@ html.dark .file-test-btn { color: #a5b4fc; }
     }
 
     .progress-bar-container {
-        height: max(1.5rem, calc(2.5rem * var(--ui-density-y))) !important;
+        height: 1.25rem !important;
         margin-top: calc(1.5rem * var(--ui-density-y)) !important;
         margin-bottom: calc(1.5rem * var(--ui-density-y)) !important;
     }
@@ -5001,10 +5077,18 @@ html.dark .file-test-btn { color: #a5b4fc; }
 
     /* --- Drop zone: the biggest single block of empty space --- */
     .file-upload {
-        padding-top: calc(4rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(4rem * var(--ui-density-y)) !important;
-        margin-top: calc(2rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(2rem * var(--ui-density-y)) !important;
+        padding-top: 1.75rem !important;
+        padding-bottom: 1.75rem !important;
+        margin-top: 1rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    /* The "already translated" zone is a tier-3 alternative path. */
+    .file-upload.file-upload-secondary {
+        padding-top: 0.75rem !important;
+        padding-bottom: 0.75rem !important;
+        margin-top: 0 !important;
+        margin-bottom: 0.75rem !important;
     }
 }
 
@@ -5107,3 +5191,658 @@ html.dark .file-test-btn { color: #a5b4fc; }
     font-family: var(--font-ui);
 }
 
+/* ========================================
+   Calm theme — importance tiers
+
+   Every element of the Translate flow is ranked, and its visual weight
+   follows its rank rather than its position in the markup:
+
+   T1  Act      language pickers, drop zone, Start, progress bar.
+                White card surface, 15-17px type, the only place the
+                accent colour is used as a fill.
+   T2  Check    file list, run figures, Pause/Interrupt, card titles.
+                13-14px ink, hairline controls.
+   T3  Tune     per-run options, the "already translated" zone, the
+                activity log. 12-13px muted text, no elevation.
+   T4  Chrome   tab nav, LLM status, UI language, theme, version.
+                11-13px, ghost controls, faint grey.
+
+   Escalation: a T3/T4 item moves up only while it needs attention
+   (LLM disconnected, fallback chunks), through state classes that
+   already exist (.status-dot.disconnected, .stat-card-critical).
+   ======================================== */
+
+body {
+    background-color: var(--background-outer);
+}
+
+.container {
+    max-width: 960px;
+}
+
+/* ---------- T4: header chrome ---------- */
+
+.header {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.25rem 1.5rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    background: var(--background-outer);
+    backdrop-filter: none;
+    border-bottom: 1px solid var(--border-light);
+}
+
+html.dark .header {
+    background: var(--background-outer);
+}
+
+.header .logo-section {
+    gap: 0.5rem;
+}
+
+.header .logo-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.header .logo-text h2 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.header .logo-text p {
+    display: none;
+}
+
+.header .logo-text .app-version {
+    color: var(--text-faint);
+    font-size: 0.6875rem;
+    font-weight: 400;
+}
+
+.header .status-section {
+    gap: 0.125rem;
+    margin-left: auto;
+}
+
+.header .status-indicator {
+    height: auto;
+    padding: 0 0.5rem 0 0;
+    gap: 0.4rem;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+
+.header .status-indicator .status-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+}
+
+.header .status-indicator .status-dot.connected,
+.header .status-indicator .status-dot.checking,
+.header .status-indicator .status-dot.waiting {
+    animation: none;
+}
+
+.header .status-indicator span {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: var(--text-muted-light);
+    max-width: 16rem;
+}
+
+/* Escalation: a broken connection is the one header fact worth reading. */
+.header .status-indicator:has(.status-dot.disconnected) span {
+    color: var(--danger-light-text);
+    font-weight: 600;
+}
+
+.header .status-indicator:has(.status-dot.error) span {
+    color: var(--warning-light-text);
+    font-weight: 600;
+}
+
+.header .header-lang-wrapper {
+    height: 1.75rem;
+    padding: 0 0.4rem;
+    gap: 0.25rem;
+    border: 0;
+    color: var(--text-faint);
+}
+
+.header .header-lang-wrapper:hover,
+.header .header-lang-wrapper:focus-within {
+    color: var(--text-dark);
+    background: var(--primary-tint);
+}
+
+.header .header-lang-caret {
+    display: none;
+}
+
+.header .header-lang-icon {
+    font-size: 0.9rem;
+}
+
+.header .header-lang-display {
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+
+.header #themeToggleBtn {
+    width: 1.75rem;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: var(--text-faint);
+}
+
+.header #themeToggleBtn:hover {
+    transform: none;
+    color: var(--text-dark);
+    background: var(--primary-tint);
+}
+
+.header #themeToggleBtn .material-symbols-outlined {
+    font-size: 1rem;
+}
+
+/* ---------- Cards and fields ---------- */
+
+.main-card {
+    background: var(--background-light);
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-soft);
+}
+
+.card-header {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    gap: 0.6rem;
+}
+
+.card-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.card-header .material-symbols-outlined {
+    color: var(--text-muted-light);
+    font-size: 1.15rem;
+}
+
+.card-body {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+}
+
+.form-group label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    padding-left: 0.125rem;
+}
+
+.neu-inset-light,
+html.dark .neu-inset-light {
+    background: var(--background-light);
+    border: 1px solid var(--border-strong);
+    box-shadow: none;
+}
+
+html.dark .neu-inset-light {
+    background: var(--background-inset);
+}
+
+.neu-inset-light:hover,
+html.dark .neu-inset-light:hover {
+    border-color: var(--text-faint);
+    box-shadow: none;
+}
+
+.neu-inset-light:focus-within,
+html.dark .neu-inset-light:focus-within {
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px var(--primary-tint);
+}
+
+/* T1: the target language is the choice the user actually makes; the
+   source is usually auto-detected. */
+.neu-inset-light:has(#targetLang),
+html.dark .neu-inset-light:has(#targetLang) {
+    border-color: var(--primary-light);
+}
+
+/* ---------- T1: drop zone ---------- */
+
+.file-upload,
+html.dark .file-upload {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    border: 1.5px dashed var(--primary-tint-border);
+    background: var(--primary-tint);
+    box-shadow: none;
+}
+
+.file-upload:hover {
+    transform: none;
+    border-color: var(--primary-light);
+}
+
+.file-upload.dragging {
+    border-color: var(--primary-light);
+    background: rgba(62, 90, 120, 0.12);
+}
+
+.file-upload .upload-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    margin: 0 auto 0.6rem;
+    background: var(--primary-light);
+}
+
+.file-upload:hover .upload-icon {
+    transform: none;
+}
+
+.file-upload .upload-icon .material-symbols-outlined {
+    font-size: 1.35rem;
+    color: #ffffff;
+}
+
+.file-upload h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+}
+
+.file-upload p {
+    font-size: 0.8125rem;
+}
+
+.file-upload .browse-btn {
+    margin-top: 0.35rem;
+    padding: 0;
+    background: transparent;
+    color: var(--primary-light);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* ---------- T3: "already translated" zone ---------- */
+
+.file-upload.file-upload-secondary,
+html.dark .file-upload.file-upload-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem 0.75rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    border: 1px dashed var(--border-strong);
+    background: transparent;
+}
+
+.file-upload.file-upload-secondary:hover {
+    border-color: var(--text-faint);
+}
+
+.file-upload-secondary .upload-icon {
+    display: none;
+}
+
+.file-upload-secondary h4 {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-muted-light);
+}
+
+.file-upload-secondary p {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+}
+
+.post-mode-switch {
+    margin: 0;
+    padding: 0;
+    gap: 0.2rem;
+    background: transparent;
+    box-shadow: none;
+}
+
+.post-mode-btn {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.post-mode-btn.active {
+    background: var(--llm-chip-bg);
+    color: var(--text-dark);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:active {
+    box-shadow: none;
+    transform: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-light-hover);
+}
+
+.btn-secondary {
+    background: var(--background-light);
+    border: 1px solid var(--border-strong);
+    box-shadow: none;
+}
+
+.btn-secondary:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: var(--text-faint);
+}
+
+/* T2 destructive: outlined, findable without competing with Start. */
+.btn-danger {
+    background: transparent;
+    color: var(--danger-light-text);
+    border: 1px solid var(--danger-light);
+    box-shadow: none;
+}
+
+.btn-danger:hover {
+    background: var(--danger-light-bg);
+    box-shadow: none;
+}
+
+/* T1: the one filled, raised button of the screen. */
+#translateBtn {
+    min-height: 2.75rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    font-size: 0.9375rem;
+    box-shadow: 0 6px 14px -8px rgba(40, 58, 82, 0.6);
+}
+
+#translateBtn:disabled {
+    box-shadow: none;
+}
+
+/* ---------- T3: pre-flight options ---------- */
+
+.preflight-panel {
+    background: var(--background-inset);
+    border: 1px solid var(--border-light);
+    box-shadow: none;
+}
+
+.preflight-panel h4 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.option-item__title {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.option-item__description {
+    font-size: 0.75rem;
+    color: var(--text-muted-light);
+}
+
+input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    min-height: 1rem;
+}
+
+/* ---------- T1/T2: progress ---------- */
+
+.progress-section {
+    background: var(--background-light);
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-soft);
+}
+
+.progress-section h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.progress-section h3 .material-symbols-outlined {
+    color: var(--text-muted-light);
+    font-size: 1.1rem;
+}
+
+.progress-bar-container {
+    background: var(--border-light);
+    border: 0;
+    box-shadow: none;
+}
+
+.progress-bar {
+    background: var(--primary-light);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.stats-grid {
+    gap: 0.375rem;
+}
+
+.stat-card {
+    background: transparent;
+    border: 1px solid var(--border-light);
+    box-shadow: none;
+}
+
+.stat-card:hover {
+    transform: none;
+}
+
+.stat-card h3 {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--text-dark);
+}
+
+.stat-card p {
+    font-size: 0.625rem;
+    font-weight: 500;
+}
+
+/* Escalation: fallbacks are a quality warning, so amber rather than accent. */
+.stat-card-critical {
+    background: var(--warning-light-bg);
+    border-color: var(--warning-light-border);
+    color: var(--warning-light-text);
+}
+
+.stat-card-critical h3,
+.stat-card-critical p,
+.stat-card-critical .stat-card-chevron {
+    color: var(--warning-light-text);
+}
+
+.recommendation-panel {
+    background: var(--warning-light-bg);
+    border-color: var(--warning-light-border);
+    color: var(--text-dark);
+}
+
+.recommendation-panel strong,
+.recommendation-link,
+.recommendation-link:hover {
+    color: var(--warning-light-text);
+}
+
+/* Book text is read, not operated: it keeps the serif. */
+#lastTranslationPreview {
+    font-family: var(--font-reading);
+}
+
+/* ---------- T3: activity log toggle ---------- */
+
+.prompt-options-toggle {
+    padding: 0.5rem 0.25rem;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--border-light);
+    box-shadow: none;
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
+}
+
+.prompt-options-toggle:hover {
+    color: var(--text-dark);
+}
+
+/* ========================================
+   Calm theme — phone and small tablet layout
+
+   Same tiers, re-flowed for a narrow screen:
+   - Header: logo and display controls share the first row; the tab nav
+     takes a full second row and scrolls sideways instead of wrapping,
+     so the sticky header never grows past two short rows.
+   - Touch: chrome controls and tabs get at least a 40px hit area.
+   - Fields render at 16px so iOS Safari does not zoom on focus.
+   - Start spans the full width: it is the tier-1 action of the screen.
+   ======================================== */
+@media (max-width: 768px) {
+    body {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .header {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .header .logo-section {
+        order: 1;
+    }
+
+    .header .status-section {
+        order: 2;
+        margin-left: auto;
+        min-width: 0;
+    }
+
+    /* .header prefix: the template's inline <style> also targets
+       #topTabNav and loads after this file. */
+    .header #topTabNav {
+        order: 3;
+        flex: 0 0 100%;
+        flex-wrap: nowrap;
+        gap: 0 1.25rem;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .header #topTabNav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tab-nav .tab-btn {
+        flex: 0 0 auto;
+        min-height: 2.5rem;
+        white-space: nowrap;
+    }
+
+    .header .status-indicator span {
+        max-width: 7rem;
+    }
+
+    .header .header-lang-wrapper,
+    .header #themeToggleBtn {
+        height: 2.5rem;
+        min-width: 2.5rem;
+        justify-content: center;
+    }
+
+    .main-card {
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .card-header,
+    .card-body {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* Card titles and toolbars wrap instead of being clipped by the
+       card's overflow: hidden (Files, Glossaries, Styles headers). */
+    .card-header,
+    .file-actions {
+        flex-wrap: wrap;
+    }
+
+    .file-actions .btn {
+        flex: 1 1 9rem;
+    }
+
+    .form-control,
+    #sourceLang,
+    #targetLang {
+        font-size: 16px;
+    }
+
+    .file-upload {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    #translateBtn {
+        width: 100%;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    /* Wide data tables scroll inside their own box rather than pushing
+       the page sideways. */
+    #glossaryListTable,
+    #glossaryTermsTable,
+    #styleListTable,
+    .file-table {
+        display: block !important;
+        overflow-x: auto;
+        max-width: 100%;
+    }
+}

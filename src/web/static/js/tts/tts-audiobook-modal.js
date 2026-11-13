@@ -71,7 +71,7 @@ async function showTTSModal(filename, filepath) {
                     <button class="close-btn" id="ttsModalClose">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p style="margin: 0 0 20px 0; color: #a3adb3; font-size: 14px;">
+                    <p style="margin: 0 0 20px 0; color: var(--text-muted-light); font-size: 14px;">
                         ${i18nSpan('tts:modal_subtitle', { filename })}
                     </p>
 
@@ -154,7 +154,7 @@ async function showTTSModal(filename, filepath) {
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-size: 13px;" data-i18n="tts:voice_optional">${t('tts:voice_optional')}</label>
                                 <input type="text" id="ttsModalVoice" class="form-control" placeholder="${DomHelpers.escapeHtml(t('tts:voice_placeholder'))}" data-i18n-attr="placeholder:tts:voice_placeholder" style="font-size: 13px;">
-                                <small style="color: #6b7280;" data-i18n="tts:voice_auto_hint">${t('tts:voice_auto_hint')}</small>
+                                <small style="color: var(--text-muted-light);" data-i18n="tts:voice_auto_hint">${t('tts:voice_auto_hint')}</small>
                             </div>
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -193,32 +193,32 @@ async function showTTSModal(filename, filepath) {
 
                     <!-- Chatterbox Options (hidden by default) -->
                     <div id="ttsModalChatterboxOptions" style="display: none;">
-                        <div style="background: #2a2a2a; border-radius: 8px; padding: 15px; margin-bottom: 15px; border: 1px solid #fbbf24;">
-                            <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #fbbf24;" data-i18n="tts:voice_cloning_heading">${t('tts:voice_cloning_heading')}</h4>
+                        <div style="background: var(--background-inset); border-radius: 8px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--warning-light-border);">
+                            <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--warning-light-text);" data-i18n="tts:voice_cloning_heading">${t('tts:voice_cloning_heading')}</h4>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-size: 13px;" data-i18n="tts:voice_prompt">${t('tts:voice_prompt')}</label>
                                 <select id="ttsModalVoicePrompt" class="form-control" style="font-size: 13px;">
                                     <option value="" data-i18n="tts:voice_prompt_default">${t('tts:voice_prompt_default')}</option>
                                     ${voicePromptsOptions}
                                 </select>
-                                <small style="color: #6b7280;" data-i18n="tts:voice_prompt_hint">${t('tts:voice_prompt_hint')}</small>
+                                <small style="color: var(--text-muted-light);" data-i18n="tts:voice_prompt_hint">${t('tts:voice_prompt_hint')}</small>
                             </div>
                         </div>
 
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-size: 13px;">
-                                    ${i18nSpan('tts:exaggeration')} <span id="ttsModalExaggerationValue" style="color: #fbbf24;">0.50</span>
+                                    ${i18nSpan('tts:exaggeration')} <span id="ttsModalExaggerationValue" style="color: var(--warning-light-text);">0.50</span>
                                 </label>
                                 <input type="range" id="ttsModalExaggeration" min="0" max="1" step="0.05" value="0.5" class="tts-slider">
-                                <small style="color: #6b7280;" data-i18n="tts:exaggeration_hint">${t('tts:exaggeration_hint')}</small>
+                                <small style="color: var(--text-muted-light);" data-i18n="tts:exaggeration_hint">${t('tts:exaggeration_hint')}</small>
                             </div>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-size: 13px;">
-                                    ${i18nSpan('tts:cfg_weight')} <span id="ttsModalCfgValue" style="color: #fbbf24;">0.50</span>
+                                    ${i18nSpan('tts:cfg_weight')} <span id="ttsModalCfgValue" style="color: var(--warning-light-text);">0.50</span>
                                 </label>
                                 <input type="range" id="ttsModalCfgWeight" min="0" max="1" step="0.05" value="0.5" class="tts-slider">
-                                <small style="color: #6b7280;" data-i18n="tts:cfg_weight_hint">${t('tts:cfg_weight_hint')}</small>
+                                <small style="color: var(--text-muted-light);" data-i18n="tts:cfg_weight_hint">${t('tts:cfg_weight_hint')}</small>
                             </div>
                         </div>
 

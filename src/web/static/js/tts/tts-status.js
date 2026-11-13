@@ -77,7 +77,7 @@ export function handleTtsUpdate(data) {
             if (ttsProgressBar) {
                 ttsProgressBar.style.width = '0%';
                 ttsProgressBar.textContent = t('tts:failed_label');
-                ttsProgressBar.style.background = '#ef4444';
+                ttsProgressBar.style.background = 'var(--danger-light)';
             }
 
             const errorText = error || message || t('errors:unknown_error');
@@ -86,7 +86,7 @@ export function handleTtsUpdate(data) {
             if (ttsStatusText) {
                 if (isFFmpegError) {
                     ttsStatusText.innerHTML = `
-                        <span style="color: #ef4444;">❌ ${i18nSpan('tts:ffmpeg_required')}</span>
+                        <span style="color: var(--danger-light);">❌ ${i18nSpan('tts:ffmpeg_required')}</span>
                         <div style="margin-top: 10px;">
                             <button id="installFFmpegBtn" class="btn btn-primary" style="margin-right: 10px;" onclick="window.installFFmpeg()">
                                 <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">download</span>
@@ -125,7 +125,7 @@ window.installFFmpeg = async function() {
     const renderFailure = (key, error) => {
         if (!ttsStatusText) return;
         ttsStatusText.innerHTML = `
-            <span style="color: #ef4444;">❌ ${i18nSpan(key, { error })}</span>
+            <span style="color: var(--danger-light);">❌ ${i18nSpan(key, { error })}</span>
             <div style="margin-top: 10px;">
                 ${ffmpegManualLink()}
             </div>
@@ -137,7 +137,7 @@ window.installFFmpeg = async function() {
         if (ttsStatusText) {
             // result.message is server text: escape it.
             ttsStatusText.innerHTML = `
-                <span style="color: #22c55e;">✅ ${DomHelpers.escapeHtml(result.message || '')}</span>
+                <span style="color: var(--success-light);">✅ ${DomHelpers.escapeHtml(result.message || '')}</span>
                 <p style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary);">
                     ${i18nSpan('tts:ffmpeg_restart_needed')}
                 </p>

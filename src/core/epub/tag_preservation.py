@@ -17,23 +17,55 @@ from .placeholder_validator import PlaceholderValidator
 from src.common.placeholder_format import PlaceholderFormat
 
 
-def is_non_translatable(text: str) -> bool:
+# Numbering made only of digits and numbering punctuation, plus whitespace and
+# invisible Unicode characters. No letters at all: "1", "1.", "1.2", "1-", "(1)".
+_NUMERIC_NUMBERING_RE = re.compile(
+    r'^[\d\.\-\u2013\u2014\)\(\s\u00A0\u2000-\u200F\u2028\u2029]+$'
+)
+
+# A strict, canonical, UPPERCASE Roman numeral (1..3999), optionally wrapped in
+# parentheses or followed by "." / ")". Matching is case-sensitive on purpose:
+# lowercase or mixed-case words built from the same letters ("did", "Civil",
+# "vivid", "mild", "Mix", "dim", "lid") are real words and must be translated.
+_ROMAN_CORE = r'M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})'
+_ROMAN_PUNCTUATED_RE = re.compile(r'^(?:\(' + _ROMAN_CORE + r'\)|' + _ROMAN_CORE + r'[\.\)])$')
+_ROMAN_BARE_RE = re.compile(r'^' + _ROMAN_CORE + r'$')
+
+# Inline tags do not end a block of running text. Any other tag (p, div, h1-h6,
+# li, td, br, section, ...) is treated as a block boundary when deciding whether
+# a text segment stands alone in its block.
+_INLINE_TAG_NAMES = frozenset({
+    'a', 'abbr', 'b', 'bdi', 'bdo', 'big', 'cite', 'code', 'data', 'del',
+    'dfn', 'em', 'font', 'i', 'ins', 'kbd', 'label', 'mark', 'q', 'rp', 'rt',
+    'ruby', 's', 'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup',
+    'time', 'tt', 'u', 'var', 'wbr',
+})
+_TAG_NAME_RE = re.compile(r'^<\s*/?\s*([A-Za-z][\w:.-]*)')
+
+
+def is_non_translatable(text: str, standalone: bool = False) -> bool:
     """
     Check if text contains only non-translatable content.
 
     Non-translatable content includes:
     - Whitespace only (spaces, tabs, newlines)
     - Non-breaking spaces and invisible Unicode characters
-    - Simple numbers (digits, with optional dots/dashes for numbering)
-    - Roman numerals (I, II, III, IV, etc.)
+    - Simple numbers (digits, with optional dots/dashes/parentheses for numbering)
+    - Strict uppercase canonical Roman numerals, see the rule below
 
-    Does NOT include:
-    - Punctuation alone (could be meaningful)
-    - Emojis or symbols
-    - Any alphabetic text (except roman numerals)
+    Roman numeral rule (case-sensitive, canonical form only):
+    - "IV.", "XII)", "(III)": always numbering (explicit numbering punctuation).
+    - Bare "IV", "XII", "I": numbering only when ``standalone`` is True, i.e.
+      the segment is the only text of its block (``<h2>IV</h2>``). Inside running
+      prose a bare uppercase token may be a word (the pronoun "I", an all-caps
+      "MIX" or "LI"), so it is left for the LLM. Sending a real numeral to the
+      LLM is harmless; freezing a real word is not.
+    - Lowercase or mixed case ("did", "Civil", "vivid", "Mix") is never numbering.
 
     Args:
         text: Text to check
+        standalone: True when the caller knows the segment is the only text in
+            its enclosing block (see ``_standalone_text_flags``).
 
     Returns:
         True if text contains only non-translatable content
@@ -41,16 +73,67 @@ def is_non_translatable(text: str) -> bool:
     if not text:
         return True
 
-    # Strip whitespace
     stripped = text.strip()
     if not stripped:
         return True  # Whitespace only
 
-    # Check if it's just numbers/roman numerals with optional formatting
-    # Matches: "1", "1.", "1.2", "42", "III", "IV.", "1-", "1)", "(1)"
-    # Also matches invisible Unicode characters
-    non_translatable_pattern = r'^[\d\.\-\–\—\)\(\s\u00A0\u2000-\u200F\u2028\u2029IVXLCDM]+$'
-    return bool(re.match(non_translatable_pattern, stripped, re.IGNORECASE))
+    if _NUMERIC_NUMBERING_RE.match(stripped):
+        return True
+
+    if _ROMAN_PUNCTUATED_RE.match(stripped):
+        return True
+
+    if standalone and _ROMAN_BARE_RE.match(stripped):
+        return True
+
+    return False
+
+
+def _is_block_boundary_tag(tag: str) -> bool:
+    """Return True if ``tag`` (a full ``<...>`` string) is not an inline tag."""
+    if tag.startswith('<!') or tag.startswith('<?'):
+        return True
+    match = _TAG_NAME_RE.match(tag)
+    if not match:
+        return True
+    name = match.group(1).lower()
+    if ':' in name:
+        name = name.split(':', 1)[1]
+    return name not in _INLINE_TAG_NAMES
+
+
+def _standalone_text_flags(segments: List[str]) -> List[bool]:
+    """
+    For each segment, tell whether it is a text segment that is the only text
+    of its block: walking left and right, only tags, empty or whitespace-only
+    segments are met before a block-boundary tag (or the start/end of input).
+    """
+    def is_tag(seg: str) -> bool:
+        return seg.startswith('<') and seg.endswith('>')
+
+    def side_is_empty(indices) -> bool:
+        for j in indices:
+            seg = segments[j]
+            if not seg:
+                continue
+            if is_tag(seg):
+                if _is_block_boundary_tag(seg):
+                    return True
+                continue
+            if seg.strip():
+                return False
+        return True
+
+    flags = []
+    for i, seg in enumerate(segments):
+        if not seg or is_tag(seg) or not seg.strip():
+            flags.append(False)
+            continue
+        flags.append(
+            side_is_empty(range(i - 1, -1, -1))
+            and side_is_empty(range(i + 1, len(segments)))
+        )
+    return flags
 
 class TagPreserver:
     """
@@ -122,13 +205,14 @@ class TagPreserver:
         # Build output by grouping tags and non-translatable content
         merged_segments = []
         current_group = []
+        standalone_flags = _standalone_text_flags(segments)
 
-        for segment in segments:
+        for index, segment in enumerate(segments):
             if not segment:
                 continue
 
             is_tag = segment.startswith('<') and segment.endswith('>')
-            is_non_trans = is_non_translatable(segment)
+            is_non_trans = is_non_translatable(segment, standalone_flags[index])
 
             if is_tag or is_non_trans:
                 # Add to current group (tags and non-translatable content)
@@ -246,12 +330,14 @@ class TagPreserver:
                 self.counter += 1
                 current_group.clear()
 
-        for segment in all_segments:
+        standalone_flags = _standalone_text_flags(all_segments)
+
+        for index, segment in enumerate(all_segments):
             if not segment:
                 continue
 
             is_tag = segment.startswith('<') and segment.endswith('>')
-            is_non_trans = is_non_translatable(segment)
+            is_non_trans = is_non_translatable(segment, standalone_flags[index])
             is_tech = self._is_technical_content(segment)
             is_block_marker = segment.startswith('__TECH_BLOCK_')
 

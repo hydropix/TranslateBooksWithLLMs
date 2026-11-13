@@ -7,7 +7,6 @@
 
 import { StateManager } from '../core/state-manager.js';
 import { ApiClient } from '../core/api-client.js';
-import { WebSocketManager } from '../core/websocket-manager.js';
 import { MessageLogger } from '../ui/message-logger.js';
 import { t } from '../i18n/i18n.js';
 
@@ -92,8 +91,8 @@ export const LifecycleManager = {
                 if (healthData.supported_formats) {
                     MessageLogger.addLog(t('common:supported_formats', { formats: healthData.supported_formats.join(', ') }));
                 }
-
-                this.initializeConnection();
+                // The WebSocket is opened once by index.js, right after its
+                // handlers are wired; connecting here as well was redundant.
 
             } catch (error) {
                 MessageLogger.showMessage(
@@ -173,17 +172,6 @@ export const LifecycleManager = {
             console.error('Error checking server restart:', error);
             MessageLogger.addLog(t('common:server_session_check_failed'));
             return false;
-        }
-    },
-
-    /**
-     * Initialize WebSocket connection
-     */
-    initializeConnection() {
-        if (typeof WebSocketManager !== 'undefined') {
-            WebSocketManager.connect();
-        } else {
-            console.warn('WebSocketManager not available');
         }
     },
 

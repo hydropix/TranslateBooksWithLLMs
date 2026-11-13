@@ -8,6 +8,13 @@ import { DomHelpers } from './dom-helpers.js';
 import { t } from '../i18n/i18n.js';
 
 /**
+ * Maximum number of entries kept in the activity log. A long book emits
+ * thousands of entries; past this cap the oldest ones are dropped so the DOM
+ * stays small.
+ */
+const MAX_LOG_ENTRIES = 500;
+
+/**
  * Log filters - messages containing these strings will be skipped
  */
 const LOG_FILTERS = [
@@ -232,7 +239,23 @@ export const MessageLogger = {
         });
 
         logContainer.appendChild(logEntry);
+        this._trimLog(logContainer);
         logContainer.scrollTop = logContainer.scrollHeight;
+    },
+
+    /**
+     * Drop the oldest entries once the log exceeds MAX_LOG_ENTRIES.
+     * @param {HTMLElement} logContainer
+     * @private
+     */
+    _trimLog(logContainer) {
+        while (logContainer.childElementCount > MAX_LOG_ENTRIES) {
+            const oldest = logContainer.firstElementChild;
+            if (oldest === this.lastProgressEntry) {
+                this.lastProgressEntry = null;
+            }
+            oldest.remove();
+        }
     },
 
     /**
@@ -258,6 +281,7 @@ export const MessageLogger = {
                 innerHTML: `<span class="log-timestamp">[${timestamp}]</span> <span style="opacity: 0.7;">[${DomHelpers.escapeHtml(fileName)}]</span> ${DomHelpers.escapeHtml(message)}`
             });
             logContainer.appendChild(this.lastProgressEntry);
+            this._trimLog(logContainer);
         }
 
         logContainer.scrollTop = logContainer.scrollHeight;
@@ -459,6 +483,7 @@ export const MessageLogger = {
         });
 
         logContainer.appendChild(logEntry);
+        this._trimLog(logContainer);
         logContainer.scrollTop = logContainer.scrollHeight;
 
         // Clear buffer

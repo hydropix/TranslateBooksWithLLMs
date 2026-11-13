@@ -407,6 +407,22 @@ def resolve_output_path(output_dir, output_filename, is_resume):
     return get_unique_output_path(tentative_output_path)
 
 
+def _mark_job_error_in_db(state_manager, translation_id, checkpoint_manager=None):
+    """Record a terminal 'error' status for the job in SQLite, never raising.
+
+    The in-memory status alone is not enough: a row left at 'running' is
+    excluded from the resumable list until the next server restart, so the
+    user could not retry the failed job. 'error' keeps it resumable.
+    """
+    try:
+        manager = checkpoint_manager or state_manager.get_checkpoint_manager()
+        if manager is not None:
+            manager.mark_error(translation_id)
+    except Exception as exc:  # pragma: no cover - defensive: best effort only
+        _logger.warning("Could not mark job %s as error in the database: %s",
+                        translation_id, exc)
+
+
 def run_translation_async_wrapper(translation_id, config, state_manager, output_dir, socketio):
     """
     Wrapper for running translation in async context
@@ -433,6 +449,7 @@ def run_translation_async_wrapper(translation_id, config, state_manager, output_
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] CRITICAL WRAPPER ERROR: {error_msg}")
             state_manager.set_translation_field(translation_id, 'logs', logs)
             emit_update(socketio, translation_id, {'error': error_msg, 'status': 'error', 'log': f"CRITICAL WRAPPER ERROR: {error_msg}"}, state_manager)
+            _mark_job_error_in_db(state_manager, translation_id)
     finally:
         loop.close()
 
@@ -641,6 +658,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         # reuses it instead of recomputing it (D5).
         await _apply_auto_prep(config, _log_message_callback, _auto_prep_progress_callback)
 
+    # Created below for inline-text jobs; removed in the `finally` on every
+    # exit path, not only on success.
+    temp_txt_file_path = None
     try:
         # Create checkpoint for new jobs (not for resumed jobs)
         if not is_resume:
@@ -701,7 +721,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         input_path_for_translate_module = config.get('file_path')
 
         # Handle special case for TXT with inline text content (no file upload)
-        temp_txt_file_path = None
         if config['file_type'] == 'txt' and 'text' in config and input_path_for_translate_module is None:
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt", dir=output_dir) as tmp_f:
                 tmp_f.write(config['text'])
@@ -932,10 +951,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         elif not os.path.exists(output_filepath_on_server):
             state_manager.set_translation_field(translation_id, 'result', f"[{file_type_upper} file (partially) translated - content not loaded for preview or write failed]")
 
-        # Clean up temporary text file if created
-        if temp_txt_file_path and os.path.exists(temp_txt_file_path):
-            os.remove(temp_txt_file_path)
-
         state_manager.set_translation_field(translation_id, 'output_filepath', output_filepath_on_server)
 
         stats = state_manager.get_translation_field(translation_id, 'stats') or {}
@@ -1102,6 +1117,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             _log_message_callback("summary_error_final", f"❌ Translation finished with errors ({elapsed_time:.2f}s)")
             final_status_payload['status'] = 'error'
             final_status_payload['error'] = state_manager.get_translation_field(translation_id, 'error') or 'Unknown error during finalization.'
+            _mark_job_error_in_db(state_manager, translation_id, checkpoint_manager)
             await asyncio.to_thread(notify, EVENT_FAILURE,
                 _notification_context(config, translation_id, elapsed_time,
                                       error=final_status_payload['error']))
@@ -1256,6 +1272,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         if state_manager.exists(translation_id):
             state_manager.set_translation_field(translation_id, 'status', 'error')
             state_manager.set_translation_field(translation_id, 'error', critical_error_msg)
+            _mark_job_error_in_db(state_manager, translation_id, checkpoint_manager)
 
             emit_update(socketio, translation_id, {
                 'error': critical_error_msg,
@@ -1271,6 +1288,14 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
     finally:
         if cost_tracking_token is not None:
             end_job_cost_tracking(cost_tracking_token)
+        if temp_txt_file_path:
+            try:
+                os.remove(temp_txt_file_path)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                _logger.warning("Could not remove temporary input file %s: %s",
+                                temp_txt_file_path, exc)
 
 
 async def _perform_tts_generation(translation_id, config, output_filepath, state_manager, socketio, log_callback):

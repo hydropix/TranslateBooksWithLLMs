@@ -66,6 +66,7 @@ from src.config import reload_config
 from src import __version__
 from src.core.llm.base import normalize_api_keys
 from src.api.api_keys import resolve_api_key as _resolve_api_key
+from src.core.llm.credentials import PROVIDER_KEY_SETTINGS
 from src.api.services.endpoint_validator import EndpointValidator
 from src.api.services.credential_guard import (
     DROP as GUARD_DROP,
@@ -328,13 +329,17 @@ def create_config_blueprint(server_session_id=None):
             masked = "***" + last[-4:] if len(last) > 4 else "***"
             return masked, len(keys)
 
-        gemini_mask, gemini_count = mask_api_key(_config.GEMINI_API_KEY)
-        openai_mask, openai_count = mask_api_key(_config.OPENAI_API_KEY)
-        openrouter_mask, openrouter_count = mask_api_key(_config.OPENROUTER_API_KEY)
-        mistral_mask, mistral_count = mask_api_key(_config.MISTRAL_API_KEY)
-        deepseek_mask, deepseek_count = mask_api_key(_config.DEEPSEEK_API_KEY)
-        poe_mask, poe_count = mask_api_key(_config.POE_API_KEY)
-        nim_mask, nim_count = mask_api_key(_config.NIM_API_KEY)
+        key_status = {
+            provider: mask_api_key(getattr(_config, setting, ''))
+            for provider, setting in PROVIDER_KEY_SETTINGS.items()
+        }
+        key_fields = {}
+        for provider, (masked, _count) in key_status.items():
+            key_fields[f"{provider}_api_key"] = masked
+        for provider, (_masked, count) in key_status.items():
+            key_fields[f"{provider}_api_key_count"] = count
+        for provider, (_masked, count) in key_status.items():
+            key_fields[f"{provider}_api_key_configured"] = count > 0
 
         config_response = {
             "api_endpoint": _config.API_ENDPOINT,
@@ -349,27 +354,7 @@ def create_config_blueprint(server_session_id=None):
             "max_attempts": _config.MAX_TRANSLATION_ATTEMPTS,
             "retry_delay": _config.RETRY_BASE_DELAY,
             "supported_formats": ["txt", "epub", "srt"],
-            "gemini_api_key": gemini_mask,
-            "openai_api_key": openai_mask,
-            "openrouter_api_key": openrouter_mask,
-            "mistral_api_key": mistral_mask,
-            "deepseek_api_key": deepseek_mask,
-            "poe_api_key": poe_mask,
-            "nim_api_key": nim_mask,
-            "gemini_api_key_count": gemini_count,
-            "openai_api_key_count": openai_count,
-            "openrouter_api_key_count": openrouter_count,
-            "mistral_api_key_count": mistral_count,
-            "deepseek_api_key_count": deepseek_count,
-            "poe_api_key_count": poe_count,
-            "nim_api_key_count": nim_count,
-            "gemini_api_key_configured": gemini_count > 0,
-            "openai_api_key_configured": openai_count > 0,
-            "openrouter_api_key_configured": openrouter_count > 0,
-            "mistral_api_key_configured": mistral_count > 0,
-            "deepseek_api_key_configured": deepseek_count > 0,
-            "poe_api_key_configured": poe_count > 0,
-            "nim_api_key_configured": nim_count > 0,
+            **key_fields,
             "output_filename_pattern": _config.OUTPUT_FILENAME_PATTERN,
             "max_tokens_per_chunk": int(_config.MAX_TOKENS_PER_CHUNK),
             "parallel_translations": int(_config.PARALLEL_TRANSLATIONS),
@@ -905,7 +890,8 @@ def create_config_blueprint(server_session_id=None):
             })
 
         except Exception as e:
-            return jsonify({"warning": None, "behavior": None, "error": str(e)})
+            logger.warning(f"Model warning lookup failed for {model!r}: {e}")
+            return jsonify({"warning": None, "behavior": None, "error": str(e)}), 500
 
     def _get_env_file_path():
         """Get the path to the .env file"""
@@ -1055,18 +1041,12 @@ def create_config_blueprint(server_session_id=None):
         for security reasons.
         """
         allowed_keys = {
-            'GEMINI_API_KEY',
+            *PROVIDER_KEY_SETTINGS.values(),
             'GEMINI_MODEL',
-            'OPENAI_API_KEY',
-            'OPENROUTER_API_KEY',
             'OPENROUTER_MODEL',
-            'MISTRAL_API_KEY',
             'MISTRAL_MODEL',
-            'DEEPSEEK_API_KEY',
             'DEEPSEEK_MODEL',
-            'POE_API_KEY',
             'POE_MODEL',
-            'NIM_API_KEY',
             'NIM_MODEL',
             'DEFAULT_MODEL',
             'LLM_PROVIDER',
@@ -1263,13 +1243,10 @@ def create_config_blueprint(server_session_id=None):
         API keys are masked for security - only indicates if configured.
         """
         return jsonify({
-            "gemini_api_key_configured": bool(_config.GEMINI_API_KEY),
-            "openai_api_key_configured": bool(_config.OPENAI_API_KEY),
-            "openrouter_api_key_configured": bool(_config.OPENROUTER_API_KEY),
-            "mistral_api_key_configured": bool(_config.MISTRAL_API_KEY),
-            "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
-            "poe_api_key_configured": bool(_config.POE_API_KEY),
-            "nim_api_key_configured": bool(_config.NIM_API_KEY),
+            **{
+                f"{provider}_api_key_configured": bool(getattr(_config, setting, ''))
+                for provider, setting in PROVIDER_KEY_SETTINGS.items()
+            },
             "default_model": _config.DEFAULT_MODEL or "",
             "llm_provider": _config.LLM_PROVIDER,
             "api_endpoint": _config.API_ENDPOINT or "",

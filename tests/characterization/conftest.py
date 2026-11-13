@@ -13,9 +13,11 @@ Two kinds of leakage made these goldens depend on the machine they ran on:
   import time, and several knobs that shape the progress trace are read from
   it rather than from the arguments the recorder passes:
 
-  - DOCX/EPUB size their HTML chunks from ``TranslationConfig``'s default,
-    which is ``MAX_TOKENS_PER_CHUNK`` frozen at import, NOT from the
-    ``max_tokens_per_chunk`` passed to ``translate_file``/``refine_file``.
+  - Code paths that still chunk with a default ``TranslationContainer``
+    (the DOCX refine pass at the time of writing) size their HTML chunks from
+    ``TranslationConfig``'s default, ``MAX_TOKENS_PER_CHUNK``, not from the
+    ``max_tokens_per_chunk`` passed to ``refine_file``. EPUB/DOCX translation
+    honours the caller's size.
   - SRT block size is ``SRT_LINES_PER_BLOCK``, bound at import by each
     consumer module.
   - The number of concurrent workers falls back to ``PARALLEL_TRANSLATIONS``.
@@ -33,8 +35,9 @@ import pytest
 import src.config as config
 import src.core.epub.container as epub_container
 
-# The shipped default of MAX_TOKENS_PER_CHUNK. It is what DOCX/EPUB actually
-# chunk with, since they ignore the recorder's max_tokens_per_chunk=60.
+# The shipped default of MAX_TOKENS_PER_CHUNK, used by any path that still
+# chunks with a default container instead of the recorder's
+# max_tokens_per_chunk=60.
 PINNED_CONTAINER_MAX_TOKENS = 450
 
 # 50 fixture subtitles at 20 lines per block -> 3 translate blocks, the

@@ -112,7 +112,11 @@ def estimate_tokens_with_margin(
         try:
             # Use cl100k_base encoding (GPT-4 tokenizer)
             # Note: Not exact for Ollama models, but close enough
-            encoder = tiktoken.get_encoding("cl100k_base")
+            # Shared, cached loader: a failed download is only attempted once
+            from src.core.chunking.token_chunker import get_encoder
+            encoder = get_encoder()
+            if encoder is None:
+                raise RuntimeError("tiktoken encoding unavailable")
             base_tokens = len(encoder.encode(text))
 
             estimated_tokens = int(base_tokens * SAFETY_MARGIN) if apply_margin else base_tokens

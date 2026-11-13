@@ -26,8 +26,16 @@ def setup_working_directory():
         (app_data_dir / 'translated_files').mkdir(exist_ok=True)
         (app_data_dir / 'checkpoints').mkdir(exist_ok=True)
 
-        # Copy .env.example if it doesn't exist and is bundled
         bundle_dir = Path(sys._MEIPASS)
+
+        # Use the tiktoken encoding bundled at build time instead of
+        # downloading it, so the app works offline or behind a firewall (#339).
+        # An explicit TIKTOKEN_CACHE_DIR set by the user still wins.
+        bundled_tiktoken_cache = bundle_dir / 'tiktoken_cache'
+        if bundled_tiktoken_cache.is_dir() and not os.environ.get('TIKTOKEN_CACHE_DIR'):
+            os.environ['TIKTOKEN_CACHE_DIR'] = str(bundled_tiktoken_cache)
+
+        # Copy .env.example if it doesn't exist and is bundled
         env_example_path = app_data_dir / '.env.example'
         if not env_example_path.exists():
             bundled_env_example = bundle_dir / '.env.example'

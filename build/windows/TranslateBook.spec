@@ -1,11 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import tempfile
+import tiktoken
 import tiktoken_ext.openai_public
 
 block_cipher = None
 
-# Get tiktoken_ext data directory (contains pre-bundled encodings)
+# tiktoken_ext only holds the encoding registry (Python code). The encoding
+# file itself is downloaded on first use, which fails offline or behind a
+# firewall (#339). Download it now, at build time, into a dedicated cache and
+# bundle that cache; launcher.py points TIKTOKEN_CACHE_DIR at it at runtime.
 tiktoken_ext_dir = os.path.dirname(tiktoken_ext.openai_public.__file__)
+tiktoken_cache_dir = tempfile.mkdtemp(prefix='tbl_tiktoken_cache_')
+os.environ['TIKTOKEN_CACHE_DIR'] = tiktoken_cache_dir
+tiktoken.get_encoding('cl100k_base')
+if not os.listdir(tiktoken_cache_dir):
+    raise SystemExit('tiktoken did not write the cl100k_base encoding to the build cache')
 
 # Prepare datas list
 datas_list = [
@@ -26,6 +36,9 @@ if os.path.isdir(custom_instructions_dir):
 # Add tiktoken_ext if directory exists
 if os.path.exists(tiktoken_ext_dir):
     datas_list.append((tiktoken_ext_dir, 'tiktoken_ext/openai_public'))
+
+# Bundled encoding cache (see the top of this file)
+datas_list.append((tiktoken_cache_dir, 'tiktoken_cache'))
 
 a = Analysis(
     ['../../launcher.py'],

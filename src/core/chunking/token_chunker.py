@@ -4,18 +4,79 @@ Token-based text chunking with natural boundary preservation.
 This module provides intelligent text chunking based on token counts
 using tiktoken, while respecting natural text boundaries (paragraphs and sentences).
 """
+import logging
+import math
 import re
-from typing import List, Dict
-import tiktoken
+import threading
+from typing import List, Dict, Optional
 
 from src.config import SENTENCE_TERMINATORS
+
+logger = logging.getLogger(__name__)
+
+_ENCODING_NAME = "cl100k_base"
+_encoder = None
+_encoder_failed = False
+_encoder_lock = threading.Lock()
+
+# Scripts where one character is roughly one token (or more) for cl100k_base:
+# CJK ideographs, kana, Hangul, and the fullwidth/CJK punctuation blocks.
+_DENSE_SCRIPT_RE = re.compile(
+    r'[　-ヿ㐀-䶿一-鿿가-힣'
+    r'ᄀ-ᇿ豈-﫿＀-￯]'
+)
+
+
+def get_encoder():
+    """Return the shared tiktoken encoder, or None if it cannot be loaded.
+
+    tiktoken downloads the encoding file on first use. Offline, behind a
+    firewall, or in a build that did not bundle the file, that download fails
+    (#339). The failure is logged once and cached, and callers fall back to
+    an approximate count instead of aborting the translation.
+    """
+    global _encoder, _encoder_failed
+    if _encoder is not None or _encoder_failed:
+        return _encoder
+    with _encoder_lock:
+        if _encoder is not None or _encoder_failed:
+            return _encoder
+        try:
+            import tiktoken
+            _encoder = tiktoken.get_encoding(_ENCODING_NAME)
+        except Exception as e:
+            _encoder_failed = True
+            logger.warning(
+                "Could not load the tiktoken '%s' encoding (%s). Token counts "
+                "will be approximated from character counts. To get exact "
+                "counts offline, set TIKTOKEN_CACHE_DIR to a folder holding "
+                "the encoding file.", _ENCODING_NAME, e
+            )
+    return _encoder
+
+
+def approximate_token_count(text: str) -> int:
+    """Estimate cl100k_base tokens without the encoder.
+
+    Dense scripts (CJK, kana, Hangul) count one token per character; other
+    text counts one token per ~3.5 characters, slightly pessimistic for
+    Latin text so chunks stay under the configured limit.
+    """
+    if not text:
+        return 0
+    dense = len(_DENSE_SCRIPT_RE.findall(text))
+    other = len(text) - dense
+    return dense + math.ceil(other / 3.5)
 
 
 def count_tokens(text: str) -> int:
     """Count tokens with the same encoding the chunker sizes chunks with."""
     if not text:
         return 0
-    return len(tiktoken.get_encoding("cl100k_base").encode(text))
+    encoder = get_encoder()
+    if encoder is None:
+        return approximate_token_count(text)
+    return len(encoder.encode(text))
 
 
 def _chunk(text: str, join_before: str) -> Dict[str, str]:
@@ -46,7 +107,7 @@ class TokenChunker:
         """
         self.max_tokens = max_tokens
         self.soft_limit = int(max_tokens * soft_limit_ratio)
-        self.encoder = tiktoken.get_encoding("cl100k_base")
+        self.encoder: Optional[object] = get_encoder()
 
     def count_tokens(self, text: str) -> int:
         """
@@ -60,6 +121,8 @@ class TokenChunker:
         """
         if not text:
             return 0
+        if self.encoder is None:
+            return approximate_token_count(text)
         return len(self.encoder.encode(text))
 
     def split_into_paragraphs(self, text: str) -> List[str]:

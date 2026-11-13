@@ -1069,42 +1069,48 @@ select.form-control {
    ======================================== */
 
 .progress-section {
-    margin-top: 2rem;
-    padding: 2rem;
+    margin-top: calc(2rem * var(--ui-density-y));
+    padding: calc(2rem * var(--ui-density-y)) 2rem;
     background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    box-shadow: var(--shadow-soft);
     border: 1px solid var(--border-light);
 }
 
 .progress-section h3 {
     color: var(--text-dark);
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin-bottom: 1.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
 
+.progress-section h3 .material-symbols-outlined {
+    color: var(--text-muted-light);
+    font-size: 1.1rem;
+}
+
 .progress-bar-container {
-    height: 2.5rem;
-    background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 1px solid var(--border-light);
+    height: 1.25rem;
+    background: var(--border-light);
+    border: 0;
     overflow: hidden;
-    margin: 1.5rem 0;
+    /* !important: a container in the template still carries an inline
+       margin-bottom that this vertical rhythm overrides. */
+    margin: calc(1.5rem * var(--ui-density-y)) 0 !important;
 }
 
 .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, var(--primary-light), #5a8ee8);
+    background: var(--primary-light);
     transition: width 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-weight: 700;
-    font-size: 0.875rem;
+    font-weight: 600;
+    font-size: 0.75rem;
 }
 
 /* ========================================
@@ -1114,14 +1120,16 @@ select.form-control {
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-    gap: 0.5rem;
-    margin: 1.5rem 0;
+    gap: 0.375rem;
+    /* !important: #openrouterCostGrid still carries an inline margin-top
+       that this vertical rhythm overrides. */
+    margin: calc(1.5rem * var(--ui-density-y)) 0 !important;
 }
 
 .stat-card {
+    position: relative;
     padding: 0.5rem 0.25rem;
-    background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    background: transparent;
     border: 1px solid var(--border-light);
     text-align: center;
     transition: transform 0.3s;
@@ -1131,38 +1139,34 @@ select.form-control {
     align-items: center;
 }
 
-.stat-card:hover {
-    transform: translateY(-1px);
-}
-
+/* Also matched by .progress-section h3 above (display, alignment, gap). */
 .stat-card h3 {
-    font-size: 1.25rem;
-    color: var(--primary-light);
-    font-weight: 900;
-    margin-bottom: 0.15rem;
+    font-size: 1.0625rem;
+    color: var(--text-dark);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
 }
 
 .stat-card p {
     color: var(--text-muted-light);
-    font-size: 0.65rem;
-    font-weight: 600;
+    font-size: 0.625rem;
+    font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
-/* Alert state for a quality-signal counter (e.g. Fallbacks): solid blue fill
-   + white text, pulling from --primary-light (the same blue as the primary
-   action buttons). Red is reserved for actually destructive surfaces like
-   .btn-danger (Interrupt / Stop). */
+/* Alert state for a quality-signal counter (e.g. Fallbacks): fallbacks are a
+   quality warning, so amber rather than accent; red stays reserved for
+   destructive surfaces like .btn-danger (Interrupt / Stop). */
 .stat-card-critical {
-    background: var(--primary-light);
-    border-color: var(--primary-light);
-    color: white;
+    background: var(--warning-light-bg);
+    border-color: var(--warning-light-border);
+    color: var(--warning-light-text);
     cursor: pointer;
 }
-.stat-card-critical h3 { color: white; }
-.stat-card-critical p  { color: rgba(255, 255, 255, 0.92); }
-.stat-card-critical .stat-card-chevron { display: inline-block; color: white; }
+.stat-card-critical h3 { color: var(--warning-light-text); }
+.stat-card-critical p  { color: var(--warning-light-text); }
+.stat-card-critical .stat-card-chevron { display: inline-block; color: var(--warning-light-text); }
 .stat-card-critical[aria-expanded="true"] .stat-card-chevron {
     transform: rotate(180deg);
 }
@@ -1180,18 +1184,16 @@ select.form-control {
     color: white;
     transition: transform 0.2s ease;
 }
-.stat-card { position: relative; }
 
 /* Inline recommendation panel toggled by the Fallbacks card.
-   Spans the full progress section width and pulls from --primary-light to
-   stay visually paired with the .stat-card-critical above. Informational —
-   keeps the destructive red palette free for actually destructive actions. */
+   Spans the full progress section width and uses the same amber as the
+   .stat-card-critical above it. */
 .recommendation-panel {
     margin: 0.75rem 0 1rem;
     padding: 0.875rem 1rem;
-    background: var(--primary-light);
-    border: 1px solid var(--primary-light);
-    color: white;
+    background: var(--warning-light-bg);
+    border: 1px solid var(--warning-light-border);
+    color: var(--text-dark);
     font-size: 0.85rem;
     line-height: 1.5;
     white-space: pre-wrap;
@@ -1200,7 +1202,7 @@ select.form-control {
 .recommendation-panel strong {
     display: block;
     margin-bottom: 0.5rem;
-    color: white;
+    color: var(--warning-light-text);
 }
 .recommendation-list {
     margin: 0;
@@ -1210,13 +1212,13 @@ select.form-control {
     margin-top: 0.25rem;
 }
 .recommendation-link {
-    color: white;
+    color: var(--warning-light-text);
     text-decoration: underline;
     text-underline-offset: 2px;
     font-weight: 600;
     cursor: pointer;
 }
-.recommendation-link:hover { color: rgba(255, 255, 255, 0.85); }
+.recommendation-link:hover { color: var(--warning-light-text); }
 
 /* ========================================
    Pre-flight Zone
@@ -1455,9 +1457,14 @@ select.form-control {
     margin-top: 10px;
     padding: 1.25rem 1.5rem;
     text-align: left;
-    background: var(--background-outer);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 2px solid color-mix(in srgb, var(--primary-light) 15%, transparent);
+    background: var(--background-inset);
+    box-shadow: none;
+    border: 1px solid var(--border-light);
+}
+
+.preflight-panel h4 {
+    font-size: 0.8125rem;
+    font-weight: 600;
 }
 .preflight-panel[hidden] { display: none; }
 
@@ -1596,11 +1603,13 @@ select.form-control {
     margin-top: 1rem;
 }
 
-/* Last Translation Preview - Dynamic height based on MAX_TOKENS_PER_CHUNK */
+/* Last Translation Preview - Dynamic height based on MAX_TOKENS_PER_CHUNK.
+   Book text is read, not operated: it keeps the serif. */
 #lastTranslationPreview {
-    height: var(--preview-height) !important;
-    min-height: var(--preview-height) !important;
-    max-height: var(--preview-height) !important;
+    height: var(--preview-height);
+    min-height: var(--preview-height);
+    max-height: var(--preview-height);
+    font-family: var(--font-reading);
 }
 
 /* Scrollbar visible uniquement pour log-container */
@@ -1707,20 +1716,22 @@ select.form-control {
 
 .prompt-options-toggle {
     cursor: pointer;
-    padding: 1rem 1.5rem;
-    background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
-    border: 1px solid var(--border-light);
+    padding: 0.5rem 0.25rem;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--border-light);
+    box-shadow: none;
     margin-bottom: 1rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    color: var(--text-dark);
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
     transition: background 0.2s, border-radius 0.2s, margin 0.2s, box-shadow 0.2s;
 }
 
 .prompt-options-toggle:hover {
-    box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+    color: var(--text-dark);
 }
 
 .prompt-options-toggle span {
@@ -4848,24 +4859,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         padding-bottom: calc(1.5rem * var(--ui-density-y)) !important;
     }
 
-    /* --- Progress block --- */
-    .progress-section {
-        margin-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    .progress-bar-container {
-        height: 1.25rem !important;
-        margin-top: calc(1.5rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-    }
-
-    .stats-grid {
-        margin-top: calc(1.5rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-    }
-
 }
 
 /* ========================================
@@ -4964,121 +4957,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    ======================================== */
 
 /* ---------- Cards and fields ---------- */
-
-/* ---------- T3: pre-flight options ---------- */
-
-.preflight-panel {
-    background: var(--background-inset);
-    border: 1px solid var(--border-light);
-    box-shadow: none;
-}
-
-.preflight-panel h4 {
-    font-size: 0.8125rem;
-    font-weight: 600;
-}
-
-/* ---------- T1/T2: progress ---------- */
-
-.progress-section {
-    background: var(--background-light);
-    border: 1px solid var(--border-light);
-    box-shadow: var(--shadow-soft);
-}
-
-.progress-section h3 {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-
-.progress-section h3 .material-symbols-outlined {
-    color: var(--text-muted-light);
-    font-size: 1.1rem;
-}
-
-.progress-bar-container {
-    background: var(--border-light);
-    border: 0;
-    box-shadow: none;
-}
-
-.progress-bar {
-    background: var(--primary-light);
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-.stats-grid {
-    gap: 0.375rem;
-}
-
-.stat-card {
-    background: transparent;
-    border: 1px solid var(--border-light);
-    box-shadow: none;
-}
-
-.stat-card:hover {
-    transform: none;
-}
-
-.stat-card h3 {
-    font-size: 1.0625rem;
-    font-weight: 600;
-    color: var(--text-dark);
-}
-
-.stat-card p {
-    font-size: 0.625rem;
-    font-weight: 500;
-}
-
-/* Escalation: fallbacks are a quality warning, so amber rather than accent. */
-.stat-card-critical {
-    background: var(--warning-light-bg);
-    border-color: var(--warning-light-border);
-    color: var(--warning-light-text);
-}
-
-.stat-card-critical h3,
-.stat-card-critical p,
-.stat-card-critical .stat-card-chevron {
-    color: var(--warning-light-text);
-}
-
-.recommendation-panel {
-    background: var(--warning-light-bg);
-    border-color: var(--warning-light-border);
-    color: var(--text-dark);
-}
-
-.recommendation-panel strong,
-.recommendation-link,
-.recommendation-link:hover {
-    color: var(--warning-light-text);
-}
-
-/* Book text is read, not operated: it keeps the serif. */
-#lastTranslationPreview {
-    font-family: var(--font-reading);
-}
-
-/* ---------- T3: activity log toggle ---------- */
-
-.prompt-options-toggle {
-    padding: 0.5rem 0.25rem;
-    background: transparent;
-    border: 0;
-    border-top: 1px solid var(--border-light);
-    box-shadow: none;
-    color: var(--text-muted-light);
-    font-size: 0.8125rem;
-}
-
-.prompt-options-toggle:hover {
-    color: var(--text-dark);
-}
 
 /* ========================================
    Calm theme — phone and small tablet layout

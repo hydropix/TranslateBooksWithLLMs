@@ -677,6 +677,22 @@ async def translate_paragraphs_plain(
         else:
             stats.failed_chunks += 1
 
+    # Calls whose translation was taken from an untagged raw reply. Reported
+    # in the log (TranslationMetrics has no field for it yet).
+    raw_fallback_calls = 0
+
+    def _count_raw_fallback():
+        nonlocal raw_fallback_calls
+        raw_fallback_calls += 1
+
+    def _report_raw_fallbacks():
+        if raw_fallback_calls and log_callback:
+            log_callback(
+                "raw_fallback_summary",
+                f"⚠️ {raw_fallback_calls} request(s) came back without translation tags "
+                "and were saved from the raw response - check those passages"
+            )
+
     async def _request(main_content, context_before, context_after, previous, options=None):
         """Single Plain Text Mode LLM call, shared by the segment loop, the
         count-stating retry and the per-paragraph repair so the three can never
@@ -696,6 +712,7 @@ async def translate_paragraphs_plain(
             prompt_options=prompt_options if options is None else options,
             context_manager=context_manager,
             placeholder_format=None,
+            on_raw_fallback=_count_raw_fallback,
         )
 
     async def _translate_chunk(i):
@@ -967,6 +984,8 @@ async def translate_paragraphs_plain(
                 next_index = i + 1
                 if next_index % checkpoint_step == 0 or next_index == len(chunks):
                     _run_checkpoint_hook(next_index)
+
+    _report_raw_fallbacks()
 
     if rate_limit_error is not None:
         # Persist the contiguous prefix translated before the limit, then keep

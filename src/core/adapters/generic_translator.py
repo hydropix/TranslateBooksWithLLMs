@@ -231,6 +231,9 @@ class GenericTranslator:
             last_context = ""
             failed_count = 0
             completed_count = len(restored_completed)
+            # Units whose translation was taken from an untagged raw reply:
+            # saved, but worth a look, so they are counted and reported.
+            raw_fallback_units = set()
 
             async def _translate_unit(i):
                 """Translate one unit. Reads last_context only in sequential mode
@@ -272,7 +275,8 @@ class GenericTranslator:
                         llm_client=llm_client,
                         log_callback=log_callback,
                         prompt_options=attempt_options,
-                        raw_response_callback=record_raw
+                        raw_response_callback=record_raw,
+                        on_raw_fallback=lambda _i=i: raw_fallback_units.add(_i),
                     )
 
                     # API failure / empty result: existing failure semantics.
@@ -344,6 +348,7 @@ class GenericTranslator:
                         'completed_chunks': completed_count,
                         'failed_chunks': failed_count,
                         'unfinished_chunks': max(0, total_units - completed_count),
+                        'raw_fallback_used': len(raw_fallback_units),
                         **_run_counters(completed_count, len(restored_completed)),
                     })
 
@@ -423,6 +428,7 @@ class GenericTranslator:
                                 'completed_chunks': completed_count,
                                 'failed_chunks': failed_count,
                                 'unfinished_chunks': max(0, total_units - completed_count),
+                                'raw_fallback_used': len(raw_fallback_units),
                                 **_run_counters(completed_count, len(restored_completed)),
                             })
 
@@ -451,6 +457,12 @@ class GenericTranslator:
                     and check_interruption_callback and check_interruption_callback()):
                 await _save_partial_and_pause(next_index)
                 return False
+
+            if raw_fallback_units and log_callback:
+                log_callback("raw_fallback_summary",
+                    f"⚠️ {len(raw_fallback_units)} unit(s) came back without translation "
+                    f"tags and were saved from the raw response: "
+                    f"{sorted(k + 1 for k in raw_fallback_units)}. Check them in the output.")
 
             # 7. Reconstruct output file
             if log_callback:

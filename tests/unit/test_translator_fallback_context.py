@@ -72,7 +72,8 @@ class TestTranslatorFallbackContext:
             has_placeholders=False,
         )
 
-        assert translated == "Here is the translation: Bonjour le monde"
+        # The "Here is the translation:" preamble is not part of the translation.
+        assert translated == "Bonjour le monde"
         assert response.was_fallback is True
 
     @pytest.mark.asyncio

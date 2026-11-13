@@ -290,7 +290,7 @@ class TestWeakLlmSafety:
             return main_content  # identity "translation"
 
         monkeypatch.setattr(plain_pipeline, "generate_translation_request", capture_llm)
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         body = _parse_body(self.BODY_INNER)
         paragraphs, _, _, _ = extract_plain_paragraphs(body)
@@ -325,7 +325,7 @@ class TestWeakLlmSafety:
             return "Traduction approximative: " + merged
 
         monkeypatch.setattr(plain_pipeline, "generate_translation_request", sloppy_llm)
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         body = _parse_body(self.BODY_INNER)
         paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
@@ -366,7 +366,7 @@ class TestWeakLlmSafety:
             )
 
         monkeypatch.setattr(plain_pipeline, "generate_translation_request", hallucinating_llm)
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         translated, _, _ = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=["Some paragraph with note 1 in it.", "Another paragraph."],
@@ -471,7 +471,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(
             plain_pipeline, "generate_translation_request", decorating_llm
         )
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=["Chapter One", "Intro paragraph.", "Closing paragraph."],
@@ -508,7 +508,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(
             plain_pipeline, "generate_translation_request", merging_then_decorating_llm
         )
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=["Chapter One", "Intro paragraph."],

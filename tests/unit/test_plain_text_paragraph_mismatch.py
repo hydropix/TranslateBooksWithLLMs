@@ -164,7 +164,7 @@ def _mismatch_logs(logs):
 @pytest.mark.asyncio
 async def test_matching_count_is_not_flagged(monkeypatch):
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     assert plain_pipeline._paragraph_count_mismatch("A\n\nB", 2) is None
     assert plain_pipeline._paragraph_count_mismatch("A", 1) is None
@@ -179,7 +179,7 @@ async def test_matching_count_is_not_flagged(monkeypatch):
 @pytest.mark.asyncio
 async def test_merged_paragraphs_are_flagged_and_logged(monkeypatch):
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_merging_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     assert plain_pipeline._paragraph_count_mismatch("A\nB", 2) == (1, 2)
     assert plain_pipeline._paragraph_count_mismatch("", 2) == (0, 2)
@@ -203,7 +203,7 @@ async def test_single_newline_separator_is_flagged(monkeypatch):
     monkeypatch.setattr(
         plain_pipeline, "generate_translation_request", _fake_single_newline_llm()
     )
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     assert plain_pipeline._paragraph_count_mismatch("A\n\nB\n\nC", 2) == (3, 2)
 
@@ -222,7 +222,7 @@ async def test_single_newline_separator_is_flagged(monkeypatch):
 async def test_partial_segments_are_never_flagged(monkeypatch):
     """An oversized paragraph is split into pieces that are joined by design."""
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     big = " ".join(
         f"This is sentence number {i} of an extremely long paragraph that "
@@ -312,7 +312,7 @@ async def test_merged_segment_is_repaired_paragraph_by_paragraph(monkeypatch):
     """The merged segment is re-translated one call per paragraph, in place."""
     fake = _recording_merging_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     body = etree.fromstring(
         "<body>" + "".join(f"<p>{p}</p>" for p in THREE) + "</body>"
@@ -349,7 +349,7 @@ async def test_repair_failure_falls_back_to_source_and_is_counted(monkeypatch):
     """A repair call the LLM cannot answer keeps source text, loudly."""
     fake = _recording_merging_llm(fail_on={THREE[1]})
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     body = etree.fromstring(
         "<body>" + "".join(f"<p>{p}</p>" for p in THREE) + "</body>"
@@ -381,7 +381,7 @@ async def test_repair_is_attempted_only_once(monkeypatch):
     """A repair answer that is itself two paragraphs collapses, never recurses."""
     fake = _fake_always_splitting_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(THREE)
 
@@ -399,7 +399,7 @@ async def test_single_paragraph_split_is_benign_and_not_repaired(monkeypatch):
     """A split inside a one-paragraph segment merges back on its own (D4)."""
     fake = _fake_always_splitting_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(["Solo paragraph."])
 
@@ -422,7 +422,7 @@ async def test_repair_result_is_checkpointed(monkeypatch):
     assert [len(segment['indices']) for segment in segments] == [3, 3, 3]
     expected = [f"T::{p}" for p in CHECKPOINT_SOURCE]
 
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     # 1. Uninterrupted reference run.
     monkeypatch.setattr(
@@ -470,7 +470,7 @@ async def test_partial_segment_is_never_repaired(monkeypatch):
     """Pieces of an oversized paragraph have no count contract."""
     fake = _fake_always_splitting_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     source = [_big_paragraph()]
     segments = plain_pipeline.build_plain_segments(source, 60)
@@ -491,7 +491,7 @@ async def test_oversized_and_merged_combined(monkeypatch):
     """An oversized paragraph and a merged segment in the same file."""
     fake = _recording_merging_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     source = [
         "Intro paragraph with enough words to stand alone as a chunk.",
@@ -523,7 +523,7 @@ async def test_retry_recovers_the_segment_in_one_call(monkeypatch):
     """A model that obeys the stated count costs 2 calls, not 1 + N."""
     fake = _fake_count_aware_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(THREE)
 
@@ -546,7 +546,7 @@ async def test_retry_hint_reaches_exactly_one_call(monkeypatch):
     """The count hint is set on the retry only, and never leaks to a neighbour."""
     fake = _fake_count_aware_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     shared_options = {'plain_text_mode': True, 'text_cleanup': False}
     segments = plain_pipeline.build_plain_segments(CHECKPOINT_SOURCE, CHECKPOINT_TOKENS)
@@ -584,7 +584,7 @@ async def test_retry_is_skipped_for_a_one_paragraph_segment(monkeypatch):
         return "" if len(calls) == 1 else "T::" + main_content.strip()
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake_request)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(["Solo paragraph."])
 
@@ -612,7 +612,7 @@ async def test_retry_answer_is_rejected_unless_the_count_matches(monkeypatch):
         return "T::A\n\nT::B"                            # 2 back, 3 expected
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake_request)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(THREE)
 
@@ -631,7 +631,7 @@ async def test_retry_result_survives_a_pause_and_resume(monkeypatch):
     """A segment realigned by the retry is what the checkpoint replays."""
     from tests.unit.test_plain_text_checkpoint import _HookRecorder
 
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
     expected = [f"T::{p}" for p in CHECKPOINT_SOURCE]
 
     fake = _fake_count_aware_llm()
@@ -668,7 +668,7 @@ async def test_retry_works_under_parallel_workers(monkeypatch):
     """The retry lives in the ordered consumer loop, not under the semaphore."""
     fake = _fake_count_aware_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(
         CHECKPOINT_SOURCE, max_tokens=CHECKPOINT_TOKENS, workers=4
@@ -688,7 +688,7 @@ async def test_retry_is_never_issued_without_a_mismatch(monkeypatch):
     """The happy path costs exactly one call per segment, as before."""
     fake = _fake_count_aware_llm()
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     out, stats, logs = await _run(["Only paragraph here."])
 

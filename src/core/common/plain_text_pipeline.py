@@ -127,6 +127,7 @@ async def _retry_segment_with_paragraph_count(
     *,
     translate_segment: Callable[[str, Dict[str, Any]], Awaitable[Optional[str]]],
     prompt_options: Optional[Dict[str, Any]] = None,
+    target_language: str = "",
 ) -> Optional[str]:
     """Re-translate a mismatched segment once, as one call, with the count stated.
 
@@ -153,7 +154,7 @@ async def _retry_segment_with_paragraph_count(
     if not answer:
         return None
 
-    cleaned = clean_translated_text(answer)
+    cleaned = clean_translated_text(answer, target_language=target_language)
     cleaned = strip_hallucinated_markup(cleaned, main_content)
     cleaned = strip_hallucinated_markdown_markers(cleaned, main_content)
     if not cleaned.strip():
@@ -172,6 +173,7 @@ async def _repair_segment_by_paragraph(
     segment_index: int,
     context_before: str = "",
     context_after: str = "",
+    target_language: str = "",
 ) -> Tuple[str, int]:
     """Re-translate each paragraph of a segment individually.
 
@@ -202,7 +204,7 @@ async def _repair_segment_by_paragraph(
         translated = await translate_one(text, before, after)
         cleaned = ""
         if translated:
-            cleaned = clean_translated_text(translated)
+            cleaned = clean_translated_text(translated, target_language=target_language)
             cleaned = strip_hallucinated_markup(cleaned, text)
             cleaned = strip_hallucinated_markdown_markers(cleaned, text)
             # One paragraph in, one paragraph out, always: a model that split
@@ -253,6 +255,7 @@ async def _repair_segment_by_bisection(
     segment_index: int,
     context_before: str = "",
     context_after: str = "",
+    target_language: str = "",
 ) -> Tuple[str, int, int]:
     """Repair a mismatched segment by locating the divergence (issue #259).
 
@@ -313,6 +316,7 @@ async def _repair_segment_by_bisection(
             segment_index=segment_index,
             context_before=before,
             context_after=after,
+            target_language=target_language,
         )
         failed += range_failed
         return joined.split(PARAGRAPH_SEPARATOR)
@@ -334,6 +338,7 @@ async def _repair_segment_by_bisection(
             hi - lo,
             translate_segment=_translate_segment,
             prompt_options=prompt_options,
+            target_language=target_language,
         )
         if answer is None:
             return None
@@ -820,7 +825,7 @@ async def translate_paragraphs_plain(
                     translated_parts[i] = main_content
                     _record_failure(i)
                 else:
-                    cleaned = clean_translated_text(value)
+                    cleaned = clean_translated_text(value, target_language=target_language)
                     cleaned = strip_hallucinated_markup(
                         cleaned, chunks[i].get('main_content', ''))
                     cleaned = strip_hallucinated_markdown_markers(
@@ -887,6 +892,7 @@ async def translate_paragraphs_plain(
                                             options,
                                         ),
                                         prompt_options=prompt_options,
+                                        target_language=target_language,
                                     )
                                 if retried is not None:
                                     # The common tail below picks `cleaned` up
@@ -927,6 +933,7 @@ async def translate_paragraphs_plain(
                                         segment_index=i,
                                         context_before=chunks[i].get('context_before', ''),
                                         context_after=chunks[i].get('context_after', ''),
+                                        target_language=target_language,
                                     )
                                     repair_calls_total += repair_calls
                                     if log_callback:

@@ -374,7 +374,7 @@ async def test_plain_pipeline_parallel_matches_sequential_order(monkeypatch):
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake_request)
     # clean_translated_text is identity-ish; keep output deterministic.
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     paragraphs = _make_paragraphs(7)
 
@@ -419,7 +419,7 @@ async def test_plain_pipeline_runs_concurrently(monkeypatch):
         return f"T::{main_content}"
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake_request)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     paragraphs = _make_paragraphs(4)
     await plain_pipeline.translate_paragraphs_plain(
@@ -440,7 +440,7 @@ async def test_plain_pipeline_failed_chunk_keeps_original(monkeypatch):
         return f"T::{main_content}"
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake_request)
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     paragraphs = _make_paragraphs(3)
     out, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(

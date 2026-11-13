@@ -1156,7 +1156,7 @@ async def refine_chunks(
             chunk_elapsed = time.time() - chunk_start_time
 
             if refined_text is not None:
-                refined_text = clean_translated_text(refined_text)
+                refined_text = clean_translated_text(refined_text, target_language=target_language)
                 if not refined_text.strip():
                     # Never let an empty refinement erase the chunk.
                     refined_text = None

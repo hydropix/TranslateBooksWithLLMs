@@ -332,7 +332,7 @@ async def _pipeline(fake, **overrides):
 
 @pytest.fixture
 def identity_cleanup(monkeypatch):
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
 
 def _llm(monkeypatch, seen, fail_on=(), rate_limit_on=()):

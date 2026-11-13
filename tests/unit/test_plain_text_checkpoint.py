@@ -87,7 +87,7 @@ def patched_llm(monkeypatch):
         monkeypatch.setattr(
             plain_pipeline, "generate_translation_request", _fake_llm(seen, fail_at)
         )
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
         return seen
 
     return install

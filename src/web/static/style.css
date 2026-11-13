@@ -6,7 +6,7 @@
 :root {
     /* Calm palette: warm paper page, white card surface, slate-ink accent.
        The accent is the only saturated colour and is reserved for tier-1
-       surfaces (see "Calm theme — importance tiers" at the end of the file). */
+       surfaces (see "Design note — importance tiers" before the Layout section). */
     --primary-light: #3e5a78;
     --primary-light-hover: #2c405a;
     --background-light: #fffdf9;
@@ -264,6 +264,27 @@ html.dark .neu-inset-light {
 }
 
 /* ========================================
+   Design note — importance tiers
+
+   Every element of the Translate flow is ranked, and its visual weight
+   follows its rank rather than its position in the markup:
+
+   T1  Act      language pickers, drop zone, Start, progress bar.
+                White card surface, 15-17px type, the only place the
+                accent colour is used as a fill.
+   T2  Check    file list, run figures, Pause/Interrupt, card titles.
+                13-14px ink, hairline controls.
+   T3  Tune     per-run options, the "already translated" zone, the
+                activity log. 12-13px muted text, no elevation.
+   T4  Chrome   tab nav, LLM status, UI language, theme, version.
+                11-13px, ghost controls, faint grey.
+
+   Escalation: a T3/T4 item moves up only while it needs attention
+   (LLM disconnected, fallback chunks), through state classes that
+   already exist (.status-dot.disconnected, .stat-card-critical).
+   ======================================== */
+
+/* ========================================
    Layout
    ======================================== */
 
@@ -414,6 +435,16 @@ html.dark .neu-inset-light {
 
 .header .header-lang-caret {
     display: none;
+}
+
+/* Top tabs. Their look lives in the template's inline <style> block,
+   which loads after this file; only the typeface and the compact vertical
+   padding are set here, and the padding needs !important to win over the
+   template's own `padding` shorthand. */
+.tab-nav .tab-btn {
+    font-family: var(--font-ui);
+    padding-top: calc(0.6rem * var(--ui-density-y)) !important;
+    padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
 }
 
 .header .header-lang-select {
@@ -1290,7 +1321,7 @@ select.form-control {
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.6;
-    font-family: inherit;
+    font-family: var(--font-ui);
     background: color-mix(in srgb, var(--text-muted-light) 6%, transparent);
     color: var(--text-muted-light);
     border: 1px dashed color-mix(in srgb, var(--text-muted-light) 55%, transparent);
@@ -1808,6 +1839,7 @@ input[type="checkbox"] {
 
 /* Compact table header */
 .file-table thead th {
+    font-family: var(--font-ui);
     padding: 0.75rem 0.5rem;
 }
 
@@ -2721,6 +2753,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .file-active-badge {
+    font-family: var(--font-ui);
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -2858,14 +2891,16 @@ html.dark .file-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
+    padding: calc(0.75rem * var(--ui-density-y)) 1rem;
     background: transparent;
     border: none;
     cursor: pointer;
     width: 100%;
     min-width: 0;
     overflow: hidden;
-    min-height: 44px;
+    /* Same token as the native controls: the custom dropdown and a
+       <select> sitting side by side must line up. */
+    min-height: var(--ui-control-h);
     transition: background 0.2s;
 }
 
@@ -2892,6 +2927,7 @@ html.dark .file-info {
 }
 
 .searchable-select-badge {
+    font-family: var(--font-ui);
     font-size: 0.7rem;
     font-weight: 600;
     padding: 0.2rem 0.5rem;
@@ -2942,7 +2978,7 @@ html.dark .file-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
+    padding: calc(0.75rem * var(--ui-density-y)) 1rem;
     border-bottom: 1px solid var(--border-light);
     background: rgba(62, 90, 120, 0.03);
     flex: 0 0 auto; /* never shrink when dropdown height is tight */
@@ -2992,7 +3028,7 @@ html.dark .file-info {
 .searchable-select-options {
     list-style: none;
     margin: 0;
-    padding: 0.5rem 0;
+    padding: calc(0.5rem * var(--ui-density-y)) 0;
     /* Fill the remaining dropdown height (after the search header) and scroll.
        min-height:0 lets the flex item shrink below its content size. */
     flex: 1 1 auto;
@@ -3001,7 +3037,8 @@ html.dark .file-info {
 }
 
 .searchable-select-option {
-    padding: 0.625rem 1rem;
+    /* Floored so a dropdown row stays a usable click target. */
+    padding: max(0.3rem, calc(0.625rem * var(--ui-density-y))) 1rem;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -3059,7 +3096,8 @@ html.dark .file-info {
 
 /* Group headers - sticky with opaque background */
 .searchable-select-group {
-    padding: 0.625rem 1rem 0.375rem;
+    font-family: var(--font-ui);
+    padding: calc(0.625rem * var(--ui-density-y)) 1rem calc(0.375rem * var(--ui-density-y));
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -3078,7 +3116,7 @@ html.dark .file-info {
 
 /* No results */
 .searchable-select-no-results {
-    padding: 1.5rem 1rem;
+    padding: calc(1.5rem * var(--ui-density-y)) 1rem;
     text-align: center;
     color: var(--text-muted-light);
     font-size: 0.875rem;
@@ -4483,6 +4521,7 @@ html.dark .sample-output-diff:hover del {
 }
 
 .sample-badge {
+    font-family: var(--font-ui);
     display: inline-block;
     padding: 2px 8px;
     font-size: 0.6875rem;
@@ -4636,6 +4675,7 @@ html.dark .file-test-btn { color: #a5b4fc; }
     gap: 6px;
 }
 .quick-test-chip {
+    font-family: var(--font-ui);
     display: inline-flex;
     align-items: center;
     padding: 2px 10px;
@@ -4796,72 +4836,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 
 /* ========================================
-   Compact density — global vertical rhythm
-
-   One knob: --ui-density-y. Every value below is the element's
-   original vertical measurement multiplied by that factor, so the
-   proportions of the design are preserved and re-tuning the whole
-   UI is a single number (1 = original spacing, 0.7 = current).
-
-   Only the vertical axis is touched — horizontal padding is left
-   alone so labels and buttons keep their breathing room.
-
-   Click targets are floored with max(): turning the knob further
-   down keeps shrinking the paddings but never takes an input,
-   a dropdown row or the progress bar below a usable height.
-
-   Same cascade-layer trick as the block above: for `!important`
-   declarations the layer order is inverted, so these win over the
-   inline <style> block of translation_interface.html (which loads
-   after this file) without having to edit it.
-
-   To restore the roomy layout, set --ui-density-y to 1 — or delete
-   the block, nothing else depends on it.
-   ======================================== */
-@layer compact-ui {
-    /* --- Tabs --- */
-    .tab-nav .tab-btn {
-        padding-top: calc(0.6rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Dropdowns (searchable-select) --- */
-    .searchable-select-display {
-        padding-top: calc(0.75rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
-        /* Same token as the native controls: the custom dropdown and a
-           <select> sitting side by side must line up. */
-        min-height: var(--ui-control-h) !important;
-    }
-
-    .searchable-select-search {
-        padding-top: calc(0.75rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
-    }
-
-    .searchable-select-options {
-        padding-top: calc(0.5rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.5rem * var(--ui-density-y)) !important;
-    }
-
-    .searchable-select-option {
-        padding-top: max(0.3rem, calc(0.625rem * var(--ui-density-y))) !important;
-        padding-bottom: max(0.3rem, calc(0.625rem * var(--ui-density-y))) !important;
-    }
-
-    .searchable-select-group {
-        padding-top: calc(0.625rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.375rem * var(--ui-density-y)) !important;
-    }
-
-    .searchable-select-no-results {
-        padding-top: calc(1.5rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-    }
-
-}
-
-/* ========================================
    Bold budget — weight reserved for buttons
 
    Bold is the affordance marker for "this is clickable". Fields and
@@ -4909,54 +4883,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         font-weight: 400 !important;
     }
 }
-
-/* ========================================
-   Interface chrome typeface
-
-   Everything on the page inherits --font-text from <body>. The
-   selectors below are the exception surface: the parts you operate
-   rather than read. They all point at --font-ui, which currently
-   resolves to the same serif, so this block changes nothing today.
-
-   Its purpose is the switch. Set --font-ui to var(--font-sans) in
-   :root and the app becomes hybrid in one edit — Spectral for the
-   content, Inter for the labels, buttons, tabs and badges, which is
-   what keeps a dense interface legible at 0.75rem. Reverting is the
-   same single line.
-   ======================================== */
-.tab-nav .tab-btn,
-.file-table thead th,
-.searchable-select-badge,
-.searchable-select-group,
-.sample-badge,
-.file-active-badge,
-.preflight-chip,
-.quick-test-chip {
-    font-family: var(--font-ui);
-}
-
-/* ========================================
-   Calm theme — importance tiers
-
-   Every element of the Translate flow is ranked, and its visual weight
-   follows its rank rather than its position in the markup:
-
-   T1  Act      language pickers, drop zone, Start, progress bar.
-                White card surface, 15-17px type, the only place the
-                accent colour is used as a fill.
-   T2  Check    file list, run figures, Pause/Interrupt, card titles.
-                13-14px ink, hairline controls.
-   T3  Tune     per-run options, the "already translated" zone, the
-                activity log. 12-13px muted text, no elevation.
-   T4  Chrome   tab nav, LLM status, UI language, theme, version.
-                11-13px, ghost controls, faint grey.
-
-   Escalation: a T3/T4 item moves up only while it needs attention
-   (LLM disconnected, fallback chunks), through state classes that
-   already exist (.status-dot.disconnected, .stat-card-critical).
-   ======================================== */
-
-/* ---------- Cards and fields ---------- */
 
 /* ========================================
    Calm theme — phone and small tablet layout

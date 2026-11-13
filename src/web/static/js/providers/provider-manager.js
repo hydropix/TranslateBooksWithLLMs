@@ -257,15 +257,44 @@ export const ProviderManager = {
         const serverConfig = StateManager.getState('ui.defaultConfig');
         if (serverConfig) {
             console.log('[ProviderManager] Config already loaded, loading models immediately');
+            this.applyServerDefaultProvider(serverConfig);
             this.toggleProviderSettings(true);
         } else {
             // Listen for server config to be loaded, THEN load models with correct endpoint
             console.log('[ProviderManager] Waiting for defaultConfigLoaded event');
             window.addEventListener('defaultConfigLoaded', () => {
                 console.log('[ProviderManager] Server config loaded, now loading models with correct endpoint');
+                this.applyServerDefaultProvider(StateManager.getState('ui.defaultConfig'));
                 this.toggleProviderSettings(true);
             }, { once: true });
         }
+    },
+
+    /**
+     * Select the provider configured on the server (LLM_PROVIDER) when this
+     * browser has no saved choice. Without it the select keeps its first
+     * option (Ollama) even when the .env configures another provider.
+     * A provider the user picked before (lastProvider) always wins.
+     * @param {Object} serverConfig - Response of /api/config
+     */
+    applyServerDefaultProvider(serverConfig) {
+        const provider = serverConfig && serverConfig.llm_provider;
+        if (!provider || SettingsManager.getLocalPreferences().lastProvider) {
+            return;
+        }
+
+        const providerSelect = DomHelpers.getElement('llmProvider');
+        if (!providerSelect || !Array.from(providerSelect.options).some(opt => opt.value === provider)) {
+            return;
+        }
+
+        providerSelect.value = provider;
+        const instance = SearchableSelectFactory.get('llmProvider');
+        if (instance) {
+            instance.refresh();
+        }
+        this.updateProviderDisplay(provider);
+        console.log('[ProviderManager] Applying LLM_PROVIDER from server:', provider);
     },
 
     /**

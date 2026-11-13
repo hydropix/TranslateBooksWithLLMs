@@ -7,13 +7,12 @@ Migre le code existant de xhtml_translator.py vers le nouveau pattern.
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from lxml import etree
 
-from ..common.translation_orchestrator import TranslationAdapter
 from .body_serializer import extract_body_html, replace_body_content
 from .container import TranslationContainer
 from .exceptions import XmlParsingError, BodyExtractionError
 
 
-class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
+class EpubTranslationAdapter:
     """
     Adaptateur pour traduire des documents XHTML/EPUB.
 
@@ -174,11 +173,29 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
                 log_callback("replace_body_error", str(e))
             return False
 
+    async def translate_document(
+        self,
+        doc_root: etree._Element,
+        log_callback: Optional[Callable] = None,
+        **kwargs
+    ) -> Tuple[bool, Any]:
+        """Translate one XHTML document in place; ``(success, stats)``.
+
+        A document whose body holds nothing is finalized as is (success, no
+        LLM call). Everything else goes to :meth:`translate_content`.
+        """
+        from .translation_metrics import TranslationMetrics
+
+        raw_content, context = self.extract_content(doc_root, log_callback)
+        if not raw_content or not raw_content.strip():
+            if log_callback:
+                log_callback("no_content", "No content to translate")
+            return self.finalize_output("", doc_root, context, log_callback), TranslationMetrics()
+        return await self.translate_content(doc_root, log_callback=log_callback, **kwargs)
+
     async def translate_content(
         self,
         raw_content: Any,
-        structure_map: Dict[str, Any],
-        context: Dict[str, Any],
         source_language: str,
         target_language: str,
         model_name: str,
@@ -199,13 +216,11 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
         """
         Translate EPUB XHTML content with checkpoint support.
 
-        This method bypasses the generic orchestrator and calls translate_xhtml_simplified
-        directly to leverage chunk-level checkpoint support.
+        Calls translate_xhtml_simplified (chunk-level checkpoint support), or
+        the Plain Text Mode path.
 
         Args:
             raw_content: etree._Element (doc_root)
-            structure_map: Not used (kept for interface compatibility)
-            context: Context dict with preservation info
             source_language: Source language
             target_language: Target language
             model_name: Model name

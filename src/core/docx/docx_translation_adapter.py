@@ -12,12 +12,11 @@ Pipeline:
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..common.translation_orchestrator import TranslationAdapter
 from .converter import DocxHtmlConverter
 from ..epub.container import TranslationContainer
 
 
-class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
+class DocxTranslationAdapter:
     """
     Adaptateur pour traduire des documents DOCX.
 
@@ -200,8 +199,6 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
     async def translate_content(
         self,
         raw_content: Any,
-        structure_map: Dict[str, Any],
-        context: Dict[str, Any],
         source_language: str,
         target_language: str,
         model_name: str,
@@ -222,13 +219,12 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         """
         Translate DOCX content with checkpoint support.
 
-        This method bypasses the generic orchestrator to use _translate_all_chunks_with_checkpoint
-        for chunk-level interruption and resume support.
+        Uses _translate_all_chunks_with_checkpoint for chunk-level
+        interruption and resume support. A document with no text is rebuilt
+        as an empty DOCX without any LLM call.
 
         Args:
             raw_content: DOCX file path (str)
-            structure_map: Not used (kept for interface compatibility)
-            context: Context dict with preservation info
             source_language: Source language
             target_language: Target language
             model_name: Model name
@@ -331,6 +327,10 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
             # === NORMAL INITIALIZATION (NO RESUME) ===
             # 1. Extract content
             html_content, context = self.extract_content(source_path, log_callback)
+            if not html_content or not html_content.strip():
+                if log_callback:
+                    log_callback("no_content", "No content to translate")
+                return self.finalize_output("", source_path, context, log_callback), TranslationMetrics()
 
             # 2. Preserve structure
             text_with_placeholders, global_tag_map, placeholder_format = \

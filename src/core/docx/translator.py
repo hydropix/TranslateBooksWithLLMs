@@ -1,12 +1,12 @@
 """
-DOCX translation using generic orchestrator.
+DOCX translation through DocxTranslationAdapter.
 
-Phase 2 implementation: Uses the unified GenericTranslationOrchestrator
-with DocxTranslationAdapter for clean, reusable architecture.
+The adapter converts the document to HTML, replaces its tags with
+placeholders, chunks, translates (with checkpoint support), restores the tags
+and rebuilds the DOCX.
 """
 
 from typing import Optional, Dict, Any
-from ..common.translation_orchestrator import GenericTranslationOrchestrator
 from ..job import JobConfig, JobContext
 from .docx_translation_adapter import DocxTranslationAdapter
 
@@ -21,16 +21,17 @@ async def translate_docx_file(
     parallel_workers: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Translate a complete DOCX file using the generic orchestrator.
+    Translate a complete DOCX file.
 
-    This implementation uses the unified translation pipeline:
+    Pipeline:
     1. Extract content (DOCX → HTML via mammoth)
     2. Preserve structure (HTML tags → placeholders)
     3. Chunk intelligently (HTML-aware chunking)
     4. Translate chunks (with 3-phase fallback)
-    5. Optional: Refine translation
-    6. Reconstruct content (restore HTML tags)
-    7. Finalize output (HTML → DOCX via python-docx)
+    5. Reconstruct content (restore HTML tags)
+    6. Finalize output (HTML → DOCX via python-docx)
+
+    Refinement is not done here: the job runner owns the refine phase.
 
     Args:
         job: The job: ``input_path``, ``output_path``, languages, provider,
@@ -87,9 +88,7 @@ async def _translate_docx(
 ) -> Dict[str, Any]:
     import os
 
-    # Create adapter and orchestrator
     adapter = DocxTranslationAdapter()
-    orchestrator = GenericTranslationOrchestrator(adapter)
 
     # Use filename as file_href for checkpointing
     file_href = os.path.basename(input_filepath)
@@ -101,9 +100,8 @@ async def _translate_docx(
         if resume_state and log_callback:
             log_callback("docx_resume_detected", f"Found checkpoint at chunk {resume_state.current_chunk_index}")
 
-    # Translate using generic pipeline with checkpoint support
-    docx_bytes, stats = await orchestrator.translate(
-        source=input_filepath,
+    docx_bytes, stats = await adapter.translate_content(
+        input_filepath,
         source_language=source_language,
         target_language=target_language,
         model_name=model_name,

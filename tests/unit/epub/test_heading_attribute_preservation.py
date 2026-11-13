@@ -221,8 +221,6 @@ async def test_plain_text_mode_preserves_heading_class():
 
     success, _stats = await adapter.translate_content(
         raw_content=doc_root,
-        structure_map={},
-        context={},
         source_language='Chinese',
         target_language='French',
         model_name='stub-model',

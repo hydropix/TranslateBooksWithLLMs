@@ -47,8 +47,6 @@ class TestBilingualOptionBug:
             
             await adapter.translate_content(
                 raw_content=doc_root,
-                structure_map={},
-                context={},
                 source_language="English",
                 target_language="French",
                 model_name="test-model",
@@ -90,8 +88,6 @@ class TestBilingualOptionBug:
             # Call without prompt_options
             await adapter.translate_content(
                 raw_content=doc_root,
-                structure_map={},
-                context={},
                 source_language="English",
                 target_language="French",
                 model_name="test-model",
@@ -128,8 +124,6 @@ class TestBilingualOptionBug:
             
             await adapter.translate_content(
                 raw_content=doc_root,
-                structure_map={},
-                context={},
                 source_language="English",
                 target_language="French",
                 model_name="test-model",

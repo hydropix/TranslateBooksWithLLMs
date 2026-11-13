@@ -73,20 +73,3 @@ def test_refine_progress_baseline(fmt, tmp_path):
     sequence, output = recorder.record_refine(tmp_path, input_path, output_path)
     assert sequence, f"no progress callbacks emitted for {fmt} refine"
     _compare_or_write(f"refine_{fmt}", {"sequence": sequence, "output": output})
-
-
-# In-translation refinement (prompt_options['refine']) is the two-phase path
-# that doubles total_chunks inside the engine (TranslationMetrics) — distinct
-# from the handlers-orchestrated refine-after. Only EPUB/DOCX implement it.
-@pytest.mark.parametrize("fmt", ["epub", "docx"])
-def test_translate_with_inline_refine_baseline(fmt, tmp_path):
-    input_path = _BUILDERS[fmt](tmp_path)
-    suffix = input_path.suffix
-    output_path = tmp_path / f"out{suffix}"
-    sequence, output = recorder.record_translation(
-        tmp_path, input_path, output_path, prompt_options={"refine": True}
-    )
-    assert sequence, f"no progress callbacks emitted for {fmt} inline-refine"
-    _compare_or_write(
-        f"translate_refine_{fmt}", {"sequence": sequence, "output": output}
-    )

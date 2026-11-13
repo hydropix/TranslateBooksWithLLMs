@@ -111,7 +111,7 @@ class TranslationMetrics:
             attempt: Attempt number (0 = first try)
             chunk_size: Size of chunk in tokens
         """
-        # Note: total_chunks is initialized in _translate_all_chunks, not incremented here
+        # Note: total_chunks is set by the caller before the chunk loop, not incremented here
 
         if attempt == 0:
             self.successful_first_try += 1
@@ -130,7 +130,7 @@ class TranslationMetrics:
         Args:
             chunk_size: Size of chunk in tokens
         """
-        # Note: total_chunks is initialized in _translate_all_chunks, not incremented here
+        # Note: total_chunks is set by the caller before the chunk loop, not incremented here
         self.fallback_used += 1
         self._update_chunk_stats(chunk_size)
 
@@ -140,7 +140,7 @@ class TranslationMetrics:
         Args:
             chunk_size: Size of chunk in tokens
         """
-        # Note: total_chunks is initialized in _translate_all_chunks, not incremented here
+        # Note: total_chunks is set by the caller before the chunk loop, not incremented here
         self.failed_chunks += 1
         self._update_chunk_stats(chunk_size)
     

@@ -220,7 +220,7 @@ async def translate_chunk_with_fallback(
     Returns:
         Translated text with global placeholders restored
     """
-    # Note: total_chunks is initialized in _translate_all_chunks before the loop
+    # total_chunks is set by the caller before the loop
     # We don't increment it here to avoid overwriting the initial count
 
     # Initialize placeholder manager
@@ -525,7 +525,7 @@ async def _translate_all_chunks_with_checkpoint(
     """
     Translate all chunks with checkpoint support.
 
-    This function extends _translate_all_chunks with:
+    This function extends the plain chunk loop with:
     - Interruption checking before each chunk
     - Periodic checkpoint saving (every N chunks)
     - Resume support from start_chunk_index
@@ -879,91 +879,6 @@ async def _translate_all_chunks_with_checkpoint(
         return _completed_prefix(), stats, True  # was_interrupted=True
 
     return _completed_prefix(), stats, False  # was_interrupted=False
-
-
-async def _translate_all_chunks(
-    chunks: List[Dict],
-    source_language: str,
-    target_language: str,
-    model_name: str,
-    llm_client: Any,
-    max_retries: int,
-    context_manager: Optional[AdaptiveContextManager],
-    placeholder_format: Tuple[str, str],
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    prompt_options: Optional[Dict] = None
-) -> Tuple[List[str], TranslationMetrics]:
-    """Translate all chunks with fallback.
-
-    Args:
-        chunks: List of chunk dictionaries
-        source_language: Source language name
-        target_language: Target language name
-        model_name: LLM model name
-        llm_client: LLM client instance
-        max_retries: Maximum retry attempts per chunk
-        context_manager: Optional context window manager
-        placeholder_format: Tuple of (prefix, suffix) for placeholders
-        log_callback: Optional callback for progress
-        stats_callback: Optional callback for stats updates
-        check_interruption_callback: Optional callback to check for interruption
-        prompt_options: Optional prompt customization options (custom instructions, etc.)
-
-    Returns:
-        Tuple of (translated_chunks, statistics)
-    """
-    stats = TranslationMetrics()
-    translated_chunks = []
-
-    # Initialize total_chunks at the start (not incrementally during processing)
-    # This ensures stats_callback can report the total immediately
-    stats.total_chunks = len(chunks)
-
-    # Report initial stats with total_chunks set
-    if stats_callback:
-        stats_callback(stats.to_dict())
-
-    for i, chunk in enumerate(chunks):
-        # Check for interruption before processing chunk
-        if check_interruption_callback:
-            should_stop = check_interruption_callback()
-            if should_stop:
-                if log_callback:
-                    log_callback("translation_interrupted", f"Translation interrupted at chunk {i}/{len(chunks)}")
-                break
-
-        translated = await translate_chunk_with_fallback(
-            chunk_text=chunk['text'],
-            local_tag_map=chunk['local_tag_map'],
-            global_indices=chunk['global_indices'],
-            source_language=source_language,
-            target_language=target_language,
-            model_name=model_name,
-            llm_client=llm_client,
-            stats=stats,
-            log_callback=log_callback,
-            max_retries=max_retries,
-            context_manager=context_manager,
-            placeholder_format=placeholder_format,
-            prompt_options=prompt_options,
-            chunk_index=i
-        )
-        translated_chunks.append(translated)
-
-        # Warn loudly once if placeholder failures are piling up (see
-        # _translate_all_chunks_with_checkpoint for rationale).
-        quality_warning = stats.check_quality_warning()
-        if quality_warning and log_callback:
-            log_callback("quality_warning", quality_warning)
-
-        # Report progress after completing each chunk
-        # Report stats after completing each chunk
-        if stats_callback:
-            stats_callback(stats.to_dict())
-
-    return translated_chunks, stats
 
 
 def _reconstruct_html(
@@ -1701,8 +1616,10 @@ async def translate_xhtml_simplified(
     2. Replace all tags with placeholders
     3. Chunk by complete HTML blocks with local renumbering
     4. Translate each chunk (with retry attempts)
-    5. (Optional) Refine translated chunks if prompt_options['refine'] is True
-    6. Reconstruct and replace body
+    5. Reconstruct and replace body
+
+    Refinement is not done here: the job runner owns the refine phase, and
+    the refine engine (src/core/refine) calls _refine_epub_chunks itself.
 
     Args:
         doc_root: Parsed XHTML document (modified in-place)
@@ -1715,7 +1632,7 @@ async def translate_xhtml_simplified(
         context_manager: Optional AdaptiveContextManager for handling context overflow
         max_retries: Maximum translation retry attempts per chunk
         container: Optional dependency injection container for components
-        prompt_options: Optional dict with prompt customization options (e.g., refine=True)
+        prompt_options: Optional dict with prompt customization options
         bilingual: If True, output will contain both original and translated text
         checkpoint_manager: Optional CheckpointManager for saving/loading partial state
         translation_id: Optional translation job ID for checkpoint tracking
@@ -1857,17 +1774,6 @@ async def translate_xhtml_simplified(
     # - tag_preserver: TagPreserver
     # - original_chunks: Optional[List[Dict]]
 
-    # Check if refinement is enabled
-    enable_refinement = prompt_options and prompt_options.get('refine')
-
-    # Configure stats for refinement tracking
-    stats.enable_refinement = enable_refinement
-    stats.refinement_phase = False  # Start in translation phase
-
-    if log_callback:
-        log_callback("epub_refinement_config",
-                     f"Refinement enabled: {enable_refinement} (prompt_options={prompt_options})")
-
     # 4. Translation with checkpoint support
     # Note: Progress is reported as raw 0-100% chunk-based progress
     # The parent epub/translator.py handles token-based progress via its own ProgressTracker
@@ -1908,40 +1814,6 @@ async def translate_xhtml_simplified(
             log_callback("xhtml_interrupted_saved",
                 "⏸️ Translation interrupted - state saved for resume")
         return False, stats  # success=False because incomplete
-
-    # 4.5. Refinement (optional - only if not interrupted)
-    if enable_refinement and translated_chunks:
-        # Switch stats to refinement phase
-        stats.refinement_phase = True
-        stats.refinement_chunks_completed = 0
-
-        if log_callback:
-            log_callback("epub_refinement_start",
-                        f"✨ Starting EPUB refinement pass to polish translation quality... ({len(translated_chunks)} chunks)")
-
-        refined_result = await _refine_epub_chunks(
-            translated_chunks=translated_chunks,
-            chunks=chunks,
-            target_language=target_language,
-            model_name=model_name,
-            llm_client=llm_client,
-            context_manager=context_manager,
-            placeholder_format=placeholder_format,
-            log_callback=log_callback,  # Pass through to parent's token tracker
-            prompt_options=prompt_options,
-            stats_callback=stats_callback,  # Pass stats callback for progress updates
-            stats=stats  # Pass stats object to update during refinement
-        )
-
-        if refined_result:
-            translated_chunks = refined_result
-            if log_callback:
-                log_callback("epub_refinement_applied", f"Applied refinement to {len(refined_result)} chunks")
-        else:
-            _log_error(log_callback, "epub_refinement_empty", "Warning: Refinement returned empty result, using original translation")
-    elif enable_refinement and not translated_chunks:
-        if log_callback:
-            log_callback("epub_refinement_skipped", "Refinement skipped: no translated chunks available")
 
     # 5. Reconstruction (only if translation complete)
     final_html = _reconstruct_html(

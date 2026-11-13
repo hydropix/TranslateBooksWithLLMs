@@ -118,9 +118,9 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
             ``prompt_options``, ``bilingual_output``, ``parallel_workers``
             and ``retry_token_aligned`` (EPUB only: explicit, user-initiated
             retry of the chunks token alignment translated with approximate
-            tag positions, D3) come from it. ``prompt_options['refine']``
-            still runs the in-engine EPUB/DOCX refine pass; the job runner,
-            not the engine, avoids a double refinement.
+            tag positions, D3) come from it. No engine refines:
+            ``prompt_options['refine']`` is read by the job runner, which
+            owns the refine phase.
         ctx: Log/stats/interruption hooks, checkpoint manager, job id and
             ``resume_from_index``.
 

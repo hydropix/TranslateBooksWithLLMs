@@ -26,7 +26,6 @@ from src.config import (
 )
 from ..job import JobConfig, JobContext, JobResult
 from ..llm.exceptions import LLMClientConfigError
-from ..common.translation_orchestrator import GenericTranslationOrchestrator
 from .epub_translation_adapter import EpubTranslationAdapter
 from .xhtml_translation_state import (
     token_aligned_chunk_indices,
@@ -786,13 +785,9 @@ async def _translate_single_xhtml_file(
         parser = etree.XMLParser(encoding='utf-8', recover=True, remove_blank_text=False)
         doc_root = etree.fromstring(content.encode('utf-8'), parser)
 
-        # Create adapter and orchestrator
         adapter = EpubTranslationAdapter()
-        orchestrator = GenericTranslationOrchestrator(adapter)
-
-        # Translate using generic pipeline WITH resume support
-        success, stats = await orchestrator.translate(
-            source=doc_root,
+        success, stats = await adapter.translate_document(
+            doc_root,
             source_language=source_language,
             target_language=target_language,
             model_name=model_name,

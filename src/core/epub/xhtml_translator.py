@@ -68,16 +68,21 @@ from src.prompts.prompts import PromptPair
 
 
 def _log_error(log_callback: Optional[Callable], event_name: str, message: str):
-    """Helper to log error messages in red color"""
+    """Report an error to the job that produced it.
+
+    The job's ``log_callback`` is the only channel that reaches the right job
+    when several translations run concurrently, so it always wins. The global
+    logger singleton is used only when there is no callback at all (direct
+    library use), so the error is not lost.
+    """
     if log_callback:
-        # Check if this is a new-style logger with LogLevel support
-        try:
-            from src.utils.unified_logger import get_logger
-            logger = get_logger()
-            logger.error(message)
-        except Exception:
-            # Fallback to legacy callback
-            log_callback(event_name, message)
+        log_callback(event_name, message)
+        return
+    try:
+        from src.utils.unified_logger import get_logger
+        get_logger().error(message)
+    except Exception:
+        pass
 
 
 class PlaceholderManager:

@@ -14,7 +14,6 @@ Components:
     - tag_preservation: HTML/XML tag preservation during translation
     - html_chunker: HTML-aware text chunking with placeholder management
     - body_serializer: Body extraction and replacement for XHTML documents
-    - xml_helpers: Safe XML manipulation utilities
     - constants: Configuration constants
 """
 

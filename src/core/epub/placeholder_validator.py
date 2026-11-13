@@ -6,7 +6,6 @@ This module provides unified validation logic for placeholder integrity checks.
 
 from typing import Dict, Tuple, List
 import re
-from .exceptions import PlaceholderValidationError
 
 
 class PlaceholderValidator:
@@ -48,9 +47,6 @@ class PlaceholderValidator:
         Returns:
             Tuple of (is_valid, error_message)
             error_message is empty string if valid
-
-        Raises:
-            PlaceholderValidationError: If validation fails (optional behavior)
         """
         # Extract placeholder pattern (e.g., "[id", "]")
         if not expected_tag_map:

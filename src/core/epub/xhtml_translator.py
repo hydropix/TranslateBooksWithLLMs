@@ -37,7 +37,6 @@ LEVEL 3 - Translation (PlaceholderManager):
 """
 import re
 import copy as _copy
-from collections import Counter
 from html.entities import html5 as _HTML5_ENTITIES
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from lxml import etree
@@ -55,27 +54,20 @@ from .xhtml_translation_state import (
     token_aligned_chunk_indices,
     unfinished_chunk_indices,
 )
-from .exceptions import (
-    PlaceholderValidationError,
-    TagRestorationError,
-    XmlParsingError,
-    BodyExtractionError
-)
+from .exceptions import XmlParsingError, BodyExtractionError
 from .placeholder_validator import PlaceholderValidator
 from .container import TranslationContainer
 from ..translator import generate_translation_request
 from ..context_optimizer import AdaptiveContextManager, INITIAL_CONTEXT_SIZE, CONTEXT_STEP, MAX_CONTEXT_SIZE
 from src.config import (
     PLACEHOLDER_PATTERN,
-    MAX_PLACEHOLDER_CORRECTION_ATTEMPTS,
     MAX_REFINE_RETRIES,
     create_placeholder,
     detect_placeholder_format_in_text,
-    detect_format_from_placeholder,
     THINKING_MODELS,
     ADAPTIVE_CONTEXT_INITIAL_THINKING,
 )
-from src.prompts.prompts import PromptPair, generate_placeholder_correction_prompt, CORRECTED_TAG_IN, CORRECTED_TAG_OUT
+from src.prompts.prompts import PromptPair
 from src.utils.unified_logger import LogLevel, LogType
 
 
@@ -162,238 +154,6 @@ def validate_placeholders(translated_text: str, local_tag_map: Dict[str, str]) -
     # Use centralized PlaceholderValidator
     is_valid, error_msg = PlaceholderValidator.validate_strict(translated_text, local_tag_map)
     return is_valid
-
-
-def build_specific_error_details(translated_text: str, expected_count: int, local_tag_map: Dict[str, str] = None) -> str:
-    """
-    Analyze placeholder errors and generate a detailed error message in English.
-
-    Args:
-        translated_text: Translated text to analyze
-        expected_count: Number of placeholders expected (0 to expected_count-1)
-        local_tag_map: Optional tag map to detect format from
-
-    Returns:
-        Detailed error message for the correction prompt
-    """
-    errors = []
-
-    # Detect format from tag_map keys
-    current_format = "safe"
-    if local_tag_map:
-        sample_placeholder = next((k for k in local_tag_map.keys() if not k.startswith("__")), "[[0]]")
-        current_format = detect_format_from_placeholder(sample_placeholder)
-
-    # Set appropriate pattern and placeholder functions based on format
-    if current_format == "id":
-        pattern = r'\[id(\d+)\]'
-        prefix = "[id"
-        suffix = "]"
-    elif current_format == "slash":
-        pattern = r'/(\d+)(?!/)'
-        prefix = "/"
-        suffix = ""
-    elif current_format == "dollar":
-        pattern = r'\$(\d+)\$'
-        prefix = "$"
-        suffix = "$"
-    elif current_format == "simple":
-        pattern = r'(?<!\[)\[(\d+)\](?!\])'
-        prefix = "["
-        suffix = "]"
-    else:  # safe
-        pattern = r'\[\[(\d+)\]\]'
-        prefix = "[["
-        suffix = "]]"
-
-    def make_placeholder(i):
-        return f"{prefix}{i}{suffix}"
-
-    # 1. Find correct placeholders present
-    found_correct = re.findall(pattern, translated_text)
-    # Extract indices from found placeholders
-    found_indices = [int(num_str) for num_str in found_correct]
-    expected_indices = set(range(expected_count))
-
-    # 2. Detect missing placeholders
-    found_set = set(found_indices)
-    missing = expected_indices - found_set
-    if missing:
-        missing_str = ", ".join(make_placeholder(i) for i in sorted(missing))
-        errors.append(f"- Missing placeholders: {missing_str}")
-
-    # 3. Detect duplicates
-    counts = Counter(found_indices)
-    duplicates = {idx: count for idx, count in counts.items() if count > 1}
-    if duplicates:
-        for idx, count in duplicates.items():
-            errors.append(f"- Duplicate: {make_placeholder(idx)} appears {count} times (should appear once)")
-
-    # 4. Check order
-    if found_indices != sorted(found_indices):
-        errors.append("- Out of order: placeholders are not in sequential order")
-
-    # 5. Count summary
-    if len(found_correct) != expected_count:
-        errors.append(f"- Count mismatch: Expected {expected_count} placeholders, found {len(found_correct)}")
-
-    # 6. Position hint - if count matches but indices don't, placeholders are shifted
-    if len(found_correct) == expected_count and found_set != expected_indices:
-        # Some placeholders have wrong indices (shifted)
-        wrong_indices = found_set - expected_indices
-        if wrong_indices:
-            wrong_str = ", ".join(make_placeholder(i) for i in sorted(wrong_indices))
-            errors.append(f"- Wrong indices used: {wrong_str} (should be {make_placeholder(0)} to {make_placeholder(expected_count - 1)})")
-
-    if errors:
-        error_msg = "ERRORS FOUND:\n" + "\n".join(errors)
-        error_msg += "\n\nIMPORTANT: Compare the ORIGINAL text to see where each placeholder should be positioned around the equivalent translated content."
-        return error_msg
-    return "No specific errors detected, but validation failed. Check placeholder positions against the original text."
-
-
-def extract_corrected_text(response: str) -> Optional[str]:
-    """
-    Extract the corrected text from LLM response.
-
-    Args:
-        response: Raw LLM response
-
-    Returns:
-        Extracted text or None if tags not found
-    """
-    if CORRECTED_TAG_IN not in response or CORRECTED_TAG_OUT not in response:
-        return None
-
-    start = response.find(CORRECTED_TAG_IN) + len(CORRECTED_TAG_IN)
-    end = response.find(CORRECTED_TAG_OUT)
-
-    if start >= end:
-        return None
-
-    return response[start:end].strip()
-
-
-async def attempt_placeholder_correction(
-    original_text: str,
-    translated_text: str,
-    local_tag_map: Dict[str, str],
-    source_language: str,
-    target_language: str,
-    llm_client: Any,
-    log_callback: Optional[Callable],
-    placeholder_format: Optional[Tuple[str, str]] = None,
-    context_manager: Optional[AdaptiveContextManager] = None
-) -> Tuple[str, bool]:
-    """
-    Attempt to correct placeholder errors via LLM.
-
-    Args:
-        original_text: Source text with correct placeholders
-        translated_text: Translation with placeholder errors
-        local_tag_map: Expected local tag map
-        source_language: Source language name
-        target_language: Target language name
-        llm_client: LLM client instance
-        log_callback: Optional logging callback
-        placeholder_format: Optional tuple of (prefix, suffix) for placeholders
-        context_manager: Optional AdaptiveContextManager for handling context overflow
-
-    Returns:
-        Tuple (corrected_text, success)
-    """
-    expected_count = len(local_tag_map)
-
-    # Generate error details
-    specific_errors = build_specific_error_details(translated_text, expected_count, local_tag_map)
-
-    # Generate correction prompt
-    prompt_pair = generate_placeholder_correction_prompt(
-        original_text=original_text,
-        translated_text=translated_text,
-        specific_errors=specific_errors,
-        source_language=source_language,
-        target_language=target_language,
-        expected_count=expected_count,
-        placeholder_format=placeholder_format
-    )
-
-    # Call LLM for correction with adaptive context retry
-    max_retries = 3
-    for retry in range(max_retries):
-        try:
-            # Log the correction request
-            if log_callback and retry == 0:
-                log_callback("correction_request", "Sending correction request to LLM")
-
-            # Set context from manager if available
-            if context_manager and hasattr(llm_client, 'context_window'):
-                new_ctx = context_manager.get_context_size()
-                if llm_client.context_window != new_ctx:
-                    if log_callback:
-                        log_callback("context_update",
-                            f"📐 Correction: Updating context window: {llm_client.context_window} → {new_ctx}")
-                llm_client.context_window = new_ctx
-
-            llm_response = await llm_client.make_request(
-                prompt_pair.user,
-                system_prompt=prompt_pair.system
-            )
-
-            if llm_response is None:
-                return translated_text, False
-
-            # Check if we should retry with larger context (adaptive strategy)
-            if context_manager and llm_response.was_truncated:
-                if context_manager.should_retry_with_larger_context(
-                    llm_response.was_truncated, llm_response.context_used
-                ):
-                    context_manager.increase_context()
-                    if log_callback:
-                        log_callback("correction_context_retry",
-                            f"Retrying correction with larger context ({context_manager.get_context_size()} tokens)")
-                    continue  # Retry with larger context
-
-            # Record success if context manager is available
-            if context_manager and llm_response.prompt_tokens > 0:
-                context_manager.record_success(
-                    llm_response.prompt_tokens,
-                    llm_response.completion_tokens,
-                    llm_response.context_limit
-                )
-
-            # Extract corrected text from response content
-            corrected = extract_corrected_text(llm_response.content)
-            if corrected is None:
-                _log_error(log_callback, "correction_extract_failed", "Failed to extract corrected text from response")
-                return translated_text, False
-
-            # Validate corrected text
-            if validate_placeholders(corrected, local_tag_map):
-                return corrected, True
-
-            return translated_text, False
-
-        except Exception as e:
-            # Re-raise RateLimitError to trigger auto-pause
-            from ..llm import ContextOverflowError, RepetitionLoopError, RateLimitError
-            if isinstance(e, RateLimitError):
-                raise
-
-            # Try to increase context if we have a manager and hit overflow/repetition errors
-            if context_manager and isinstance(e, (ContextOverflowError, RepetitionLoopError)):
-                if context_manager.should_retry_with_larger_context(True, 0):
-                    context_manager.increase_context()
-                    if log_callback:
-                        log_callback("correction_context_overflow",
-                            f"Context overflow in correction - retrying with {context_manager.get_context_size()} tokens")
-                    continue  # Retry with larger context
-
-            _log_error(log_callback, "correction_error", f"Correction attempt failed: {str(e)}")
-            return translated_text, False
-
-    # Max retries exceeded
-    return translated_text, False
 
 
 async def translate_chunk_with_fallback(

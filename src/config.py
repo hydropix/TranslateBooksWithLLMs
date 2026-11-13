@@ -343,13 +343,6 @@ peuvent être 2x plus longues que la source)"""
 TRANSLATION_TAG_OVERHEAD = 50
 """Tokens réservés pour les balises XML de traduction (<Translated>...</Translated>)"""
 
-# === Placeholder Validation ===
-MAX_PLACEHOLDER_RETRIES = 3
-"""Nombre maximum de tentatives de validation des placeholders"""
-
-MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 2
-"""Nombre maximum de tentatives de correction LLM pour les placeholders malformés"""
-
 try:
     MAX_REFINE_RETRIES = max(0, int(os.getenv('MAX_REFINE_RETRIES', '1')))
 except ValueError:
@@ -553,13 +546,6 @@ PLACEHOLDER_SUFFIX = "]"
 
 PLACEHOLDER_PATTERN = r'\[id(\d+)\]'
 """Regex pattern for placeholders (e.g., [id0])"""
-
-# Maximum retries for placeholder validation before falling back to source text
-MAX_PLACEHOLDER_RETRIES = 0
-"""Number of retry attempts when placeholder validation fails"""
-
-MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 0
-"""Number of LLM correction attempts before falling back to proportional insertion (0 = skip correction phase entirely)"""
 
 # =============================================================================
 # TOKEN ALIGNMENT FALLBACK CONFIGURATION (Phase 2)

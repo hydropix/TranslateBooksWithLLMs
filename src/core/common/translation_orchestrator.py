@@ -149,7 +149,7 @@ class GenericTranslationOrchestrator(Generic[SourceT, ResultT]):
         Initialise l'orchestrateur avec un adaptateur.
 
         Args:
-            adapter: Adaptateur format-spécifique (EpubAdapter, DocxAdapter, etc.)
+            adapter: Format-specific adapter (TxtAdapter, SrtAdapter, etc.)
         """
         self.adapter = adapter
 

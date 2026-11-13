@@ -18,7 +18,6 @@ from .generic_translator import GenericTranslator
 from .txt_adapter import TxtAdapter
 from .srt_adapter import SrtAdapter
 from .pgn_adapter import PgnAdapter
-from .epub_adapter import EpubAdapter
 from .exceptions import UnsupportedFormatError
 from src.utils.file_detector import detect_file_type, detect_file_type_by_content
 
@@ -425,98 +424,3 @@ def get_file_type_from_path(filepath: str) -> str:
     }
 
     return type_map.get(ext, 'unknown')
-
-
-async def build_translated_output(
-    translation_id: str,
-    checkpoint_manager: Any,
-    **adapter_config
-) -> tuple[Optional[bytes], Optional[str]]:
-    """
-    Rebuild the translated output file from a checkpoint.
-
-    This function is used by the web API to reconstruct the output file
-    from checkpoint data when resuming or downloading an interrupted translation.
-
-    Args:
-        translation_id: Translation job identifier
-        checkpoint_manager: CheckpointManager instance
-        **adapter_config: Additional configuration for the adapter
-
-    Returns:
-        Tuple of (output_bytes, error_message)
-        - If successful: (bytes, None)
-        - If failed: (None, error_message)
-
-    Example:
-        >>> from src.persistence.checkpoint_manager import CheckpointManager
-        >>> from src.core.adapters import build_translated_output
-        >>>
-        >>> checkpoint_mgr = CheckpointManager()
-        >>> output_bytes, error = await build_translated_output(
-        ...     translation_id="job_123",
-        ...     checkpoint_manager=checkpoint_mgr
-        ... )
-        >>> if output_bytes:
-        ...     with open("output.epub", "wb") as f:
-        ...         f.write(output_bytes)
-    """
-    # Load job from checkpoint
-    job = checkpoint_manager.db.get_job(translation_id)
-    if not job:
-        return None, "Job not found"
-
-    config = job['config']
-    file_type = job['file_type']
-
-    # Map file types to adapters
-    adapter_map = {
-        'txt': TxtAdapter,
-        'srt': SrtAdapter,
-        'pgn': PgnAdapter,
-        'epub': EpubAdapter,
-        # Note: docx doesn't support checkpoint reconstruction yet
-        # Note: pdf doesn't support checkpoint reconstruction yet
-    }
-
-    adapter_class = adapter_map.get(file_type)
-    if not adapter_class:
-        return None, f"Unsupported file type: {file_type}"
-
-    # Get file paths from config
-    input_file_path = config.get('preserved_input_path') or config.get('input_file_path')
-    output_file_path = config.get('output_file_path')
-
-    if not input_file_path or not output_file_path:
-        return None, "Missing file paths in checkpoint configuration"
-
-    # Create adapter instance
-    try:
-        adapter = adapter_class(
-            input_file_path=input_file_path,
-            output_file_path=output_file_path,
-            config={**config, **adapter_config}
-        )
-
-        # Prepare adapter
-        if not await adapter.prepare_for_translation():
-            return None, "Failed to prepare adapter for reconstruction"
-
-        # Load checkpoint data
-        checkpoint_data = checkpoint_manager.load_checkpoint(translation_id)
-        if not checkpoint_data:
-            return None, "No checkpoint data found"
-
-        # Resume from checkpoint (restores translated content)
-        await adapter.resume_from_checkpoint(checkpoint_data)
-
-        # Reconstruct output
-        output_bytes = await adapter.reconstruct_output()
-
-        # Cleanup
-        await adapter.cleanup()
-
-        return output_bytes, None
-
-    except Exception as e:
-        return None, f"Error reconstructing output: {str(e)}"

@@ -80,7 +80,9 @@ TABLE_LINE_TOLERANCE = 1.0       # pt: a line whose centre is this close to a ta
 TEXT_FLAGS = pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_LIGATURES
 PAGE_NUMBER_RE = re.compile(r"^\s*(?:page\s+)?(?:\d{1,4}|[ivxlcdm]{1,7})(?:\s*(?:/|of)\s*\d{1,4})?\s*$", re.I)
 LIST_MARKER_RE = re.compile(r"^\s*(?:[•◦▪▫‣⁃●○■□*·]|-(?=\s)|\(?\d{1,3}[.)]|\(?[A-Za-z][.)])\s+")
-TERMINAL_PUNCT_RE = re.compile(r"[.!?…:;\"»”’)\]。！？」』）]\s*$")
+# Sentence-final punctuation, Latin and others: CJK full/halfwidth stops, Arabic
+# question mark, Urdu full stop, Devanagari danda, Armenian, Ethiopic, Myanmar, Khmer.
+TERMINAL_PUNCT_RE = re.compile(r"[.!?…:;\"»”’)\]。！？」』）．｡︒؟۔।॥։።။។]\s*$")
 LIGATURES = {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"}
 
 # Scripts that wrap lines without spaces (Hangul is excluded: Korean wraps at spaces)
@@ -657,11 +659,29 @@ def _split_list_items(lines: List[str]) -> List[Tuple[str, str, List[int]]]:
     return paragraphs
 
 
+# Scripts without case and without sentence-final punctuation (Thai, Lao):
+# nothing tells a continuation from a new paragraph, so they never merge.
+_NO_PUNCT_SCRIPTS = (("\u0e00", "\u0eff"),)
+
+
+def _continues_sentence(first: str) -> bool:
+    """Whether a paragraph starting with `first` may continue the previous one."""
+    if first.islower():
+        return True
+    # A letter without case (CJK, Arabic, Hebrew, Devanagari...): rely on the
+    # previous paragraph's punctuation alone.
+    return (
+        first.isalpha()
+        and not first.isupper()
+        and not any(low <= first <= high for low, high in _NO_PUNCT_SCRIPTS)
+    )
+
+
 def _should_merge(prev_text: str, prev_style: str, text: str) -> bool:
     """Whether a new normal paragraph continues the previous one (step 8)."""
     # A trailing "<letter>-" is not terminal punctuation, so hyphenated page
     # breaks are covered by the same rule. Headings and list items never merge.
-    if prev_style != "normal" or not text[:1].islower():
+    if prev_style != "normal" or not _continues_sentence(text[:1]):
         return False
     return TERMINAL_PUNCT_RE.search(prev_text) is None
 

@@ -1,5 +1,5 @@
 """
-Regression tests for line-end hyphen repair.
+Regression tests for line-end hyphen repair and caseless cross-block merges.
 
 Fixtures are generated with PyMuPDF at test time (no binary fixtures).
 """
@@ -17,6 +17,17 @@ def _single_page_pdf(tmp_path, body: str, fontname: str = "helv") -> str:
     page = doc.new_page(width=595, height=842)
     page.insert_text((72, 120), body, fontsize=11, fontname=fontname)
     path = tmp_path / "doc.pdf"
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def _two_page_pdf(tmp_path, first: str, second: str, fontname: str) -> str:
+    doc = pymupdf.open()
+    for body in (first, second):
+        page = doc.new_page(width=595, height=842)
+        page.insert_text((72, 120), body, fontsize=11, fontname=fontname)
+    path = tmp_path / "pages.pdf"
     doc.save(str(path))
     doc.close()
     return str(path)
@@ -86,3 +97,47 @@ def test_no_break_marker_leaks_into_output(tmp_path):
 
     for text in extract_pdf_paragraphs(path).paragraphs_text:
         assert extractor._BREAK_HYPHEN not in text
+
+
+# --- Caseless scripts across blocks/pages ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prev_text, text",
+    [
+        ("这是一个没有结束的句子", "继续写在下一页上。"),
+        ("هذه جملة لم تنته", "بعد وتستمر هنا."),
+        ("זה משפט שלא נגמר", "וממשיך כאן."),
+    ],
+)
+def test_caseless_continuation_merges(prev_text, text):
+    assert extractor._should_merge(prev_text, "normal", text)
+
+
+@pytest.mark.parametrize(
+    "prev_text, text",
+    [
+        ("这是一个完整的句子。", "新的段落开始了。"),
+        ("这是一个问题吗？", "新的段落开始了。"),
+        ("هل هذا سؤال؟", "فقرة جديدة."),
+        ("Une phrase sans fin", "Majuscule ensuite"),
+    ],
+)
+def test_terminated_or_capitalised_paragraphs_do_not_merge(prev_text, text):
+    assert not extractor._should_merge(prev_text, "normal", text)
+
+
+def test_cjk_paragraph_split_by_page_break_is_reassembled(tmp_path):
+    path = _two_page_pdf(
+        tmp_path,
+        "这是第一页上的一个很长的句子，它在页面的末尾还没有结束，而且",
+        "在第二页上继续写下去，直到这里才终于写完了这个句子。",
+        fontname="china-s",
+    )
+
+    content = extract_pdf_paragraphs(path)
+
+    assert content.paragraphs_text == [
+        "这是第一页上的一个很长的句子，它在页面的末尾还没有结束，而且"
+        "在第二页上继续写下去，直到这里才终于写完了这个句子。"
+    ]

@@ -10,6 +10,21 @@ from typing import List, Callable
 from src.core.chunking.token_chunker import TokenChunker
 
 
+def _split_after(text: str, boundary_chars: str) -> List[str]:
+    """Split ``text`` after each run of whitespace that follows a boundary char.
+
+    The whitespace stays attached to the preceding part, so joining the parts
+    gives back ``text`` exactly. A split without whitespace is also made right
+    before a legacy ``[[`` placeholder that follows a boundary char.
+    """
+    pieces = re.split(rf'(?<=[{boundary_chars}])(\s+)(?=\S)', text)
+    parts = []
+    for index in range(0, len(pieces), 2):
+        separator = pieces[index + 1] if index + 1 < len(pieces) else ''
+        parts.extend(re.split(rf'(?<=[{boundary_chars}])(?=\[\[)', pieces[index] + separator))
+    return parts
+
+
 class TextSplitter:
     """Splits text using hierarchical strategies (sentences -> punctuation -> newlines -> force)."""
 
@@ -122,9 +137,10 @@ class TextSplitter:
         Returns:
             List of sentence segments
         """
-        # Find sentence boundaries (. ! ? followed by space or placeholder or end)
-        sentence_pattern = r'(?<=[.!?])\s+(?=\S)|(?<=[.!?])(?=\[\[)'
-        parts = re.split(sentence_pattern, text)
+        # Sentence boundaries (. ! ? followed by space or placeholder). The
+        # whitespace stays with the preceding sentence: dropping it glued the
+        # sentences back together as "end.Next".
+        parts = _split_after(text, '.!?')
         return self._split_with_strategy(text, lambda t: parts)
 
     def _split_on_punctuation(self, text: str) -> List[str]:
@@ -134,9 +150,9 @@ class TextSplitter:
         Returns:
             List of punctuation-split segments
         """
-        # Split on ; : , but keep the punctuation with the preceding text
-        punct_pattern = r'(?<=[;:,])\s+(?=\S)|(?<=[;:,])(?=\[\[)'
-        parts = re.split(punct_pattern, text)
+        # Split on ; : , keeping the punctuation and the following whitespace
+        # with the preceding text
+        parts = _split_after(text, ';:,')
         return self._split_with_strategy(text, lambda t: parts)
 
     def _split_on_newlines(self, text: str) -> List[str]:
@@ -146,8 +162,8 @@ class TextSplitter:
         Returns:
             List of newline-split segments
         """
-        parts = text.split('\n')
-        return self._split_with_strategy(text, lambda t: parts, joiner='\n')
+        parts = text.splitlines(keepends=True)
+        return self._split_with_strategy(text, lambda t: parts)
 
     def _force_split_at_tokens(self, text: str) -> List[str]:
         """

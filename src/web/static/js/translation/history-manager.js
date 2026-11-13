@@ -12,7 +12,7 @@ import { MessageLogger } from '../ui/message-logger.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { FileActions } from '../files/file-actions.js';
 import { getFileIcon } from './progress-title.js';
-import { t, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
+import { t, tHtml, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
 
 /**
  * Fetch the translated-files listing without letting its failure sink the
@@ -87,7 +87,7 @@ export const HistoryManager = {
                     </div>
                     <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px; color: #9ca3af; margin-top: 8px;">
                         <span>${t('translation:history_type_line', { type: DomHelpers.escapeHtml(fileType) })}</span>
-                        <span>${t('translation:history_chunks', { completed: completedChunks, total: totalChunks })}</span>
+                        <span>${tHtml('translation:history_chunks', { completed: completedChunks, total: totalChunks })}</span>
                         <span>${t('translation:history_completed_at', { date: DomHelpers.escapeHtml(completedDate) })}</span>
                     </div>
                 </div>

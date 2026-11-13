@@ -74,7 +74,7 @@ function sourceHeader(item, rowIdx) {
                 <span class="material-symbols-outlined">close</span>
             </button>
             <div class="sample-card-source-meta">
-                <span class="sample-card-source-index">#${item.index}</span>
+                <span class="sample-card-source-index">#${escapeHtml(item.index)}</span>
                 <span class="sample-card-source-label" data-i18n="sample:source_col_header">${t('sample:source_col_header')}</span>
                 ${truncBadge}
             </div>

@@ -11,7 +11,7 @@ import { MessageLogger } from '../ui/message-logger.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { ProgressManager } from './progress-manager.js';
 import { TranslationTracker } from './translation-tracker.js';
-import { t, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
+import { t, tHtml, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
 import {
     overridePanelHtml,
     toggleOverridePanel,
@@ -49,11 +49,11 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
     const fileType = (job.file_type || 'txt').toUpperCase();
     const isPartial = job.status === 'partial';
 
-    const failedBadgeLabel = t('translation:job_card_failed_badge', { count: failedChunks });
+    const failedBadgeLabel = tHtml('translation:job_card_failed_badge', { count: failedChunks });
     const statusBadge = isPartial
-        ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px;" title="${t('translation:job_card_partial_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
+        ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px;" title="${tHtml('translation:job_card_partial_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
         : (failedChunks > 0
-            ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px;" title="${t('translation:job_card_failed_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
+            ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px;" title="${tHtml('translation:job_card_failed_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
             : '');
 
     const naText = t('translation:job_card_na');
@@ -77,7 +77,7 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
     const displayNameFormatted = displayName.charAt(0).toUpperCase() + displayName.slice(1);
 
     const idValue = inputHash || job.translation_id.replace('trans_', '');
-    const typeIdLine = t('translation:job_card_type_id', { type: fileType, id: idValue });
+    const typeIdLine = tHtml('translation:job_card_type_id', { type: fileType, id: idValue });
     const resumeTitle = hasActiveTranslation
         ? t('translation:cannot_resume_in_progress_title')
         : t('translation:resume_btn_title');
@@ -89,6 +89,12 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
     const origProvider = cfg.llm_provider || 'ollama';
     const origModel = cfg.model || '';
     const origEndpoint = cfg.llm_api_endpoint || '';
+
+    // The id is a server value: HTML-escape it for attributes, and JSON-encode
+    // it first where it lands inside an inline-handler JS string literal.
+    const safeTid = DomHelpers.escapeHtml(job.translation_id);
+    const jsTid = DomHelpers.escapeHtml(JSON.stringify(String(job.translation_id)));
+    const safePercent = Number(progressPercent) || 0;
 
     return `
         <div class="resumable-job-card" style="border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 15px; border-radius: 8px; background: #f9fafb;">
@@ -106,12 +112,12 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
                 </div>
 
                 <div style="display: flex; gap: 10px; flex-shrink: 0;">
-                    <button class="btn btn-primary" onclick="resumeJob('${job.translation_id}')"
+                    <button class="btn btn-primary" onclick="resumeJob(${jsTid})"
                             title="${resumeTitle}"
                             ${hasActiveTranslation ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
                         ${t('translation:job_card_resume_btn')}
                     </button>
-                    <button class="btn btn-danger" onclick="deleteCheckpoint('${job.translation_id}')" title="${t('translation:job_card_delete_title')}">
+                    <button class="btn btn-danger" onclick="deleteCheckpoint(${jsTid})" title="${t('translation:job_card_delete_title')}">
                         ${t('translation:job_card_delete_btn')}
                     </button>
                 </div>
@@ -119,10 +125,10 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
 
             <div style="margin-bottom: 10px;">
                 <div style="display: flex; justify-content: space-between; font-size: 13px; color: #6b7280; margin-bottom: 5px;">
-                    <span>${t('translation:job_card_progress', { completed: completedChunks, total: totalChunks, percent: progressPercent })}</span>
+                    <span>${tHtml('translation:job_card_progress', { completed: completedChunks, total: totalChunks, percent: progressPercent })}</span>
                 </div>
                 <div style="width: 100%; background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
-                    <div style="width: ${progressPercent}%; background: #3b82f6; height: 100%; transition: width 0.3s;"></div>
+                    <div style="width: ${safePercent}%; background: #3b82f6; height: 100%; transition: width 0.3s;"></div>
                 </div>
             </div>
 
@@ -131,7 +137,7 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
                     <span>${t('translation:job_card_created', { date: createdDate })}</span>
                     <span>${t('translation:job_card_paused', { date: pausedDate })}</span>
                 </div>
-                <button class="resume-change-model" data-tid="${job.translation_id}"
+                <button class="resume-change-model" data-tid="${safeTid}"
                         title="${t('translation:resume_change_model_title')}"
                         ${hasActiveTranslation ? 'disabled' : ''}
                         style="display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 2px 4px; font-size: 12px; color: #3b82f6; cursor: pointer; white-space: nowrap;${hasActiveTranslation ? ' opacity: 0.5; cursor: not-allowed;' : ''}">

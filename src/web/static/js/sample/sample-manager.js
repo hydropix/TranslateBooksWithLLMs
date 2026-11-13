@@ -228,7 +228,7 @@ function renderWarnings(box, warnings) {
             const key = `sample:${w.code}`;
             const params = w.params || {};
             const paramsAttr = DomHelpers.escapeHtml(JSON.stringify(params));
-            return `<div class="sample-warning">⚠ <span data-i18n="${key}" data-i18n-params='${paramsAttr}'>${DomHelpers.escapeHtml(t(key, params))}</span></div>`;
+            return `<div class="sample-warning">⚠ <span data-i18n="${DomHelpers.escapeHtml(key)}" data-i18n-params='${paramsAttr}'>${DomHelpers.escapeHtml(t(key, params))}</span></div>`;
         }
         return `<div class="sample-warning">⚠ ${DomHelpers.escapeHtml(String(w))}</div>`;
     }).join('');

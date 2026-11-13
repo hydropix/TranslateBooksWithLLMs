@@ -15,7 +15,7 @@ import { ModalStack } from '../ui/modal-stack.js';
 import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { StateManager } from '../core/state-manager.js';
-import { t } from '../i18n/i18n.js';
+import { t, tHtml } from '../i18n/i18n.js';
 
 const STORAGE_KEY = 'tbl_pricing_overrides_v1';
 
@@ -207,7 +207,7 @@ function renderBadge(badge, state) {
         badge.classList.add('cost-free');
         badge.innerHTML = `
             <span class="cost-badge-icon material-symbols-outlined">verified</span>
-            <span class="cost-badge-text">${state.message || t('settings:cost_free_local')}</span>
+            <span class="cost-badge-text">${DomHelpers.escapeHtml(state.message || t('settings:cost_free_local'))}</span>
         `;
         badge.title = '';
         return;
@@ -231,7 +231,7 @@ function renderBadge(badge, state) {
             <span class="cost-badge-icon material-symbols-outlined">help</span>
             <span class="cost-badge-text">${t('settings:cost_unknown')}</span>
             <button type="button" class="cost-badge-edit" data-action="edit"
-                title="${t('settings:cost_set_prices_title', { provider, model })}">${t('settings:cost_set_prices')}</button>
+                title="${tHtml('settings:cost_set_prices_title', { provider, model })}">${t('settings:cost_set_prices')}</button>
         `;
         badge.title = `${provider} / ${model}`;
         return;
@@ -493,7 +493,7 @@ export const CostEstimator = {
                             <div class="neu-inset-light">
                                 <input type="number" min="0" step="0.001"
                                     id="costPriceInput" class="form-control"
-                                    value="${current.input}">
+                                    value="${DomHelpers.escapeHtml(current.input)}">
                             </div>
                         </div>
                         <div class="form-group">
@@ -501,7 +501,7 @@ export const CostEstimator = {
                             <div class="neu-inset-light">
                                 <input type="number" min="0" step="0.001"
                                     id="costPriceOutput" class="form-control"
-                                    value="${current.output}">
+                                    value="${DomHelpers.escapeHtml(current.output)}">
                             </div>
                         </div>
                     </div>

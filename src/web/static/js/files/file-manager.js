@@ -158,7 +158,7 @@ export const FileManager = {
                 <input type="checkbox" class="file-checkbox" data-filename="${safeFilename}">
             </td>
             <td style="max-width: 0;">
-                <span class="clickable-filename" data-filename="${safeFilename}" data-action="open" title="${tooltipInfo}">
+                <span class="clickable-filename" data-filename="${safeFilename}" data-action="open" title="${DomHelpers.escapeHtml(tooltipInfo)}">
                     <span class="material-symbols-outlined file-icon-cell">${fileIconClass}</span>
                     <span class="filename-text">${safeFilename}</span>
                 </span>

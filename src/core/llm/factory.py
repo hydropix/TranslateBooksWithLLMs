@@ -113,7 +113,7 @@ def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
         )
         return GeminiProvider(
             api_key=api_key,
-            model=kwargs.get("model", "gemini-2.0-flash")
+            model=kwargs.get("model", "gemini-3.6-flash")
         )
     elif provider_type.lower() == "openrouter":
         api_key = _require_key(

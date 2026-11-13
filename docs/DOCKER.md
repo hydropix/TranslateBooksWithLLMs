@@ -201,7 +201,7 @@ docker run -d \
   -p 5000:5000 \
   -e LLM_PROVIDER=gemini \
   -e GEMINI_API_KEY=your_api_key_here \
-  -e DEFAULT_MODEL=gemini-2.0-flash \
+  -e DEFAULT_MODEL=gemini-3.6-flash \
   ghcr.io/hydropix/translatebookswithllms:latest
 ```
 

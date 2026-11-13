@@ -28,7 +28,7 @@ services:
 
       # Gemini Configuration (if using Gemini provider)
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
 
       # OpenAI Configuration (if using OpenAI provider)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

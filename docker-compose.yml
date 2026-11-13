@@ -58,7 +58,7 @@ services:
       # - OPENAI_API_KEY=
 
       # - GEMINI_API_KEY=
-      # - GEMINI_MODEL=gemini-2.0-flash
+      # - GEMINI_MODEL=gemini-3.6-flash
       # - GEMINI_SAFETY_THRESHOLD=BLOCK_NONE
 
       # - OPENROUTER_API_KEY=

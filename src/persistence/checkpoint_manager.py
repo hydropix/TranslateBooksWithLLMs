@@ -2,8 +2,10 @@
 Checkpoint manager for translation job persistence and resume functionality.
 """
 
+import os
 import re
 import shutil
+import time
 from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
 from pathlib import Path
 from .database import Database
@@ -28,6 +30,9 @@ class CheckpointManager:
     Manages translation job checkpoints including database persistence
     and file storage for uploaded files.
     """
+
+    # Age below which cleanup_orphan_uploads never deletes an item.
+    ORPHAN_GRACE_SECONDS = 3600
 
     def __init__(self, db_path: str = "data/jobs.db", server_session_id: Optional[str] = None):
         """
@@ -69,7 +74,8 @@ class CheckpointManager:
 
         # Create job in database with updated config and server session ID
         success = self.db.create_job(
-            translation_id, file_type, config, self.server_session_id
+            translation_id, file_type, config, self.server_session_id,
+            owner_pid=os.getpid(),
         )
 
         return success
@@ -408,8 +414,12 @@ class CheckpointManager:
 
         These are "orphan" items left behind from previous incomplete cleanups.
         Handles:
-        - trans_xxx folders (job ID folders)
+        - job folders (trans_xxx from the web UI, cli_xxx from the CLI, ...):
+          deleted only when no job row carries that ID
         - hash_filename files (legacy upload files)
+
+        Items modified within ORPHAN_GRACE_SECONDS are kept: another process
+        creates a job folder just before it inserts the job row.
 
         Returns:
             Number of orphan items deleted
@@ -451,11 +461,18 @@ class CheckpointManager:
 
             is_orphan = True
 
+            try:
+                if time.time() - item.stat().st_mtime < self.ORPHAN_GRACE_SECONDS:
+                    continue
+            except OSError:
+                continue
+
             if item.is_dir():
-                # It's a folder - check if it's a job ID folder
-                if item_name.startswith('trans_'):
-                    if item_name in db_job_ids:
-                        is_orphan = False
+                # A job folder is named after its job ID, whatever the prefix
+                # (trans_ for web jobs, cli_ for CLI jobs). Only a folder no
+                # job row points to is an orphan.
+                if item_name in db_job_ids:
+                    is_orphan = False
             else:
                 # It's a file - check if it's referenced by any job
                 if item_name in preserved_files:

@@ -26,6 +26,49 @@ def sanitize_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def is_process_alive(pid: Optional[int]) -> bool:
+    """Best-effort check that a process with this PID is running.
+
+    Never sends a signal on Windows: os.kill(pid, 0) there delivers
+    CTRL_C_EVENT instead of probing, so the Win32 API is queried directly.
+    A PID can be reused after its process exits, so a True answer may
+    occasionally be a false positive; callers only use it to *skip* work.
+    """
+    if not pid or pid <= 0:
+        return False
+    if os.name == 'nt':
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        process_query_limited_information = 0x1000
+        still_active = 259
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            # Access denied means the process exists but belongs to someone else.
+            return ctypes.get_last_error() == 5
+        try:
+            exit_code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 class Database:
     """
     Manages SQLite database for translation job checkpoints.
@@ -96,6 +139,11 @@ class Database:
             columns = [row[1] for row in cursor.fetchall()]
             if 'server_session_id' not in columns:
                 cursor.execute("ALTER TABLE translation_jobs ADD COLUMN server_session_id TEXT")
+            # PID of the process that created the job, so a server restart
+            # does not flip the row of a job another live process (the CLI,
+            # a second server) is still running.
+            if 'owner_pid' not in columns:
+                cursor.execute("ALTER TABLE translation_jobs ADD COLUMN owner_pid INTEGER")
 
             # Checkpoint chunks table
             cursor.execute("""
@@ -142,7 +190,8 @@ class Database:
         translation_id: str,
         file_type: str,
         config: Dict[str, Any],
-        server_session_id: Optional[str] = None
+        server_session_id: Optional[str] = None,
+        owner_pid: Optional[int] = None
     ) -> bool:
         """
         Create a new translation job record.
@@ -152,6 +201,7 @@ class Database:
             file_type: Type of file (txt, srt, epub)
             config: Full translation configuration
             server_session_id: Unique identifier for the current server session
+            owner_pid: PID of the process running the job (see reset_running_jobs)
 
         Returns:
             True if created successfully
@@ -176,15 +226,17 @@ class Database:
 
                 cursor.execute("""
                     INSERT INTO translation_jobs
-                    (translation_id, status, file_type, config, progress, server_session_id)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (translation_id, status, file_type, config, progress, server_session_id,
+                     owner_pid)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     translation_id,
                     'running',
                     file_type,
                     json.dumps(sanitize_config_secrets(config)),
                     json.dumps(progress),
-                    server_session_id
+                    server_session_id,
+                    owner_pid
                 ))
 
                 conn.commit()
@@ -620,6 +672,8 @@ class Database:
 
         Only resets jobs that have a different server_session_id than the current one,
         preserving jobs that are actually running in the current session.
+        A job whose recorded owner process is another, still-alive process
+        (a CLI run has no server session) is left alone too.
 
         This should be called on server startup to handle jobs that were
         interrupted by a server crash or restart.
@@ -635,18 +689,30 @@ class Database:
                 conn = self._get_connection()
                 cursor = conn.cursor()
 
-                # Reset jobs that are 'running' but from a different session
-                # (or have no session_id, meaning they're from before this feature)
+                # Candidates: 'running' rows from a different session (or with
+                # no session_id: legacy rows and CLI jobs).
                 cursor.execute("""
-                    UPDATE translation_jobs
-                    SET status = 'interrupted',
-                        updated_at = CURRENT_TIMESTAMP,
-                        paused_at = CURRENT_TIMESTAMP
+                    SELECT translation_id, owner_pid FROM translation_jobs
                     WHERE status = 'running'
                     AND (server_session_id IS NULL OR server_session_id != ?)
                 """, (current_session_id,))
+                own_pid = os.getpid()
+                stale_ids = [
+                    row['translation_id'] for row in cursor.fetchall()
+                    if not (row['owner_pid'] and row['owner_pid'] != own_pid
+                            and is_process_alive(row['owner_pid']))
+                ]
 
-                affected_rows = cursor.rowcount
+                affected_rows = 0
+                for translation_id in stale_ids:
+                    cursor.execute("""
+                        UPDATE translation_jobs
+                        SET status = 'interrupted',
+                            updated_at = CURRENT_TIMESTAMP,
+                            paused_at = CURRENT_TIMESTAMP
+                        WHERE translation_id = ? AND status = 'running'
+                    """, (translation_id,))
+                    affected_rows += cursor.rowcount
                 conn.commit()
                 return affected_rows
             except Exception as e:

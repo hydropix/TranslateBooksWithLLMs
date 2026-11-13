@@ -235,10 +235,12 @@ async def test_persistent_rate_limit_raises_for_upstream_pause(litellm_stub, no_
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_without_pool_keeps_plain_backoff(litellm_stub, no_sleep):
+async def test_rate_limit_without_pool_retries_then_pauses(litellm_stub, no_sleep):
     """With credentials in env vars there is no pool and nothing to rotate:
-    the 429 stays an ordinary transient retry that ends in None."""
+    the 429 is retried with plain backoff, then RateLimitError propagates so
+    the job pauses and checkpoints instead of failing the chunk."""
     # The provider's own binding: another test may reload src.config.
+    from src.core.llm.exceptions import RateLimitError
     from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
 
     litellm_stub.acompletion.side_effect = FakeLiteLLMRateLimitError(
@@ -246,7 +248,8 @@ async def test_rate_limit_without_pool_keeps_plain_backoff(litellm_stub, no_slee
     )
 
     provider = LiteLLMProvider(model="openai/gpt-4o")
-    assert await provider.generate("Hello") is None
+    with pytest.raises(RateLimitError):
+        await provider.generate("Hello")
     assert litellm_stub.acompletion.call_count == MAX_TRANSLATION_ATTEMPTS
 
 

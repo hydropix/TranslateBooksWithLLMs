@@ -18,7 +18,7 @@ import json
 
 from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError
+from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -325,6 +325,10 @@ class MistralProvider(LLMProvider):
                     continue
                 return None
 
+            except (RateLimitError, ContextOverflowError):
+                # Must reach the pipeline: a rate-limit pause or a chunk split,
+                # never a retried-then-failed chunk.
+                raise
             except Exception as e:
                 print(f"Mistral API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
                 attempt += 1

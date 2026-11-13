@@ -550,7 +550,11 @@ class OllamaProvider(LLMProvider):
                     # Ollama reports failures as {"error": "..."}; fall back to the
                     # raw body when the server answers with plain text or HTML.
                     try:
-                        error_message = e.response.json().get("error") or str(e)
+                        error = e.response.json().get("error")
+                        # OpenAI-style gateways nest it: {"error": {"message": ...}}
+                        if isinstance(error, dict):
+                            error = error.get("message")
+                        error_message = str(error or e)
                     except Exception:
                         try:
                             error_message = e.response.text.strip() or str(e)
@@ -626,7 +630,7 @@ class OllamaProvider(LLMProvider):
                     print(f"{RED}❌ All retry attempts exhausted. Translation failed.{RESET}")
 
                 return None
-            except (RepetitionLoopError, ContextOverflowError):
+            except (RepetitionLoopError, ContextOverflowError, RateLimitError):
                 # These errors should propagate up for handling by translator
                 raise
             except json.JSONDecodeError as e:

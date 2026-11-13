@@ -23,7 +23,7 @@ from typing import Optional, Union, List
 
 from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError
+from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -222,6 +222,13 @@ class LiteLLMProvider(LLMProvider):
                     f"{MAX_TRANSLATION_ATTEMPTS}): {e}"
                 )
                 if attempt >= MAX_TRANSLATION_ATTEMPTS:
+                    if qualname == _RATE_LIMIT_EXCEPTION:
+                        # No key pool to rotate (credentials come from the
+                        # environment): pause the job instead of failing the chunk.
+                        raise RateLimitError(
+                            f"LiteLLM rate limit persisted after {attempt} attempt(s): {e}",
+                            provider="litellm",
+                        ) from e
                     return None
 
                 if qualname in _TRANSIENT_EXCEPTIONS:

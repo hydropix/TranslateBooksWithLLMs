@@ -23,7 +23,7 @@ from src.config import (
     POE_DISABLE_THINKING, POE_DISABLE_WEB_SEARCH
 )
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError
+from ..exceptions import ContextOverflowError, RateLimitError
 from ..cost_tracker import CostTracker, get_current_cost_tracker
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
@@ -623,6 +623,10 @@ class PoeProvider(LLMProvider):
                     continue
                 return None
 
+            except (RateLimitError, ContextOverflowError):
+                # Must reach the pipeline: a rate-limit pause or a chunk split,
+                # never a retried-then-failed chunk.
+                raise
             except Exception as e:
                 print(f"Poe API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
                 attempt += 1

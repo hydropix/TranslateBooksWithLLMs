@@ -11,8 +11,8 @@ import json
 import httpx
 
 from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError
-from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from ..exceptions import ContextOverflowError, RateLimitError
+from ..rate_limit_handler import compute_wait_time, handle_rate_limit, is_retryable_http_status
 from ..utils.context_detection import ContextDetector
 
 from src.config import (
@@ -31,6 +31,7 @@ class OpenAICompatibleProvider(LLMProvider):
                  provider_name: str = "openai-compatible"):
         # Skip pool creation if no key (local servers like llama.cpp don't need one)
         super().__init__(model, api_keys=api_key, provider_name=provider_name)
+        self._provider_name = provider_name
         self.api_endpoint = self._normalize_endpoint(api_endpoint)
         self.context_window = context_window
         self.log_callback = log_callback
@@ -282,6 +283,16 @@ class OpenAICompatibleProvider(LLMProvider):
                     await asyncio.sleep(2)
                     continue
 
+                # Keyless endpoint still answering 429 after every retry: pause
+                # the job (checkpoint) instead of failing the chunk.
+                if e.response is not None and e.response.status_code == 429:
+                    raise RateLimitError(
+                        f"{self._provider_name} rate limit persisted after "
+                        f"{MAX_TRANSLATION_ATTEMPTS} attempt(s): {error_message}",
+                        retry_after=compute_wait_time(e.response.headers, attempt),
+                        provider=self._provider_name,
+                    )
+
                 # All retries exhausted
                 if self.log_callback:
                     self.log_callback("llm_http_error_fatal",
@@ -328,6 +339,10 @@ class OpenAICompatibleProvider(LLMProvider):
                     print(f"{RED}❌ All retry attempts exhausted. Translation failed.{RESET}")
 
                 return None
+            except (RateLimitError, ContextOverflowError):
+                # Must reach the pipeline: a rate-limit pause or a chunk split,
+                # never a retried-then-failed chunk.
+                raise
             except Exception as e:
                 RED = '\033[91m'
                 YELLOW = '\033[93m'

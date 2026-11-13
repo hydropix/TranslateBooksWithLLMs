@@ -1,9 +1,10 @@
 """
-Test that technical content prompt section is NOT added when protect_technical=True.
+Test that the technical content prompt section is never added.
 
-With the new placeholder-based protection system, technical content (code, formulas,
-HTML entities) is hidden from the LLM in placeholders. Therefore, the system prompt
-section instructing the LLM to "not translate code" is obsolete and should not be added.
+The preserve_technical_content option has no effect on the prompt: the
+TECHNICAL_CONTENT_SECTION is not emitted, and placeholder-based technical
+protection is currently disabled (TECHNICAL_PROTECTION_ENABLED = False in
+src/core/epub/xhtml_translator.py, owner decision).
 """
 
 import pytest
@@ -108,13 +109,13 @@ def test_rationale_documentation():
     source_file = Path(__file__).parent.parent / "src" / "prompts" / "prompts.py"
     source_code = source_file.read_text(encoding='utf-8')
 
-    # Verify that there's a comment explaining why the section is not added
-    assert "placeholder system" in source_code.lower(), (
-        "Code should document that placeholder system handles protection"
+    # The comment must state the real situation: technical protection is
+    # disabled (owner decision), not silently handled by placeholders.
+    assert "TECHNICAL_PROTECTION_ENABLED = False" in source_code, (
+        "Code should point at the switch that keeps technical protection disabled"
     )
-
-    assert "hidden in placeholders" in source_code.lower(), (
-        "Code should explain that content is hidden in placeholders"
+    assert "technical content protection is currently disabled" in source_code.lower(), (
+        "Code should state that technical content protection is disabled"
     )
 
 

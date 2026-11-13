@@ -47,10 +47,11 @@ def test_plain_text_cleanup_forbids_merging():
     assert "Merge incorrectly split paragraphs" not in result.system
 
 
-def test_placeholder_cleanup_still_merges():
-    """The non-plain path keeps today's cleanup wording unchanged."""
+def test_placeholder_cleanup_does_not_merge():
+    """The placeholder path demands the exact layout, so cleanup must not ask to merge."""
     result = _prompt(has_placeholders=True, prompt_options={"text_cleanup": True})
-    assert "Merge incorrectly split paragraphs" in result.system
+    assert "never merge or split paragraphs" in result.system
+    assert "Merge incorrectly split paragraphs" not in result.system
 
 
 def test_first_attempt_never_carries_the_retry_rules():

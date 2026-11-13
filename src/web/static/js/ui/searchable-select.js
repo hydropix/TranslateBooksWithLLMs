@@ -87,14 +87,16 @@ export class SearchableSelect {
 
         // Debug: log if no options found
         if (this.allOptions.length === 0) {
-            console.warn(`[SearchableSelect] No options found for #${this.originalSelect.id}, retrying...`);
+            console.debug(`[SearchableSelect] No options found for #${this.originalSelect.id}, retrying...`);
             // Retry after a short delay (options might not be parsed yet)
             setTimeout(() => {
                 this._updateFromOriginalSelect();
                 if (this.allOptions.length > 0) {
                     console.log(`[SearchableSelect] Options loaded for #${this.originalSelect.id}: ${this.allOptions.length} options`);
                 } else {
-                    console.error(`[SearchableSelect] Still no options for #${this.originalSelect.id}`);
+                    // Not an error: a list still loading only holds its placeholder,
+                    // and the MutationObserver picks the options up once they arrive.
+                    console.debug(`[SearchableSelect] Still no options for #${this.originalSelect.id}`);
                 }
             }, 100);
         }

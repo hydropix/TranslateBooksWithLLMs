@@ -1289,6 +1289,43 @@ def _replace_body(
     return xml_success
 
 
+def _mark_file_untranslated(
+    stats: TranslationMetrics,
+    chunk_count: int,
+    checkpoint_manager: Optional[Any],
+    translation_id: Optional[str],
+    file_href: Optional[str],
+    log_callback: Optional[Callable] = None,
+) -> None:
+    """Record that every chunk of a file fell back to its source text.
+
+    Used when the translated chunks could not be written back into the body
+    (the body is left untouched, i.e. in the source language). The in-memory
+    outcomes and the persisted partial state are both updated, so the EPUB file
+    loop lists the file in `unfinished_units` and a later pass retries it.
+    """
+    for index in range(chunk_count):
+        stats.record_chunk_outcome(index, CHUNK_UNTRANSLATED)
+
+    if not (checkpoint_manager and translation_id and file_href):
+        return
+    try:
+        state = checkpoint_manager.load_xhtml_partial_state(translation_id, file_href)
+    except Exception:
+        state = None
+    if state is None or not state.chunk_statuses:
+        return
+    state.chunk_statuses = [
+        status if status == CHUNK_PENDING else CHUNK_UNTRANSLATED
+        for status in state.chunk_statuses
+    ]
+    try:
+        checkpoint_manager.save_xhtml_partial_state(translation_id, file_href, state)
+    except Exception as e:
+        _log_error(log_callback, "replace_body_state_error",
+                   f"Could not record the failed body replacement in the checkpoint: {e}")
+
+
 def _report_statistics(
     stats: TranslationMetrics,
     log_callback: Optional[Callable] = None,
@@ -1913,6 +1950,13 @@ async def translate_xhtml_simplified(
 
     # 6. Replace body
     xml_success = _replace_body(body_element, final_html, log_callback)
+    if not xml_success:
+        # The body kept its source text, so every chunk of this file is still
+        # owed. Say so in the persisted statuses: otherwise they all read
+        # 'translated' and the file would look clean to the retry map.
+        _mark_file_untranslated(
+            stats, len(chunks), checkpoint_manager, translation_id, file_href, log_callback
+        )
 
     # 7. Partial state deletion now handled in translator.py after save_epub_file
     # This ensures atomicity: state deleted ONLY after file is successfully saved

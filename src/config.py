@@ -5,7 +5,7 @@ import os
 import sys
 import logging
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -711,44 +711,47 @@ MODEL_FAMILY_CONTEXT_DEFAULTS = {
 DEFAULT_CONTEXT_FALLBACK = 2048
 
 
+def _live(name: str):
+    """Dataclass default resolved at instantiation from this module's globals."""
+    return field(default_factory=lambda: globals()[name])
+
+
 @dataclass
 class TranslationConfig:
-    """Unified configuration for both CLI and web interfaces"""
+    """Unified configuration for both CLI and web interfaces.
+
+    Defaults that come from settings are resolved when an instance is
+    created, from the current module globals, so values refreshed by
+    reload_config() (or patched in tests) reach new instances.
+    """
     
     # Core settings
-    source_language: str = DEFAULT_SOURCE_LANGUAGE
-    target_language: str = DEFAULT_TARGET_LANGUAGE
-    model: str = DEFAULT_MODEL
-    api_endpoint: str = API_ENDPOINT
+    source_language: str = _live('DEFAULT_SOURCE_LANGUAGE')
+    target_language: str = _live('DEFAULT_TARGET_LANGUAGE')
+    model: str = _live('DEFAULT_MODEL')
+    api_endpoint: str = _live('API_ENDPOINT')
     
-    # LLM Provider settings
-    llm_provider: str = LLM_PROVIDER
-    gemini_api_key: str = GEMINI_API_KEY
-    openai_api_key: str = OPENAI_API_KEY
-    openrouter_api_key: str = OPENROUTER_API_KEY
-    mistral_api_key: str = MISTRAL_API_KEY
-    deepseek_api_key: str = DEEPSEEK_API_KEY
-    poe_api_key: str = POE_API_KEY
-    nim_api_key: str = NIM_API_KEY
+    # LLM Provider settings (credentials live in ProviderConfig)
+    llm_provider: str = _live('LLM_PROVIDER')
 
     # LLM parameters
-    timeout: int = REQUEST_TIMEOUT
-    max_attempts: int = MAX_TRANSLATION_ATTEMPTS
+    timeout: int = _live('REQUEST_TIMEOUT')
+    max_attempts: int = _live('MAX_TRANSLATION_ATTEMPTS')
     retry_delay: int = 2  # Fixed retry delay in seconds
-    context_window: int = OLLAMA_NUM_CTX
+    context_window: int = _live('OLLAMA_NUM_CTX')
 
     # Context optimization
-    auto_adjust_context: bool = AUTO_ADJUST_CONTEXT
-    min_chunk_size: int = MIN_CHUNK_SIZE
-    max_chunk_size: int = MAX_CHUNK_SIZE
+    auto_adjust_context: bool = _live('AUTO_ADJUST_CONTEXT')
+    min_chunk_size: int = _live('MIN_CHUNK_SIZE')
+    max_chunk_size: int = _live('MAX_CHUNK_SIZE')
 
     # Token-based chunking
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK
-    soft_limit_ratio: float = SOFT_LIMIT_RATIO
+    max_tokens_per_chunk: int = _live('MAX_TOKENS_PER_CHUNK')
+    soft_limit_ratio: float = _live('SOFT_LIMIT_RATIO')
 
     # Parallel translation (concurrent chunks). Effective value is resolved at
     # run time via resolve_parallel_workers() so local providers stay at 1.
-    parallel_workers: int = PARALLEL_TRANSLATIONS
+    parallel_workers: int = _live('PARALLEL_TRANSLATIONS')
 
     # Interface-specific
     interface_type: str = "cli"  # or "web"
@@ -766,13 +769,6 @@ class TranslationConfig:
             interface_type="cli",
             enable_colors=not args.no_color,
             llm_provider=getattr(args, 'provider', LLM_PROVIDER),
-            gemini_api_key=getattr(args, 'gemini_api_key', GEMINI_API_KEY),
-            openai_api_key=getattr(args, 'openai_api_key', OPENAI_API_KEY),
-            openrouter_api_key=getattr(args, 'openrouter_api_key', OPENROUTER_API_KEY),
-            mistral_api_key=getattr(args, 'mistral_api_key', MISTRAL_API_KEY),
-            deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
-            poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
-            nim_api_key=getattr(args, 'nim_api_key', NIM_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=getattr(args, 'parallel', PARALLEL_TRANSLATIONS)
@@ -815,13 +811,6 @@ class TranslationConfig:
             interface_type="web",
             enable_interruption=True,
             llm_provider=request_data.get('llm_provider', LLM_PROVIDER),
-            gemini_api_key=request_data.get('gemini_api_key', GEMINI_API_KEY),
-            openai_api_key=request_data.get('openai_api_key', OPENAI_API_KEY),
-            openrouter_api_key=request_data.get('openrouter_api_key', OPENROUTER_API_KEY),
-            mistral_api_key=request_data.get('mistral_api_key', MISTRAL_API_KEY),
-            deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
-            poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
-            nim_api_key=request_data.get('nim_api_key', NIM_API_KEY),
             max_tokens_per_chunk=clamped_max_tokens,
             soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=clamped_workers
@@ -839,13 +828,6 @@ class TranslationConfig:
             'retry_delay': self.retry_delay,
             'context_window': self.context_window,
             'llm_provider': self.llm_provider,
-            'gemini_api_key': self.gemini_api_key,
-            'openai_api_key': self.openai_api_key,
-            'openrouter_api_key': self.openrouter_api_key,
-            'mistral_api_key': self.mistral_api_key,
-            'deepseek_api_key': self.deepseek_api_key,
-            'poe_api_key': self.poe_api_key,
-            'nim_api_key': self.nim_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'soft_limit_ratio': self.soft_limit_ratio,
             'parallel_workers': self.parallel_workers

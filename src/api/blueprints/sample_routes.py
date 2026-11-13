@@ -29,8 +29,7 @@ from src.core.glossary.models import GlossaryConfig
 from src.core.llm.factory import create_llm_provider
 from src.core.pricing.pricing_data import get_default_pricing
 from src.core.sampling import cap_chunk_text, select_sample_indices
-from src.api.api_keys import provider_env_var as _provider_env_var
-from src.api.api_keys import resolve_api_key as _resolve_api_key
+from src.api.services.credential_guard import guard_request_credentials
 from src.core.text_processor import split_text_into_chunks
 from src.prompts.prompts import (
     generate_refinement_prompt, generate_translation_prompt,
@@ -271,11 +270,20 @@ def _pick_random_unused_index(total: int, exclude: Set[int]) -> Optional[int]:
 def _instantiate_provider(column: Dict[str, Any]):
     """Build an LLMProvider from a column descriptor.
 
-    Resolves `__USE_ENV__` placeholders to the corresponding env variable.
+    Goes through the shared credential guard: `__USE_ENV__` resolves to the
+    env key, the endpoint must be allowed, and a column that picks its own
+    endpoint must bring its own key. `start_sample_run` already refused such
+    columns; re-checking here keeps the invariant local to the one place that
+    builds the provider.
+
+    Raises:
+        ValueError: when the guard rejects the column.
     """
     provider = (column.get("provider") or "ollama").lower()
-    env_var = _provider_env_var(provider)
-    api_key = _resolve_api_key(column.get("api_key"), env_var) if env_var else None
+    endpoint = column.get("api_endpoint") or column.get("endpoint")
+    api_key, rejection = guard_request_credentials(provider, endpoint, column.get("api_key"))
+    if rejection is not None:
+        raise ValueError(rejection.message)
 
     kwargs: Dict[str, Any] = {
         "model": column.get("model"),
@@ -283,7 +291,6 @@ def _instantiate_provider(column: Dict[str, Any]):
     }
     if api_key:
         kwargs["api_key"] = api_key
-    endpoint = column.get("api_endpoint") or column.get("endpoint")
     if endpoint:
         kwargs["api_endpoint"] = endpoint
 
@@ -847,6 +854,21 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
         columns_raw = data["columns"]
         if not isinstance(columns_raw, list) or len(columns_raw) < 1:
             return jsonify({"error": "columns must be a non-empty list"}), 400
+
+        # Same endpoint/credential guard as /api/translate, before any work:
+        # a column may not route the server's stored key to a host the
+        # request chose.
+        for index, raw in enumerate(columns_raw):
+            if not isinstance(raw, dict):
+                return jsonify({"error": "each column must be an object"}), 400
+            _key, rejection = guard_request_credentials(
+                raw.get("provider"), raw.get("api_endpoint") or raw.get("endpoint"),
+                raw.get("api_key"))
+            if rejection is not None:
+                return jsonify({
+                    "error": rejection.error,
+                    "message": f"Column {index + 1}: {rejection.message}",
+                }), 400
 
         # Build sample items.
         #

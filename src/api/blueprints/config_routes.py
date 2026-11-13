@@ -66,6 +66,10 @@ from src import __version__
 from src.core.llm.base import normalize_api_keys
 from src.api.api_keys import resolve_api_key as _resolve_api_key
 from src.api.services.endpoint_validator import EndpointValidator
+from src.api.services.credential_guard import (
+    DROP as GUARD_DROP,
+    guard_request_credentials,
+)
 
 # Setup logger for this module
 logger = logging.getLogger('config_routes')
@@ -664,23 +668,17 @@ def create_config_blueprint(server_session_id=None):
           would cause HTTP 400 at translation time. Return an explicit error so
           the UI can surface it.
         """
-        ok, err = EndpointValidator.validate(api_endpoint)
-        if not ok:
-            logger.warning("Rejected client-supplied OpenAI endpoint: %s", err)
-            return jsonify({"error": err}), 400
-
-        # When the caller picks a host other than the configured one, the
-        # server's stored key must not follow it (see endpoint_validator).
-        requested = (api_endpoint or '').strip().rstrip('/')
-        is_override = bool(requested) and requested != (
-            _config.OPENAI_API_ENDPOINT or ''
-        ).strip().rstrip('/')
-        api_key = _first_key(_resolve_api_key(
-            provided_api_key,
-            'OPENAI_API_KEY',
-            _config.OPENAI_API_KEY,
-            allow_env_fallback=not is_override,
-        ))
+        # Shared guard (src/api/services/credential_guard.py). DROP rather
+        # than REJECT: listing models of a local OpenAI-compatible server
+        # must keep working while a cloud key sits in .env, and this path
+        # hands the key straight to requests (no provider-factory fallback),
+        # so an overridden endpoint simply gets no stored key.
+        api_key, rejection = guard_request_credentials(
+            'openai', api_endpoint, provided_api_key, on_missing_own_key=GUARD_DROP)
+        if rejection is not None:
+            logger.warning("Rejected client-supplied OpenAI endpoint: %s", rejection.message)
+            return jsonify({"error": rejection.message}), 400
+        api_key = _first_key(api_key)
 
         if api_endpoint:
             base_url = api_endpoint.replace('/chat/completions', '').rstrip('/')
@@ -1069,6 +1067,29 @@ def create_config_blueprint(server_session_id=None):
 
             if not updates:
                 return jsonify({"error": "No valid settings to save"}), 400
+
+            # A saved endpoint becomes the server default, which the stored
+            # key then follows on every later request. Apply the same guard
+            # as a per-request endpoint: it must be allowed, and moving the
+            # default to another host needs the key for that host in the same
+            # save (unless no key is stored).
+            for setting, provider in (('OLLAMA_API_ENDPOINT', 'ollama'),
+                                      ('OPENAI_API_ENDPOINT', 'openai')):
+                new_endpoint = updates.get(setting)
+                if not new_endpoint:
+                    continue
+                _key, rejection = guard_request_credentials(
+                    provider, new_endpoint,
+                    updates.get(f'{provider.upper()}_API_KEY'),
+                    default_endpoint=getattr(_config, setting, '') or '',
+                )
+                if rejection is not None:
+                    logger.warning("Rejected %s in settings: %s", setting, rejection.message)
+                    return jsonify({
+                        "error": rejection.message,
+                        "error_code": "endpoint_rejected",
+                        "fields": [setting],
+                    }), 400
 
             # The UI shows masked webhook secrets. Restore the stored value for
             # parts left masked, but only while the destination is unchanged:

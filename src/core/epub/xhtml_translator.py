@@ -449,9 +449,9 @@ def _create_chunks(
     Returns:
         List of chunk dictionaries
     """
-    # Use container's chunker if provided, otherwise create directly
+    # The caller's max_tokens always wins over the container's default size.
     if container is not None:
-        chunker = container.chunker
+        chunker = container.chunker_for(max_tokens)
     else:
         chunker = HtmlChunker(max_tokens=max_tokens)
 

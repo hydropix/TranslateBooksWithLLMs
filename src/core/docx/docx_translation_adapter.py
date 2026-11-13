@@ -114,7 +114,9 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         Returns:
             List of chunks
         """
-        chunks = self.html_chunker.chunk_html_with_placeholders(
+        # The caller's max_tokens (the user's chunk size) wins over the
+        # container's default configuration.
+        chunks = self.container.chunker_for(max_tokens).chunk_html_with_placeholders(
             text, structure_map
         )
 

@@ -227,5 +227,15 @@
   "cost_reset_default": "重置为默认值",
   "cost_format_free": "免费",
   "cost_format_lt_001": "<$0.01",
-  "model_context_tooltip": "上下文：{{tokens}} 个 token"
+  "model_context_tooltip": "上下文：{{tokens}} 个 token",
+  "provider_desc_local": "本地",
+  "provider_desc_multi": "多提供商",
+  "provider_desc_cloud_api": "云端 API",
+  "provider_desc_cloud": "云端",
+  "provider_desc_compatible": "兼容",
+  "provider_desc_many_models": "200+ 个模型",
+  "model_limit_na": "无",
+  "model_token_limits_tooltip": "输入：{{input}} 个 token，输出：{{output}} 个 token",
+  "model_label_price_per_request": "{{name}}（{{price}}/次）",
+  "model_label_price_per_million": "{{name}}（输入：{{input}}/M，输出：{{output}}/M）"
 }

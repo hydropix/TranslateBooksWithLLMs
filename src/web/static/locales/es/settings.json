@@ -227,5 +227,15 @@
   "cost_reset_default": "Restablecer al valor por defecto",
   "cost_format_free": "Gratis",
   "cost_format_lt_001": "<$0.01",
-  "model_context_tooltip": "Contexto: {{tokens}} tokens"
+  "model_context_tooltip": "Contexto: {{tokens}} tokens",
+  "provider_desc_local": "Local",
+  "provider_desc_multi": "Multiproveedor",
+  "provider_desc_cloud_api": "API en la nube",
+  "provider_desc_cloud": "Nube",
+  "provider_desc_compatible": "Compatible",
+  "provider_desc_many_models": "200+ modelos",
+  "model_limit_na": "N/D",
+  "model_token_limits_tooltip": "Entrada: {{input}} tokens, salida: {{output}} tokens",
+  "model_label_price_per_request": "{{name}} ({{price}}/solicitud)",
+  "model_label_price_per_million": "{{name}} (Entrada: {{input}}/M, Salida: {{output}}/M)"
 }

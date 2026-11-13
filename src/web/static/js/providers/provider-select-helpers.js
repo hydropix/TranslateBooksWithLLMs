@@ -22,15 +22,17 @@ export const PROVIDER_LOGOS = {
     nim: '/static/img/providers/nvidia.png',
 };
 
+// Provider names are brand names and stay untranslated; the short tag shown
+// next to them is an i18n key resolved at render time.
 export const PROVIDER_META = {
-    ollama: { name: 'Ollama', description: 'Local' },
-    poe: { name: 'Poe', description: 'Multi-Provider' },
-    deepseek: { name: 'DeepSeek', description: 'Cloud API' },
-    mistral: { name: 'Mistral', description: 'Cloud API' },
-    gemini: { name: 'Gemini', description: 'Cloud' },
-    openai: { name: 'OpenAI', description: 'Compatible' },
-    openrouter: { name: 'OpenRouter', description: '200+ models' },
-    nim: { name: 'NVIDIA NIM', description: 'Cloud API' },
+    ollama: { name: 'Ollama', descriptionKey: 'settings:provider_desc_local' },
+    poe: { name: 'Poe', descriptionKey: 'settings:provider_desc_multi' },
+    deepseek: { name: 'DeepSeek', descriptionKey: 'settings:provider_desc_cloud_api' },
+    mistral: { name: 'Mistral', descriptionKey: 'settings:provider_desc_cloud_api' },
+    gemini: { name: 'Gemini', descriptionKey: 'settings:provider_desc_cloud' },
+    openai: { name: 'OpenAI', descriptionKey: 'settings:provider_desc_compatible' },
+    openrouter: { name: 'OpenRouter', descriptionKey: 'settings:provider_desc_many_models' },
+    nim: { name: 'NVIDIA NIM', descriptionKey: 'settings:provider_desc_cloud_api' },
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
@@ -86,6 +88,43 @@ function refreshModelTooltips() {
     document.querySelectorAll('option[data-context-length]').forEach((opt) => {
         opt.title = buildModelTooltip(opt.dataset.contextLength, opt.dataset.tooltipDescription);
     });
+    document.querySelectorAll('option[data-input-token-limit]').forEach((opt) => {
+        opt.title = buildGeminiTooltip(opt);
+    });
+    document.querySelectorAll('option[data-model-name]').forEach((opt) => {
+        opt.textContent = buildPricedLabel(opt);
+    });
+}
+
+/**
+ * Gemini tooltip: optional description + input/output token limits, read
+ * from the option's data attributes so it can be rebuilt on a locale switch.
+ */
+function buildGeminiTooltip(opt) {
+    const na = t('settings:model_limit_na');
+    const parts = [];
+    if (opt.dataset.tooltipDescription) parts.push(opt.dataset.tooltipDescription);
+    parts.push(t('settings:model_token_limits_tooltip', {
+        input: opt.dataset.inputTokenLimit || na,
+        output: opt.dataset.outputTokenLimit || na,
+    }));
+    return parts.join(' | ');
+}
+
+/**
+ * OpenRouter / Poe option label with pricing, rebuilt from data attributes.
+ */
+function buildPricedLabel(opt) {
+    const name = opt.dataset.modelName;
+    const perRequest = parseFloat(opt.dataset.pricingRequest);
+    if (perRequest > 0) {
+        return t('settings:model_label_price_per_request', { name, price: `$${perRequest.toFixed(4)}` });
+    }
+    return t('settings:model_label_price_per_million', {
+        name,
+        input: formatPrice(parseFloat(opt.dataset.pricingInput)),
+        output: formatPrice(parseFloat(opt.dataset.pricingOutput)),
+    });
 }
 
 window.addEventListener('localeChanged', refreshModelTooltips);
@@ -114,10 +153,10 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             const opt = document.createElement('option');
             opt.value = m.name;
             opt.textContent = m.displayName || m.name;
-            const parts = [];
-            if (m.description) parts.push(m.description);
-            parts.push(`Input: ${m.inputTokenLimit || 'N/A'} tokens, Output: ${m.outputTokenLimit || 'N/A'} tokens`);
-            opt.title = parts.join(' | ');
+            opt.dataset.inputTokenLimit = m.inputTokenLimit || '';
+            opt.dataset.outputTokenLimit = m.outputTokenLimit || '';
+            if (m.description) opt.dataset.tooltipDescription = m.description;
+            opt.title = buildGeminiTooltip(opt);
             if (m.name === defaultModel) { opt.selected = true; defaultFound = true; }
             selectEl.appendChild(opt);
         });
@@ -152,12 +191,9 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             const modelId = m.id || m.value;
             opt.value = modelId;
             if (m.pricing && (m.pricing.prompt_per_million !== undefined || m.pricing.request)) {
+                opt.dataset.modelName = m.name || modelId;
                 if (m.pricing.request && m.pricing.request > 0) {
-                    opt.textContent = `${m.name || modelId} ($${m.pricing.request.toFixed(4)}/req)`;
-                } else {
-                    const inputPrice = formatPrice(m.pricing.prompt_per_million);
-                    const outputPrice = formatPrice(m.pricing.completion_per_million);
-                    opt.textContent = `${m.name || modelId} (In: ${inputPrice}/M, Out: ${outputPrice}/M)`;
+                    opt.dataset.pricingRequest = m.pricing.request;
                 }
                 if (m.pricing.prompt_per_million !== undefined) {
                     opt.dataset.pricingInput = m.pricing.prompt_per_million;
@@ -165,6 +201,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
                 if (m.pricing.completion_per_million !== undefined) {
                     opt.dataset.pricingOutput = m.pricing.completion_per_million;
                 }
+                opt.textContent = buildPricedLabel(opt);
             } else {
                 opt.textContent = m.label || m.name || modelId;
             }
@@ -205,7 +242,8 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
  */
 export function renderProviderOption(opt) {
     const logo = PROVIDER_LOGOS[opt.value] || '';
-    const meta = PROVIDER_META[opt.value] || { name: opt.label, description: '' };
+    const meta = PROVIDER_META[opt.value] || { name: opt.label };
+    const description = meta.descriptionKey ? t(meta.descriptionKey) : '';
     const checkmark = opt.selected
         ? '<span class="option-check material-symbols-outlined">check</span>'
         : '<span class="option-check"></span>';
@@ -214,7 +252,7 @@ export function renderProviderOption(opt) {
         <span class="provider-option">
             <img src="${logo}" alt="" class="provider-logo" onerror="this.style.display='none'">
             <span class="provider-name">${DomHelpers.escapeHtml(meta.name)}</span>
-            <span class="provider-description">${DomHelpers.escapeHtml(meta.description)}</span>
+            <span class="provider-description">${DomHelpers.escapeHtml(description)}</span>
         </span>
     `;
 }
@@ -224,7 +262,7 @@ export function renderProviderOption(opt) {
  */
 export function providerDisplayHtml(providerValue) {
     const logo = PROVIDER_LOGOS[providerValue] || '';
-    const meta = PROVIDER_META[providerValue] || { name: providerValue, description: '' };
+    const meta = PROVIDER_META[providerValue] || { name: providerValue };
     return `
         <span class="provider-option">
             <img src="${logo}" alt="" class="provider-logo" onerror="this.style.display='none'">

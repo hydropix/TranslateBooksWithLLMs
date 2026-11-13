@@ -187,7 +187,7 @@ export const SampleTable = {
                 return `
                     <div class="sample-phase sample-phase-error">
                         <div class="sample-phase-label">${escapeHtml(label)}</div>
-                        <div class="sample-error-text">${escapeHtml(block.error || 'Error')}</div>
+                        <div class="sample-error-text">${escapeHtml(block.error || t('errors:unknown_error'))}</div>
                         ${metricsLine(block.metrics)}
                     </div>
                 `;

@@ -310,5 +310,6 @@
   "file_status_error": "Error",
   "file_status_missing_api_key": "Error: falta la clave API",
   "file_status_path_error": "Error de ruta",
-  "file_status_initiation_error": "Error al iniciar"
+  "file_status_initiation_error": "Error al iniciar",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} tokens"
 }

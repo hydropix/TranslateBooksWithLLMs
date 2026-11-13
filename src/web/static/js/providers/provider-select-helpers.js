@@ -281,7 +281,8 @@ export function attachProviderSearchable(selectEl, { placeholder, onChange } = {
     if (!selectEl) return null;
     const id = selectEl.id;
     const instance = SearchableSelectFactory.create(selectEl, {
-        placeholder: placeholder || t('settings:search_providers_placeholder'),
+        placeholder,
+        placeholderKey: placeholder ? null : 'settings:search_providers_placeholder',
         showBadge: false,
         renderOption: renderProviderOption,
         onSelect: (option) => {
@@ -306,7 +307,8 @@ export function attachProviderSearchable(selectEl, { placeholder, onChange } = {
 export function attachModelSearchable(selectEl, { placeholder, onChange, allowCustomValue = true } = {}) {
     if (!selectEl) return null;
     return SearchableSelectFactory.create(selectEl, {
-        placeholder: placeholder || t('settings:search_models_placeholder'),
+        placeholder,
+        placeholderKey: placeholder ? null : 'settings:search_models_placeholder',
         allowCustomValue,
         onSelect: (option) => {
             if (typeof onChange === 'function') onChange(option.value);

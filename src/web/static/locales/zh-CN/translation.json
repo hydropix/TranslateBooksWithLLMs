@@ -310,5 +310,6 @@
   "file_status_error": "错误",
   "file_status_missing_api_key": "错误：缺少 API 密钥",
   "file_status_path_error": "路径错误",
-  "file_status_initiation_error": "启动失败"
+  "file_status_initiation_error": "启动失败",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} 个 token"
 }

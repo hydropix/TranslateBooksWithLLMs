@@ -336,14 +336,14 @@ function buildColumnCard(idx, col) {
         return `<option value="${value}" ${selected}>${meta.name}</option>`;
     }).join('');
 
-    const ciOptions = [`<option value="">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
+    const ciOptions = [`<option value="" data-i18n="settings:select_none">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
         .concat(customInstructionFiles.map((f) => {
             const sel = col.custom_instruction_file === f.filename ? 'selected' : '';
             return `<option value="${DomHelpers.escapeHtml(f.filename)}" ${sel}>${DomHelpers.escapeHtml(f.display_name || f.filename)}</option>`;
         }))
         .join('');
 
-    const glossaryOptions = [`<option value="">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
+    const glossaryOptions = [`<option value="" data-i18n="settings:select_none">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
         .concat(glossaryList.map((g) => {
             const sel = String(col.glossary_id) === String(g.id) ? 'selected' : '';
             return `<option value="${DomHelpers.escapeHtml(String(g.id))}" ${sel}>${DomHelpers.escapeHtml(g.name || `#${g.id}`)}</option>`;

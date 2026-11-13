@@ -310,5 +310,6 @@
   "file_status_error": "Fehler",
   "file_status_missing_api_key": "Fehler: API-Schlüssel fehlt",
   "file_status_path_error": "Pfadfehler",
-  "file_status_initiation_error": "Start fehlgeschlagen"
+  "file_status_initiation_error": "Start fehlgeschlagen",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} Tokens"
 }

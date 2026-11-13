@@ -649,7 +649,7 @@ export const ProviderManager = {
             // factored into provider-select-helpers.js so the Sample tab
             // column dropdowns produce visually identical UI.
             SearchableSelectFactory.create('llmProvider', {
-                placeholder: t('settings:search_providers_placeholder'),
+                placeholderKey: 'settings:search_providers_placeholder',
                 showBadge: false,
                 renderOption: renderProviderOption,
                 onSelect: (option) => {
@@ -681,7 +681,7 @@ export const ProviderManager = {
         const modelSelect = DomHelpers.getElement('model');
         if (modelSelect) {
             SearchableSelectFactory.create('model', {
-                placeholder: t('settings:search_models_placeholder'),
+                placeholderKey: 'settings:search_models_placeholder',
                 allowCustomValue: true, // Allow custom bot names for Poe
                 onSelect: (option) => {
                     // Trigger model detection check

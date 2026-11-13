@@ -310,5 +310,6 @@
   "file_status_error": "Error",
   "file_status_missing_api_key": "Error: missing API key",
   "file_status_path_error": "Path error",
-  "file_status_initiation_error": "Failed to start"
+  "file_status_initiation_error": "Failed to start",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} tokens"
 }

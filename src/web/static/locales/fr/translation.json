@@ -310,5 +310,6 @@
   "file_status_error": "Erreur",
   "file_status_missing_api_key": "Erreur : clé API manquante",
   "file_status_path_error": "Erreur de chemin",
-  "file_status_initiation_error": "Échec du démarrage"
+  "file_status_initiation_error": "Échec du démarrage",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} tokens"
 }

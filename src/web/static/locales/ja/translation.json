@@ -310,5 +310,6 @@
   "file_status_error": "エラー",
   "file_status_missing_api_key": "エラー: APIキーがありません",
   "file_status_path_error": "パスエラー",
-  "file_status_initiation_error": "開始に失敗しました"
+  "file_status_initiation_error": "開始に失敗しました",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} トークン"
 }

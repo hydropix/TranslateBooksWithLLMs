@@ -310,5 +310,6 @@
   "file_status_error": "오류",
   "file_status_missing_api_key": "오류: API 키 없음",
   "file_status_path_error": "경로 오류",
-  "file_status_initiation_error": "시작 실패"
+  "file_status_initiation_error": "시작 실패",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} 토큰"
 }

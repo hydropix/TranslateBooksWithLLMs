@@ -55,6 +55,10 @@ export class SearchableSelect {
             // defaults are resolved at render time (see _placeholderText /
             // _noSelectionText) and follow a UI language switch.
             placeholder: options.placeholder || null,
+            // i18n key for the search placeholder; wins over `placeholder`
+            // and is re-resolved on every render, so it follows a UI
+            // language switch.
+            placeholderKey: options.placeholderKey || null,
             noSelectionText: options.noSelectionText || null,
             allowCustomValue: options.allowCustomValue || false,
             onSelect: options.onSelect || null,
@@ -250,6 +254,7 @@ export class SearchableSelect {
      * @returns {string}
      */
     _placeholderText() {
+        if (this.options.placeholderKey) return t(this.options.placeholderKey);
         return this.options.placeholder || t('common:searchable_select_search_placeholder');
     }
 

@@ -606,10 +606,11 @@ def _create_llm_client(
 ) -> Any:
     """Create the LLM client for this job, or None when it cannot be created.
 
-    ``create_llm_client`` returns None for an unknown provider or a missing
-    required key ("use the default client"). The EPUB pipeline has no default
-    client to fall back to, so None, like a creation error, is reported to the
-    job's log and returned for the caller to stop on; it is never passed on.
+    ``create_llm_client`` raises ``LLMClientConfigError`` for an unknown
+    provider or a missing required key. The EPUB pipeline has no default
+    client to fall back to, so a creation error (or a None result from a
+    stubbed factory) is reported to the job's log and None is returned for
+    the caller to stop on; it is never passed on.
     """
     from ..llm_client import create_llm_client
 

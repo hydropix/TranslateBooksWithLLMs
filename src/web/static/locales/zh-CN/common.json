@@ -74,5 +74,11 @@
   "notification_test_failed": "通知测试失败：{{error}}",
   "notifications_preset_applied": "已应用通知预设：{{name}}",
 
-  "endpoint_reset_log": "端点已重置为服务器默认值"
+  "endpoint_reset_log": "端点已重置为服务器默认值",
+  "searchable_select_no_results": "未找到结果",
+  "searchable_select_use_custom_value": "按 Enter 使用“{{value}}”",
+  "searchable_select_model_count_one": "{{count}} 个模型",
+  "searchable_select_model_count_other": "{{count}} 个模型",
+  "searchable_select_search_placeholder": "搜索...",
+  "searchable_select_no_selection": "请选择一个选项..."
 }

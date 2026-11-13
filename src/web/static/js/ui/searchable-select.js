@@ -10,10 +10,30 @@
  */
 
 import { DomHelpers } from './dom-helpers.js';
+import { t } from '../i18n/i18n.js';
+
+// Stand-in for the user's typed value while splitting the localized
+// "Press Enter to use ..." sentence, so the value itself can be inserted as a
+// text node (never as HTML) inside its styled `.custom-value` span.
+const CUSTOM_VALUE_MARKER = '\u0001CUSTOM_VALUE\u0001';
 
 /**
  * SearchableSelect class
  */
+/**
+ * A value-less option that only says "loading" or "enter a key first". These
+ * are identified by their i18n key, not their text, so the check works in
+ * every UI language (it used to match the English words 'Loading'/'Enter').
+ * @param {HTMLOptionElement} opt
+ * @returns {boolean}
+ */
+function isTransientPlaceholder(opt) {
+    const key = opt.getAttribute('data-i18n') || '';
+    return key === 'common:loading'
+        || key.startsWith('settings:search_models_loading')
+        || key === 'settings:search_models_enter_key_first';
+}
+
 export class SearchableSelect {
     /**
      * Create a searchable select
@@ -31,8 +51,11 @@ export class SearchableSelect {
         }
 
         this.options = {
-            placeholder: options.placeholder || 'Search...',
-            noSelectionText: options.noSelectionText || 'Select an option...',
+            // Left null when the caller passes nothing, so the localized
+            // defaults are resolved at render time (see _placeholderText /
+            // _noSelectionText) and follow a UI language switch.
+            placeholder: options.placeholder || null,
+            noSelectionText: options.noSelectionText || null,
             allowCustomValue: options.allowCustomValue || false,
             onSelect: options.onSelect || null,
             renderOption: options.renderOption || null,
@@ -96,7 +119,7 @@ export class SearchableSelect {
         // Selected value text
         this.displayText = document.createElement('span');
         this.displayText.className = 'searchable-select-value';
-        this.displayText.textContent = this.options.noSelectionText;
+        this.displayText.textContent = this._noSelectionText();
 
         // Badge for count
         this.badge = document.createElement('span');
@@ -132,7 +155,7 @@ export class SearchableSelect {
         this.searchInput = document.createElement('input');
         this.searchInput.type = 'text';
         this.searchInput.className = 'searchable-select-input';
-        this.searchInput.placeholder = this.options.placeholder;
+        this.searchInput.placeholder = this._placeholderText();
         this.searchInput.autocomplete = 'off';
 
         this.clearBtn = document.createElement('button');
@@ -208,6 +231,35 @@ export class SearchableSelect {
             subtree: true,
             attributes: true
         });
+
+        // Re-render the strings this component builds itself (count badge,
+        // "no results" / "press Enter" row) when the UI language changes.
+        this._onLocaleChanged = () => {
+            this.searchInput.placeholder = this._placeholderText();
+            if (this.allOptions.length === 0) {
+                this.displayText.textContent = this._noSelectionText();
+            }
+            this._updateBadge();
+            if (this.isOpen) this._renderOptions();
+        };
+        window.addEventListener('localeChanged', this._onLocaleChanged);
+    }
+
+    /**
+     * Search input placeholder: the caller's text, else the localized default.
+     * @returns {string}
+     */
+    _placeholderText() {
+        return this.options.placeholder || t('common:searchable_select_search_placeholder');
+    }
+
+    /**
+     * Text shown when there is nothing to select: the caller's text, else the
+     * localized default.
+     * @returns {string}
+     */
+    _noSelectionText() {
+        return this.options.noSelectionText || t('common:searchable_select_no_selection');
     }
 
     /**
@@ -318,11 +370,22 @@ export class SearchableSelect {
         if (this.filteredOptions.length === 0) {
             const noResults = document.createElement('li');
             noResults.className = 'searchable-select-no-results';
-            noResults.innerHTML = this.options.allowCustomValue
-                ? '<span class="material-symbols-outlined">add_circle</span> Press Enter to use "<span class="custom-value"></span>"'
-                : '<span class="material-symbols-outlined">search_off</span> No results found';
+            const icon = document.createElement('span');
+            icon.className = 'material-symbols-outlined';
+            icon.textContent = this.options.allowCustomValue ? 'add_circle' : 'search_off';
+            noResults.appendChild(icon);
+            noResults.appendChild(document.createTextNode(' '));
             if (this.options.allowCustomValue) {
-                noResults.querySelector('.custom-value').textContent = this.searchInput.value;
+                const sentence = t('common:searchable_select_use_custom_value', { value: CUSTOM_VALUE_MARKER });
+                const [before, ...rest] = sentence.split(CUSTOM_VALUE_MARKER);
+                noResults.appendChild(document.createTextNode(before));
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'custom-value';
+                valueSpan.textContent = this.searchInput.value;
+                noResults.appendChild(valueSpan);
+                noResults.appendChild(document.createTextNode(rest.join('')));
+            } else {
+                noResults.appendChild(document.createTextNode(t('common:searchable_select_no_results')));
             }
             this.optionsList.appendChild(noResults);
             return;
@@ -557,7 +620,7 @@ export class SearchableSelect {
      */
     _updateBadge() {
         if (this.options.showBadge && this.allOptions.length > 0) {
-            this.badge.textContent = `${this.allOptions.length} models`;
+            this.badge.textContent = t('common:searchable_select_model_count', { count: this.allOptions.length });
             this.badge.style.display = 'inline-flex';
         } else {
             this.badge.style.display = 'none';
@@ -575,7 +638,7 @@ export class SearchableSelect {
 
         options.forEach(opt => {
             const text = opt.textContent.trim();
-            if (opt.value === '' && (text.includes('Loading') || text.includes('Enter'))) {
+            if (opt.value === '' && isTransientPlaceholder(opt)) {
                 return; // Skip loading/placeholder
             }
 
@@ -610,7 +673,7 @@ export class SearchableSelect {
             this.displayText.classList.remove('placeholder');
             this.originalSelect.value = firstOpt.value;
         } else if (this.allOptions.length === 0) {
-            this.displayText.textContent = this.options.noSelectionText;
+            this.displayText.textContent = this._noSelectionText();
             this.displayText.classList.add('placeholder');
         }
 
@@ -663,6 +726,7 @@ export class SearchableSelect {
     destroy() {
         this._close();
         document.removeEventListener('click', this._onDocClick);
+        window.removeEventListener('localeChanged', this._onLocaleChanged);
         if (this._observer) this._observer.disconnect();
         // The dropdown was portalled to <body> — remove it explicitly.
         this.dropdown.remove();

@@ -74,5 +74,11 @@
   "notification_test_failed": "Benachrichtigungstest fehlgeschlagen: {{error}}",
   "notifications_preset_applied": "Benachrichtigungs-Voreinstellung angewendet: {{name}}",
 
-  "endpoint_reset_log": "Endpunkt auf Server-Standard zurückgesetzt"
+  "endpoint_reset_log": "Endpunkt auf Server-Standard zurückgesetzt",
+  "searchable_select_no_results": "Keine Ergebnisse gefunden",
+  "searchable_select_use_custom_value": "Eingabetaste drücken, um „{{value}}“ zu verwenden",
+  "searchable_select_model_count_one": "{{count}} Modell",
+  "searchable_select_model_count_other": "{{count}} Modelle",
+  "searchable_select_search_placeholder": "Suchen...",
+  "searchable_select_no_selection": "Option auswählen..."
 }

@@ -8,6 +8,9 @@ import os
 import time
 from typing import Optional, Dict, List, Any
 import threading
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 def sanitize_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -67,6 +70,30 @@ def is_process_alive(pid: Optional[int]) -> bool:
     except OSError:
         return False
     return True
+
+
+#: A running job refreshes its heartbeat every OWNER_HEARTBEAT_INTERVAL
+#: seconds; one older than OWNER_HEARTBEAT_STALE_AFTER means its owner is gone
+#: even if a process with the same PID exists (PIDs are reused).
+OWNER_HEARTBEAT_INTERVAL = 30.0
+OWNER_HEARTBEAT_STALE_AFTER = 300.0
+
+
+def owner_still_running(owner_pid: Optional[int], owner_heartbeat: Optional[float],
+                        now: Optional[float] = None) -> bool:
+    """True when another live process still owns a 'running' job.
+
+    The PID must belong to a live process other than this one, and, when the
+    row carries a heartbeat, that heartbeat must be recent: a PID reused by an
+    unrelated process does not refresh it. Rows written before the heartbeat
+    existed fall back to the PID check alone.
+    """
+    if not owner_pid or owner_pid == os.getpid() or not is_process_alive(owner_pid):
+        return False
+    if owner_heartbeat is None:
+        return True
+    now = time.time() if now is None else now
+    return (now - float(owner_heartbeat)) <= OWNER_HEARTBEAT_STALE_AFTER
 
 
 class Database:
@@ -145,21 +172,38 @@ class Database:
             if 'owner_pid' not in columns:
                 cursor.execute("ALTER TABLE translation_jobs ADD COLUMN owner_pid INTEGER")
 
-            # Checkpoint chunks table
+            # Phase the job is in ('translate' / 'refine'), so a resume
+            # re-enters the phase that was running (NULL on rows written
+            # before it existed: they resume their translation, as before).
+            if 'job_phase' not in columns:
+                cursor.execute("ALTER TABLE translation_jobs ADD COLUMN job_phase TEXT")
+            # Last sign of life of the owning process (epoch seconds). The PID
+            # alone can be reused by an unrelated process after a crash; a
+            # recent heartbeat is what proves the owner still runs the job.
+            if 'owner_heartbeat' not in columns:
+                cursor.execute("ALTER TABLE translation_jobs ADD COLUMN owner_heartbeat REAL")
+
+            # Checkpoint chunks, namespaced by phase: the refine pass of a job
+            # stores its units next to, never over, the translation chunks.
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS checkpoint_chunks (
                     translation_id TEXT NOT NULL,
+                    phase TEXT NOT NULL DEFAULT 'translate',
                     chunk_index INTEGER NOT NULL,
                     original_text TEXT NOT NULL,
                     translated_text TEXT,
                     chunk_data JSON,
                     status TEXT NOT NULL,
                     completed_at TIMESTAMP,
-                    PRIMARY KEY (translation_id, chunk_index),
+                    PRIMARY KEY (translation_id, phase, chunk_index),
                     FOREIGN KEY (translation_id) REFERENCES translation_jobs(translation_id)
                         ON DELETE CASCADE
                 )
             """)
+            cursor.execute("PRAGMA table_info(checkpoint_chunks)")
+            chunk_columns = [row[1] for row in cursor.fetchall()]
+            if 'phase' not in chunk_columns:
+                self._migrate_chunks_add_phase(cursor)
 
             # Create indexes for performance
             cursor.execute("""
@@ -181,9 +225,43 @@ class Database:
                 WHERE translation_id NOT IN (SELECT translation_id FROM translation_jobs)
             """)
             if cursor.rowcount > 0:
-                print(f"Reclaimed {cursor.rowcount} orphaned checkpoint chunk row(s)")
+                _logger.info("Reclaimed %d orphaned checkpoint chunk row(s)", cursor.rowcount)
 
             conn.commit()
+
+    @staticmethod
+    def _migrate_chunks_add_phase(cursor) -> None:
+        """Rebuild checkpoint_chunks with the phase column in its primary key.
+
+        SQLite cannot alter a primary key in place, so the table is copied.
+        Every existing row belongs to the translation phase.
+        """
+        cursor.execute("""
+            CREATE TABLE checkpoint_chunks_phase_migration (
+                translation_id TEXT NOT NULL,
+                phase TEXT NOT NULL DEFAULT 'translate',
+                chunk_index INTEGER NOT NULL,
+                original_text TEXT NOT NULL,
+                translated_text TEXT,
+                chunk_data JSON,
+                status TEXT NOT NULL,
+                completed_at TIMESTAMP,
+                PRIMARY KEY (translation_id, phase, chunk_index),
+                FOREIGN KEY (translation_id) REFERENCES translation_jobs(translation_id)
+                    ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO checkpoint_chunks_phase_migration
+                (translation_id, phase, chunk_index, original_text, translated_text,
+                 chunk_data, status, completed_at)
+            SELECT translation_id, 'translate', chunk_index, original_text, translated_text,
+                   chunk_data, status, completed_at
+            FROM checkpoint_chunks
+        """)
+        cursor.execute("DROP TABLE checkpoint_chunks")
+        cursor.execute("ALTER TABLE checkpoint_chunks_phase_migration RENAME TO checkpoint_chunks")
+        _logger.info("Migrated checkpoint_chunks: added the phase namespace")
 
     def create_job(
         self,
@@ -227,8 +305,8 @@ class Database:
                 cursor.execute("""
                     INSERT INTO translation_jobs
                     (translation_id, status, file_type, config, progress, server_session_id,
-                     owner_pid)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                     owner_pid, owner_heartbeat)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     translation_id,
                     'running',
@@ -236,7 +314,8 @@ class Database:
                     json.dumps(sanitize_config_secrets(config)),
                     json.dumps(progress),
                     server_session_id,
-                    owner_pid
+                    owner_pid,
+                    time.time() if owner_pid else None
                 ))
 
                 conn.commit()
@@ -245,7 +324,7 @@ class Database:
                 # Job already exists
                 return False
             except Exception as e:
-                print(f"Error creating job: {e}")
+                _logger.error(f"Error creating job: {e}")
                 return False
 
     def update_job_progress(
@@ -346,7 +425,7 @@ class Database:
                 conn.commit()
                 return True
             except Exception as e:
-                print(f"Error updating job progress: {e}")
+                _logger.error(f"Error updating job progress: {e}")
                 return False
 
     def save_chunk(
@@ -356,7 +435,8 @@ class Database:
         original_text: str,
         translated_text: Optional[str] = None,
         chunk_data: Optional[Dict[str, Any]] = None,
-        status: str = 'completed'
+        status: str = 'completed',
+        phase: str = 'translate'
     ) -> bool:
         """
         Save a translated chunk to database.
@@ -368,6 +448,7 @@ class Database:
             translated_text: Translated text (if completed)
             chunk_data: Additional chunk metadata (context_before, context_after, etc.)
             status: Chunk status (completed, failed)
+            phase: Checkpoint namespace ('translate' or 'refine')
 
         Returns:
             True if saved successfully
@@ -379,11 +460,12 @@ class Database:
 
                 cursor.execute("""
                     INSERT OR REPLACE INTO checkpoint_chunks
-                    (translation_id, chunk_index, original_text, translated_text,
+                    (translation_id, phase, chunk_index, original_text, translated_text,
                      chunk_data, status, completed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """, (
                     translation_id,
+                    phase,
                     chunk_index,
                     original_text,
                     translated_text,
@@ -394,7 +476,7 @@ class Database:
                 conn.commit()
                 return True
             except Exception as e:
-                print(f"Error saving chunk: {e}")
+                _logger.error(f"Error saving chunk: {e}")
                 return False
 
     def get_job(self, translation_id: str) -> Optional[Dict[str, Any]]:
@@ -431,10 +513,14 @@ class Database:
                     'created_at': row['created_at'],
                     'updated_at': row['updated_at'],
                     'paused_at': row['paused_at'],
-                    'completed_at': row['completed_at']
+                    'completed_at': row['completed_at'],
+                    'job_phase': row['job_phase'] if 'job_phase' in row.keys() else None,
+                    'owner_pid': row['owner_pid'] if 'owner_pid' in row.keys() else None,
+                    'owner_heartbeat': (row['owner_heartbeat']
+                                        if 'owner_heartbeat' in row.keys() else None),
                 }
             except Exception as e:
-                print(f"Error getting job: {e}")
+                _logger.error(f"Error getting job: {e}")
                 return None
 
     def update_job_config(self, translation_id: str, config: Dict[str, Any]) -> bool:
@@ -460,15 +546,16 @@ class Database:
                 conn.commit()
                 return cursor.rowcount > 0
             except Exception as e:
-                print(f"Error updating job config: {e}")
+                _logger.error(f"Error updating job config: {e}")
                 return False
 
-    def get_chunks(self, translation_id: str) -> List[Dict[str, Any]]:
+    def get_chunks(self, translation_id: str, phase: str = 'translate') -> List[Dict[str, Any]]:
         """
-        Retrieve all chunks for a job.
+        Retrieve the chunks of one phase of a job.
 
         Args:
             translation_id: Job identifier
+            phase: Checkpoint namespace ('translate' or 'refine')
 
         Returns:
             List of chunk dictionaries ordered by chunk_index
@@ -480,9 +567,9 @@ class Database:
 
                 cursor.execute("""
                     SELECT * FROM checkpoint_chunks
-                    WHERE translation_id = ?
+                    WHERE translation_id = ? AND phase = ?
                     ORDER BY chunk_index
-                """, (translation_id,))
+                """, (translation_id, phase))
 
                 chunks = []
                 for row in cursor.fetchall():
@@ -497,10 +584,10 @@ class Database:
 
                 return chunks
             except Exception as e:
-                print(f"Error getting chunks: {e}")
+                _logger.error(f"Error getting chunks: {e}")
                 return []
 
-    def get_failed_chunk_indices(self, translation_id: str) -> List[int]:
+    def get_failed_chunk_indices(self, translation_id: str, phase: str = 'translate') -> List[int]:
         """
         Return the chunk_index of every chunk currently marked 'failed'.
 
@@ -513,12 +600,12 @@ class Database:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT chunk_index FROM checkpoint_chunks
-                    WHERE translation_id = ? AND status = 'failed'
+                    WHERE translation_id = ? AND phase = ? AND status = 'failed'
                     ORDER BY chunk_index
-                """, (translation_id,))
+                """, (translation_id, phase))
                 return [row['chunk_index'] for row in cursor.fetchall()]
             except Exception as e:
-                print(f"Error getting failed chunks: {e}")
+                _logger.error(f"Error getting failed chunks: {e}")
                 return []
 
     def get_resumable_jobs(self, max_age_days: int = 30) -> List[Dict[str, Any]]:
@@ -559,7 +646,7 @@ class Database:
 
                 return jobs
             except Exception as e:
-                print(f"Error getting resumable jobs: {e}")
+                _logger.error(f"Error getting resumable jobs: {e}")
                 return []
 
     def get_job_history(self, limit: int = 50) -> List[Dict[str, Any]]:
@@ -609,7 +696,7 @@ class Database:
 
                 return jobs
             except Exception as e:
-                print(f"Error getting job history: {e}")
+                _logger.error(f"Error getting job history: {e}")
                 return []
 
     def cleanup_old_jobs(self, max_age_days: int = 30) -> int:
@@ -663,7 +750,7 @@ class Database:
                 conn.commit()
                 return deleted_count
             except Exception as e:
-                print(f"Error cleaning up old jobs: {e}")
+                _logger.error(f"Error cleaning up old jobs: {e}")
                 return 0
 
     def reset_running_jobs(self, current_session_id: str) -> int:
@@ -692,15 +779,13 @@ class Database:
                 # Candidates: 'running' rows from a different session (or with
                 # no session_id: legacy rows and CLI jobs).
                 cursor.execute("""
-                    SELECT translation_id, owner_pid FROM translation_jobs
+                    SELECT translation_id, owner_pid, owner_heartbeat FROM translation_jobs
                     WHERE status = 'running'
                     AND (server_session_id IS NULL OR server_session_id != ?)
                 """, (current_session_id,))
-                own_pid = os.getpid()
                 stale_ids = [
                     row['translation_id'] for row in cursor.fetchall()
-                    if not (row['owner_pid'] and row['owner_pid'] != own_pid
-                            and is_process_alive(row['owner_pid']))
+                    if not owner_still_running(row['owner_pid'], row['owner_heartbeat'])
                 ]
 
                 affected_rows = 0
@@ -716,7 +801,7 @@ class Database:
                 conn.commit()
                 return affected_rows
             except Exception as e:
-                print(f"Error resetting running jobs: {e}")
+                _logger.error(f"Error resetting running jobs: {e}")
                 return 0
 
     def update_translation_context(
@@ -748,7 +833,41 @@ class Database:
                 conn.commit()
                 return True
             except Exception as e:
-                print(f"Error updating translation context: {e}")
+                _logger.error(f"Error updating translation context: {e}")
+                return False
+
+    def set_job_phase(self, translation_id: str, phase: str) -> bool:
+        """Record the phase the job is running ('translate' or 'refine')."""
+        with self._lock:
+            try:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE translation_jobs SET job_phase = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE translation_id = ?",
+                    (phase, translation_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except Exception as e:
+                _logger.error("Error setting job phase: %s", e)
+                return False
+
+    def touch_owner(self, translation_id: str, pid: Optional[int] = None) -> bool:
+        """Refresh the owner heartbeat (and PID) of a running job."""
+        with self._lock:
+            try:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE translation_jobs SET owner_heartbeat = ?, "
+                    "owner_pid = COALESCE(?, owner_pid) WHERE translation_id = ?",
+                    (time.time(), pid, translation_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except Exception as e:
+                _logger.error("Error refreshing job heartbeat: %s", e)
                 return False
 
     def delete_chunks(self, translation_id: str) -> bool:
@@ -778,7 +897,7 @@ class Database:
                 conn.commit()
                 return True
             except Exception as e:
-                print(f"Error deleting chunks: {e}")
+                _logger.error(f"Error deleting chunks: {e}")
                 return False
 
     def delete_job(self, translation_id: str) -> bool:
@@ -811,7 +930,7 @@ class Database:
                 conn.commit()
                 return True
             except Exception as e:
-                print(f"Error deleting job: {e}")
+                _logger.error(f"Error deleting job: {e}")
                 return False
 
     def close(self):

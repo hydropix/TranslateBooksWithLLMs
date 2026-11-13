@@ -20,6 +20,7 @@ back to the ``.env`` key when the caller passed ``None`` (no opinion).
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, Optional
 
+from .credentials import KEY_PROVIDERS, KEY_REQUIRED_PROVIDERS, env_key as _env_key  # noqa: F401
 from .policy import RetryPolicy
 
 #: Every provider type ``create_llm_provider`` can build.
@@ -27,20 +28,9 @@ SUPPORTED_PROVIDERS = (
     "ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm",
 )
 
-#: Providers that cannot work without an API key.
-KEY_REQUIRED_PROVIDERS = frozenset({"gemini", "openrouter", "mistral", "deepseek", "poe", "nim"})
-
-#: Name of the loose ``*_api_key`` argument and of the ``src.config`` / env
-#: setting holding each provider's key.
-_KEY_ARG = {
-    "openai": "openai_api_key",
-    "gemini": "gemini_api_key",
-    "openrouter": "openrouter_api_key",
-    "mistral": "mistral_api_key",
-    "deepseek": "deepseek_api_key",
-    "poe": "poe_api_key",
-    "nim": "nim_api_key",
-}
+#: Name of the loose ``*_api_key`` argument of the transitional
+#: ``provider_config_from_args`` bridge.
+_KEY_ARG = {name: f"{name}_api_key" for name in KEY_PROVIDERS}
 
 
 @dataclass(frozen=True)
@@ -84,18 +74,6 @@ class ProviderConfig:
         return (f"ProviderConfig(provider={self.provider!r}, model={self.model!r}, "
                 f"endpoint={self.endpoint!r}, api_key={'<set>' if self.api_key else None}, "
                 f"context_window={self.context_window!r})")
-
-
-def _env_key(provider: str) -> str:
-    """The ``.env`` key for ``provider``, read at call time."""
-    import os
-    from src import config
-
-    arg = _KEY_ARG.get(provider)
-    if not arg:
-        return ""
-    setting = arg.upper()
-    return os.getenv(setting) or getattr(config, setting, "") or ""
 
 
 def provider_config_from_args(

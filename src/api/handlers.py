@@ -446,6 +446,38 @@ def resolve_output_path(output_dir, output_filename, is_resume):
     return get_unique_output_path(tentative_output_path)
 
 
+# Longest string kept per field of a stored log entry's data. LLM request and
+# response entries carry whole prompts and responses; the live view already
+# received them in full over WebSocket, the stored copy only feeds the status
+# endpoint.
+_STORED_LOG_FIELD_MAX_CHARS = 2000
+
+
+def _compact_log_entry(log_entry):
+    """Return a copy of ``log_entry`` with long data strings truncated."""
+    data = log_entry.get('data') if isinstance(log_entry, dict) else None
+    if not isinstance(data, dict):
+        return log_entry
+    compact = {}
+    for key, value in data.items():
+        if isinstance(value, str) and len(value) > _STORED_LOG_FIELD_MAX_CHARS:
+            value = value[:_STORED_LOG_FIELD_MAX_CHARS] + ' [...]'
+        compact[key] = value
+    return {**log_entry, 'data': compact}
+
+
+def _store_log_entry(state_manager, translation_id, entry):
+    """Append to the job's in-memory log (bounded by the state manager)."""
+    append = getattr(state_manager, 'append_log', None)
+    if append is not None:
+        append(translation_id, entry)
+        return
+    # Minimal state managers (tests) without append_log.
+    logs = state_manager.get_translation_field(translation_id, 'logs') or []
+    logs.append(entry)
+    state_manager.set_translation_field(translation_id, 'logs', logs)
+
+
 def _mark_job_error_in_db(state_manager, translation_id, checkpoint_manager=None):
     """Record a terminal 'error' status for the job in SQLite, never raising.
 
@@ -498,11 +530,9 @@ def _run_worker_loop(loop, translation_id, config, state_manager, output_dir, so
         if state_manager.exists(translation_id):
             state_manager.set_translation_field(translation_id, 'status', 'error')
             state_manager.set_translation_field(translation_id, 'error', error_msg)
-            logs = state_manager.get_translation_field(translation_id, 'logs')
-            if logs is None:
-                logs = []
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] CRITICAL WRAPPER ERROR: {error_msg}")
-            state_manager.set_translation_field(translation_id, 'logs', logs)
+            _store_log_entry(
+                state_manager, translation_id,
+                f"[{datetime.now().strftime('%H:%M:%S')}] CRITICAL WRAPPER ERROR: {error_msg}")
             emit_update(socketio, translation_id, {'error': error_msg, 'status': 'error', 'log': f"CRITICAL WRAPPER ERROR: {error_msg}"}, state_manager)
             _mark_job_error_in_db(state_manager, translation_id)
     finally:
@@ -532,24 +562,18 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             return True
         return False
 
-    # Setup unified logger for web interface
+    # Setup unified logger for web interface. The logger calls both callbacks
+    # for every entry, so exactly one of them stores it: the web callback only
+    # emits (with the full entry), the storage callback keeps a compact copy
+    # in the job's bounded in-memory log.
     def web_callback(log_entry):
         """Callback for WebSocket emission"""
-        logs = state_manager.get_translation_field(translation_id, 'logs')
-        if logs is None:
-            logs = []
-        logs.append(log_entry)
-        state_manager.set_translation_field(translation_id, 'logs', logs)
         # Send full log entry for structured processing on client side
         emit_update(socketio, translation_id, {'log': log_entry['message'], 'log_entry': log_entry}, state_manager)
-    
+
     def storage_callback(log_entry):
         """Callback for storing logs"""
-        logs = state_manager.get_translation_field(translation_id, 'logs')
-        if logs is None:
-            logs = []
-        logs.append(log_entry)
-        state_manager.set_translation_field(translation_id, 'logs', logs)
+        _store_log_entry(state_manager, translation_id, _compact_log_entry(log_entry))
     
     logger = setup_web_logger(web_callback, storage_callback)
     

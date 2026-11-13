@@ -13,6 +13,20 @@ if TYPE_CHECKING:
     from src.core.glossary import GlossaryStore
 
 
+# In-memory job logs are a rolling window: the status endpoint returns the last
+# 100 entries and the live view gets every entry over WebSocket, so keeping a
+# whole book's worth only grew memory and the deep copies made per request.
+MAX_STORED_LOG_ENTRIES = 500
+
+
+def _append_bounded(logs: list, entry: Any) -> None:
+    """Append in place, dropping the oldest entries beyond the cap."""
+    logs.append(entry)
+    overflow = len(logs) - MAX_STORED_LOG_ENTRIES
+    if overflow > 0:
+        del logs[:overflow]
+
+
 def generate_server_session_id() -> str:
     """Generate a unique session ID for this server instance using timestamp."""
     import time
@@ -108,7 +122,7 @@ class TranslationStateManager:
             if 'log' in updates:
                 if 'logs' not in translation:
                     translation['logs'] = []
-                translation['logs'].append(updates['log'])
+                _append_bounded(translation['logs'], updates['log'])
                 updates = {k: v for k, v in updates.items() if k != 'log'}
             
             # Update remaining fields
@@ -138,14 +152,14 @@ class TranslationStateManager:
             self._translations[translation_id][field] = value
             return True
     
-    def append_log(self, translation_id: str, log_entry: str) -> bool:
-        """Append a log entry to translation"""
+    def append_log(self, translation_id: str, log_entry: Any) -> bool:
+        """Append a log entry to the job's bounded in-memory log."""
         with self._lock:
             if translation_id not in self._translations:
                 return False
             if 'logs' not in self._translations[translation_id]:
                 self._translations[translation_id]['logs'] = []
-            self._translations[translation_id]['logs'].append(log_entry)
+            _append_bounded(self._translations[translation_id]['logs'], log_entry)
             return True
     
     def update_stats(self, translation_id: str, stats_update: Dict[str, Any]) -> bool:

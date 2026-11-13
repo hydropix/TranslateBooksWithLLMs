@@ -11,6 +11,7 @@ from flask import Flask
 from src.api import handlers
 from src.api.blueprints.translation_routes import create_translation_blueprint
 from src.api.translation_state import TranslationStateManager
+from src.core.job import JobConfig
 
 
 class FakeCheckpointManager:
@@ -45,21 +46,35 @@ def resume_app(tmp_path):
     checkpoint_manager = FakeCheckpointManager(preserved)
     state = TranslationStateManager(checkpoint_manager=checkpoint_manager, server_session_id='s')
     started = []
+    jobs = []
 
-    def start(translation_id, config):
+    def start(translation_id, job, is_resume=False):
         # Stands in for the thread start: the worker now owns the claim and
         # stays alive until the test releases it.
         state.mark_worker_active(translation_id)
         started.append(translation_id)
+        jobs.append((job, is_resume))
 
     app = Flask(__name__)
     app.register_blueprint(create_translation_blueprint(state, start, str(tmp_path)))
     with app.test_client() as client:
-        yield client, state, checkpoint_manager, started
+        yield client, state, checkpoint_manager, started, jobs
+
+
+def test_resume_starts_the_rebuilt_job_as_a_resume(resume_app, tmp_path):
+    client, _state, _cm, started, jobs = resume_app
+    resp = client.post('/api/resume/trans_1')
+    assert resp.status_code == 200
+    assert resp.get_json()['resume_from_chunk'] == 2
+    (job, is_resume), = jobs
+    assert isinstance(job, JobConfig)
+    assert is_resume is True
+    assert job.input_path == str(tmp_path / 'book.txt')
+    assert job.output_path == str(tmp_path / 'out.txt')
 
 
 def test_second_resume_while_worker_alive_is_refused(resume_app):
-    client, state, _cm, started = resume_app
+    client, state, _cm, started, _jobs = resume_app
     assert client.post('/api/resume/trans_1').status_code == 200
     # Until the new worker flips the status to 'running', the in-memory
     # status still reads 'paused', so the old status check let a second
@@ -75,7 +90,7 @@ def test_second_resume_while_worker_alive_is_refused(resume_app):
 
 
 def test_failed_resume_releases_the_claim(resume_app):
-    client, state, checkpoint_manager, started = resume_app
+    client, state, checkpoint_manager, started, _jobs = resume_app
     checkpoint_manager.has_checkpoint = False
     assert client.post('/api/resume/trans_1').status_code == 404
     assert not state.is_worker_active('trans_1')
@@ -86,7 +101,7 @@ def test_failed_resume_releases_the_claim(resume_app):
 
 
 def test_job_waiting_to_auto_resume_counts_as_active(resume_app):
-    client, state, _cm, started = resume_app
+    client, state, _cm, started, _jobs = resume_app
     state.create_translation('trans_other', {'output_filename': 'other.txt'})
     state.set_translation_field('trans_other', 'status', 'rate_limited')
     assert client.post('/api/resume/trans_1').status_code == 409

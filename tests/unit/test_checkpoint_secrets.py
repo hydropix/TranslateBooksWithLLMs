@@ -1,20 +1,19 @@
 """Unit tests for issue #213 follow-up: the jobs database must never store API keys.
 
 Covers `sanitize_config_secrets` (the persistence-side strip), the actual DB
-write paths (`create_job`, `update_job_config`), and the resume-time credential
-validation that replaces reading keys back from the checkpoint.
+write paths (`create_job`, `update_job_config`), the resume-time credential
+validation that replaces reading keys back from the checkpoint
+(`JobConfig.from_checkpoint`), and `JobConfig.to_persisted`.
 """
 import json
 import sqlite3
 
 import pytest
-from flask import Flask
 
+import src.config as config_module
+from src.api.blueprints.translation_routes import _strip_api_keys
+from src.core.job import JobConfig, JobConfigError
 from src.persistence.database import Database, sanitize_config_secrets
-from src.api.blueprints.translation_routes import (
-    _apply_resume_overrides,
-    _strip_api_keys,
-)
 
 
 SECRET_CONFIG = {
@@ -104,11 +103,10 @@ class TestDatabaseNeverStoresKeys:
 class TestResumeCredentialValidation:
     """Checkpoints carry no keys, so resume must validate .env/request instead."""
 
-    @pytest.fixture
-    def app_ctx(self):
-        app = Flask(__name__)
-        with app.app_context():
-            yield
+    @staticmethod
+    def _no_env_key(monkeypatch, var):
+        monkeypatch.delenv(var, raising=False)
+        monkeypatch.setattr(config_module, var, '', raising=False)
 
     def _restored_config(self):
         # What load_checkpoint now yields: a cloud-provider config, no keys.
@@ -116,45 +114,66 @@ class TestResumeCredentialValidation:
             'model': 'gemini-2.0-flash',
             'llm_provider': 'gemini',
             'llm_api_endpoint': '',
+            'output_filename': 'book_fr.epub',
+            'file_type': 'epub',
         }
 
-    def test_empty_body_resume_without_env_key_is_rejected(self, app_ctx, monkeypatch):
-        monkeypatch.delenv('GEMINI_API_KEY', raising=False)
-        result = _apply_resume_overrides(self._restored_config(), {})
-        assert result is not None
-        _response, status = result
-        assert status == 400
+    @staticmethod
+    def _resume(stored, overrides):
+        return JobConfig.from_checkpoint(stored, output_dir='out', overrides=overrides)
 
-    def test_empty_body_resume_with_env_key_passes(self, app_ctx, monkeypatch):
+    def test_empty_body_resume_without_env_key_is_rejected(self, monkeypatch):
+        self._no_env_key(monkeypatch, 'GEMINI_API_KEY')
+        with pytest.raises(JobConfigError) as info:
+            self._resume(self._restored_config(), {})
+        assert info.value.status == 400
+
+    def test_empty_body_resume_with_env_key_passes(self, monkeypatch):
         monkeypatch.setenv('GEMINI_API_KEY', 'env-key')
-        assert _apply_resume_overrides(self._restored_config(), {}) is None
+        job = self._resume(self._restored_config(), {})
+        assert job.provider.api_key == 'env-key'
+        _assert_no_secrets(job.to_persisted())
 
-    def test_key_in_resume_request_passes_without_env(self, app_ctx, monkeypatch):
-        monkeypatch.delenv('GEMINI_API_KEY', raising=False)
-        config = self._restored_config()
-        assert _apply_resume_overrides(config, {'api_key': 'user-key'}) is None
-        assert config['gemini_api_key'] == 'user-key'
+    def test_key_in_resume_request_passes_without_env(self, monkeypatch):
+        self._no_env_key(monkeypatch, 'GEMINI_API_KEY')
+        job = self._resume(self._restored_config(), {'api_key': 'user-key'})
+        assert job.provider.api_key == 'user-key'
+        _assert_no_secrets(job.to_persisted())
+        assert 'user-key' not in json.dumps(job.to_persisted())
 
-    def test_local_openai_compatible_resume_needs_no_key(self, app_ctx, monkeypatch):
-        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    def test_local_openai_compatible_resume_needs_no_key(self, monkeypatch):
+        self._no_env_key(monkeypatch, 'OPENAI_API_KEY')
         config = {
             'model': 'qwen3-14b',
             'llm_provider': 'openai',
             'llm_api_endpoint': 'http://localhost:1234/v1/chat/completions',
+            'output_filename': 'book_fr.txt',
         }
-        assert _apply_resume_overrides(config, {}) is None
+        job = self._resume(config, {})
+        assert not job.provider.api_key
 
-    def test_official_openai_resume_without_key_is_rejected(self, app_ctx, monkeypatch):
-        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    def test_official_openai_resume_without_key_is_rejected(self, monkeypatch):
+        self._no_env_key(monkeypatch, 'OPENAI_API_KEY')
         config = {
             'model': 'gpt-4o',
             'llm_provider': 'openai',
             'llm_api_endpoint': 'https://api.openai.com/v1/chat/completions',
+            'output_filename': 'book_fr.txt',
         }
-        result = _apply_resume_overrides(config, {})
-        assert result is not None
-        _response, status = result
-        assert status == 400
+        with pytest.raises(JobConfigError) as info:
+            self._resume(config, {})
+        assert info.value.status == 400
+
+
+class TestJobConfigPersistence:
+    def test_to_persisted_never_carries_a_key(self):
+        stored = dict(SECRET_CONFIG)
+        job = JobConfig.from_persisted(stored, output_dir='out')
+        job = job.with_changes(provider=job.provider.with_changes(api_key='live-secret'))
+        persisted = job.to_persisted()
+        _assert_no_secrets(persisted)
+        assert 'live-secret' not in json.dumps(persisted)
+        assert 'AIza-secret' not in json.dumps(persisted)
 
 
 class TestResponseStripping:

@@ -6,14 +6,15 @@ client supplied one, the server must derive it from the validated upload
 path, or (for a text job with none of the above) omit the key entirely so
 `get_translation_summaries()` keeps emitting `null` as before.
 """
+import re
+
 import pytest
 from flask import Flask
 
 import src.config as _config
-from src.api.blueprints.translation_routes import (
-    _display_input_filename,
-    create_translation_blueprint,
-)
+from src.api.blueprints.translation_routes import create_translation_blueprint
+from src.core.job import JobConfig
+from src.core.job.config import display_input_filename as _display_input_filename
 
 OPENAI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
@@ -42,7 +43,7 @@ def translate_app(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(create_translation_blueprint(
         state_manager,
-        lambda translation_id, config: started.append(translation_id),
+        lambda translation_id, job: started.append((translation_id, job)),
         str(tmp_path),
     ))
 
@@ -79,6 +80,20 @@ def test_text_job_records_requested_input_filename(translate_app):
     assert resp.status_code == 200
     _translation_id, config = state_manager.created[0]
     assert config['input_filename'] == 'chapter one.txt'
+
+
+def test_job_id_format_and_started_job(translate_app):
+    client, state_manager, started = translate_app
+    resp = client.post('/api/translate', json=_payload())
+    assert resp.status_code == 200
+    translation_id = resp.get_json()['translation_id']
+    assert re.fullmatch(r'trans_\d+_[0-9a-f]{6}', translation_id)
+    assert state_manager.created[0][0] == translation_id
+    started_id, job = started[0]
+    assert started_id == translation_id
+    assert isinstance(job, JobConfig)
+    assert job.origin == 'web'
+    assert job.output_filename == 'out.txt'
 
 
 def test_text_job_strips_path_traversal_from_input_filename(translate_app):
@@ -128,7 +143,7 @@ def test_file_job_falls_back_to_stripped_upload_name(translate_app, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Direct unit tests of _display_input_filename
+# Direct unit tests of display_input_filename (moved to src.core.job.config)
 # ---------------------------------------------------------------------------
 
 def test_display_input_filename_prefers_requested_basename():

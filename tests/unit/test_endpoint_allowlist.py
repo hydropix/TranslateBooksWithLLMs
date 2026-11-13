@@ -4,9 +4,10 @@ Two guards are covered:
 
 1. `EndpointValidator` — a request-supplied endpoint must be loopback/private
    or an allowlisted host.
-2. The pairing rule in `translation_routes` — an endpoint that differs from the
-   server default must carry its own API key, so the `.env` key never travels
-   to a host the request chose.
+2. The pairing rule (``credential_guard``, applied by
+   ``JobConfig.from_web_request`` for ``/api/translate``) — an endpoint that
+   differs from the server default must carry its own API key, so the `.env`
+   key never travels to a host the request chose.
 """
 import socket
 
@@ -260,7 +261,7 @@ def translate_app(tmp_path):
     app = Flask(__name__)
     app.register_blueprint(create_translation_blueprint(
         state_manager,
-        lambda translation_id, config: started.append(translation_id),
+        lambda translation_id, job: started.append((translation_id, job)),
         str(tmp_path),
     ))
 
@@ -315,7 +316,7 @@ def test_endpoint_override_without_own_key_is_rejected(translate_app, monkeypatc
 
 
 def test_endpoint_override_with_own_key_is_accepted(translate_app, monkeypatch):
-    client, state_manager, _started = translate_app
+    client, state_manager, started = translate_app
     monkeypatch.setenv('OPENAI_API_KEY', 'env-only-key')
     resp = client.post('/api/translate', json=_payload(
         llm_provider='openai',
@@ -324,8 +325,13 @@ def test_endpoint_override_with_own_key_is_accepted(translate_app, monkeypatch):
     ))
     assert resp.status_code == 200
     assert len(state_manager.created) == 1
+    _translation_id, job = started[0]
+    assert job.provider.api_key == FAKE_KEY
+    assert job.endpoint == OPENAI_ALT_ENDPOINT
+    # The key lives in the in-memory job only, never in the registry config.
     _translation_id, config = state_manager.created[0]
-    assert config['openai_api_key'] == FAKE_KEY
+    assert 'openai_api_key' not in config
+    assert FAKE_KEY not in repr(config)
 
 
 def test_gemini_endpoint_field_is_inert(translate_app, monkeypatch):
@@ -410,7 +416,7 @@ def test_keyless_local_openai_server_is_accepted(translate_app, monkeypatch):
 
     Nothing can leak, so the pairing rule must not fire.
     """
-    client, state_manager, _started = translate_app
+    client, state_manager, started = translate_app
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
     resp = client.post('/api/translate', json=_payload(
         llm_provider='openai',
@@ -419,8 +425,9 @@ def test_keyless_local_openai_server_is_accepted(translate_app, monkeypatch):
         openai_api_key='__USE_ENV__',
     ))
     assert resp.status_code == 200
-    _translation_id, config = state_manager.created[0]
-    assert config['openai_api_key'] == ''
+    assert len(state_manager.created) == 1
+    _translation_id, job = started[0]
+    assert not job.provider.api_key
 
 
 def test_stored_key_never_reaches_a_local_override(translate_app, monkeypatch):

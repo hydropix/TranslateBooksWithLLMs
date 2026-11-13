@@ -18,7 +18,7 @@ python translate.py -i input_file -o output_file
 
 | Option | Description |
 |--------|-------------|
-| `-i, --input` | Input file (.txt, .epub, .srt, .pgn, .docx, .pdf) |
+| `-i, --input` | Input file (.txt, .epub, .srt, .pgn, .docx, .pdf). Not needed with `--resume`. |
 
 ### Output
 
@@ -63,7 +63,7 @@ python translate.py -i input_file -o output_file
 | Option | Description |
 |--------|-------------|
 | `--text-cleanup` | Enable OCR/typographic cleanup (fix broken lines, spacing, punctuation) |
-| `--refine` | Enable refinement pass: runs a second pass to polish translation quality and literary style |
+| `--refine` | Run a refinement pass on the translated output to polish quality and literary style (TXT, SRT, EPUB, DOCX; ignored with a warning for PDF and PGN) |
 | `--refine-only` | Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language. |
 | `--glossary` | Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent |
 | `--auto-glossary` | Derive a throwaway glossary from the input document with one extra LLM call before translating (no file, nothing saved). Ignored when `--glossary` is given or with `--refine-only`. |
@@ -92,6 +92,16 @@ python translate.py -i input_file -o output_file
 | Option | Description |
 |--------|-------------|
 | `--no-color` | Disable colored output |
+
+### Exit Code and Resume
+
+The command exits with `0` only when every unit was translated and the output was written; a partial, failed, interrupted or rate-limited run exits with `1`. A rate limit pauses the job and keeps its checkpoint; the last line printed gives the command to continue it:
+
+```bash
+python translate.py --resume cli_1a2b3c4d
+```
+
+`--resume` re-enters the phase that was running (a job paused during its `--refine` pass resumes the refinement, not the translation). API keys are never stored with the checkpoint: pass them again or keep them in `.env`.
 
 ---
 

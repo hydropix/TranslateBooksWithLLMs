@@ -1,10 +1,16 @@
 """
-Command-line interface for text translation
+Command-line interface for text translation.
+
+A thin adapter over the shared job runner (``src/core/job/runner.py``): it
+parses the arguments into a ``JobConfig`` and supplies console sinks. The
+verdict, glossary snapshot, refine chaining, checkpoints and resume are the
+runner's, exactly as for the web server.
 """
 import os
 import argparse
 import asyncio
 import logging
+import uuid
 
 # Force UTF-8 stdio before anything prints, so emoji log lines (💬, ✅, ❌, ...)
 # don't crash on Windows cp1252 consoles. See issue #184.
@@ -15,118 +21,75 @@ ensure_utf8_stdio()
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
 from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
-from src.utils.file_utils import get_unique_output_path, generate_tts_for_translation
 from src.utils.unified_logger import setup_cli_logger, LogType
-from src.tts.tts_config import TTSConfig, TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
+from src.tts.tts_config import TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
 from src.persistence.checkpoint_manager import CheckpointManager
-from src.core.adapters import translate_file, refine_file
-from src.core import auto_prep
-from src.core.auto_prep import build_auto_prompt_options
-from src.core.llm.factory import create_provider_from_args
-from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE
-import time
-import uuid
+from src.core.job import JobConfig, JobConfigError, JobResult, JobStatus
+from src.core.job.runner import JobRunner, JobSinks
+from src.core.llm.credentials import KEY_PROVIDERS
 
 
-def _apply_cli_auto_prep(args, prompt_options, logger) -> None:
-    """Merge auto glossary/style into `prompt_options` (in place). Never raises.
+class CliJobSinks(JobSinks):
+    """Runner sinks for the console: the unified CLI logger and its progress bar."""
 
-    Mirrors the web path's auto mode (see plan/PLAN_AutoGlossaryStyle.md,
-    Phase 4) for the CLI: `--auto-glossary` and `--auto-style` each derive a
-    throwaway glossary/style block from the input document with one extra LLM
-    call, and merge the result straight into `prompt_options` — nothing is
-    saved, nothing is reviewed.
+    def __init__(self, logger):
+        self.logger = logger
+        self._log = logger.create_legacy_callback()
 
-    Precedence, each logged as a warning when a flag is dropped:
-      - `--auto-glossary` + `--glossary`     -> auto-glossary skipped
-        ("⚠️ --auto-glossary ignored: --glossary was provided.")
-      - `--auto-glossary` + `--refine-only`  -> auto-glossary skipped
-        ("⚠️ --auto-glossary ignored in --refine-only mode.")
-    `--auto-style` is honoured in every mode, including `--refine-only`: the
-    refinement block reaches `refine_file` through the same `prompt_options`.
+    def log(self, key, message="", data=None):
+        self._log(key, message, data)
 
-    Language handling mirrors decision D7 of the plan: in `--refine-only`
-    mode the input is already in the target language, so
-    `source_language := args.target_lang` for the style pass.
+    def emit_stats(self, stats):
+        total = stats.get('total_chunks', 0) or 0
+        if total > 0:
+            self.logger.update_progress(stats.get('completed_chunks', 0), total)
 
-    Event-loop discipline: this helper owns its own `asyncio.run(...)`, fully
-    closed before the translation starts. The provider is created *and*
-    closed inside that single coroutine — a provider built in one event
-    loop and closed in another would leak httpx state.
+    def job_started(self, job, is_resume):
+        details = {
+            'target_lang': job.target_language,
+            'file_type': job.file_type.upper(),
+            'model': job.model,
+            'input_file': job.input_path,
+            'output_file': job.output_path,
+            'api_endpoint': job.endpoint,
+            'llm_provider': job.llm_provider,
+        }
+        if job.is_refine_only:
+            self.logger.info("Refine-Only Started", LogType.TRANSLATION_START,
+                             {**details, 'mode': 'refine-only'})
+        else:
+            self.logger.info("Translation Started", LogType.TRANSLATION_START,
+                             {'source_lang': job.source_language, **details})
 
-    The whole body is wrapped in try/except so a failure here only logs a
-    warning and leaves `prompt_options` untouched; it can never make the
-    translation job fail.
-    """
-    try:
-        want_glossary = bool(getattr(args, "auto_glossary", False))
-        want_style = bool(getattr(args, "auto_style", False))
-
-        if want_glossary and getattr(args, "glossary", None):
-            logger.warning("⚠️ --auto-glossary ignored: --glossary was provided.")
-            want_glossary = False
-
-        if want_glossary and getattr(args, "refine_only", False):
-            logger.warning("⚠️ --auto-glossary ignored in --refine-only mode.")
-            want_glossary = False
-
-        if not want_glossary and not want_style:
+    def job_finished(self, job, result: JobResult, elapsed):
+        if job.is_term_fix and result.detail is not None and not getattr(result.detail, 'changed', True):
+            self.logger.warning("⚠️ Term fix: no occurrence matched; the output is identical to the input.")
+        if result.status is JobStatus.COMPLETED:
+            label = "Refine-Only Completed Successfully" if job.is_refine_only else "Translation Completed Successfully"
+            details = {'output_file': result.output_path}
+            if job.is_refine_only:
+                details['mode'] = 'refine-only'
+            self.logger.info(label, LogType.TRANSLATION_END, details)
             return
+        label = "Refine-only" if job.is_refine_only else ("Term fix" if job.is_term_fix else "Translation")
+        reason = (f"{label} did not complete ({result.status.value}): "
+                  f"{result.error or 'one or more units failed or the output could not be written'}. "
+                  f"Check the log above; '{result.output_path}' may be missing or partial.")
+        self.logger.error(reason, LogType.ERROR_DETAIL, {'details': reason, 'input_file': job.input_path})
 
-        source_text = auto_prep.extract_source_text(file_path=args.input)
-        if not source_text or not source_text.strip():
-            logger.warning(
-                "⚠️ Auto mode: could not read the source document — "
-                "translating without an auto glossary or style."
-            )
-            return
+    def job_rate_limited(self, job, message):
+        self.logger.error(message, LogType.ERROR_DETAIL, {'details': message, 'input_file': job.input_path})
 
-        refine_only = bool(getattr(args, "refine_only", False))
-        source_language = args.target_lang if refine_only else args.source_lang
-        target_language = args.target_lang
-
-        async def _run():
-            client = create_provider_from_args(
-                args.provider,
-                args.model,
-                args.api_endpoint,
-                gemini_api_key=args.gemini_api_key,
-                openai_api_key=args.openai_api_key,
-                openrouter_api_key=args.openrouter_api_key,
-                mistral_api_key=args.mistral_api_key,
-                deepseek_api_key=args.deepseek_api_key,
-                poe_api_key=args.poe_api_key,
-                nim_api_key=args.nim_api_key,
-                context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
-            )
-            try:
-                return await build_auto_prompt_options(
-                    source_text=source_text,
-                    source_language=source_language,
-                    target_language=target_language,
-                    want_glossary=want_glossary,
-                    want_style=want_style,
-                    llm_client=client,
-                    log=lambda key, msg: logger.info(msg),
-                )
-            finally:
-                try:
-                    await client.close()
-                except Exception as close_exc:
-                    logger.debug(f"auto prep client close failed: {close_exc}")
-
-        fragment = asyncio.run(_run())
-        if fragment:
-            prompt_options.update(fragment)
-    except Exception as exc:
-        logger.warning(f"⚠️ Auto mode failed: {exc} — translating without it.")
+    def job_failed(self, job, error):
+        self.logger.error(f"Translation failed: {error}", LogType.ERROR_DETAIL,
+                          {'details': error, 'input_file': job.input_path})
 
 
-def _run_term_fix(args, parser, logger) -> int:
-    """Run `--fix-terms` (or `--fix-terms-scan`) and return the exit code."""
-    from src.core.adapters import term_fix_file, scan_file
+def _run_term_fix_scan(args, parser, logger) -> int:
+    """`--fix-terms-scan`: count the matches, write nothing, call no LLM."""
+    from src.core.adapters import scan_file
     from src.core.adapters.exceptions import UnsupportedFormatError
-    from src.core.term_fix import RuleParseError, check_literal_rules, format_scan, load_rules_file
+    from src.core.term_fix import RuleParseError, format_scan, load_rules_file
 
     try:
         rules = load_rules_file(args.fix_terms)
@@ -135,207 +98,74 @@ def _run_term_fix(args, parser, logger) -> int:
     except RuleParseError as e:
         parser.error(f"Invalid rules in {args.fix_terms}: {e}")
     logger.info(f"Term fix: {len(rules)} rule(s) loaded from {args.fix_terms}")
-
     try:
-        if args.fix_terms_scan:
-            for line in format_scan(asyncio.run(scan_file(args.input, rules))):
-                logger.info(line)
-            return 0
-
-        if args.fix_terms_mode == "literal":
-            check_literal_rules(rules)
-
-        def stats_callback(stats: dict):
-            if stats.get('total_chunks', 0) > 0:
-                logger.update_progress(stats.get('completed_chunks', 0), stats['total_chunks'])
-
-        result = asyncio.run(term_fix_file(
-            input_filepath=args.input,
-            output_filepath=args.output,
-            rules=rules,
-            mode=args.fix_terms_mode,
-            target_language=args.target_lang,
-            model_name=args.model,
-            llm_provider=args.provider,
-            llm_api_endpoint=args.api_endpoint,
-            gemini_api_key=args.gemini_api_key,
-            openai_api_key=args.openai_api_key,
-            openrouter_api_key=args.openrouter_api_key,
-            mistral_api_key=args.mistral_api_key,
-            deepseek_api_key=args.deepseek_api_key,
-            poe_api_key=args.poe_api_key,
-            nim_api_key=args.nim_api_key,
-            parallel_workers=args.parallel,
-            log_callback=logger.create_legacy_callback(),
-            stats_callback=stats_callback,
-        ))
-    except (UnsupportedFormatError, ValueError, FileNotFoundError, RuntimeError) as e:
+        for line in format_scan(asyncio.run(scan_file(args.input, rules))):
+            logger.info(line)
+    except (UnsupportedFormatError, FileNotFoundError) as e:
         logger.error(f"Term fix failed: {e}", LogType.ERROR_DETAIL)
         return 1
-    if not result.changed:
-        logger.warning("⚠️ Term fix: no occurrence matched; the output is identical to the input.")
     return 0
 
 
-def _run_job(args, logger, prompt_options, log_callback, stats_callback) -> int:
-    """Run the translation (or refine-only) job and return the process exit code.
-
-    The adapters return True only when every unit was translated and the
-    output was written; a False result (failed or partial translation) is a
-    failure here too: it is logged as such, triggers the failure notification
-    and yields a non-zero exit code, just like a raised exception.
-    """
-    start_time = time.time()
+def _check_term_fix_rules(job, parser, logger) -> None:
+    """Fail fast on an unreadable rules file or a rule literal mode cannot apply."""
+    from src.core.term_fix import RuleParseError, check_literal_rules, load_rules_file
+    rules_file = job.term_fix['rules_file']
     try:
-        # Create checkpoint manager for resume capability
-        checkpoint_manager = CheckpointManager()
-
-        # Generate unique translation ID
-        translation_id = f"cli_{uuid.uuid4().hex[:8]}"
-
-        if args.refine_only:
-            ok = asyncio.run(refine_file(
-                input_filepath=args.input,
-                output_filepath=args.output,
-                target_language=args.target_lang,
-                model_name=args.model,
-                llm_provider=args.provider,
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                log_callback=log_callback,
-                stats_callback=stats_callback,
-                check_interruption_callback=None,
-                llm_api_endpoint=args.api_endpoint,
-                gemini_api_key=args.gemini_api_key,
-                openai_api_key=args.openai_api_key,
-                openrouter_api_key=args.openrouter_api_key,
-                mistral_api_key=args.mistral_api_key,
-                deepseek_api_key=args.deepseek_api_key,
-                poe_api_key=args.poe_api_key,
-                nim_api_key=args.nim_api_key,
-                prompt_options=prompt_options,
-            ))
-        else:
-            ok = asyncio.run(translate_file(
-                input_filepath=args.input,
-                output_filepath=args.output,
-                source_language=args.source_lang,
-                target_language=args.target_lang,
-                model_name=args.model,
-                llm_provider=args.provider,
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                log_callback=log_callback,
-                stats_callback=stats_callback,
-                check_interruption_callback=None,
-                llm_api_endpoint=args.api_endpoint,
-                gemini_api_key=args.gemini_api_key,
-                openai_api_key=args.openai_api_key,
-                openrouter_api_key=args.openrouter_api_key,
-                mistral_api_key=args.mistral_api_key,
-                deepseek_api_key=args.deepseek_api_key,
-                poe_api_key=args.poe_api_key,
-                nim_api_key=args.nim_api_key,
-                prompt_options=prompt_options,
-                parallel_workers=args.parallel
-            ))
-
-        if ok is not True:
-            label = "Refine-only" if args.refine_only else "Translation"
-            reason = (f"{label} did not complete: one or more units failed or the "
-                      f"output could not be written. Check the log above; "
-                      f"'{args.output}' may be missing or partial.")
-            logger.error(reason, LogType.ERROR_DETAIL, {
-                'details': reason,
-                'input_file': args.input,
-            })
-            notify(EVENT_FAILURE, {
-                'file': args.input,
-                'output': args.output,
-                'duration_seconds': time.time() - start_time,
-                'provider': args.provider,
-                'model': args.model,
-                'error': reason,
-            })
-            return 1
-
-        if args.refine_only:
-            logger.info("Refine-Only Completed Successfully", LogType.TRANSLATION_END, {
-                'output_file': args.output,
-                'mode': 'refine-only',
-            })
-        else:
-            logger.info("Translation Completed Successfully", LogType.TRANSLATION_END, {
-                'output_file': args.output
-            })
-
-        notify(EVENT_SUCCESS, {
-            'file': args.input,
-            'output': args.output,
-            'duration_seconds': time.time() - start_time,
-            'provider': args.provider,
-            'model': args.model,
-            'source_lang': None if args.refine_only else args.source_lang,
-            'target_lang': args.target_lang,
-            'mode': 'refine-only' if args.refine_only else 'translate',
-        })
-
-        # TTS Generation (if enabled)
-        if args.tts:
-            logger.info("Starting TTS Generation", LogType.INFO, {
-                'voice': args.tts_voice or 'auto',
-                'rate': args.tts_rate,
-                'format': args.tts_format
-            })
-
-            # Create TTS config from CLI arguments
-            tts_config = TTSConfig.from_cli_args(args)
-
-            # Generate audio from translated file
-            success, message, audio_path = asyncio.run(generate_tts_for_translation(
-                translated_filepath=args.output,
-                target_language=args.target_lang,
-                tts_config=tts_config,
-                log_callback=log_callback
-            ))
-
-            if success:
-                logger.info("TTS Generation Completed", LogType.INFO, {
-                    'audio_file': audio_path
-                })
-            else:
-                logger.error(f"TTS generation failed: {message}", LogType.ERROR_DETAIL, {
-                    'details': message
-                })
-
-    except Exception as e:
-        logger.error(f"Translation failed: {str(e)}", LogType.ERROR_DETAIL, {
-            'details': str(e),
-            'input_file': args.input
-        })
-
-        notify(EVENT_FAILURE, {
-            'file': args.input,
-            'output': args.output,
-            'duration_seconds': time.time() - start_time,
-            'provider': args.provider,
-            'model': args.model,
-            'error': str(e),
-        })
-        return 1
-
-    return 0
+        rules = load_rules_file(rules_file)
+    except FileNotFoundError:
+        parser.error(f"Rules file not found: {rules_file}")
+    except RuleParseError as e:
+        parser.error(f"Invalid rules in {rules_file}: {e}")
+    if job.term_fix.get('mode') == 'literal':
+        try:
+            check_literal_rules(rules)
+        except ValueError as e:
+            parser.error(f"Term fix: {e}")
+    logger.info(f"Term fix: {len(rules)} rule(s) loaded from {rules_file}")
 
 
-if __name__ == "__main__":
+def _resume_job(args, checkpoint_manager) -> JobConfig:
+    """The stored job `--resume ID` continues, with this run's credentials."""
+    data = checkpoint_manager.load_checkpoint(args.resume)
+    if not data:
+        raise JobConfigError(f"No checkpoint found for job '{args.resume}'.")
+    stored = data['job']['config']
+    input_path = stored.get('preserved_input_path') or stored.get('file_path')
+    if not input_path or not os.path.exists(input_path):
+        raise JobConfigError(f"The input file of job '{args.resume}' is no longer available.")
+    job = JobConfig.from_persisted(stored, input_path=input_path)
+    provider = job.llm_provider
+    cli_key = getattr(args, f'{provider}_api_key', None) if provider in KEY_PROVIDERS else None
+    if cli_key:
+        job = job.with_changes(provider=job.provider.with_changes(api_key=cli_key))
+    return job
+
+
+def run_cli_job(job: JobConfig, logger, *, translation_id=None, checkpoint_manager=None,
+                is_resume=False, engines=None) -> JobResult:
+    """Run a job from the command line and return its result."""
+    checkpoint_manager = checkpoint_manager or CheckpointManager()
+    translation_id = translation_id or f"cli_{uuid.uuid4().hex[:8]}"
+    runner = JobRunner(job, translation_id=translation_id, checkpoint_manager=checkpoint_manager,
+                       sinks=CliJobSinks(logger), is_resume=is_resume,
+                       temp_dir=job.output_dir or None, engines=engines)
+    result = asyncio.run(runner.run())
+    if result.status in (JobStatus.RATE_LIMITED, JobStatus.INTERRUPTED, JobStatus.PARTIAL):
+        logger.info(f"Resume this job later with: python translate.py --resume {translation_id}")
+    return result
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Translate a text, EPUB, SRT, PGN, DOCX or PDF file using an LLM.",
         epilog="Tip: any --*_api_key flag also accepts comma-separated keys "
                "(e.g. --gemini_api_key key1,key2,key3) for automatic rotation "
                "on HTTP 429 — useful to chain free-tier accounts.",
     )
-    parser.add_argument("-i", "--input", required=True, help="Path to the input file (text, EPUB, SRT, PGN, DOCX or PDF).")
+    parser.add_argument("-i", "--input", default=None, help="Path to the input file (text, EPUB, SRT, PGN, DOCX or PDF). Required unless --resume is given.")
     parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
+    parser.add_argument("--resume", default=None, metavar="JOB_ID", help="Resume an interrupted, rate-limited or partial CLI job from its checkpoint (the id is printed when the job stops).")
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
@@ -351,10 +181,9 @@ if __name__ == "__main__":
     parser.add_argument("--parallel", type=int, default=PARALLEL_TRANSLATIONS, metavar="N", help=f"Number of chunks translated concurrently (default: {PARALLEL_TRANSLATIONS}). Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context chaining.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
 
-    # Prompt options (optional system prompt instructions)
     prompt_group = parser.add_argument_group('Prompt Options', 'Optional instructions to include in the translation prompt')
     prompt_group.add_argument("--text-cleanup", action="store_true", help="Enable OCR/typographic cleanup (fix broken lines, spacing, punctuation).")
-    prompt_group.add_argument("--refine", action="store_true", help="Enable refinement pass: runs a second pass to polish translation quality and literary style.")
+    prompt_group.add_argument("--refine", action="store_true", help="Run a refinement pass on the translated output to polish quality and literary style (TXT, SRT, EPUB, DOCX).")
     prompt_group.add_argument("--refine-only", action="store_true", dest="refine_only", help="Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language.")
     prompt_group.add_argument("--glossary", default=None, help="Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent.")
     prompt_group.add_argument(
@@ -367,7 +196,6 @@ if __name__ == "__main__":
         help="Derive style instructions from the input document with one extra LLM call "
              "before translating (no preset file, nothing saved).")
 
-    # Term fix: correct terms in an already-translated file, no retranslation
     term_fix_group = parser.add_argument_group(
         'Term Fix', 'Replace wrong renderings of a term in an already-translated file')
     term_fix_group.add_argument(
@@ -386,197 +214,54 @@ if __name__ == "__main__":
         help="With --fix-terms: only count the matches per rule and show sample "
              "sentences. Nothing is written, no LLM call.")
 
-    # TTS (Text-to-Speech) arguments
     tts_group = parser.add_argument_group('TTS Options', 'Text-to-Speech audio generation')
     tts_group.add_argument("--tts", action="store_true", default=TTS_ENABLED, help="Generate audio from translated text using Edge-TTS.")
     tts_group.add_argument("--tts-voice", default=TTS_VOICE, help="TTS voice name (auto-selected based on target language if not specified).")
     tts_group.add_argument("--tts-rate", default=TTS_RATE, help="TTS speech rate adjustment, e.g. '+10%%' or '-20%%' (default: %(default)s).")
     tts_group.add_argument("--tts-bitrate", default=TTS_BITRATE, help="Audio bitrate for encoding, e.g. '64k', '96k' (default: %(default)s).")
     tts_group.add_argument("--tts-format", default=TTS_OUTPUT_FORMAT, choices=["opus", "mp3"], help="Audio output format (default: %(default)s).")
+    return parser
 
-    args = parser.parse_args()
 
-    # Auto-select default model based on provider if not explicitly set
-    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL, LITELLM_MODEL
-    if args.model == DEFAULT_MODEL:
-        if args.provider == "nim" and NIM_MODEL:
-            args.model = NIM_MODEL
-        elif args.provider == "litellm" and LITELLM_MODEL:
-            args.model = LITELLM_MODEL
-        elif args.provider == "mistral" and MISTRAL_MODEL:
-            args.model = MISTRAL_MODEL
-        elif args.provider == "deepseek" and DEEPSEEK_MODEL:
-            args.model = DEEPSEEK_MODEL
-        elif args.provider == "poe" and POE_MODEL:
-            args.model = POE_MODEL
-        elif args.provider == "openrouter" and OPENROUTER_MODEL:
-            args.model = OPENROUTER_MODEL
-        elif args.provider == "gemini" and GEMINI_MODEL:
-            args.model = GEMINI_MODEL
-
-    # If no .env was found, surface the *effective* settings now (after argparse)
-    # so the warning box shows the real CLI arguments rather than the import-time
-    # defaults (issue #187). No-op when a .env exists or running as executable.
-    from src.config import warn_env_config_missing, PORT
-    warn_env_config_missing(
-        provider=args.provider,
-        api_endpoint=args.api_endpoint,
-        model=args.model,
-        port=PORT,
-    )
-
-    if args.output is None:
-        base, ext = os.path.splitext(args.input)
-        output_ext = ext
-        if args.input.lower().endswith('.epub'):
-            output_ext = '.epub'
-        elif args.input.lower().endswith('.srt'):
-            output_ext = '.srt'
-        elif args.input.lower().endswith('.pgn'):
-            output_ext = '.pgn'
-        if args.fix_terms:
-            args.output = f"{base} (term-fix){output_ext}"
-        elif args.refine_only:
-            args.output = f"{base} (refined){output_ext}"
-        else:
-            args.output = f"{base} ({args.target_lang}){output_ext}"
-
-    # Ensure output path is unique (add number suffix if file exists)
-    args.output = get_unique_output_path(args.output)
-
-    # Determine file type
-    if args.input.lower().endswith('.epub'):
-        file_type = "EPUB"
-    elif args.input.lower().endswith('.srt'):
-        file_type = "SRT"
-    elif args.input.lower().endswith('.pgn'):
-        file_type = "PGN"
-    elif args.input.lower().endswith('.docx'):
-        file_type = "DOCX"
-    elif args.input.lower().endswith('.pdf'):
-        file_type = "PDF"
-    else:
-        file_type = "TEXT"
-    
-    # Setup unified logger
+def main(argv=None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
     logger = setup_cli_logger(enable_colors=not args.no_color)
 
-    # The scan and literal term fix need no LLM, so they run before any
-    # provider/API-key validation and exit. Smart mode runs after it.
-    if args.fix_terms_scan and not args.fix_terms:
-        parser.error("--fix-terms-scan requires --fix-terms RULES")
-    if args.fix_terms:
-        if args.refine or args.refine_only:
-            parser.error("--fix-terms cannot be combined with --refine or --refine-only")
-        if args.fix_terms_scan or args.fix_terms_mode == "literal":
-            raise SystemExit(_run_term_fix(args, parser, logger))
-
-    # Validate API keys for providers
-    if args.provider == "gemini" and not args.gemini_api_key:
-        parser.error("--gemini_api_key is required when using gemini provider")
-    # Note: OpenAI API key is optional for local servers (llama.cpp, LM Studio, vLLM, etc.)
-    # Only required for OpenAI cloud API
-    if args.provider == "openrouter" and not args.openrouter_api_key:
-        parser.error("--openrouter_api_key is required when using openrouter provider")
-    if args.provider == "mistral" and not args.mistral_api_key:
-        parser.error("--mistral_api_key is required when using mistral provider")
-    if args.provider == "deepseek" and not args.deepseek_api_key:
-        parser.error("--deepseek_api_key is required when using deepseek provider")
-    if args.provider == "poe" and not args.poe_api_key:
-        parser.error("--poe_api_key is required when using poe provider. Get your key at https://poe.com/api_key")
-    if args.provider == "nim" and not args.nim_api_key:
-        parser.error("--nim_api_key is required when using nim provider. Get your key at https://build.nvidia.com/")
-    # LiteLLM needs a provider-prefixed model name; the default Ollama model
-    # won't route. Keys come from each provider's native env var, so we only
-    # guard the model here rather than an API key.
-    if args.provider == "litellm" and args.model == DEFAULT_MODEL:
-        parser.error("litellm provider requires a provider-prefixed model. "
-                     "Set LITELLM_MODEL in .env or pass -m, e.g. "
-                     "-m anthropic/claude-sonnet-4-6")
-
-    if args.fix_terms:
-        raise SystemExit(_run_term_fix(args, parser, logger))
-
-    # PDF output is a rebuilt, reflowed document and PGN translates comments
-    # only; neither has a refine path yet.
-    if args.input.lower().endswith(('.pdf', '.pgn')):
-        input_format = os.path.splitext(args.input)[1][1:].upper()
-        if args.refine_only:
-            parser.error(f"--refine-only does not support {input_format} input yet.")
-        if args.refine:
-            logger.warning(f"⚠️ --refine is ignored for {input_format} input (not supported yet).")
-            args.refine = False
-
-    # Refinement is monolingual: mismatched source/target almost always
-    # means the user forgot. Warn but proceed using target_lang.
-    if args.refine_only and args.source_lang != args.target_lang:
-        logger.warning(
-            f"⚠️ --refine-only: source language ({args.source_lang}) differs from "
-            f"target language ({args.target_lang}). Refinement is monolingual; "
-            f"source_lang will be ignored and the file will be polished as "
-            f"{args.target_lang}."
-        )
-
-    if args.refine_only:
-        logger.info("Refine-Only Started", LogType.TRANSLATION_START, {
-            'target_lang': args.target_lang,
-            'file_type': file_type,
-            'model': args.model,
-            'input_file': args.input,
-            'output_file': args.output,
-            'api_endpoint': args.api_endpoint,
-            'llm_provider': args.provider,
-            'mode': 'refine-only',
-        })
-    else:
-        logger.info("Translation Started", LogType.TRANSLATION_START, {
-            'source_lang': args.source_lang,
-            'target_lang': args.target_lang,
-            'file_type': file_type,
-            'model': args.model,
-            'input_file': args.input,
-            'output_file': args.output,
-            'api_endpoint': args.api_endpoint,
-            'llm_provider': args.provider
-        })
-
-    # Create legacy callback for backward compatibility
-    log_callback = logger.create_legacy_callback()
-
-    # Create stats callback to update logger progress
-    def stats_callback(stats: dict):
-        completed = stats.get('completed_chunks', 0)
-        total = stats.get('total_chunks', 0)
-        if total > 0:
-            logger.update_progress(completed, total)
-
-    # Build prompt_options from CLI arguments
-    # Technical content protection is now always enabled.
-    # In refine-only mode the refinement pass is implicit, so we force the
-    # `refine` flag off to avoid double-counting in the progress tracker.
-    prompt_options = {
-        'preserve_technical_content': True,
-        'text_cleanup': args.text_cleanup,
-        'refine': args.refine and not args.refine_only,
-    }
-
-    # Load glossary file (JSON or CSV) into prompt_options
-    if args.glossary:
+    if args.resume:
+        checkpoint_manager = CheckpointManager()
         try:
-            from src.core.glossary.cli_loader import load_glossary_from_file
-            glossary_terms, glossary_metadata = load_glossary_from_file(args.glossary)
-            if glossary_terms:
-                prompt_options['glossary_terms'] = glossary_terms
-                if glossary_metadata:
-                    prompt_options['glossary_term_metadata'] = glossary_metadata
-                logger.info(f"Glossary loaded: {len(glossary_terms)} terms from {args.glossary}")
-            else:
-                logger.warning(f"Glossary file {args.glossary} contained no usable entries")
-        except Exception as e:
-            parser.error(f"Failed to load glossary {args.glossary}: {e}")
+            job = _resume_job(args, checkpoint_manager)
+        except JobConfigError as e:
+            parser.error(str(e))
+        return run_cli_job(job, logger, translation_id=args.resume,
+                           checkpoint_manager=checkpoint_manager, is_resume=True).exit_code
 
-    # Auto glossary / auto style: derive throwaway prompt_options from the
-    # input document itself, with one extra LLM call per requested pass.
-    _apply_cli_auto_prep(args, prompt_options, logger)
+    if not args.input:
+        parser.error("the following arguments are required: -i/--input (or --resume JOB_ID)")
+    if args.fix_terms_scan:
+        if not args.fix_terms:
+            parser.error("--fix-terms-scan requires --fix-terms RULES")
+        return _run_term_fix_scan(args, parser, logger)
 
-    raise SystemExit(_run_job(args, logger, prompt_options, log_callback, stats_callback))
+    try:
+        job = JobConfig.from_cli_args(args)
+    except JobConfigError as e:
+        parser.error(str(e))
+
+    # If no .env was found, show the *effective* settings (issue #187).
+    from src.config import warn_env_config_missing, PORT
+    warn_env_config_missing(provider=job.llm_provider, api_endpoint=job.endpoint,
+                            model=job.model, port=PORT)
+    for notice in job.notices:
+        if notice.startswith("⚠️"):
+            logger.warning(notice)
+        else:
+            logger.info(notice)
+    if job.is_term_fix:
+        _check_term_fix_rules(job, parser, logger)
+    return run_cli_job(job, logger).exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

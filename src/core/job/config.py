@@ -59,7 +59,7 @@ _OWNED_KEYS = frozenset({
     'bilingual_output', 'refine_only', 'refine_after', 'term_fix', 'tts_enabled',
     'tts_config', 'file_type', 'file_path', 'text', 'input_filename',
     'auto_adjust_context', 'min_chunk_size', 'max_tokens_per_chunk', 'retry_token_aligned',
-    'origin', 'refine_model', 'refine_llm_provider', 'refine_llm_api_endpoint',
+    'origin', 'output_dir', 'refine_model', 'refine_llm_provider', 'refine_llm_api_endpoint',
     # Runtime-only markers older handlers wrote into the in-memory config.
     'is_resume', 'resume_from_index', '_auto_resume_last_index', '_auto_resume_stuck_count',
 })
@@ -334,6 +334,10 @@ class JobConfig:
             'retry_token_aligned': self.retry_token_aligned,
             'origin': self.origin,
         })
+        if self.origin == 'cli':
+            # A CLI job writes next to the user's files, not into a server
+            # output directory, so `translate.py --resume` needs the folder.
+            data['output_dir'] = self.output_dir
         if self.input_path is not None:
             data['file_path'] = self.input_path
         if self.text is not None:
@@ -366,6 +370,7 @@ class JobConfig:
         else:
             operation = OP_TRANSLATE
         output_name = stored.get('output_filename') or ''
+        output_dir = output_dir if output_dir is not None else stored.get('output_dir')
         output_path = os.path.join(output_dir, output_name) if output_dir else output_name
         refine_provider = None
         if stored.get('refine_model') or stored.get('refine_llm_provider'):

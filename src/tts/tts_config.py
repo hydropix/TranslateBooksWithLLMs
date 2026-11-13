@@ -371,6 +371,18 @@ class TTSConfig:
         }
         return format_extensions.get(self.output_format.lower(), '.opus')
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'TTSConfig':
+        """Rebuild an enabled config from ``to_dict()`` output (a job's TTS options).
+
+        Unknown keys are ignored; missing ones keep their defaults.
+        """
+        import dataclasses
+        known = {f.name for f in dataclasses.fields(cls)}
+        values = {k: v for k, v in (data or {}).items() if k in known}
+        values['enabled'] = True
+        return cls(**values)
+
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization"""
         return {

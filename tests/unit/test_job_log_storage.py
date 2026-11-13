@@ -9,6 +9,9 @@ import pytest
 from src.api import handlers
 from src.api import translation_state
 from src.api.translation_state import TranslationStateManager
+from src.core import adapters
+from src.core.job import JobConfig, JobResult
+from src.core.llm.provider_config import ProviderConfig
 
 
 class FakeCheckpointManager:
@@ -19,8 +22,8 @@ class FakeCheckpointManager:
         return True
 
     def __getattr__(self, name):
-        if name.startswith('mark_') or name == 'prune_job_data':
-            return lambda translation_id: None
+        if name.startswith('mark_') or name in ('prune_job_data', 'set_job_phase'):
+            return lambda translation_id, *args: None
         raise AttributeError(name)
 
     def load_checkpoint(self, translation_id):
@@ -45,31 +48,35 @@ def test_append_log_is_bounded():
 
 @pytest.mark.asyncio
 async def test_job_logs_are_stored_once_and_compact(tmp_path, monkeypatch):
-    monkeypatch.setattr(handlers, 'notify', lambda *a, **k: None)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('src.utils.notifier.notify', lambda *a, **k: None)
     emitted = []
     monkeypatch.setattr(handlers, 'emit_update',
                         lambda _sio, _tid, payload, _sm: emitted.append(payload))
     huge = 'x' * 50_000
 
-    async def fake_translate_file(**kwargs):
-        kwargs['log_callback']('llm_response', '', data={'type': 'llm_response', 'response': huge})
-        kwargs['log_callback']('marker', 'unique marker line')
-        with open(kwargs['output_filepath'], 'w', encoding='utf-8') as handle:
+    async def fake_translate_file(job, ctx):
+        ctx.log('llm_response', '', {'type': 'llm_response', 'response': huge})
+        ctx.log('marker', 'unique marker line')
+        with open(job.output_path, 'w', encoding='utf-8') as handle:
             handle.write('done')
+        stats = {'total_chunks': 1, 'completed_chunks': 1, 'failed_chunks': 0}
+        ctx.emit(stats)
+        return JobResult.from_run(stats, job.output_path, engine_ok=True)
 
-    monkeypatch.setattr(handlers, 'translate_file', fake_translate_file)
+    monkeypatch.setattr(adapters, 'translate_file', fake_translate_file)
     state = TranslationStateManager(checkpoint_manager=FakeCheckpointManager(), server_session_id='s')
-    config = {
-        'text': 'Hello.', 'file_type': 'txt', 'source_language': 'English',
-        'target_language': 'French', 'model': 'm', 'llm_provider': 'ollama',
-        'llm_api_endpoint': 'http://localhost:11434/api/generate',
-        'output_filename': 'out.txt', 'prompt_options': {},
-    }
-    state.create_translation('trans_1', config)
     output_dir = tmp_path / 'out'
     output_dir.mkdir()
+    job = JobConfig(
+        text='Hello.', file_type='txt', source_language='English', target_language='French',
+        provider=ProviderConfig(provider='ollama', model='m',
+                                endpoint='http://localhost:11434/api/generate'),
+        output_path=str(output_dir / 'out.txt'), prompt_options={}, origin='web',
+    )
+    state.create_translation('trans_1', job.to_persisted())
 
-    await handlers.perform_actual_translation('trans_1', config, state, str(output_dir), FakeSocketIO())
+    await handlers.perform_actual_translation('trans_1', job, state, str(output_dir), FakeSocketIO())
 
     logs = [e for e in state.get_translation_field('trans_1', 'logs') if isinstance(e, dict)]
     assert [e['message'] for e in logs].count('unique marker line') == 1

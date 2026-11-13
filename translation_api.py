@@ -194,9 +194,10 @@ logger.info(f"Output folder '{OUTPUT_DIR}' is ready")
 # Static files are now handled automatically by Flask
 
 # Wrapper function for starting translation jobs
-def start_job_wrapper(translation_id, config):
+def start_job_wrapper(translation_id, job, is_resume=False):
     """Wrapper to inject dependencies into job starter"""
-    start_translation_job(translation_id, config, state_manager, OUTPUT_DIR, socketio)
+    start_translation_job(translation_id, job, state_manager, OUTPUT_DIR, socketio,
+                          is_resume=is_resume)
 
 # Configure routes and WebSocket handlers
 configure_routes(app, state_manager, OUTPUT_DIR, start_job_wrapper, socketio)

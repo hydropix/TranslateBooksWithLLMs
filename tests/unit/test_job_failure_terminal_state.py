@@ -5,12 +5,17 @@ The generic `except Exception` path of `perform_actual_translation` used to set
 the in-memory status to 'error' without calling `checkpoint_manager.mark_error`,
 so the SQLite row stayed 'running' (not resumable until a restart). The
 temporary text file created for inline-text jobs was only removed on success.
+Both are now the job runner's (``src.core.job.runner``) ``try/finally``
+guarantees; ``perform_actual_translation`` is its web adapter.
 """
 import time
 
 import pytest
 
 from src.api import handlers
+from src.core import adapters
+from src.core.job import JobConfig, JobResult
+from src.core.llm.provider_config import ProviderConfig
 
 
 class FakeCheckpointManager:
@@ -24,8 +29,8 @@ class FakeCheckpointManager:
         return True
 
     def __getattr__(self, name):
-        if name.startswith('mark_') or name == 'prune_job_data':
-            return lambda translation_id: self.calls.append((name, translation_id))
+        if name.startswith('mark_') or name in ('prune_job_data', 'set_job_phase'):
+            return lambda translation_id, *args: self.calls.append((name, translation_id))
         raise AttributeError(name)
 
     def load_checkpoint(self, translation_id):
@@ -58,24 +63,24 @@ class FakeSocketIO:
         pass
 
 
-def _config():
-    return {
-        'text': 'Hello world.',
-        'file_type': 'txt',
-        'source_language': 'English',
-        'target_language': 'French',
-        'model': 'some-model',
-        'llm_provider': 'ollama',
-        'llm_api_endpoint': 'http://localhost:11434/api/generate',
-        'output_filename': 'out.txt',
-        'prompt_options': {},
-    }
+def _job(output_dir):
+    return JobConfig(
+        text='Hello world.',
+        file_type='txt',
+        source_language='English',
+        target_language='French',
+        provider=ProviderConfig(provider='ollama', model='some-model',
+                                endpoint='http://localhost:11434/api/generate'),
+        output_path=str(output_dir / 'out.txt'),
+        prompt_options={},
+        origin='web',
+    )
 
 
 @pytest.fixture
 def seams(monkeypatch):
     monkeypatch.setattr(handlers, 'emit_update', lambda *a, **k: None)
-    monkeypatch.setattr(handlers, 'notify', lambda *a, **k: None)
+    monkeypatch.setattr('src.utils.notifier.notify', lambda *a, **k: None)
 
 
 async def _run(tmp_path, monkeypatch, translate_impl):
@@ -83,27 +88,29 @@ async def _run(tmp_path, monkeypatch, translate_impl):
     state_manager = FakeStateManager(checkpoint_manager)
     seen = {}
 
-    async def fake_translate_file(**kwargs):
-        seen['input'] = kwargs['input_filepath']
-        await translate_impl(state_manager, **kwargs)
+    async def fake_translate_file(job, ctx):
+        seen['input'] = job.input_path
+        return await translate_impl(job, ctx)
 
-    monkeypatch.setattr(handlers, 'translate_file', fake_translate_file)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(adapters, 'translate_file', fake_translate_file)
     output_dir = tmp_path / 'out'
     output_dir.mkdir()
     await handlers.perform_actual_translation(
-        'trans_1', _config(), state_manager, str(output_dir), FakeSocketIO())
+        'trans_1', _job(output_dir), state_manager, str(output_dir), FakeSocketIO())
     return state_manager, checkpoint_manager, seen, output_dir
 
 
 @pytest.mark.asyncio
 async def test_unexpected_exception_marks_db_error_and_removes_temp_file(
         tmp_path, monkeypatch, seams):
-    async def boom(_state, **kwargs):
+    async def boom(job, ctx):
         raise RuntimeError('provider exploded')
 
     state, checkpoint_manager, seen, output_dir = await _run(tmp_path, monkeypatch, boom)
 
     assert state.fields['status'] == 'error'
+    assert 'provider exploded' in state.fields['error']
     assert ('mark_error', 'trans_1') in checkpoint_manager.calls
     # The temp input lived in the output dir and must be gone.
     assert seen['input'].startswith(str(output_dir))
@@ -111,32 +118,37 @@ async def test_unexpected_exception_marks_db_error_and_removes_temp_file(
 
 
 @pytest.mark.asyncio
-async def test_in_memory_error_status_is_mirrored_to_db(tmp_path, monkeypatch, seams):
-    async def fails_softly(state, **kwargs):
-        state.fields['status'] = 'error'
-        state.fields['error'] = 'chunk loop failed'
+async def test_engine_failure_result_is_mirrored_to_db(tmp_path, monkeypatch, seams):
+    async def fails_softly(job, ctx):
+        return JobResult.failed('chunk loop failed')
 
     state, checkpoint_manager, _seen, output_dir = await _run(
         tmp_path, monkeypatch, fails_softly)
 
     assert state.fields['status'] == 'error'
+    assert state.fields['error'] == 'chunk loop failed'
     assert ('mark_error', 'trans_1') in checkpoint_manager.calls
     assert list(output_dir.iterdir()) == []
 
 
 @pytest.mark.asyncio
 async def test_success_still_removes_temp_file(tmp_path, monkeypatch, seams):
-    async def writes(_state, **kwargs):
-        with open(kwargs['output_filepath'], 'w', encoding='utf-8') as handle:
+    async def writes(job, ctx):
+        with open(job.output_path, 'w', encoding='utf-8') as handle:
             handle.write('Bonjour le monde.')
+        stats = {'total_chunks': 1, 'completed_chunks': 1, 'failed_chunks': 0}
+        ctx.emit(stats)
+        return JobResult.from_run(stats, job.output_path, engine_ok=True)
 
     state, checkpoint_manager, _seen, output_dir = await _run(tmp_path, monkeypatch, writes)
 
+    assert state.fields['status'] == 'completed'
     assert ('mark_error', 'trans_1') not in checkpoint_manager.calls
+    assert ('mark_completed', 'trans_1') in checkpoint_manager.calls
     assert [p.name for p in output_dir.iterdir()] == ['out.txt']
 
 
-def test_wrapper_error_marks_db_error(monkeypatch):
+def test_wrapper_error_marks_db_error(monkeypatch, tmp_path):
     checkpoint_manager = FakeCheckpointManager()
     state = FakeStateManager(checkpoint_manager)
     monkeypatch.setattr(handlers, 'emit_update', lambda *a, **k: None)
@@ -145,7 +157,7 @@ def test_wrapper_error_marks_db_error(monkeypatch):
         raise RuntimeError('crash before the job body')
 
     monkeypatch.setattr(handlers, 'perform_actual_translation', crash)
-    handlers.run_translation_async_wrapper('trans_2', {}, state, '.', FakeSocketIO())
+    handlers.run_translation_async_wrapper('trans_2', _job(tmp_path), state, '.', FakeSocketIO())
 
     assert state.fields['status'] == 'error'
     assert ('mark_error', 'trans_2') in checkpoint_manager.calls

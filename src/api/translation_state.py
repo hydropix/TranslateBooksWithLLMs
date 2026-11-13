@@ -5,8 +5,9 @@ import atexit
 import threading
 import time
 import copy
+import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Callable, Dict, Any, Optional, TYPE_CHECKING
 from src.persistence.checkpoint_manager import CheckpointManager
 
 if TYPE_CHECKING:
@@ -25,6 +26,37 @@ def _append_bounded(logs: list, entry: Any) -> None:
     overflow = len(logs) - MAX_STORED_LOG_ENTRIES
     if overflow > 0:
         del logs[:overflow]
+
+
+# Statuses after which a job's worker is gone for good (a 'rate_limited' job
+# counts only once it is interrupted, i.e. paused rather than waiting to
+# auto-resume).
+TERMINAL_STATUSES = frozenset({'completed', 'partial', 'error', 'interrupted'})
+
+# Finished jobs stay in memory this long so the UI can still replay their
+# completion card and resync after a reconnect; the history and resumable
+# lists read SQLite, not this registry.
+FINISHED_JOB_TTL_SECONDS = 6 * 3600
+
+# Hard cap on finished jobs kept in memory, oldest evicted first.
+MAX_FINISHED_JOBS = 200
+
+
+def _elapsed(status: Optional[str], stats: Dict[str, Any]) -> Optional[float]:
+    """Live elapsed time for an active job, the stored one for a finished job."""
+    start = stats.get('start_time')
+    if status in ('running', 'queued'):
+        return time.time() - start if start else None
+    if stats.get('elapsed_time') is not None:
+        return stats.get('elapsed_time')
+    return time.time() - start if start else None
+
+
+def new_job_id() -> str:
+    """A collision-free job id. Keeps the 'trans_' prefix the upload and
+    checkpoint cleanup rely on; the random suffix makes two jobs created in
+    the same millisecond distinct."""
+    return f"trans_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
 
 
 def generate_server_session_id() -> str:
@@ -79,8 +111,40 @@ class TranslationStateManager:
         with self._workers_lock:
             return translation_id in self._active_workers
     
+    def _is_finished(self, data: Dict[str, Any]) -> bool:
+        status = data.get('status')
+        return status in TERMINAL_STATUSES or (status == 'rate_limited' and data.get('interrupted'))
+
+    def evict_finished(self, now: Optional[float] = None) -> int:
+        """Drop finished jobs older than the TTL (and beyond the cap).
+
+        A job with a live worker is never evicted. Returns how many went.
+        """
+        now = time.time() if now is None else now
+        with self._workers_lock:
+            busy = set(self._active_workers)
+        with self._lock:
+            finished = []
+            for tid, data in self._translations.items():
+                if tid in busy or not self._is_finished(data):
+                    continue
+                finished_at = data.get('finished_at')
+                if finished_at is None:
+                    data['finished_at'] = finished_at = now
+                finished.append((finished_at, tid))
+            finished.sort()
+            expired = {tid for ts, tid in finished if now - ts > FINISHED_JOB_TTL_SECONDS}
+            overflow = len(finished) - len(expired) - MAX_FINISHED_JOBS
+            if overflow > 0:
+                remaining = [tid for _, tid in finished if tid not in expired]
+                expired.update(remaining[:overflow])
+            for tid in expired:
+                del self._translations[tid]
+            return len(expired)
+
     def create_translation(self, translation_id: str, config: Dict[str, Any]) -> None:
         """Create a new translation entry"""
+        self.evict_finished()
         with self._lock:
             self._translations[translation_id] = {
                 'status': 'queued',
@@ -149,7 +213,10 @@ class TranslationStateManager:
         with self._lock:
             if translation_id not in self._translations:
                 return False
-            self._translations[translation_id][field] = value
+            data = self._translations[translation_id]
+            data[field] = value
+            if field in ('status', 'interrupted'):
+                data['finished_at'] = time.time() if self._is_finished(data) else None
             return True
     
     def append_log(self, translation_id: str, log_entry: Any) -> bool:
@@ -162,6 +229,31 @@ class TranslationStateManager:
             _append_bounded(self._translations[translation_id]['logs'], log_entry)
             return True
     
+    def merge_stats(self, translation_id: str, stats_update: Dict[str, Any],
+                    finalize: Optional[Callable[[Dict[str, Any]], None]] = None
+                    ) -> Optional[Dict[str, Any]]:
+        """Merge an update into the job's stats and return a private copy.
+
+        ``finalize`` may adjust the merged dict (derived fields) before the
+        copy is taken. Everything happens under the lock: HTTP threads deep-
+        copy the same dict, so it must never be mutated outside it. Returns
+        None when the job does not exist.
+        """
+        with self._lock:
+            if translation_id not in self._translations:
+                return None
+            stats = self._translations[translation_id].setdefault('stats', {})
+            stats.update(stats_update)
+            if finalize is not None:
+                finalize(stats)
+            return copy.deepcopy(stats)
+
+    def get_stats(self, translation_id: str) -> Dict[str, Any]:
+        """A private copy of the job's stats ({} when unknown)."""
+        with self._lock:
+            data = self._translations.get(translation_id)
+            return copy.deepcopy(data.get('stats') or {}) if data else {}
+
     def update_stats(self, translation_id: str, stats_update: Dict[str, Any]) -> bool:
         """Update translation statistics"""
         with self._lock:
@@ -184,6 +276,7 @@ class TranslationStateManager:
     
     def get_translation_summaries(self) -> list:
         """Get summaries of all translations for listing"""
+        self.evict_finished()
         with self._lock:
             summaries = []
             for tid, data in self._translations.items():
@@ -207,7 +300,13 @@ class TranslationStateManager:
                     # legacy fields above for back-compat.
                     "percent": stats.get('percent'),
                     "phase": stats.get('phase'),
-                    "last_translation": data.get('last_translation')
+                    "last_translation": data.get('last_translation'),
+                    "input_file": config.get('input_filename'),
+                    "failed_chunks": stats.get('failed_chunks', 0),
+                    "elapsed_time": _elapsed(data.get('status'), stats),
+                    # The same stats the Socket.IO updates carry, so a client
+                    # that reconnects can resync the whole progress panel.
+                    "stats": copy.deepcopy(stats),
                 })
             return sorted(summaries, key=lambda x: x.get('start_time', 0), reverse=True)
     

@@ -54,6 +54,43 @@ function formatPrice(price) {
 }
 
 /**
+ * Build the "Context: N tokens | description" tooltip of a model option.
+ * The raw values are kept in data attributes so refreshModelTooltips() can
+ * rebuild the localized text when the UI language changes.
+ */
+function buildModelTooltip(contextLength, description) {
+    const parts = [];
+    if (contextLength) parts.push(t('settings:model_context_tooltip', { tokens: contextLength }));
+    if (description) parts.push(description);
+    return parts.join(' | ');
+}
+
+function setModelTooltip(opt, contextLength, description) {
+    if (!contextLength) {
+        // Description-only tooltip: no localized part, nothing to refresh.
+        if (description) opt.title = description;
+        return;
+    }
+    opt.dataset.contextLength = contextLength;
+    if (description) opt.dataset.tooltipDescription = description;
+    opt.title = buildModelTooltip(contextLength, description);
+}
+
+/**
+ * Re-localize every model option tooltip carrying a context length. Model
+ * lists are only rebuilt on (re)load, so without this the tooltip would keep
+ * the language active when the list was fetched. Covers the Settings
+ * dropdown and the Sample tab columns alike.
+ */
+function refreshModelTooltips() {
+    document.querySelectorAll('option[data-context-length]').forEach((opt) => {
+        opt.title = buildModelTooltip(opt.dataset.contextLength, opt.dataset.tooltipDescription);
+    });
+}
+
+window.addEventListener('localeChanged', refreshModelTooltips);
+
+/**
  * Populate any <select> element with the right per-provider format:
  *   - Gemini  → displayName + token-limit tooltip
  *   - OpenAI  → curated label list
@@ -131,10 +168,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             } else {
                 opt.textContent = m.label || m.name || modelId;
             }
-            const tip = [];
-            if (m.context_length) tip.push(`Context: ${m.context_length} tokens`);
-            if (m.description) tip.push(m.description);
-            if (tip.length) opt.title = tip.join(' | ');
+            setModelTooltip(opt, m.context_length, m.description);
             if (modelId === defaultModel) { opt.selected = true; defaultFound = true; }
             (optgroup || selectEl).appendChild(opt);
         });
@@ -147,7 +181,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             const opt = document.createElement('option');
             opt.value = value;
             opt.textContent = label;
-            if (m.context_length) opt.title = `Context: ${m.context_length} tokens`;
+            setModelTooltip(opt, m.context_length);
             if (value === defaultModel) { opt.selected = true; defaultFound = true; }
             selectEl.appendChild(opt);
         });

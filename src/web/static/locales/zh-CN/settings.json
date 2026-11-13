@@ -226,5 +226,6 @@
   "cost_override_note": "此模型当前已保存自定义价格。",
   "cost_reset_default": "重置为默认值",
   "cost_format_free": "免费",
-  "cost_format_lt_001": "<$0.01"
+  "cost_format_lt_001": "<$0.01",
+  "model_context_tooltip": "上下文：{{tokens}} 个 token"
 }

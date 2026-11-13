@@ -171,6 +171,348 @@ let ollamaRetryTimer = null;
 let ollamaRetryCount = 0;
 
 /**
+ * Monotonically increasing token of the latest model-list request. Every
+ * loadModels() call takes a new token; a response (or error) whose token is
+ * no longer the latest is discarded without touching the DOM or the state,
+ * so a slow answer for provider X cannot overwrite the list after the user
+ * switched to provider Y (or re-triggered a load for the same provider).
+ */
+let latestModelLoadToken = 0;
+
+/** Map backend `{id, name}` models to the `{value, label}` dropdown shape. */
+function toValueLabel(models) {
+    return models.map(m => ({ value: m.id, label: m.name || m.id }));
+}
+
+/** Same as toValueLabel, keeping `context_length` for the tooltip. */
+function toValueLabelWithContext(models) {
+    return models.map(m => ({ value: m.id, label: m.name || m.id, context_length: m.context_length }));
+}
+
+/**
+ * Shared success path: populate the dropdown, log, lock the .env model when
+ * the provider opts in, restore the saved selection, refresh the model
+ * recommendation, publish the available models and mark the provider as
+ * connected.
+ */
+function applyLoadedModels(ctx, data) {
+    const { provider, cfg } = ctx;
+    MessageLogger.showMessage('', '');
+    const models = cfg.formatModels ? cfg.formatModels(data.models) : data.models;
+    const envModelApplied = populateModelSelect(models, data.default, provider);
+    MessageLogger.addLog(t(cfg.successLogKey, cfg.successLogParams ? cfg.successLogParams(data) : { count: data.count }));
+
+    // If .env model was found and applied, lock it in
+    if (cfg.lockEnvModel && envModelApplied && data.default) {
+        SettingsManager.markEnvModelApplied();
+    }
+
+    // Apply saved model preference if any (skipped if .env model was applied)
+    SettingsManager.applyPendingModelSelection();
+    ModelDetector.checkAndShowRecommendation();
+
+    StateManager.setState('models.availableModels', cfg.availableModels ? cfg.availableModels(models) : models);
+    StatusManager.setConnected(provider, data.count);
+}
+
+/** Publish a static fallback list in state and keep the provider "connected". */
+function publishFallbackList(provider, fallback) {
+    StateManager.setState('models.availableModels', fallback.models.map(m => m.value));
+    StatusManager.setConnected(provider, fallback.models.length);
+}
+
+/**
+ * Default handler for an empty / error-carrying response:
+ *   - providers with a `fallback` config switch to their static list,
+ *   - the others surface the error and leave a "no models" placeholder.
+ */
+function handleEmptyResponse(ctx, data) {
+    const { provider, cfg, modelSelect } = ctx;
+    const errorMessage = data.error || t(cfg.emptyDefaultKey);
+    if (cfg.fallback) {
+        MessageLogger.showMessage(t(cfg.fallback.emptyMessageKey, { message: errorMessage }), 'warning');
+        populateModelSelect(cfg.fallback.models, cfg.fallback.defaultModel, provider);
+        MessageLogger.addLog(t(cfg.fallback.emptyLogKey));
+        publishFallbackList(provider, cfg.fallback);
+        return;
+    }
+    MessageLogger.showMessage(t('settings:no_models_warning', { message: errorMessage }), 'error');
+    setPlaceholderOption(modelSelect, 'settings:search_models_no_models_available');
+    if (cfg.emptyLogKey) MessageLogger.addLog(t(cfg.emptyLogKey));
+    StatusManager.setError(t('settings:status_no_models'));
+}
+
+/**
+ * Default handler for a failed request: fallback list when the provider has
+ * one, otherwise an error message plus an "error" placeholder.
+ */
+function handleRequestError(ctx, error) {
+    const { provider, cfg, modelSelect } = ctx;
+    const params = { error: error.message };
+    if (cfg.fallback) {
+        MessageLogger.showMessage(t(cfg.fallback.errorMessageKey, params), 'warning');
+        MessageLogger.addLog(t(cfg.fallback.errorLogKey, params));
+        populateModelSelect(cfg.fallback.models, cfg.fallback.defaultModel, provider);
+        publishFallbackList(provider, cfg.fallback);
+        return;
+    }
+    MessageLogger.showMessage(t(cfg.errorMessageKey, params), 'error');
+    if (cfg.errorLogKey) MessageLogger.addLog(t(cfg.errorLogKey, params));
+    setPlaceholderOption(modelSelect, 'settings:search_models_error');
+    StatusManager.setError(error.message);
+}
+
+/** Last-resort static list for the official OpenAI host. */
+function applyOpenAIStaticFallback() {
+    populateModelSelect(OPENAI_MODELS, null, 'openai');
+    MessageLogger.addLog(t('settings:openai_models_common_log'));
+
+    SettingsManager.applyPendingModelSelection();
+    ModelDetector.checkAndShowRecommendation();
+
+    StateManager.setState('models.availableModels', OPENAI_MODELS.map(m => m.value));
+    StatusManager.setConnected('openai', OPENAI_MODELS.length);
+}
+
+/**
+ * Per-provider model-loading configuration consumed by
+ * ProviderManager.loadModels(). Fields:
+ *   loadingKey        i18n key of the "loading" placeholder
+ *   apiKeyInput       id of the API-key input (read via ApiKeyUtils)
+ *   missingKeyMessage when set, an empty API key aborts the load with this
+ *                     warning and an "enter key first" placeholder
+ *   prepare(ctx)      optional synchronous hook run before the request
+ *   requestOptions(ctx, apiKey)  options passed to ApiClient.getModels
+ *   formatModels      optional mapping of `data.models` before rendering
+ *   availableModels   optional mapping of the rendered list into state
+ *   lockEnvModel      call SettingsManager.markEnvModelApplied() when the
+ *                     .env default model was found
+ *   successLogKey / successLogParams  log line after a successful load
+ *   emptyDefaultKey   message used when an empty response carries no error
+ *   emptyLogKey       optional log line for an empty response (no fallback)
+ *   errorMessageKey / errorLogKey     messages for a failed request (no fallback)
+ *   fallback          static list used on empty response or request failure
+ *   beforeSuccess(ctx) optional hook run before the shared success path
+ *   onEmpty(ctx, data) optional replacement of handleEmptyResponse
+ *   onData(ctx, data)  optional replacement of the whole response handling
+ *   onError(ctx, error) optional replacement of handleRequestError
+ */
+const MODEL_LOADERS = {
+    ollama: {
+        loadingKey: 'settings:search_models_loading',
+        requestOptions: (ctx) => {
+            ctx.apiEndpoint = DomHelpers.getValue('apiEndpoint');
+            return { apiEndpoint: ctx.apiEndpoint };
+        },
+        lockEnvModel: true,
+        successLogKey: 'settings:models_loaded_ollama_log',
+        successLogParams: (data) => ({ count: data.count, default: data.default }),
+        // Success - stop auto-retry
+        beforeSuccess: (ctx) => ctx.manager.stopOllamaAutoRetry(),
+        onEmpty: (ctx, data) => {
+            // No models available - start auto-retry
+            const errorMessage = data.error || t('settings:no_models_default');
+
+            // Show message only after several retries
+            if (ollamaRetryCount >= OLLAMA_MAX_SILENT_RETRIES) {
+                MessageLogger.showMessage(t('settings:no_models_warning', { message: errorMessage }), 'error');
+                MessageLogger.addLog(t('settings:waiting_for_ollama_log', { endpoint: ctx.apiEndpoint, interval: OLLAMA_RETRY_INTERVAL / 1000 }));
+            }
+
+            setPlaceholderOption(ctx.modelSelect, 'settings:search_models_waiting_ollama');
+            StatusManager.setWaiting(t('settings:search_models_waiting_ollama'));
+            ctx.manager.startOllamaAutoRetry();
+        },
+        onError: (ctx) => {
+            // Connection error - start auto-retry
+            if (ollamaRetryCount >= OLLAMA_MAX_SILENT_RETRIES) {
+                MessageLogger.showMessage(t('settings:waiting_for_ollama_msg'), 'warning');
+                MessageLogger.addLog(t('settings:ollama_not_accessible_log', { interval: OLLAMA_RETRY_INTERVAL / 1000 }));
+            }
+
+            setPlaceholderOption(ctx.modelSelect, 'settings:search_models_waiting_ollama');
+            StatusManager.setDisconnected(t('settings:status_not_accessible'));
+            ctx.manager.startOllamaAutoRetry();
+        },
+    },
+
+    gemini: {
+        loadingKey: 'settings:search_models_loading_gemini',
+        apiKeyInput: 'geminiApiKey',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        lockEnvModel: true,
+        successLogKey: 'settings:models_loaded_gemini_log',
+        emptyDefaultKey: 'settings:no_models_gemini',
+        emptyLogKey: 'settings:models_no_gemini_log',
+        errorMessageKey: 'settings:gemini_fetch_error',
+        errorLogKey: 'settings:gemini_fetch_error_log',
+    },
+
+    /**
+     * OpenAI-compatible endpoints. For api.openai.com, falls back to a static
+     * cloud list if the live fetch fails. For any custom endpoint, surfaces
+     * the error instead of falling back, since the cloud model names would
+     * not exist on a local server.
+     */
+    openai: {
+        loadingKey: 'settings:search_models_loading',
+        apiKeyInput: 'openaiApiKey',
+        prepare: (ctx) => {
+            ctx.apiEndpoint = DomHelpers.getValue('openaiEndpoint') || 'https://api.openai.com/v1/chat/completions';
+            ctx.isOfficialOpenAI = /^https?:\/\/api\.openai\.com(\/|$)/i.test(ctx.apiEndpoint);
+            const isLocalHttps = /^https:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(ctx.apiEndpoint);
+            if (isLocalHttps) {
+                MessageLogger.addLog(t('settings:openai_local_https_warning_log', { host: ctx.apiEndpoint.slice(8) }));
+            }
+        },
+        requestOptions: (ctx, apiKey) => ({ apiKey, apiEndpoint: ctx.apiEndpoint }),
+        formatModels: toValueLabel,
+        availableModels: (models) => models.map(m => m.value),
+        lockEnvModel: true,
+        successLogKey: 'settings:openai_models_loaded_log',
+        onData: (ctx, data) => {
+            const hasModels = data.models && data.models.length > 0;
+
+            if (data.status === 'openai_connected' && hasModels) {
+                applyLoadedModels(ctx, data);
+                return;
+            }
+
+            if (data.status === 'openai_error') {
+                const errorMsg = data.error || t('settings:openai_endpoint_error_default');
+                MessageLogger.showMessage(t('settings:openai_endpoint_error_warning', { error: errorMsg }), 'warning');
+                MessageLogger.addLog(t('settings:openai_endpoint_error_log', { error: errorMsg }));
+                setPlaceholderOption(ctx.modelSelect, 'settings:search_models_no_check_endpoint');
+                StateManager.setState('models.availableModels', []);
+                StatusManager.setError(errorMsg);
+                return;
+            }
+
+            if (data.status === 'openai_static' && hasModels) {
+                const reason = data.error ? ` (${data.error})` : '';
+                MessageLogger.showMessage(t('settings:openai_static_warning', { reason }), 'warning');
+                MessageLogger.addLog(t('settings:openai_static_log', { reason }));
+
+                const formattedModels = toValueLabel(data.models);
+                populateModelSelect(formattedModels, data.default, 'openai');
+                SettingsManager.applyPendingModelSelection();
+                ModelDetector.checkAndShowRecommendation();
+
+                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
+                StatusManager.setConnected('openai', data.count);
+                return;
+            }
+
+            // Any other answer: last-resort static list
+            applyOpenAIStaticFallback();
+        },
+        onError: (ctx, error) => {
+            MessageLogger.showMessage(t('settings:openai_cannot_reach_endpoint', { error: error.message }), 'warning');
+            MessageLogger.addLog(t('settings:openai_connection_error_log', { error: error.message }));
+
+            if (!ctx.isOfficialOpenAI) {
+                setPlaceholderOption(ctx.modelSelect, 'settings:search_models_no_check_endpoint');
+                StateManager.setState('models.availableModels', []);
+                StatusManager.setError(error.message);
+                return;
+            }
+
+            // Last-resort static fallback, only for the official OpenAI host
+            applyOpenAIStaticFallback();
+        },
+    },
+
+    // Text-only models, sorted by price
+    openrouter: {
+        loadingKey: 'settings:search_models_loading_openrouter',
+        apiKeyInput: 'openrouterApiKey',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        availableModels: (models) => models.map(m => m.id),
+        lockEnvModel: true,
+        successLogKey: 'settings:openrouter_models_loaded_log',
+        emptyDefaultKey: 'settings:openrouter_default_error',
+        fallback: {
+            models: OPENROUTER_FALLBACK_MODELS,
+            defaultModel: 'anthropic/claude-sonnet-4',
+            emptyMessageKey: 'settings:openrouter_fallback_warn',
+            emptyLogKey: 'settings:openrouter_fallback_log',
+            errorMessageKey: 'settings:openrouter_fetch_error_msg',
+            errorLogKey: 'settings:openrouter_fetch_error_log',
+        },
+    },
+
+    mistral: {
+        loadingKey: 'settings:search_models_loading_mistral',
+        apiKeyInput: 'mistralApiKey',
+        missingKeyMessage: 'settings:mistral_key_required',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        formatModels: toValueLabelWithContext,
+        availableModels: (models) => models.map(m => m.value),
+        successLogKey: 'settings:mistral_models_loaded_log',
+        emptyDefaultKey: 'settings:mistral_no_models_default',
+        errorMessageKey: 'settings:mistral_error',
+    },
+
+    deepseek: {
+        loadingKey: 'settings:search_models_loading_deepseek',
+        apiKeyInput: 'deepseekApiKey',
+        missingKeyMessage: 'settings:deepseek_key_required',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        formatModels: toValueLabelWithContext,
+        availableModels: (models) => models.map(m => m.value),
+        successLogKey: 'settings:deepseek_models_loaded_log',
+        emptyDefaultKey: 'settings:deepseek_default_error',
+        fallback: {
+            models: DEEPSEEK_FALLBACK_MODELS,
+            defaultModel: 'deepseek-v4-pro',
+            emptyMessageKey: 'settings:deepseek_fallback_msg',
+            emptyLogKey: 'settings:deepseek_fallback_log',
+            errorMessageKey: 'settings:deepseek_error_fallback_msg',
+            errorLogKey: 'settings:deepseek_error_fallback_log',
+        },
+    },
+
+    nim: {
+        loadingKey: 'settings:search_models_loading_nim',
+        apiKeyInput: 'nimApiKey',
+        missingKeyMessage: 'settings:nim_key_required',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        formatModels: toValueLabelWithContext,
+        availableModels: (models) => models.map(m => m.value),
+        successLogKey: 'settings:nim_models_loaded_log',
+        emptyDefaultKey: 'settings:nim_default_error',
+        fallback: {
+            models: NIM_FALLBACK_MODELS,
+            defaultModel: 'meta/llama-3.1-70b-instruct',
+            // NIM and Poe reuse the generic DeepSeek-named fallback messages.
+            emptyMessageKey: 'settings:deepseek_fallback_msg',
+            emptyLogKey: 'settings:nim_fallback_log',
+            errorMessageKey: 'settings:deepseek_error_fallback_msg',
+            errorLogKey: 'settings:nim_error_fallback_log',
+        },
+    },
+
+    poe: {
+        loadingKey: 'settings:search_models_loading_poe',
+        apiKeyInput: 'poeApiKey',
+        missingKeyMessage: 'settings:poe_key_required',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        // Models are passed through as-is (same format as OpenRouter)
+        availableModels: (models) => models.map(m => m.id),
+        successLogKey: 'settings:poe_models_loaded_log',
+        emptyDefaultKey: 'settings:poe_default_error',
+        fallback: {
+            models: POE_FALLBACK_MODELS,
+            defaultModel: 'Claude-Sonnet-4',
+            emptyMessageKey: 'settings:deepseek_fallback_msg',
+            emptyLogKey: 'settings:poe_fallback_log',
+            errorMessageKey: 'settings:deepseek_error_fallback_msg',
+            errorLogKey: 'settings:poe_error_fallback_log',
+        },
+    },
+};
+
+/**
  * Replace the model dropdown content with a single placeholder option whose
  * text comes from i18n key `i18nKey`. The data-i18n attribute ensures
  * applyToDOM re-translates it on language switch — so a dropdown stuck in
@@ -237,7 +579,7 @@ export const ProviderManager = {
                 endpointTimeout = setTimeout(() => {
                     const currentProvider = DomHelpers.getValue('llmProvider');
                     if (currentProvider === 'openai') {
-                        this.loadOpenAIModels();
+                        this.loadModels('openai');
                     }
                 }, 500); // Wait 500ms after user stops typing
             });
@@ -387,7 +729,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadOllamaModels();
+            if (loadModels) this.loadModels('ollama');
         } else if (provider === 'poe') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -398,7 +740,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'block';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadPoeModels();
+            if (loadModels) this.loadModels('poe');
         } else if (provider === 'gemini') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'block';
@@ -409,7 +751,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadGeminiModels();
+            if (loadModels) this.loadModels('gemini');
         } else if (provider === 'openai') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -420,7 +762,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadOpenAIModels();
+            if (loadModels) this.loadModels('openai');
         } else if (provider === 'openrouter') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -431,7 +773,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadOpenRouterModels();
+            if (loadModels) this.loadModels('openrouter');
         } else if (provider === 'mistral') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -442,7 +784,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadMistralModels();
+            if (loadModels) this.loadModels('mistral');
         } else if (provider === 'deepseek') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -453,7 +795,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'block';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadDeepSeekModels();
+            if (loadModels) this.loadModels('deepseek');
         } else if (provider === 'nim') {
             DomHelpers.hide('ollamaSettings');
             if (geminiSettings) geminiSettings.style.display = 'none';
@@ -464,7 +806,7 @@ export const ProviderManager = {
             if (deepseekSettings) deepseekSettings.style.display = 'none';
             if (poeSettings) poeSettings.style.display = 'none';
             if (nimSettings) nimSettings.style.display = 'block';
-            if (loadModels) this.loadNimModels();
+            if (loadModels) this.loadModels('nim');
         }
 
         // Parallel translation is only useful for cloud providers; a single
@@ -481,114 +823,67 @@ export const ProviderManager = {
      * Refresh models for current provider
      */
     refreshModels() {
-        const provider = DomHelpers.getValue('llmProvider');
-
-        if (provider === 'ollama') {
-            this.loadOllamaModels();
-        } else if (provider === 'poe') {
-            this.loadPoeModels();
-        } else if (provider === 'gemini') {
-            this.loadGeminiModels();
-        } else if (provider === 'openai') {
-            this.loadOpenAIModels();
-        } else if (provider === 'openrouter') {
-            this.loadOpenRouterModels();
-        } else if (provider === 'mistral') {
-            this.loadMistralModels();
-        } else if (provider === 'deepseek') {
-            this.loadDeepSeekModels();
-        } else if (provider === 'nim') {
-            this.loadNimModels();
-        }
+        // Unknown providers are ignored by loadModels()
+        this.loadModels(DomHelpers.getValue('llmProvider'));
     },
 
     /**
-     * Load Ollama models with auto-retry on failure
+     * Load the model list for `provider` using its MODEL_LOADERS config.
+     * Only the latest request may write to the DOM / state: an older
+     * response or error is dropped once a newer load has started or the
+     * selected provider no longer matches.
+     * @param {string} provider - Provider id ('ollama', 'gemini', ...)
      */
-    async loadOllamaModels() {
+    async loadModels(provider) {
+        const cfg = MODEL_LOADERS[provider];
+        if (!cfg) return;
+
         const modelSelect = DomHelpers.getElement('model');
         if (!modelSelect) return;
 
-        // Cancel any pending request
-        const currentRequest = StateManager.getState('models.currentLoadRequest');
-        if (currentRequest) {
-            currentRequest.cancelled = true;
-        }
-
-        // Create new request tracker
-        const thisRequest = { cancelled: false };
+        const token = ++latestModelLoadToken;
+        const thisRequest = { token, provider };
         StateManager.setState('models.currentLoadRequest', thisRequest);
+        const isStale = () =>
+            token !== latestModelLoadToken || DomHelpers.getValue('llmProvider') !== provider;
 
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading');
+        const ctx = { provider, cfg, modelSelect, manager: this };
+
+        setPlaceholderOption(modelSelect, cfg.loadingKey);
         StatusManager.setChecking();
+        if (cfg.prepare) cfg.prepare(ctx);
 
         try {
-            const apiEndpoint = DomHelpers.getValue('apiEndpoint');
-            const data = await ApiClient.getModels('ollama', { apiEndpoint });
-
-            // Check if request was cancelled
-            if (thisRequest.cancelled) {
-                console.log('Model load request was cancelled');
+            // ApiKeyUtils returns '__USE_ENV__' when the key is configured in .env
+            const apiKey = cfg.apiKeyInput ? ApiKeyUtils.getValue(cfg.apiKeyInput) : undefined;
+            if (cfg.missingKeyMessage && !apiKey) {
+                MessageLogger.showMessage(t(cfg.missingKeyMessage), 'warning');
+                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
+                StatusManager.setError(t('settings:status_no_api_key'));
                 return;
             }
 
-            // Verify provider hasn't changed
-            const currentProvider = DomHelpers.getValue('llmProvider');
-            if (currentProvider !== 'ollama') {
-                console.log('Provider changed during model load, ignoring Ollama response');
+            const data = await ApiClient.getModels(provider, cfg.requestOptions(ctx, apiKey));
+
+            if (isStale()) {
+                console.log(`[ProviderManager] Discarding stale ${provider} model list response`);
                 return;
             }
 
-            if (data.models && data.models.length > 0) {
-                // Success - stop auto-retry
-                this.stopOllamaAutoRetry();
-
-                MessageLogger.showMessage('', '');
-                const envModelApplied = populateModelSelect(data.models, data.default, 'ollama');
-                MessageLogger.addLog(t('settings:models_loaded_ollama_log', { count: data.count, default: data.default }));
-
-                // If .env model was found and applied, lock it in
-                if (envModelApplied && data.default) {
-                    SettingsManager.markEnvModelApplied();
-                }
-
-                // Apply saved model preference if any (will be skipped if .env model was applied)
-                SettingsManager.applyPendingModelSelection();
-
-                ModelDetector.checkAndShowRecommendation();
-
-                // Update available models in state
-                StateManager.setState('models.availableModels', data.models);
-
-                // Update status to connected
-                StatusManager.setConnected('ollama', data.count);
+            if (cfg.onData) {
+                cfg.onData(ctx, data);
+            } else if (data.models && data.models.length > 0) {
+                if (cfg.beforeSuccess) cfg.beforeSuccess(ctx);
+                applyLoadedModels(ctx, data);
             } else {
-                // No models available - start auto-retry
-                const errorMessage = data.error || t('settings:no_models_default');
-
-                // Show message only after several retries
-                if (ollamaRetryCount >= OLLAMA_MAX_SILENT_RETRIES) {
-                    MessageLogger.showMessage(t('settings:no_models_warning', { message: errorMessage }), 'error');
-                    MessageLogger.addLog(t('settings:waiting_for_ollama_log', { endpoint: apiEndpoint, interval: OLLAMA_RETRY_INTERVAL / 1000 }));
-                }
-
-                setPlaceholderOption(modelSelect, 'settings:search_models_waiting_ollama');
-                StatusManager.setWaiting(t('settings:search_models_waiting_ollama'));
-                this.startOllamaAutoRetry();
+                (cfg.onEmpty || handleEmptyResponse)(ctx, data);
             }
-
         } catch (error) {
-            if (!thisRequest.cancelled) {
-                // Connection error - start auto-retry
-                if (ollamaRetryCount >= OLLAMA_MAX_SILENT_RETRIES) {
-                    MessageLogger.showMessage(t('settings:waiting_for_ollama_msg'), 'warning');
-                    MessageLogger.addLog(t('settings:ollama_not_accessible_log', { interval: OLLAMA_RETRY_INTERVAL / 1000 }));
-                }
-
-                setPlaceholderOption(modelSelect, 'settings:search_models_waiting_ollama');
-                StatusManager.setDisconnected(t('settings:status_not_accessible'));
-                this.startOllamaAutoRetry();
+            if (isStale()) {
+                console.log(`[ProviderManager] Discarding stale ${provider} model list error`);
+                return;
             }
+            (cfg.onError || handleRequestError)(ctx, error);
         } finally {
             // Clear request tracker if it's still ours
             if (StateManager.getState('models.currentLoadRequest') === thisRequest) {
@@ -615,7 +910,7 @@ export const ProviderManager = {
             const currentProvider = DomHelpers.getValue('llmProvider');
             if (currentProvider === 'ollama') {
                 console.log(`Auto-retrying Ollama connection (attempt ${ollamaRetryCount})...`);
-                this.loadOllamaModels();
+                this.loadModels('ollama');
             }
         }, OLLAMA_RETRY_INTERVAL);
     },
@@ -629,444 +924,6 @@ export const ProviderManager = {
             ollamaRetryTimer = null;
         }
         ollamaRetryCount = 0;
-    },
-
-    /**
-     * Load Gemini models
-     */
-    async loadGeminiModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading_gemini');
-        StatusManager.setChecking();
-
-        try {
-            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
-            const apiKey = ApiKeyUtils.getValue('geminiApiKey');
-            const data = await ApiClient.getModels('gemini', { apiKey });
-
-            if (data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-                const envModelApplied = populateModelSelect(data.models, data.default, 'gemini');
-                MessageLogger.addLog(t('settings:models_loaded_gemini_log', { count: data.count }));
-
-                // If .env model was found and applied, lock it in
-                if (envModelApplied && data.default) {
-                    SettingsManager.markEnvModelApplied();
-                }
-
-                // Apply saved model preference if any (will be skipped if .env model was applied)
-                SettingsManager.applyPendingModelSelection();
-
-                ModelDetector.checkAndShowRecommendation();
-
-                // Update available models in state
-                StateManager.setState('models.availableModels', data.models);
-
-                // Update status to connected
-                StatusManager.setConnected('gemini', data.count);
-            } else {
-                const errorMessage = data.error || t('settings:no_models_gemini');
-                MessageLogger.showMessage(t('settings:no_models_warning', { message: errorMessage }), 'error');
-                setPlaceholderOption(modelSelect, 'settings:search_models_no_models_available');
-                MessageLogger.addLog(t('settings:models_no_gemini_log'));
-                StatusManager.setError(t('settings:status_no_models'));
-            }
-
-        } catch (error) {
-            MessageLogger.showMessage(t('settings:gemini_fetch_error', { error: error.message }), 'error');
-            MessageLogger.addLog(t('settings:gemini_fetch_error_log', { error: error.message }));
-            setPlaceholderOption(modelSelect, 'settings:search_models_error');
-            StatusManager.setError(error.message);
-        }
-    },
-
-    /**
-     * Load OpenAI-compatible models dynamically.
-     * For api.openai.com, falls back to a static cloud list if the live fetch fails.
-     * For any custom endpoint, surfaces the error instead of falling back, since
-     * the cloud model names would not exist on a local server.
-     */
-    async loadOpenAIModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        const apiEndpoint = DomHelpers.getValue('openaiEndpoint') || 'https://api.openai.com/v1/chat/completions';
-        const isOfficialOpenAI = /^https?:\/\/api\.openai\.com(\/|$)/i.test(apiEndpoint);
-        const isLocalHttps = /^https:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(apiEndpoint);
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading');
-        StatusManager.setChecking();
-
-        if (isLocalHttps) {
-            MessageLogger.addLog(t('settings:openai_local_https_warning_log', { host: apiEndpoint.slice(8) }));
-        }
-
-        try {
-            const apiKey = ApiKeyUtils.getValue('openaiApiKey');
-            const data = await ApiClient.getModels('openai', { apiKey, apiEndpoint });
-
-            if (data.status === 'openai_connected' && data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-
-                const formattedModels = data.models.map(m => ({
-                    value: m.id,
-                    label: m.name || m.id
-                }));
-
-                const envModelApplied = populateModelSelect(formattedModels, data.default, 'openai');
-                MessageLogger.addLog(t('settings:openai_models_loaded_log', { count: data.count }));
-
-                if (envModelApplied && data.default) {
-                    SettingsManager.markEnvModelApplied();
-                }
-
-                SettingsManager.applyPendingModelSelection();
-                ModelDetector.checkAndShowRecommendation();
-
-                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
-                StatusManager.setConnected('openai', data.count);
-                return;
-            }
-
-            if (data.status === 'openai_error') {
-                const errorMsg = data.error || t('settings:openai_endpoint_error_default');
-                MessageLogger.showMessage(t('settings:openai_endpoint_error_warning', { error: errorMsg }), 'warning');
-                MessageLogger.addLog(t('settings:openai_endpoint_error_log', { error: errorMsg }));
-                setPlaceholderOption(modelSelect, 'settings:search_models_no_check_endpoint');
-                StateManager.setState('models.availableModels', []);
-                StatusManager.setError(errorMsg);
-                return;
-            }
-
-            if (data.status === 'openai_static' && data.models && data.models.length > 0) {
-                const reason = data.error ? ` (${data.error})` : '';
-                MessageLogger.showMessage(t('settings:openai_static_warning', { reason }), 'warning');
-                MessageLogger.addLog(t('settings:openai_static_log', { reason }));
-
-                const formattedModels = data.models.map(m => ({
-                    value: m.id,
-                    label: m.name || m.id
-                }));
-                populateModelSelect(formattedModels, data.default, 'openai');
-                SettingsManager.applyPendingModelSelection();
-                ModelDetector.checkAndShowRecommendation();
-
-                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
-                StatusManager.setConnected('openai', data.count);
-                return;
-            }
-        } catch (error) {
-            MessageLogger.showMessage(t('settings:openai_cannot_reach_endpoint', { error: error.message }), 'warning');
-            MessageLogger.addLog(t('settings:openai_connection_error_log', { error: error.message }));
-
-            if (!isOfficialOpenAI) {
-                setPlaceholderOption(modelSelect, 'settings:search_models_no_check_endpoint');
-                StateManager.setState('models.availableModels', []);
-                StatusManager.setError(error.message);
-                return;
-            }
-        }
-
-        // Last-resort static fallback — only reached for the official OpenAI host
-        populateModelSelect(OPENAI_MODELS, null, 'openai');
-        MessageLogger.addLog(t('settings:openai_models_common_log'));
-
-        SettingsManager.applyPendingModelSelection();
-        ModelDetector.checkAndShowRecommendation();
-
-        StateManager.setState('models.availableModels', OPENAI_MODELS.map(m => m.value));
-        StatusManager.setConnected('openai', OPENAI_MODELS.length);
-    },
-
-    /**
-     * Load OpenRouter models dynamically from API (text-only models, sorted by price)
-     */
-    async loadOpenRouterModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading_openrouter');
-        StatusManager.setChecking();
-
-        try {
-            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
-            const apiKey = ApiKeyUtils.getValue('openrouterApiKey');
-            const data = await ApiClient.getModels('openrouter', { apiKey });
-
-            if (data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-                const envModelApplied = populateModelSelect(data.models, data.default, 'openrouter');
-                MessageLogger.addLog(t('settings:openrouter_models_loaded_log', { count: data.count }));
-
-                // If .env model was found and applied, lock it in
-                if (envModelApplied && data.default) {
-                    SettingsManager.markEnvModelApplied();
-                }
-
-                // Apply saved model preference if any (will be skipped if .env model was applied)
-                SettingsManager.applyPendingModelSelection();
-
-                ModelDetector.checkAndShowRecommendation();
-
-                // Update available models in state
-                StateManager.setState('models.availableModels', data.models.map(m => m.id));
-
-                // Update status to connected
-                StatusManager.setConnected('openrouter', data.count);
-            } else {
-                // Use fallback list
-                const errorMessage = data.error || t('settings:openrouter_default_error');
-                MessageLogger.showMessage(t('settings:openrouter_fallback_warn', { message: errorMessage }), 'warning');
-                populateModelSelect(OPENROUTER_FALLBACK_MODELS, 'anthropic/claude-sonnet-4', 'openrouter');
-                MessageLogger.addLog(t('settings:openrouter_fallback_log'));
-
-                // Update available models in state
-                StateManager.setState('models.availableModels', OPENROUTER_FALLBACK_MODELS.map(m => m.value));
-
-                // Still mark as connected since we have fallback models
-                StatusManager.setConnected('openrouter', OPENROUTER_FALLBACK_MODELS.length);
-            }
-
-        } catch (error) {
-            // Use fallback list on error
-            MessageLogger.showMessage(t('settings:openrouter_fetch_error_msg'), 'warning');
-            MessageLogger.addLog(t('settings:openrouter_fetch_error_log', { error: error.message }));
-            populateModelSelect(OPENROUTER_FALLBACK_MODELS, 'anthropic/claude-sonnet-4', 'openrouter');
-
-            // Update available models in state
-            StateManager.setState('models.availableModels', OPENROUTER_FALLBACK_MODELS.map(m => m.value));
-
-            // Still mark as connected since we have fallback models
-            StatusManager.setConnected('openrouter', OPENROUTER_FALLBACK_MODELS.length);
-        }
-    },
-
-    /**
-     * Load Mistral models dynamically from API
-     */
-    async loadMistralModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading_mistral');
-        StatusManager.setChecking();
-
-        try {
-            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
-            const apiKey = ApiKeyUtils.getValue('mistralApiKey');
-            if (!apiKey) {
-                MessageLogger.showMessage(t('settings:mistral_key_required'), 'warning');
-                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
-                StatusManager.setError(t('settings:status_no_api_key'));
-                return;
-            }
-
-            const data = await ApiClient.getModels('mistral', { apiKey });
-
-            if (data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-
-                // Format models for the dropdown
-                const formattedModels = data.models.map(m => ({
-                    value: m.id,
-                    label: m.name || m.id,
-                    context_length: m.context_length
-                }));
-
-                populateModelSelect(formattedModels, data.default, 'mistral');
-                MessageLogger.addLog(t('settings:mistral_models_loaded_log', { count: data.count }));
-
-                SettingsManager.applyPendingModelSelection();
-                ModelDetector.checkAndShowRecommendation();
-
-                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
-                StatusManager.setConnected('mistral', data.count);
-            } else {
-                const errorMessage = data.error || t('settings:mistral_no_models_default');
-                MessageLogger.showMessage(t('settings:no_models_warning', { message: errorMessage }), 'error');
-                setPlaceholderOption(modelSelect, 'settings:search_models_no_models_available');
-                StatusManager.setError(t('settings:status_no_models'));
-            }
-        } catch (error) {
-            MessageLogger.showMessage(t('settings:mistral_error', { error: error.message }), 'error');
-            setPlaceholderOption(modelSelect, 'settings:search_models_error');
-            StatusManager.setError(error.message);
-        }
-    },
-
-    /**
-     * Load DeepSeek models dynamically from API
-     */
-    async loadDeepSeekModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading_deepseek');
-        StatusManager.setChecking();
-
-        try {
-            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
-            const apiKey = ApiKeyUtils.getValue('deepseekApiKey');
-            if (!apiKey) {
-                MessageLogger.showMessage(t('settings:deepseek_key_required'), 'warning');
-                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
-                StatusManager.setError(t('settings:status_no_api_key'));
-                return;
-            }
-
-            const data = await ApiClient.getModels('deepseek', { apiKey });
-
-            if (data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-
-                // Format models for the dropdown
-                const formattedModels = data.models.map(m => ({
-                    value: m.id,
-                    label: m.name || m.id,
-                    context_length: m.context_length
-                }));
-
-                populateModelSelect(formattedModels, data.default, 'deepseek');
-                MessageLogger.addLog(t('settings:deepseek_models_loaded_log', { count: data.count }));
-
-                SettingsManager.applyPendingModelSelection();
-                ModelDetector.checkAndShowRecommendation();
-
-                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
-                StatusManager.setConnected('deepseek', data.count);
-            } else {
-                // Use fallback list
-                const errorMessage = data.error || t('settings:deepseek_default_error');
-                MessageLogger.showMessage(t('settings:deepseek_fallback_msg', { message: errorMessage }), 'warning');
-                populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-v4-pro', 'deepseek');
-                MessageLogger.addLog(t('settings:deepseek_fallback_log'));
-
-                StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
-                StatusManager.setConnected('deepseek', DEEPSEEK_FALLBACK_MODELS.length);
-            }
-        } catch (error) {
-            // Use fallback list on error
-            MessageLogger.showMessage(t('settings:deepseek_error_fallback_msg', { error: error.message }), 'warning');
-            MessageLogger.addLog(t('settings:deepseek_error_fallback_log', { error: error.message }));
-            populateModelSelect(DEEPSEEK_FALLBACK_MODELS, 'deepseek-v4-pro', 'deepseek');
-
-            StateManager.setState('models.availableModels', DEEPSEEK_FALLBACK_MODELS.map(m => m.value));
-            StatusManager.setConnected('deepseek', DEEPSEEK_FALLBACK_MODELS.length);
-        }
-    },
-
-    /**
-     * Load NVIDIA NIM models dynamically from API
-     */
-    async loadNimModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading_nim');
-        StatusManager.setChecking();
-
-        try {
-            const apiKey = ApiKeyUtils.getValue('nimApiKey');
-            if (!apiKey) {
-                MessageLogger.showMessage(t('settings:nim_key_required'), 'warning');
-                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
-                StatusManager.setError(t('settings:status_no_api_key'));
-                return;
-            }
-
-            const data = await ApiClient.getModels('nim', { apiKey });
-
-            if (data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-
-                const formattedModels = data.models.map(m => ({
-                    value: m.id,
-                    label: m.name || m.id,
-                    context_length: m.context_length
-                }));
-
-                populateModelSelect(formattedModels, data.default, 'nim');
-                MessageLogger.addLog(t('settings:nim_models_loaded_log', { count: data.count }));
-
-                SettingsManager.applyPendingModelSelection();
-                ModelDetector.checkAndShowRecommendation();
-
-                StateManager.setState('models.availableModels', formattedModels.map(m => m.value));
-                StatusManager.setConnected('nim', data.count);
-            } else {
-                const errorMessage = data.error || t('settings:nim_default_error');
-                MessageLogger.showMessage(t('settings:deepseek_fallback_msg', { message: errorMessage }), 'warning');
-                populateModelSelect(NIM_FALLBACK_MODELS, 'meta/llama-3.1-70b-instruct', 'nim');
-                MessageLogger.addLog(t('settings:nim_fallback_log'));
-
-                StateManager.setState('models.availableModels', NIM_FALLBACK_MODELS.map(m => m.value));
-                StatusManager.setConnected('nim', NIM_FALLBACK_MODELS.length);
-            }
-        } catch (error) {
-            MessageLogger.showMessage(t('settings:deepseek_error_fallback_msg', { error: error.message }), 'warning');
-            MessageLogger.addLog(t('settings:nim_error_fallback_log', { error: error.message }));
-            populateModelSelect(NIM_FALLBACK_MODELS, 'meta/llama-3.1-70b-instruct', 'nim');
-
-            StateManager.setState('models.availableModels', NIM_FALLBACK_MODELS.map(m => m.value));
-            StatusManager.setConnected('nim', NIM_FALLBACK_MODELS.length);
-        }
-    },
-
-    /**
-     * Load Poe models dynamically from API
-     */
-    async loadPoeModels() {
-        const modelSelect = DomHelpers.getElement('model');
-        if (!modelSelect) return;
-
-        setPlaceholderOption(modelSelect, 'settings:search_models_loading_poe');
-        StatusManager.setChecking();
-
-        try {
-            // Use ApiKeyUtils to get API key (returns '__USE_ENV__' if configured in .env)
-            const apiKey = ApiKeyUtils.getValue('poeApiKey');
-            if (!apiKey) {
-                MessageLogger.showMessage(t('settings:poe_key_required'), 'warning');
-                setPlaceholderOption(modelSelect, 'settings:search_models_enter_key_first');
-                StatusManager.setError(t('settings:status_no_api_key'));
-                return;
-            }
-
-            const data = await ApiClient.getModels('poe', { apiKey });
-
-            if (data.models && data.models.length > 0) {
-                MessageLogger.showMessage('', '');
-
-                // Pass models directly (same format as OpenRouter)
-                populateModelSelect(data.models, data.default, 'poe');
-                MessageLogger.addLog(t('settings:poe_models_loaded_log', { count: data.count }));
-
-                SettingsManager.applyPendingModelSelection();
-                ModelDetector.checkAndShowRecommendation();
-
-                StateManager.setState('models.availableModels', data.models.map(m => m.id));
-                StatusManager.setConnected('poe', data.count);
-            } else {
-                // Use fallback list
-                const errorMessage = data.error || t('settings:poe_default_error');
-                MessageLogger.showMessage(t('settings:deepseek_fallback_msg', { message: errorMessage }), 'warning');
-                populateModelSelect(POE_FALLBACK_MODELS, 'Claude-Sonnet-4', 'poe');
-                MessageLogger.addLog(t('settings:poe_fallback_log'));
-
-                StateManager.setState('models.availableModels', POE_FALLBACK_MODELS.map(m => m.value));
-                StatusManager.setConnected('poe', POE_FALLBACK_MODELS.length);
-            }
-        } catch (error) {
-            // Use fallback list on error
-            MessageLogger.showMessage(t('settings:deepseek_error_fallback_msg', { error: error.message }), 'warning');
-            MessageLogger.addLog(t('settings:poe_error_fallback_log', { error: error.message }));
-            populateModelSelect(POE_FALLBACK_MODELS, 'Claude-Sonnet-4', 'poe');
-
-            StateManager.setState('models.availableModels', POE_FALLBACK_MODELS.map(m => m.value));
-            StatusManager.setConnected('poe', POE_FALLBACK_MODELS.length);
-        }
     },
 
     /**

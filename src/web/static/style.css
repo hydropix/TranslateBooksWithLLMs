@@ -82,6 +82,17 @@
     /* Book content only (translation preview, completion excerpts). */
     --font-reading: var(--font-serif);
 
+    /* Vertical density. One knob: every vertical padding and margin that
+       reads var(--ui-density-y) is its original measurement multiplied by
+       this factor (1 = original roomy spacing, 0.7 = current). Only the
+       vertical axis uses it; horizontal padding keeps its breathing room. */
+    --ui-density-y: 0.7;
+    /* Height of a single-line control, derived from the knob and floored so
+       a field never drops below a usable height. Exposed as a token because
+       the box height and the line-height that centres its text must never
+       drift apart. */
+    --ui-control-h: max(1.9rem, calc(2.75rem * var(--ui-density-y)));
+
     /* Translation preview height (based on MAX_TOKENS_PER_CHUNK) */
     /* Default: 300px for 450 tokens. Formula: (tokens / 450) * 300 */
     /* Min: 120px, Max: 400px */
@@ -140,19 +151,6 @@ html.dark {
        than the #2a2a2a card it would sit on, so it would read as a hole
        rather than as a chip. Lifted just above the card instead. */
     --llm-chip-bg: #2b3037;
-}
-
-html.dark .neu-inset-light {
-    background: var(--background-inset);
-    border: 2px solid rgba(136, 136, 136, 0.15);
-}
-
-html.dark .neu-inset-light:hover {
-    border-color: rgba(136, 136, 136, 0.35);
-}
-
-html.dark .neu-inset-light:focus-within {
-    border-color: var(--primary-light);
 }
 
 html.dark .form-control {
@@ -240,21 +238,33 @@ body {
     border: 1px solid var(--border-light);
 }
 
+/* Field frame: the hairline box around every form control. (The class
+   name is historical; it no longer draws a neumorphic inset.) */
 .neu-inset-light {
-    background: #ffffff;
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 2px solid rgba(62, 90, 120, 0.15);
+    background: var(--background-light);
+    box-shadow: none;
+    border: 1px solid var(--border-strong);
     transition: all 0.3s ease;
 }
 
+html.dark .neu-inset-light {
+    background: var(--background-inset);
+}
+
 .neu-inset-light:hover {
-    border-color: rgba(62, 90, 120, 0.35);
-    box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+    border-color: var(--text-faint);
+    box-shadow: none;
 }
 
 .neu-inset-light:focus-within {
     border-color: var(--primary-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light), 0 0 0 3px rgba(62, 90, 120, 0.1);
+    box-shadow: 0 0 0 3px var(--primary-tint);
+}
+
+/* T1: the target language is the choice the user actually makes; the
+   source is usually auto-detected. */
+.neu-inset-light:has(#targetLang) {
+    border-color: var(--primary-light);
 }
 
 /* ========================================
@@ -544,26 +554,23 @@ body {
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: calc(0.5rem * var(--ui-density-y));
 }
 
 .form-group label {
     color: var(--text-muted-light);
+    font-family: var(--font-ui);
     font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding-left: 0.25rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    padding-left: 0.125rem;
 }
 
 /* Prompt-options checkbox rows: shared layout for all toggles
    (Polish, Bilingual, Plain Text Mode, Text Cleanup, Disable Auto-Pause). */
 .option-item {
-    margin-bottom: 15px;
-}
-
-.option-item:last-child {
-    margin-bottom: 0;
+    margin-bottom: calc(15px * var(--ui-density-y));
 }
 
 .option-item__label {
@@ -584,7 +591,7 @@ body {
 .option-item__title {
     display: block;
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-dark);
     text-transform: none;
     letter-spacing: normal;
@@ -607,9 +614,12 @@ body {
     width: 100%;
     box-sizing: border-box;
     display: block;
-    height: 2.75rem;
-    min-height: 2.75rem;
-    max-height: 2.75rem;
+    /* Single-line controls fake their vertical centring with
+       line-height = height, so both read the same token. Textareas get
+       their multi-line geometry back below. */
+    height: var(--ui-control-h);
+    min-height: var(--ui-control-h);
+    max-height: var(--ui-control-h);
     padding: 0 1.25rem;
     margin: 0;
     background: #ffffff;
@@ -617,9 +627,8 @@ body {
     color: #1a1a1a;
     font-size: 1rem;
     font-family: var(--font-text);
-    line-height: 2.75rem;
+    line-height: var(--ui-control-h);
     transition: all 0.3s;
-    font-weight: 600;
     vertical-align: middle;
 }
 
@@ -627,11 +636,23 @@ body {
    Explicit rules force <input> and <select> to identical box geometry. */
 input.form-control,
 select.form-control {
+    height: var(--ui-control-h);
+    min-height: var(--ui-control-h);
+    max-height: var(--ui-control-h);
+    line-height: var(--ui-control-h);
+    padding: 0 1.25rem;
+}
+
+/* Tier 1: the two language pickers are the first decision of a run, so
+   they get a taller box and larger type than ordinary fields (their
+   weight lives with the other field weights, in the input-weight layer). */
+#sourceLang,
+#targetLang {
     height: 2.75rem;
     min-height: 2.75rem;
     max-height: 2.75rem;
     line-height: 2.75rem;
-    padding: 0 1.25rem;
+    font-size: 1.0625rem;
 }
 
 .neu-inset-light .form-control {
@@ -1721,10 +1742,10 @@ select.form-control {
    ======================================== */
 
 input[type="checkbox"] {
-    width: 1.25rem;
-    height: 1.25rem;
-    min-width: 1.25rem;
-    min-height: 1.25rem;
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    min-height: 1rem;
     cursor: pointer;
     accent-color: var(--primary-light);
     flex-shrink: 0;
@@ -3515,10 +3536,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     flex: 1 1 10rem;
     width: auto;
     min-width: 8rem;
-    height: 2.25rem;
-    min-height: 2.25rem;
-    max-height: 2.25rem;
-    line-height: 2.25rem;
     padding: 0 0.75rem;
     font-size: 0.95rem;
     border: 1px solid var(--border-light);
@@ -4774,55 +4791,14 @@ html.dark .file-test-btn { color: #a5b4fc; }
    the block, nothing else depends on it.
    ======================================== */
 @layer compact-ui {
-    :root {
-        --ui-density-y: 0.7;
-        /* Height of a single-line control, derived from the knob. Exposed as
-           a token because the box height and the line-height that centres
-           its text must never drift apart. */
-        --ui-control-h: max(1.9rem, calc(2.75rem * var(--ui-density-y)));
-    }
-
     /* --- Tabs --- */
     .tab-nav .tab-btn {
         padding-top: calc(0.6rem * var(--ui-density-y)) !important;
         padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
     }
 
-    /* --- Form rows --- */
-    .form-group {
-        gap: calc(0.5rem * var(--ui-density-y)) !important;
-    }
-
-    .option-item {
-        margin-bottom: calc(15px * var(--ui-density-y)) !important;
-    }
-
-    /* Single-line controls fake their vertical centring with
-       `line-height: <height>` (see .form-control above), so the two must
-       be resized together — shrinking the box alone drops the text to the
-       bottom. Both read the same token. Textareas are excluded: they are
-       multi-line and keep their original geometry. */
-    .form-control:not(textarea) {
-        height: var(--ui-control-h) !important;
-        min-height: var(--ui-control-h) !important;
-        max-height: var(--ui-control-h) !important;
-        line-height: var(--ui-control-h) !important;
-    }
-
     /* .btn-sm and the glossary toolbar buttons are already compact and
        carry their own padding; leave them where they are. */
-    /* Tier 1: the two language pickers are the first decision of a run,
-       so they get a taller box and larger type than ordinary fields. */
-    #sourceLang,
-    #targetLang {
-        height: 2.75rem !important;
-        min-height: 2.75rem !important;
-        max-height: 2.75rem !important;
-        line-height: 2.75rem !important;
-        font-size: 1.0625rem !important;
-        font-weight: 500 !important;
-    }
-
     .btn:not(.btn-sm):not(.glossary-toolbar-btn):not(#themeToggleBtn) {
         padding-top: calc(0.75rem * var(--ui-density-y)) !important;
         padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
@@ -4929,6 +4905,12 @@ html.dark .file-test-btn { color: #a5b4fc; }
         font-weight: 400 !important;
     }
 
+    /* Tier-1 exception: the language pickers carry a little more weight. */
+    #sourceLang,
+    #targetLang {
+        font-weight: 500 !important;
+    }
+
     /* Custom dropdowns: the trigger, and the panel — which is portalled
        to <body>, so it is not a descendant of .searchable-select and
        needs its own selector. */
@@ -4956,7 +4938,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    ======================================== */
 .btn,
 .tab-nav .tab-btn,
-.form-group label,
 .file-table thead th,
 .searchable-select-badge,
 .searchable-select-group,
@@ -4989,44 +4970,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
    ======================================== */
 
 /* ---------- Cards and fields ---------- */
-
-.form-group label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: 0;
-    padding-left: 0.125rem;
-}
-
-.neu-inset-light,
-html.dark .neu-inset-light {
-    background: var(--background-light);
-    border: 1px solid var(--border-strong);
-    box-shadow: none;
-}
-
-html.dark .neu-inset-light {
-    background: var(--background-inset);
-}
-
-.neu-inset-light:hover,
-html.dark .neu-inset-light:hover {
-    border-color: var(--text-faint);
-    box-shadow: none;
-}
-
-.neu-inset-light:focus-within,
-html.dark .neu-inset-light:focus-within {
-    border-color: var(--primary-light);
-    box-shadow: 0 0 0 3px var(--primary-tint);
-}
-
-/* T1: the target language is the choice the user actually makes; the
-   source is usually auto-detected. */
-.neu-inset-light:has(#targetLang),
-html.dark .neu-inset-light:has(#targetLang) {
-    border-color: var(--primary-light);
-}
 
 /* ---------- T1: drop zone ---------- */
 
@@ -5211,23 +5154,6 @@ html.dark .file-upload.file-upload-secondary {
 .preflight-panel h4 {
     font-size: 0.8125rem;
     font-weight: 600;
-}
-
-.option-item__title {
-    font-size: 0.8125rem;
-    font-weight: 500;
-}
-
-.option-item__description {
-    font-size: 0.75rem;
-    color: var(--text-muted-light);
-}
-
-input[type="checkbox"] {
-    width: 1rem;
-    height: 1rem;
-    min-width: 1rem;
-    min-height: 1rem;
 }
 
 /* ---------- T1/T2: progress ---------- */
@@ -5423,9 +5349,7 @@ input[type="checkbox"] {
         flex: 1 1 9rem;
     }
 
-    .form-control,
-    #sourceLang,
-    #targetLang {
+    .form-control {
         font-size: 16px;
     }
 

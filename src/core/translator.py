@@ -199,6 +199,41 @@ def _weighted_length(text: str) -> float:
     return total
 
 
+# Previous-translation context handed to the next chunk's prompt: at most
+# this many words, and at most this weighted length (CJK counts 3, Hangul 2),
+# so unspaced scripts get a bounded tail too instead of the whole chunk.
+PREVIOUS_CONTEXT_MAX_WORDS = 25
+PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS = 300
+
+
+def previous_context_tail(text: Optional[str]) -> str:
+    """The end of a translation, used as the next chunk's previous context.
+
+    The single policy for every pipeline: the last PREVIOUS_CONTEXT_MAX_WORDS
+    whitespace-separated words, further capped at
+    PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS. A Chinese or Japanese translation has
+    no spaces, so the word rule alone would pass the whole previous chunk.
+    """
+    text = text or ""
+    words = text.split()
+    tail = " ".join(words[-PREVIOUS_CONTEXT_MAX_WORDS:]) if len(words) > PREVIOUS_CONTEXT_MAX_WORDS else text
+    if _weighted_length(tail) <= PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS:
+        return tail
+    budget = PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS
+    start = len(tail)
+    while start > 0:
+        weight = _weighted_length(tail[start - 1])
+        if weight > budget:
+            break
+        budget -= weight
+        start -= 1
+    cut = tail[start:]
+    # Do not start in the middle of a word when the text has spaces.
+    if start > 0 and not tail[start - 1].isspace() and " " in cut:
+        cut = cut.split(" ", 1)[1]
+    return cut.lstrip()
+
+
 def strip_raw_preamble(raw: str) -> str:
     """Drop a leading "Here is the translation:" line from an untagged reply."""
     stripped = _RAW_PREAMBLE_RE.sub("", raw, count=1).strip()
@@ -571,8 +606,7 @@ async def _make_llm_request_with_adaptive_context(
                 current_sep, current_content = remaining.pop(0)
                 # Update context for continuity
                 if all_translations:
-                    words = all_translations[-1][1].split()
-                    previous_translation_context = " ".join(words[-25:]) if len(words) > 25 else all_translations[-1][1]
+                    previous_translation_context = previous_context_tail(all_translations[-1][1])
                 reduction_attempt = 0  # Reset for new content
                 continue
 
@@ -1193,11 +1227,7 @@ async def refine_chunks(
                 progress_tracker.mark_completed(i, chunk_elapsed)
 
                 # Update context for next chunk
-                words = refined_text.split()
-                if len(words) > 25:
-                    last_refined_context = " ".join(words[-25:])
-                else:
-                    last_refined_context = refined_text
+                last_refined_context = previous_context_tail(refined_text)
             else:
                 # Keep original translation if refinement fails
                 if log_callback:

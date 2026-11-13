@@ -17,7 +17,7 @@ import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from src.core.chunking.token_chunker import TokenChunker
-from src.core.translator import generate_translation_request
+from src.core.translator import generate_translation_request, previous_context_tail
 from src.core.post_processor import clean_translated_text
 from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.epub.xhtml_translation_state import (
@@ -663,9 +663,8 @@ async def translate_paragraphs_plain(
         stats_callback(stats.to_dict())
 
     def _context_tail(text):
-        """The last 25 words of a translation, as sequential context."""
-        words = (text or "").split()
-        return " ".join(words[-25:]) if len(words) > 25 else (text or "")
+        """The end of a translation, as sequential context (shared policy)."""
+        return previous_context_tail(text)
 
     def _previous_context(i):
         """previous_translation_context for segment i (sequential mode only).

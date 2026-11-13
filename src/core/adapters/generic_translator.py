@@ -226,7 +226,7 @@ class GenericTranslator:
 
             # 5. Create LLM client
             from src.core.llm_client import LLMClient
-            from src.core.translator import generate_translation_request
+            from src.core.translator import generate_translation_request, previous_context_tail
 
             llm_client = LLMClient(
                 provider_type=llm_provider,
@@ -455,11 +455,7 @@ class GenericTranslator:
                             })
 
                         if sequential:
-                            last_context = (
-                                translated_content[-200:]
-                                if len(translated_content) > 200
-                                else translated_content
-                            )
+                            last_context = previous_context_tail(translated_content)
 
                         if log_callback:
                             log_callback("unit_complete",

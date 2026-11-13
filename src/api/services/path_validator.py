@@ -11,6 +11,72 @@ class PathValidator:
 
     MAX_FILENAME_LENGTH = 255
 
+    # Extensions a translation job may write. Mirrors the document types
+    # SecureFileHandler.ALLOWED_EXTENSIONS accepts as input (an upload keeps
+    # its extension in the default output name pattern). A requested name with
+    # any other extension gets '.txt' appended, so a job can never drop an
+    # executable ('.bat', '.exe', '.hta', ...) into the output directory.
+    OUTPUT_EXTENSIONS = frozenset({
+        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf',
+        '.text', '.log', '.md', '.markdown', '.rst', '.asc',
+        '.csv', '.json', '.xml', '.html', '.htm', '.yaml', '.yml',
+    })
+
+    # Files POST /api/files/<name>/open may hand to the OS default
+    # application: translated documents and TTS audio only. Formats whose
+    # default handler can run active content (HTML in a browser, CSV
+    # formulas in a spreadsheet, ...) are excluded on purpose.
+    OPENABLE_EXTENSIONS = frozenset({
+        '.txt', '.text', '.md', '.markdown', '.rst', '.log', '.asc',
+        '.srt', '.pgn', '.epub', '.docx', '.pdf',
+        '.opus', '.mp3', '.wav', '.ogg',
+    })
+
+    @staticmethod
+    def safe_output_filename(requested: Optional[str]) -> Optional[str]:
+        """Reduce a client-supplied output filename to a safe bare name.
+
+        Any directory component (either separator, a drive prefix) is
+        dropped, so '../../x.txt' or an absolute path both become 'x.txt'. A
+        name whose extension is not in OUTPUT_EXTENSIONS gets '.txt'
+        appended. Returns None when nothing usable remains.
+        """
+        if not isinstance(requested, str):
+            return None
+        name = requested.replace('\\', '/').rsplit('/', 1)[-1]
+        # A Windows drive prefix without separator ('C:x.txt').
+        if len(name) >= 2 and name[1] == ':':
+            name = name[2:]
+        name = name.strip().strip('.').strip()
+        if not name:
+            return None
+        if Path(name).suffix.lower() not in PathValidator.OUTPUT_EXTENSIONS:
+            name = f"{name}.txt"
+        if len(name) > PathValidator.MAX_FILENAME_LENGTH:
+            stem, suffix = os.path.splitext(name)
+            name = stem[:PathValidator.MAX_FILENAME_LENGTH - len(suffix)] + suffix
+        return name
+
+    @staticmethod
+    def resolve_output_file(output_dir: Union[str, Path], requested: Optional[str]) -> Path:
+        """Return the path inside `output_dir` a job may write `requested` to.
+
+        Raises ValueError when the name is unusable or would escape the
+        directory (defence in depth on top of safe_output_filename).
+        """
+        name = PathValidator.safe_output_filename(requested)
+        if name is None:
+            raise ValueError("Invalid output filename")
+        candidate = Path(output_dir) / name
+        if not PathValidator.is_within_directory(candidate, output_dir):
+            raise ValueError("Output filename resolves outside the output directory")
+        return candidate
+
+    @staticmethod
+    def is_openable(path: Union[str, Path]) -> bool:
+        """True when `path` has a document/audio extension safe to open."""
+        return Path(path).suffix.lower() in PathValidator.OPENABLE_EXTENSIONS
+
     @staticmethod
     def is_within_directory(path: Union[str, Path], directory: Union[str, Path]) -> bool:
         """

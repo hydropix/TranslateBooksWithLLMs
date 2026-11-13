@@ -193,11 +193,21 @@ class FileService:
         import subprocess
         import platform
 
+        from .path_validator import PathValidator
+
+        # os.startfile / open / xdg-open run whatever handler the OS maps to
+        # the extension, so only translated documents and TTS audio qualify:
+        # never a script or executable that landed in the output directory.
+        if not PathValidator.is_openable(filename):
+            return False, "Opening this file type is not allowed", None
+
         file_path = self.find_file(filename)
         if not file_path:
             return False, "File not found", None
 
         abs_path = str(file_path.resolve())
+        if not PathValidator.is_openable(abs_path):
+            return False, "Opening this file type is not allowed", None
         system = platform.system()
 
         try:

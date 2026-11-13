@@ -405,6 +405,12 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                 else:
                     return jsonify({"error": f"Missing or empty field: {field}"}), 400
 
+        # The output name is joined to the server's output directory: keep
+        # only a bare filename with a document extension, never a path.
+        output_filename = PathValidator.safe_output_filename(data['output_filename'])
+        if output_filename is None:
+            return jsonify({"error": "Invalid output_filename"}), 400
+
         # Generate unique translation ID
         translation_id = f"trans_{int(time.time() * 1000)}"
 
@@ -419,7 +425,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'max_attempts': int(data.get('max_attempts', 2)),
             'retry_delay': int(data.get('retry_delay', 2)),
             'parallel_workers': _clamp_parallel_workers(data.get('parallel_workers')),
-            'output_filename': data['output_filename'],
+            'output_filename': output_filename,
             'llm_provider': data.get('llm_provider', 'ollama'),
             # Prompt options (optional instructions to include in the system prompt)
             'prompt_options': data.get('prompt_options', {}),

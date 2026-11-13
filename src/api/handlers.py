@@ -26,6 +26,7 @@ from src.core.progress import snapshot_from_legacy_stats
 from src.tts.tts_config import TTSConfig
 from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE, EVENT_INTERRUPTION
 from .completion_status import classify_completion
+from .services.path_validator import PathValidator
 from .websocket import emit_update
 
 # Module logger for diagnostics that must never reach the user-facing job log
@@ -400,8 +401,13 @@ def resolve_output_path(output_dir, output_filename, is_resume):
 
     The path is returned as-is on a resume even when nothing is there yet (the
     user deleted the previous output): the run recreates it.
+
+    The requested name comes from the client, so it is reduced to a bare
+    filename with an allowed document extension and must resolve inside
+    ``output_dir`` (see PathValidator.resolve_output_file); a name that cannot
+    be made safe raises ValueError.
     """
-    tentative_output_path = os.path.join(output_dir, output_filename)
+    tentative_output_path = str(PathValidator.resolve_output_file(output_dir, output_filename))
     if is_resume:
         return tentative_output_path
     return get_unique_output_path(tentative_output_path)

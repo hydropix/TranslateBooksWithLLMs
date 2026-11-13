@@ -483,6 +483,47 @@ def get_logger(name: str = "TranslateBookWithLLM", **kwargs) -> UnifiedLogger:
     return _global_logger
 
 
+def _default_min_level() -> LogLevel:
+    # Import here to avoid circular dependencies
+    from src.config import DEBUG_MODE
+    return LogLevel.DEBUG if DEBUG_MODE else LogLevel.INFO
+
+
+def create_job_logger(web_callback: Optional[Callable] = None,
+                      storage_callback: Optional[Callable] = None,
+                      *,
+                      console_output: bool = True,
+                      enable_colors: bool = True,
+                      min_level: Optional[LogLevel] = None,
+                      name: str = "TranslateBookWithLLM") -> UnifiedLogger:
+    """Create an independent logger for one job.
+
+    Unlike :func:`setup_web_logger` / :func:`get_logger`, this never reads or
+    replaces the module-level shared logger: each call returns a fresh
+    :class:`UnifiedLogger` with its own callbacks and its own translation
+    state, so a job started later cannot redirect an earlier job's log lines.
+
+    Args:
+        web_callback: Called with each structured log entry (WebSocket emit).
+        storage_callback: Called with each structured log entry (persistence).
+        console_output: Also print formatted lines to the console.
+        enable_colors: Colored console output. Note that ``False`` calls
+            ``Colors.disable()``, which is process-wide (pre-existing
+            behaviour of :class:`UnifiedLogger`).
+        min_level: Minimum level; defaults to DEBUG when ``DEBUG_MODE`` is
+            set, INFO otherwise (same rule as the setup_* helpers).
+        name: Logger name/identifier.
+    """
+    return UnifiedLogger(
+        name,
+        console_output=console_output,
+        enable_colors=enable_colors,
+        min_level=min_level if min_level is not None else _default_min_level(),
+        web_callback=web_callback,
+        storage_callback=storage_callback,
+    )
+
+
 def setup_cli_logger(enable_colors: bool = True) -> UnifiedLogger:
     """Setup logger for CLI usage"""
     # Import here to avoid circular dependencies

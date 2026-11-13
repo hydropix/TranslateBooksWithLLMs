@@ -211,6 +211,10 @@ html.dark .log-entry.log-summary-detailed {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    /* Scrollbars are hidden app-wide (Firefox, then IE/Edge Legacy); the
+       few scrolling panels that need one opt back in. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 body {
@@ -1632,6 +1636,8 @@ select.form-control {
     font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
     font-size: 0.875rem;
     margin-top: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--shadow-dark) transparent;
 }
 
 /* Last Translation Preview - Dynamic height based on MAX_TOKENS_PER_CHUNK.
@@ -1661,12 +1667,6 @@ select.form-control {
 
 .log-container::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted-light);
-}
-
-/* Scrollbar pour Firefox */
-.log-container {
-    scrollbar-width: thin;
-    scrollbar-color: var(--shadow-dark) transparent;
 }
 
 .log-entry {
@@ -1729,16 +1729,6 @@ select.form-control {
 
 ::-webkit-scrollbar-thumb:hover {
     background: transparent;
-}
-
-/* Hide scrollbars for Firefox */
-* {
-    scrollbar-width: none;
-}
-
-/* Hide scrollbars for IE and Edge Legacy */
-* {
-    -ms-overflow-style: none;
 }
 
 /* ========================================
@@ -4951,11 +4941,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
         height: 2.5rem;
         min-width: 2.5rem;
         justify-content: center;
-    }
-
-    .main-card {
-        margin-left: 0;
-        margin-right: 0;
     }
 
     .card-header,

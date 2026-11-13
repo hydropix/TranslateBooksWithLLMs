@@ -74,9 +74,11 @@ def test_multipage_drops_headers_and_page_numbers(multipage_pdf_path):
 def test_multipage_rejoins_hyphenated_page_break(multipage_pdf_path):
     content = extract_pdf_paragraphs(multipage_pdf_path)
 
-    merged = [text for text in content.paragraphs_text if "the continuation of the sentence." in text]
+    # The page break is mended (one paragraph, no stray space). The hyphen is
+    # kept: nothing else in the document spells "continuation", so a line-end
+    # hyphen cannot be told apart from a real compound (see test_extractor_hyphenation).
+    merged = [text for text in content.paragraphs_text if "the conti-nuation of the sentence." in text]
     assert len(merged) == 1
-    assert "conti-" not in merged[0]
     # Pages 1 and 2 form one paragraph; pages 3 and 4 start with a capital
     assert len(content.paragraphs_text) == 3
 
@@ -199,11 +201,12 @@ def test_non_pdf_document_path_raises_open_error(tmp_path):
         # (a) soft hyphen
         ("hyphen\u00ad", "  ation", "hyphenation"),
         ("Soft\u00ad", "Capital", "SoftCapital"),
-        # (b) letter + hyphen, next line lowercase
-        ("the conti-", "nuation", "the continuation"),
-        ("the conti-", "  nuation", "the continuation"),
-        # (b) does not apply: next line uppercase, or hyphen not after a letter
-        ("well-", "Known", "well- Known"),
+        # (b) letter + hyphen, next line starts with a letter: the hyphen is
+        # kept and no space is added (dropping it needs whole-document evidence)
+        ("the conti-", "nuation", "the conti-nuation"),
+        ("the conti-", "  nuation", "the conti-nuation"),
+        ("well-", "Known", "well-Known"),
+        # (b) does not apply: hyphen not after a letter
         ("pages 10-", "twelve", "pages 10- twelve"),
         # (c) CJK joined without a space
         ("中文", "段落", "中文段落"),

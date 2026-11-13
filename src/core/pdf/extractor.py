@@ -16,8 +16,9 @@ Text blocks are read in content-stream order. Lines inside a detected table
 are taken out of their blocks and the table is emitted as a unit in their
 place. Running headers/footers and page numbers are dropped, blocks whose
 lines change font size or colour are split (eyebrow / title / subtitle),
-hyphenated line breaks are repaired, and paragraphs broken by a page boundary
-are reassembled when their formats match. Scanned documents (no text layer)
+hyphenated line breaks are repaired (conservatively: see join_lines and
+_resolve_break_hyphens), and paragraphs broken by a page boundary are
+reassembled when their formats match. Scanned documents (no text layer)
 are rejected: OCR is out of scope.
 
 The input is untrusted: every PyMuPDF call sits behind the exception
@@ -93,6 +94,14 @@ _CJK_RANGES = (
 )
 
 _SOFT_HYPHEN = "­"
+# Private-use stand-in for a hyphen found at a line end, written by the internal
+# joins while the document is read and resolved once the whole document is
+# known (see _resolve_break_hyphens). Never present in the returned content.
+_BREAK_HYPHEN = "\ue000"
+_LETTERS = r"[^\W\d_]+"
+_BREAK_WORD_RE = re.compile(rf"({_LETTERS})\ue000({_LETTERS})")
+_MARKED_TOKEN_RE = re.compile(r"\S*\ue000\S*")
+_WORD_RE = re.compile(rf"{_LETTERS}(?:-{_LETTERS})*")
 _BODY_STYLES = ("normal", "list")   # styles whose spans decide the document's font family
 _ENCRYPTED_MESSAGE = "This PDF is password-protected. Remove the password and try again."
 _NO_TEXT_MESSAGE = (
@@ -112,19 +121,26 @@ def _ends_with_letter_hyphen(text: str) -> bool:
     return len(text) >= 2 and text[-1] == "-" and text[-2].isalpha()
 
 
-def join_lines(prev: str, nxt: str) -> str:
+def join_lines(prev: str, nxt: str, break_hyphen: str = "-") -> str:
     """
     Join two consecutive lines (or paragraph fragments) of running text.
 
-    Rules, in order: a trailing soft hyphen is removed; a word hyphenated at
-    the line end is rejoined when the next line starts lowercase; CJK text is
-    joined without a space; anything else is joined with a single space.
+    Rules, in order: a trailing soft hyphen is removed; a letter + hyphen at
+    the line end followed by a letter is kept as a hyphen and joined without a
+    space ("well-" + "known" -> "well-known", "peut-" + "être" -> "peut-être"),
+    because a line-end hyphen alone cannot tell a real compound from a word
+    split by the typesetter; CJK text is joined without a space; anything else
+    is joined with a single space.
+
+    The extractor passes a private marker as break_hyphen and decides later,
+    with whole-document evidence, which of those hyphens to drop
+    (_resolve_break_hyphens).
     """
     nxt_stripped = nxt.lstrip()
     if prev.endswith(_SOFT_HYPHEN):
         return prev[:-1] + nxt_stripped
-    if _ends_with_letter_hyphen(prev) and nxt_stripped[:1].islower():
-        return prev[:-1] + nxt_stripped
+    if _ends_with_letter_hyphen(prev) and nxt_stripped[:1].isalpha():
+        return prev[:-1] + break_hyphen + nxt_stripped
     prev_stripped = prev.rstrip()
     if prev_stripped and nxt_stripped and _is_cjk(prev_stripped[-1]) and _is_cjk(nxt_stripped[0]):
         return prev_stripped + nxt_stripped
@@ -144,8 +160,45 @@ def _join_and_normalize(lines: List[str]) -> str:
         return ""
     text = lines[0]
     for line in lines[1:]:
-        text = join_lines(text, line)
+        text = join_lines(text, line, _BREAK_HYPHEN)
     return _normalize_text(text)
+
+
+def _resolve_break_hyphens(texts: List[str]) -> List[str]:
+    """
+    Decide, for every hyphen found at a line end, whether to keep it.
+
+    The hyphen is dropped ("conti-" + "nuation" -> "continuation") only with
+    clear evidence: the next fragment starts lowercase, the joined word occurs
+    elsewhere in the document without a hyphen, and the hyphenated spelling
+    does not occur elsewhere. Otherwise the hyphen is kept ("well-known",
+    "peut-être"): a spurious hyphen is harmless to a translator, a wrongly
+    glued compound is not. Soft hyphens (U+00AD) are handled by join_lines.
+    """
+    if not any(_BREAK_HYPHEN in text for text in texts):
+        return texts
+    plain_words, hyphenated_words = set(), set()
+    for text in texts:
+        for word in _WORD_RE.findall(_MARKED_TOKEN_RE.sub(" ", text)):
+            (hyphenated_words if "-" in word else plain_words).add(word.lower())
+
+    def decide(match: "re.Match") -> str:
+        left, right = match.group(1), match.group(2)
+        joined = (left + right).lower()
+        if (
+            right[:1].islower()
+            and joined in plain_words
+            and f"{left}-{right}".lower() not in hyphenated_words
+        ):
+            return left + right
+        return f"{left}-{right}"
+
+    resolved = []
+    for text in texts:
+        if _BREAK_HYPHEN in text:
+            text = _BREAK_WORD_RE.sub(decide, text).replace(_BREAK_HYPHEN, "-")
+        resolved.append(text)
+    return resolved
 
 
 def _line_text(line: dict) -> str:
@@ -630,7 +683,7 @@ class _ParagraphSink:
             and self.formats[-1] == fmt
             and _should_merge(self.texts[-1], self.styles[-1], text)
         ):
-            self.texts[-1] = _normalize_text(join_lines(self.texts[-1], text))
+            self.texts[-1] = _normalize_text(join_lines(self.texts[-1], text, _BREAK_HYPHEN))
             return
         self._add(text, style, fmt)
 
@@ -818,7 +871,7 @@ def _extract(doc, include_images: bool, detect_layout: bool = True) -> PdfPlainC
     first_page = doc[0].rect
     metadata = doc.metadata or {}
     return PdfPlainContent(                                                  # step 10
-        paragraphs_text=sink.texts,
+        paragraphs_text=_resolve_break_hyphens(sink.texts),
         paragraphs_style=sink.styles,
         images_by_paragraph=images_by_paragraph,
         page_size=(first_page.width, first_page.height),

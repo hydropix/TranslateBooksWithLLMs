@@ -4,14 +4,20 @@ Language detection utility for automatic source language identification
 Uses langdetect library (based on Google's language-detection library)
 for fast and accurate language identification from text content.
 """
+import posixpath
 import re
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
+from urllib.parse import unquote
+
 from langdetect import DetectorFactory, detect_langs, LangDetectException
 from lxml import etree
 
 # langdetect is randomised: without a fixed seed the same text can yield a
 # different language or confidence on every call.
 DetectorFactory.seed = 0
+
+_OPF_NS = "http://www.idpf.org/2007/opf"
+_CONTAINER_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
 
 
 # Mapping from ISO 639-1 codes (langdetect output) to full language names
@@ -66,9 +72,48 @@ class LanguageDetector:
     MAX_SAMPLE_LENGTH = 10000
 
     @staticmethod
+    def _epub_spine_order(epub_zip) -> List[str]:
+        """
+        Return the content documents of an EPUB in reading (spine) order.
+
+        Follows META-INF/container.xml to the OPF package document and resolves
+        its spine against the manifest. Returns [] when any step is missing or
+        malformed, so the caller can fall back to the archive order.
+        """
+        parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=True)
+        try:
+            container = etree.fromstring(epub_zip.read("META-INF/container.xml"), parser)
+            rootfile = container.find(f".//{{{_CONTAINER_NS}}}rootfile")
+            opf_path = rootfile.get("full-path") if rootfile is not None else None
+            if not opf_path:
+                return []
+            opf = etree.fromstring(epub_zip.read(opf_path), parser)
+        except Exception:
+            return []
+        if opf is None:
+            return []
+
+        opf_dir = posixpath.dirname(opf_path)
+        hrefs = {
+            item.get("id"): item.get("href")
+            for item in opf.iter(f"{{{_OPF_NS}}}item")
+            if item.get("id") and item.get("href")
+        }
+        names = set(epub_zip.namelist())
+        ordered = []
+        for itemref in opf.iter(f"{{{_OPF_NS}}}itemref"):
+            href = hrefs.get(itemref.get("idref"))
+            if not href:
+                continue
+            path = posixpath.normpath(posixpath.join(opf_dir, unquote(href.split("#")[0])))
+            if path in names and path not in ordered:
+                ordered.append(path)
+        return ordered
+
+    @staticmethod
     def _extract_text_from_epub(file_data: bytes) -> str:
         """
-        Extract readable text from EPUB file
+        Extract readable text from EPUB file, in spine (reading) order
 
         Args:
             file_data: Raw EPUB file bytes
@@ -83,8 +128,10 @@ class LanguageDetector:
             with zipfile.ZipFile(io.BytesIO(file_data)) as epub_zip:
                 text_parts = []
 
-                # Find all XHTML/HTML files in EPUB
-                for file_name in epub_zip.namelist():
+                # Reading order from the OPF spine; archive order only as a
+                # fallback for a package without a usable spine.
+                file_names = LanguageDetector._epub_spine_order(epub_zip) or epub_zip.namelist()
+                for file_name in file_names:
                     if file_name.endswith(('.xhtml', '.html', '.htm')):
                         try:
                             content = epub_zip.read(file_name)

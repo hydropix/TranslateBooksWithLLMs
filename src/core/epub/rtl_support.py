@@ -248,65 +248,114 @@ def generate_rtl_css(language: str) -> str:
     return RTL_CSS_TEMPLATE.format(language=code)
 
 
+def _parse_markup(html_content: str):
+    """Parse an XHTML/HTML string, XML first, HTML only as a fallback.
+
+    Returns ``(tree, is_xml)``. XHTML must be parsed AND serialized as XML:
+    HTML serialization leaves ``<br>``/``<img>`` unclosed and drops the XML
+    declaration, and the file is later re-parsed as XML with recovery, which
+    then nests the following content inside the void elements. This mirrors
+    ``cjk_typography._parse_markup_tree``.
+    """
+    from lxml import etree
+
+    data = html_content.encode('utf-8')
+    try:
+        # encoding='utf-8' overrides the declaration: the string was decoded
+        # as UTF-8 by the caller, whatever the declaration says.
+        root = etree.fromstring(
+            data,
+            etree.XMLParser(recover=True, remove_blank_text=False,
+                            huge_tree=True, encoding='utf-8'),
+        )
+        if root is not None:
+            return root.getroottree(), True
+    except etree.XMLSyntaxError:
+        pass
+
+    root = etree.fromstring(data, etree.HTMLParser(encoding='utf-8'))
+    if root is None:
+        raise ValueError("document has no root element")
+    return root.getroottree(), False
+
+
+def _serialize_markup(tree, is_xml: bool) -> str:
+    """Serialize a tree produced by ``_parse_markup`` in its own dialect."""
+    from lxml import etree
+
+    if is_xml:
+        # Serializing the ElementTree (not the root) keeps the DOCTYPE.
+        return etree.tostring(tree, encoding='utf-8', xml_declaration=True).decode('utf-8')
+    return etree.tostring(tree, encoding='unicode', method='html')
+
+
+def _local_name(element) -> str:
+    """Lower-cased local name of an element ('' for comments and PIs)."""
+    if not isinstance(element.tag, str):
+        return ''
+    return element.tag.rsplit('}', 1)[-1].lower()
+
+
+def _find_descendant(root, local_name: str):
+    """First element with the given local name, in any namespace."""
+    for element in root.iter():
+        if _local_name(element) == local_name:
+            return element
+    return None
+
+
+def _qualified(root, local_name: str) -> str:
+    """Tag name for a new element in the namespace of ``root``."""
+    if isinstance(root.tag, str) and root.tag.startswith('{'):
+        return root.tag.split('}', 1)[0] + '}' + local_name
+    return local_name
+
+
 def inject_rtl_css_to_html(html_content: str, language: str) -> str:
     """
     Inject RTL CSS into HTML content.
-    
+
+    XHTML is parsed and serialized as XML (self-closing tags, the XML
+    declaration and the DOCTYPE survive); only a document that is not XML at
+    all goes through the HTML parser and serializer.
+
     Args:
         html_content: Original HTML content
         language: Target language for CSS comment
-    
+
     Returns:
         Modified HTML with RTL CSS in head
     """
     from lxml import etree
-    
+
     css_content = generate_rtl_css(language)
     style_tag = f"<style type=\"text/css\">\n{css_content}\n</style>"
     lang_code = get_language_code(language) or 'ar'
-    
+
     try:
-        parser = etree.HTMLParser()
-        tree = etree.fromstring(html_content.encode('utf-8'), parser)
-        
+        tree, is_xml = _parse_markup(html_content)
+        root = tree.getroot()
+
         # Find or create head
-        head = tree.find('.//head')
+        head = _find_descendant(root, 'head')
         if head is None:
-            # Create head element
-            head = etree.Element('head')
-            # Insert before body if exists
-            body = tree.find('.//body')
+            head = etree.Element(_qualified(root, 'head'))
+            body = _find_descendant(root, 'body')
             if body is not None:
                 body.addprevious(head)
             else:
-                tree.insert(0, head)
-        
-        # Create style element
-        style_elem = etree.Element('style')
+                root.insert(0, head)
+
+        style_elem = etree.SubElement(head, _qualified(root, 'style'))
         style_elem.set('type', 'text/css')
         style_elem.text = f"\n{css_content}\n"
-        
-        # Add to head
-        head.append(style_elem)
-        
-        # Add dir="rtl" and lang to html element
-        # lxml's HTMLParser puts everything under a root <html> element
-        root = tree
-        if root is not None:
-            root.set('dir', 'rtl')
-            root.set('lang', lang_code)
-        
-        # Convert back to string
-        result = etree.tostring(tree, encoding='unicode', method='html')
-        
-        # Ensure DOCTYPE is preserved if present
-        if '<!DOCTYPE' in html_content.upper() or html_content.strip().startswith('<?xml'):
-            # Add DOCTYPE back if it was stripped
-            if '<!DOCTYPE' not in result.upper():
-                result = '<!DOCTYPE html>\n' + result
-        
-        return result
-    
+
+        # Add dir="rtl" and lang to the html element
+        root.set('dir', 'rtl')
+        root.set('lang', lang_code)
+
+        return _serialize_markup(tree, is_xml)
+
     except Exception:
         # If parsing fails, inject CSS manually
         if '<head>' in html_content:
@@ -315,11 +364,11 @@ def inject_rtl_css_to_html(html_content: str, language: str) -> str:
             result = html_content.replace('<html', f'<head>\n{style_tag}\n</head>\n<html')
         else:
             result = f"<head>\n{style_tag}\n</head>\n{html_content}"
-        
+
         # Add dir and lang to html tag
         if '<html' in result.lower():
             result = result.replace('<html', f'<html dir="rtl" lang="{lang_code}"')
-        
+
         return result
 
 
@@ -414,24 +463,24 @@ blockquote { border-left: 3px solid #ccc; border-right: none; margin: 1em 0; pad
 """
     
     try:
-        parser = etree.HTMLParser()
-        tree = etree.fromstring(html_content.encode('utf-8'), parser)
-        
+        tree, is_xml = _parse_markup(html_content)
+        root = tree.getroot()
+
         # Find head
-        head = tree.find('.//head')
-        
+        head = _find_descendant(root, 'head')
+
         # Remove existing RTL style elements (identified by comment or content)
         if head is not None:
-            for style in head.findall('.//style'):
+            styles = [el for el in head.iter() if _local_name(el) == 'style']
+            for style in styles:
                 style_text = style.text or ''
                 # Check if it's an RTL style (contains our marker or RTL-specific rules)
                 if ('RTL Support' in style_text or 
                     'direction: rtl' in style_text or
                     'text-align: right' in style_text):
-                    head.remove(style)
-        
+                    style.getparent().remove(style)
+
         # Reset html attributes to LTR
-        root = tree
         if root is not None:
             # Remove dir attribute if set to rtl, or set to ltr
             current_dir = root.get('dir', '').lower()
@@ -442,21 +491,13 @@ blockquote { border-left: 3px solid #ccc; border-right: none; margin: 1em 0; pad
         
         # Add LTR reset CSS
         if head is not None:
-            style_elem = etree.Element('style')
+            style_elem = etree.Element(_qualified(root, 'style'))
             style_elem.set('type', 'text/css')
             style_elem.text = f"\n{ltr_css}\n"
             head.insert(0, style_elem)  # Insert at beginning
-        
-        # Convert back to string
-        result = etree.tostring(tree, encoding='unicode', method='html')
-        
-        # Preserve DOCTYPE
-        if '<!DOCTYPE' in html_content.upper() or html_content.strip().startswith('<?xml'):
-            if '<!DOCTYPE' not in result.upper():
-                result = '<!DOCTYPE html>\n' + result
-        
-        return result
-    
+
+        return _serialize_markup(tree, is_xml)
+
     except Exception:
         # Fallback: use regex to remove RTL styles
         # Remove style tags containing RTL

@@ -992,8 +992,8 @@ def _normalize_markup_file(path: str, result: dict,
 
     Serialization is XML, never `method='html'`: HTML serialization expands
     XHTML self-closing tags into `<br></br>`, drops the XML declaration and
-    mangles namespace prefixes. `rtl_support.inject_rtl_css_to_html` makes
-    exactly that mistake; the plan (§2) forbids repeating it.
+    mangles namespace prefixes. `rtl_support` used to make exactly that
+    mistake; the plan (§2) forbids repeating it.
 
     The file is written only when something changed, so untouched documents keep
     their exact original bytes.

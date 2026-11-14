@@ -13,7 +13,7 @@ import pytest
 from src.core.job import JobConfig, JobStatus
 from src.core.job.runner import JobRunner, JobSinks
 from src.core.llm.provider_config import ProviderConfig
-from src.core.progress import snapshot_from_legacy_stats
+from src.core.progress import snapshot_from_job_stats
 from src.persistence.checkpoint_manager import CheckpointManager
 from tests.characterization import fake_llm, fixtures
 
@@ -65,4 +65,4 @@ def test_translate_then_refine_once(fmt, builder, tmp_path):
     last = {}
     for s in sinks.stats:
         last.update(s)
-    assert snapshot_from_legacy_stats(last).percent == 100.0
+    assert snapshot_from_job_stats(last).percent == 100.0

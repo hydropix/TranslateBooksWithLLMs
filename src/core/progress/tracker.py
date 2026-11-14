@@ -7,9 +7,9 @@
 3. calls :meth:`record_unit` once per processed unit,
 4. emits :meth:`snapshot` to whoever reports progress.
 
-The segment math lives in :func:`global_percent` (shared with the legacy
-bridge): a single model where translation fills ``[0, split]`` and refinement
-fills ``[split, 100]``, replacing the old scattered "double ``total_chunks``
+The segment math lives in :func:`global_percent` (shared with
+:func:`snapshot_from_job_stats`): a single model where translation fills
+``[0, split]`` and refinement fills ``[split, 100]``, replacing the old scattered "double ``total_chunks``
 when refining" trick plus client-side 0–50/50–100 remapping. Per-phase totals
 may differ (e.g. SRT refines per subtitle but translates per block) — each
 phase is scaled into its own segment independently, so that divergence no

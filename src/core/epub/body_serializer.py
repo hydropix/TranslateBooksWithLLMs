@@ -160,6 +160,7 @@ def extract_body_html(
 MAX_VISIBLE_TEXT_LOSS = 0.10
 MAX_VISIBLE_TEXT_LOSS_WITH_RECOVERY = 0.02
 
+_OPS_NS = 'http://www.idpf.org/2007/ops'
 _COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
 _ANY_TAG_RE = re.compile(r'<[^>]*>')
 _WHITESPACE_RE = re.compile(r'\s+')
@@ -195,8 +196,15 @@ def _parse_translated_body(new_html: str) -> Tuple[etree._Element, str, List[str
     Raises:
         XmlParsingError: if every parsing method failed.
     """
-    # Wrap in a temp element to handle multiple root elements
-    wrapped = f"<temp xmlns='http://www.w3.org/1999/xhtml'>{new_html}</temp>"
+    # Wrap in a temp element to handle multiple root elements. The body was
+    # serialized out of its document, so prefixes declared on <html> are not
+    # in scope here: declare the EPUB ops prefix too, or every epub:type
+    # attribute is a namespace error and every EPUB 3 body parses in recover
+    # mode (noisy logs, and the tighter loss bound applied to clean bodies).
+    wrapped = (
+        "<temp xmlns='http://www.w3.org/1999/xhtml' "
+        f"xmlns:epub='{_OPS_NS}'>{new_html}</temp>"
+    )
 
     # Try XML parser first with huge_tree option to handle large documents
     # This preserves exact XML structure without HTML normalization

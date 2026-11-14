@@ -267,6 +267,30 @@ class TechnicalContentDetector:
 
         return result
 
+    def _pattern_specs(self) -> list:
+        """The detection table: ``(regex, name, priority, validator)`` in apply order."""
+        return [
+            # Priority 10: Multiline code blocks
+            (self.code_block_pattern, "code_block", PatternPriority.MULTILINE_BLOCK, None),
+            # Priority 10: LaTeX display math
+            (self.latex_display_pattern, "latex_display", PatternPriority.MULTILINE_BLOCK, None),
+            # Priority 9: HTML entity blocks (escaped code examples)
+            (self.html_entity_block_pattern, "html_entity_block",
+             PatternPriority.HTML_ENTITY_BLOCK, None),
+            # Priority 5: Inline code
+            (self.inline_code_pattern, "inline_code", PatternPriority.INLINE_CODE, None),
+            # Priority 5: LaTeX inline (with validation)
+            (self.latex_inline_pattern, "latex_inline", PatternPriority.INLINE_CODE,
+             self._is_latex_formula),
+            # Priority 3: Technical measurements
+            (self.measurement_pattern, "measurement", PatternPriority.MEASUREMENT, None),
+            # Priority 3: Measurement ranges
+            (self.measurement_range_pattern, "measurement_range",
+             PatternPriority.MEASUREMENT, None),
+            # Priority 2: Technical identifiers
+            (self.technical_id_pattern, "technical_id", PatternPriority.IDENTIFIER, None),
+        ]
+
     def find_all_technical_content(self, text: str) -> List[TechnicalPattern]:
         """
         Find all technical content in text with overlap resolution.
@@ -294,71 +318,9 @@ class TechnicalContentDetector:
             ['latex_inline', 'measurement', 'inline_code']
         """
         all_patterns = []
-
-        # Priority 10: Multiline code blocks
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.code_block_pattern,
-            "code_block",
-            PatternPriority.MULTILINE_BLOCK
-        ))
-
-        # Priority 10: LaTeX display math
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.latex_display_pattern,
-            "latex_display",
-            PatternPriority.MULTILINE_BLOCK
-        ))
-
-        # Priority 9: HTML entity blocks (escaped code examples)
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.html_entity_block_pattern,
-            "html_entity_block",
-            PatternPriority.HTML_ENTITY_BLOCK
-        ))
-
-        # Priority 5: Inline code
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.inline_code_pattern,
-            "inline_code",
-            PatternPriority.INLINE_CODE
-        ))
-
-        # Priority 5: LaTeX inline (with validation)
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.latex_inline_pattern,
-            "latex_inline",
-            PatternPriority.INLINE_CODE,
-            validator=self._is_latex_formula
-        ))
-
-        # Priority 3: Technical measurements
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.measurement_pattern,
-            "measurement",
-            PatternPriority.MEASUREMENT
-        ))
-
-        # Priority 3: Measurement ranges
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.measurement_range_pattern,
-            "measurement_range",
-            PatternPriority.MEASUREMENT
-        ))
-
-        # Priority 2: Technical identifiers
-        all_patterns.extend(self._find_pattern_matches(
-            text,
-            self.technical_id_pattern,
-            "technical_id",
-            PatternPriority.IDENTIFIER
-        ))
+        for pattern, name, priority, validator in self._pattern_specs():
+            all_patterns.extend(self._find_pattern_matches(
+                text, pattern, name, priority, validator=validator))
 
         # Resolve overlaps and return sorted by position
         return self._resolve_overlaps(all_patterns)

@@ -220,22 +220,14 @@ class TagPreserver:
             else:
                 # Found translatable text - flush the group as a placeholder
                 if current_group:
-                    merged_content = ''.join(current_group)
-                    placeholder = self.placeholder_format.create(self.counter)
-                    self.tag_map[placeholder] = merged_content
-                    merged_segments.append(placeholder)
-                    self.counter += 1
+                    self._add_placeholder(''.join(current_group), merged_segments)
                     current_group = []
                 # Add the translatable text directly
                 merged_segments.append(segment)
 
         # Flush remaining group at the end
         if current_group:
-            merged_content = ''.join(current_group)
-            placeholder = self.placeholder_format.create(self.counter)
-            self.tag_map[placeholder] = merged_content
-            merged_segments.append(placeholder)
-            self.counter += 1
+            self._add_placeholder(''.join(current_group), merged_segments)
 
         processed_text = ''.join(merged_segments)
 
@@ -286,10 +278,34 @@ class TagPreserver:
         # These are replaced with temporary markers to keep them atomic
         text_with_markers, multiline_block_map = self._extract_multiline_blocks(text)
 
+        # Steps 2 and 3: split on HTML tags, then on technical patterns
+        all_segments = self._split_tags_and_technical(text_with_markers)
+
+        # Step 4: Group adjacent non-translatable segments
+        processed_text = self._group_technical_segments(all_segments, multiline_block_map)
+
+        return processed_text, self.tag_map.copy()
+
+    def _add_placeholder(self, content: str, merged_segments: List[str]) -> None:
+        """Register `content` under the next placeholder and append that placeholder."""
+        placeholder = self.placeholder_format.create(self.counter)
+        self.tag_map[placeholder] = content
+        merged_segments.append(placeholder)
+        self.counter += 1
+
+    @staticmethod
+    def _restore_block_markers(content: str, multiline_block_map: Dict[str, str]) -> str:
+        """Swap every temporary multiline-block marker back to its block."""
+        for marker, block_content in multiline_block_map.items():
+            content = content.replace(marker, block_content)
+        return content
+
+    def _split_tags_and_technical(self, text_with_markers: str) -> List[str]:
+        """Split on HTML tags, then split each non-tag segment on technical content."""
         # Step 2: Split on HTML tags
         tag_segments = re.split(r'(<[^>]+>)', text_with_markers)
 
-        # Step 3 & 4: For each segment, split on technical patterns and group
+        # Step 3: For each segment, split on technical patterns
         all_segments = []
         for segment in tag_segments:
             if not segment:
@@ -310,24 +326,25 @@ class TagPreserver:
                     # Split on inline technical patterns (code, LaTeX, measurements)
                     technical_split = self._split_on_technical_patterns(segment)
                     all_segments.extend(technical_split)
+        return all_segments
 
-        # Step 4: Group adjacent non-translatable segments
-        # BUT: Technical content should get its own placeholder (not grouped with tags)
-        merged_segments = []
-        current_group = []
+    def _group_technical_segments(self, all_segments: List[str],
+                                  multiline_block_map: Dict[str, str]) -> str:
+        """Replace non-translatable runs with placeholders and join the result.
+
+        Tags and non-translatable text are grouped, BUT technical content and
+        block markers get their own placeholder (not grouped with tags).
+        """
+        merged_segments: List[str] = []
+        current_group: List[str] = []
 
         def flush_group():
             """Helper to flush current group as a placeholder."""
             if current_group:
-                merged_content = ''.join(current_group)
                 # Restore multiline blocks in the group
-                for marker, block_content in multiline_block_map.items():
-                    merged_content = merged_content.replace(marker, block_content)
-
-                placeholder = self.placeholder_format.create(self.counter)
-                self.tag_map[placeholder] = merged_content
-                merged_segments.append(placeholder)
-                self.counter += 1
+                merged_content = self._restore_block_markers(
+                    ''.join(current_group), multiline_block_map)
+                self._add_placeholder(merged_content, merged_segments)
                 current_group.clear()
 
         standalone_flags = _standalone_text_flags(all_segments)
@@ -347,14 +364,8 @@ class TagPreserver:
                 flush_group()
 
                 # Create dedicated placeholder for technical content
-                merged_content = segment
-                for marker, block_content in multiline_block_map.items():
-                    merged_content = merged_content.replace(marker, block_content)
-
-                placeholder = self.placeholder_format.create(self.counter)
-                self.tag_map[placeholder] = merged_content
-                merged_segments.append(placeholder)
-                self.counter += 1
+                merged_content = self._restore_block_markers(segment, multiline_block_map)
+                self._add_placeholder(merged_content, merged_segments)
             elif is_tag or is_non_trans:
                 # Add to current tag group
                 current_group.append(segment)
@@ -367,9 +378,7 @@ class TagPreserver:
         # Flush remaining group at the end
         flush_group()
 
-        processed_text = ''.join(merged_segments)
-
-        return processed_text, self.tag_map.copy()
+        return ''.join(merged_segments)
 
     def restore_tags(self, text: str, tag_map: Dict[str, str]) -> str:
         """

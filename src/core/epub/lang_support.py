@@ -18,7 +18,7 @@ RTL-specific concerns (CSS, page-progression-direction) remain in rtl_support.
 from __future__ import annotations
 
 import os
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Iterator, Optional
 
 from lxml import etree
 
@@ -181,6 +181,57 @@ def set_xhtml_lang_attributes(doc_root: etree._Element, lang_code: str) -> bool:
     return changed
 
 
+def _iter_markup_paths(directory: str) -> Iterator[str]:
+    """Yield every .xhtml/.html/.htm file under `directory`, in os.walk order."""
+    for root_dir, _, files in os.walk(directory):
+        for name in files:
+            lower = name.lower()
+            if not (lower.endswith(".xhtml") or lower.endswith(".html") or lower.endswith(".htm")):
+                continue
+            yield os.path.join(root_dir, name)
+
+
+def _apply_lang_to_file(
+    path: str,
+    code: str,
+    parser: etree.XMLParser,
+    result: Dict,
+    log_callback: Optional[Callable],
+) -> None:
+    """Set lang/xml:lang in one file, counting the outcome into `result`."""
+    try:
+        with open(path, "rb") as f:
+            content = f.read()
+
+        doc_root = etree.fromstring(content, parser)
+        if doc_root is None:
+            result["skipped"] += 1
+            return
+
+        if not set_xhtml_lang_attributes(doc_root, code):
+            result["skipped"] += 1
+            return
+
+        with open(path, "wb") as f:
+            f.write(
+                etree.tostring(
+                    doc_root,
+                    encoding="utf-8",
+                    xml_declaration=True,
+                    pretty_print=True,
+                    method="xml",
+                )
+            )
+        result["updated"] += 1
+    except Exception as e:
+        result["errors"] += 1
+        if log_callback:
+            log_callback(
+                "epub_lang_update_error",
+                f"Could not update lang attributes in {path}: {e}",
+            )
+
+
 def apply_target_language_to_xhtml_directory(
     directory: str,
     target_language: str,
@@ -224,44 +275,8 @@ def apply_target_language_to_xhtml_directory(
 
     parser = etree.XMLParser(encoding="utf-8", recover=True, remove_blank_text=False)
 
-    for root_dir, _, files in os.walk(directory):
-        for name in files:
-            lower = name.lower()
-            if not (lower.endswith(".xhtml") or lower.endswith(".html") or lower.endswith(".htm")):
-                continue
-
-            path = os.path.join(root_dir, name)
-            try:
-                with open(path, "rb") as f:
-                    content = f.read()
-
-                doc_root = etree.fromstring(content, parser)
-                if doc_root is None:
-                    result["skipped"] += 1
-                    continue
-
-                if not set_xhtml_lang_attributes(doc_root, code):
-                    result["skipped"] += 1
-                    continue
-
-                with open(path, "wb") as f:
-                    f.write(
-                        etree.tostring(
-                            doc_root,
-                            encoding="utf-8",
-                            xml_declaration=True,
-                            pretty_print=True,
-                            method="xml",
-                        )
-                    )
-                result["updated"] += 1
-            except Exception as e:
-                result["errors"] += 1
-                if log_callback:
-                    log_callback(
-                        "epub_lang_update_error",
-                        f"Could not update lang attributes in {path}: {e}",
-                    )
+    for path in _iter_markup_paths(directory):
+        _apply_lang_to_file(path, code, parser, result, log_callback)
 
     if log_callback:
         log_callback(

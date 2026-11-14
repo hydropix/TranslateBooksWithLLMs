@@ -545,6 +545,30 @@ export const ApiClient = {
         return await apiRequest('/api/history' + (limit ? '?limit=' + encodeURIComponent(limit) : ''));
     },
 
+    /**
+     * Remove one completed job from the history (the translated file stays)
+     * @param {string} translationId - Job identifier
+     * @returns {Promise<Object>} { deleted }
+     */
+    async deleteHistoryEntry(translationId) {
+        return await apiRequest(`/api/history/${encodeURIComponent(translationId)}`, {
+            method: 'DELETE'
+        });
+    },
+
+    /**
+     * Remove several history entries, or the whole history when no IDs are given
+     * @param {string[]} [translationIds] - Entries to remove; omit to clear all
+     * @returns {Promise<Object>} { deleted }
+     */
+    async clearHistory(translationIds) {
+        const body = translationIds ? { translation_ids: translationIds } : {};
+        return await apiRequest('/api/history/clear', {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+    },
+
     // ========================================
     // Settings Management
     // ========================================

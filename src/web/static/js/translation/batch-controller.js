@@ -257,7 +257,7 @@ export const BatchController = {
         MessageLogger.clearAlerts();
         // Files that could not even be submitted in this batch. Their error
         // message must stay on screen instead of being replaced by the
-        // green "batch completed" banner.
+        // success "batch completed" banner.
         this._startFailures = 0;
         MessageLogger.addLog(t('translation:batch_started_log', { count: queuedFilesCount }));
         MessageLogger.showMessage(t('translation:batch_initiated', { count: queuedFilesCount }), 'info');

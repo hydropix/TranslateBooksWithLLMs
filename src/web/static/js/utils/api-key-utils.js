@@ -136,9 +136,16 @@ export const ApiKeyUtils = {
             field.dataset.envKeyCount = String(count);
 
             if (statusSpan) {
-                statusSpan.textContent = count > 1
-                    ? t('settings:key_status_configured_rotation', { count })
-                    : t('settings:key_status_configured');
+                // data-i18n* lets applyToDOM re-translate the tag on a locale switch.
+                if (count > 1) {
+                    statusSpan.setAttribute('data-i18n', 'settings:key_status_configured_rotation');
+                    statusSpan.setAttribute('data-i18n-params', JSON.stringify({ count }));
+                    statusSpan.textContent = t('settings:key_status_configured_rotation', { count });
+                } else {
+                    statusSpan.setAttribute('data-i18n', 'settings:key_status_configured');
+                    statusSpan.removeAttribute('data-i18n-params');
+                    statusSpan.textContent = t('settings:key_status_configured');
+                }
                 statusSpan.className = 'key-status configured';
             }
         } else {
@@ -147,6 +154,8 @@ export const ApiKeyUtils = {
             field.dataset.envKeyCount = '0';
 
             if (statusSpan) {
+                statusSpan.setAttribute('data-i18n', 'settings:key_status_not_configured_badge');
+                statusSpan.removeAttribute('data-i18n-params');
                 statusSpan.textContent = t('settings:key_status_not_configured_badge');
                 statusSpan.className = 'key-status not-configured';
             }

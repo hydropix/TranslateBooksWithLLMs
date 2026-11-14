@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ initial_locale|default('en') }}" class="light">
+<html lang="{{ initial_locale|default('en') }}" class="light" data-layout="flat">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -735,7 +735,7 @@
                         <span data-i18n="tts:progress_title">Audio Generation</span>
                     </h3>
                     <div class="progress-bar-container" style="margin-bottom: 10px;">
-                        <div class="progress-bar" id="ttsProgressBar" style="width: 0%; background: linear-gradient(90deg, var(--success-light), #22c55e);">0%</div>
+                        <div class="progress-bar" id="ttsProgressBar" style="width: 0%; background: var(--success-light);">0%</div>
                     </div>
                     <p id="ttsStatusText" data-i18n="tts:waiting" style="margin: 0; font-size: 0.875rem; color: var(--success-light);">Waiting to start...</p>
                 </div>
@@ -793,13 +793,37 @@
             <div class="card-header">
                 <span class="material-symbols-outlined">history</span>
                 <h2 data-i18n="translation:history_title">Translation History</h2>
-                <button class="btn btn-secondary" onclick="loadHistory()" data-i18n-attr="title:translation:refresh_list_title" title="Refresh list" style="margin-left: auto; padding: 0.5rem 1rem;">
-                    <span class="material-symbols-outlined">refresh</span>
-                </button>
+                <span id="historyCount" class="history-count" hidden></span>
+                <div class="history-header-actions">
+                    <div class="history-cleanup">
+                        <button type="button" class="btn btn-secondary" id="historyCleanupBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="historyCleanupMenu" data-i18n-attr="title:translation:history_cleanup_title;aria-label:translation:history_cleanup_title" title="Clean up history">
+                            <span class="material-symbols-outlined">mop</span>
+                        </button>
+                        <div class="history-cleanup-menu" id="historyCleanupMenu" role="menu" hidden>
+                            <button type="button" role="menuitem" class="history-cleanup-item" id="historyCleanupMissing">
+                                <span class="material-symbols-outlined" aria-hidden="true">link_off</span>
+                                <span id="historyCleanupMissingLabel" data-i18n="translation:history_cleanup_missing" data-i18n-params='{"count":0}'>Remove entries without a file (0)</span>
+                            </button>
+                            <button type="button" role="menuitem" class="history-cleanup-item history-cleanup-item--danger" id="historyCleanupAll">
+                                <span class="material-symbols-outlined" aria-hidden="true">delete_sweep</span>
+                                <span data-i18n="translation:history_cleanup_all">Clear the whole history</span>
+                            </button>
+                            <p class="history-cleanup-note" data-i18n="translation:history_cleanup_note">Translated files are kept in the Files tab.</p>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="loadHistory()" data-i18n-attr="title:translation:refresh_list_title" title="Refresh list" style="padding: 0.5rem 1rem;">
+                        <span class="material-symbols-outlined">refresh</span>
+                    </button>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="card-body history-body">
                 <div id="historyLoading" style="text-align: center; padding: 20px;"><p data-i18n="common:loading">Loading...</p></div>
-                <div id="historyList" style="display: none;"></div>
+                <div id="historyFilterWrap" class="history-filter" hidden>
+                    <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    <input type="search" id="historyFilter" autocomplete="off" data-i18n-attr="placeholder:translation:history_filter_placeholder;aria-label:translation:history_filter_placeholder" placeholder="Filter by file name">
+                </div>
+                <div id="historyList" class="history-list" style="display: none;"></div>
+                <p id="historyNoMatch" class="history-no-match" data-i18n="translation:history_filter_no_match" hidden>No translation matches this filter</p>
                 <div id="historyEmpty" style="text-align: center; padding: 40px; display: none;"><p data-i18n="translation:history_empty" style="color: var(--text-muted-light);">No completed translations yet</p></div>
             </div>
         </div>
@@ -969,16 +993,16 @@
         <div id="tab-settings" class="hidden">
         <div class="main-card">
             <div class="card-body">
-                <!-- Provider & Defaults (Collapsible) -->
+                <!-- Provider & Defaults (Collapsible, open by default) -->
                 <div class="prompt-options-toggle" onclick="toggleSettingsOptions()">
                     <span style="display: flex; align-items: center; gap: 0.75rem;">
                         <span class="material-symbols-outlined">tune</span>
                         <span data-i18n="settings:provider_and_defaults">Provider &amp; Defaults</span>
                     </span>
-                    <span id="settingsOptionsIcon" class="material-symbols-outlined">expand_more</span>
+                    <span id="settingsOptionsIcon" class="material-symbols-outlined" style="transform: rotate(180deg);">expand_more</span>
                 </div>
 
-                <div id="settingsOptionsSection" class="hidden">
+                <div id="settingsOptionsSection">
                     <!-- Provider + API Settings Row -->
                     <div id="providerRow" style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px; margin-bottom: 15px; align-items: end;">
                         <div class="form-group" style="margin-bottom: 0;">
@@ -1168,7 +1192,7 @@
                     <span style="display: flex; align-items: center; gap: 0.75rem;">
                         <span class="material-symbols-outlined">notifications_active</span>
                         <span data-i18n="settings:notifications">Notifications</span>
-                        <span id="notifyStatusBadge" style="display: none; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #10b981; color: white;">ON</span>
+                        <span id="notifyStatusBadge" style="display: none; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--success-light); color: white;">ON</span>
                     </span>
                     <span id="notificationOptionsIcon" class="material-symbols-outlined">expand_more</span>
                 </div>

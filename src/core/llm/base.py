@@ -171,6 +171,20 @@ CONTEXT_OVERFLOW_ERROR_CODES = frozenset({
     "context_window_exceeded",
 })
 
+# Headers through which a rate-limited answer says how long to wait.
+RATE_LIMIT_HINT_HEADERS = ("Retry-After", "retry-after", "X-RateLimit-Reset", "x-ratelimit-reset")
+
+# Upper bound, in seconds, for one wait taken from a server hint when there is
+# no key pool to rotate. A larger hint (RFC 6585's own example is 3600 s) is
+# not slept in full: the request is retried after this cap, and once its
+# attempts are spent the RateLimitError carries the full hint so the pipeline
+# can pause instead of stalling a worker.
+MAX_HINTED_RETRY_WAIT = 60
+
+
+def _has_rate_limit_hint(headers: Mapping[str, str]) -> bool:
+    return any(h in headers for h in RATE_LIMIT_HINT_HEADERS)
+
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers (owns the shared request loop)."""
@@ -385,8 +399,7 @@ class LLMProvider(ABC):
             attempt += 1
             if attempt >= policy.max_attempts:
                 if error.rate_limited:
-                    hinted = any(h in error.headers for h in (
-                        "Retry-After", "retry-after", "X-RateLimit-Reset", "x-ratelimit-reset"))
+                    hinted = _has_rate_limit_hint(error.headers)
                     raise RateLimitError(
                         f"{self.provider_name} rate limit persisted after "
                         f"{attempt} attempt(s): {error.message}",
@@ -399,6 +412,11 @@ class LLMProvider(ABC):
                 return None
 
             delay = policy.delay_before(attempt)
+            if error.rate_limited and _has_rate_limit_hint(error.headers):
+                # No key pool to rotate: honour the server's wait hint
+                # (Retry-After, RFC 6585 section 4), within a cap.
+                hint = compute_wait_time(error.headers, attempt)
+                delay = max(delay, min(hint, MAX_HINTED_RETRY_WAIT))
             self._log("llm_retry", f"   Retrying in {delay:.1f}s "
                                    f"(attempt {attempt + 1}/{policy.max_attempts})...",
                       level=logging.INFO)

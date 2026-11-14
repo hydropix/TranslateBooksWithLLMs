@@ -7,10 +7,10 @@ each provider sends (URL, auth header form, payload keys) and the handling of
 each provider's documented error shapes, so an accidental wire change shows
 up as a test failure.
 
-Three behaviours that are the same on the pre-refactor code are pinned as
-strict xfails until the owner decides on them: the keyless Retry-After wait,
-an OpenRouter 200 carrying only an error, and a partial answer ending with
-finish_reason "error".
+It also pins three fixes over the pre-refactor code: a keyless 429 waits for
+its Retry-After hint (capped), an OpenRouter 200 carrying only an error object
+is classified by the status it names and retried when transient, and a partial
+answer ending with finish_reason "error" is never accepted as a translation.
 """
 
 import json
@@ -303,11 +303,10 @@ async def test_rejected_temperature_is_remembered_across_requests(sleeps):
     assert all("temperature" not in p["json"] for p in wire.posts[1:])
 
 
-@pytest.mark.xfail(strict=True, reason='Retry-After is ignored without a key pool (pre-existing; design decision)')
 @pytest.mark.asyncio
 async def test_keyless_429_waits_for_retry_after(sleeps):
-    """DEFECT (minor): with no key pool (keyless OpenAI-compatible gateway), the wait
-    before the retry uses the backoff policy (2 s) and ignores Retry-After."""
+    """With no key pool (keyless OpenAI-compatible gateway), the wait before the
+    retry honours Retry-After (7 s) instead of the backoff policy alone (2 s)."""
     wire = Wire([httpx.Response(429, headers={"Retry-After": "7"},
                                 json={"error": {"message": "slow down"}}), _ok()])
     provider = _attach(_make("openai", model="m", api_key="",
@@ -319,12 +318,11 @@ async def test_keyless_429_waits_for_retry_after(sleeps):
     assert sleeps and sleeps[0] >= 7
 
 
-@pytest.mark.xfail(strict=True, reason='a 200 whose body is only an error is not retried (pre-existing; design decision)')
 @pytest.mark.asyncio
 async def test_openrouter_200_error_body_is_retried(sleeps):
-    """DEFECT (pre-existing on main): OpenRouter documents a 200 whose body holds only
-    an 'error' object (upstream failure before any output). It is transient (code
-    502) but is failed without retry as 'unexpected response format'."""
+    """OpenRouter documents a 200 whose body holds only an 'error' object (upstream
+    failure before any output). Code 502 is transient: it is retried (MAIN failed
+    it without retry as 'unexpected response format')."""
     wire = Wire([httpx.Response(200, json={"id": "gen-1", "error": {
         "code": 502, "message": "Upstream provider error"}}), _ok()])
     provider = _attach(_make("openrouter", model="@preset/x", api_key=FAKE_KEY), wire)
@@ -336,12 +334,11 @@ async def test_openrouter_200_error_body_is_retried(sleeps):
     assert len(wire.posts) == 2
 
 
-@pytest.mark.xfail(strict=True, reason="a partial answer with finish_reason 'error' is accepted (pre-existing; design decision)")
 @pytest.mark.asyncio
 async def test_finish_reason_error_partial_output_is_not_accepted(sleeps):
-    """DEFECT (pre-existing on main, output-impact): OpenRouter returns 200 with
-    partial content and finish_reason 'error' when the upstream dies mid-answer.
-    The partial text is returned as a successful translation."""
+    """OpenRouter returns 200 with partial content and finish_reason 'error' when the
+    upstream dies mid-answer. The partial text must not be returned as a
+    translation (MAIN did); the request is retried instead."""
     partial = httpx.Response(200, json={"id": "gen-2", "choices": [
         {"message": {"role": "assistant", "content": "<TRANSLATION>Bonj"},
          "finish_reason": "error"}], "error": {"code": 502, "message": "disconnected"}})
@@ -352,3 +349,65 @@ async def test_finish_reason_error_partial_output_is_not_accepted(sleeps):
     finally:
         await provider.close()
     assert response is not None and response.content == "<TRANSLATION>ok</TRANSLATION>"
+
+
+@pytest.mark.asyncio
+async def test_keyless_429_huge_retry_after_is_capped(sleeps):
+    """A huge Retry-After (RFC 6585's own example is 3600 s) must not stall a worker:
+    the retry wait is capped, and the final RateLimitError keeps the full hint so
+    the pipeline can pause."""
+    wire = Wire([httpx.Response(429, headers={"Retry-After": "3600"},
+                                json={"error": {"message": "slow down"}})] * 2)
+    provider = _attach(_make("openai", model="m", api_key="",
+                             api_endpoint="http://localhost:8080/v1"), wire)
+    try:
+        with pytest.raises(RateLimitError) as info:
+            await provider.generate("USER")
+    finally:
+        await provider.close()
+    assert sleeps == [base_mod.MAX_HINTED_RETRY_WAIT]
+    assert info.value.retry_after == 3600
+
+
+@pytest.mark.asyncio
+async def test_openrouter_200_error_with_402_is_not_retried(sleeps):
+    """A 200 whose error object names 402 (out of credits) is classified like an
+    HTTP 402: not retryable, and not read as a context overflow."""
+    wire = Wire([httpx.Response(200, json={"id": "gen-3", "error": {
+        "code": 402, "message": "Insufficient credits"}}), _ok()])
+    provider = _attach(_make("openrouter", model="@preset/x", api_key=FAKE_KEY), wire)
+    try:
+        assert await provider.generate("USER") is None
+    finally:
+        await provider.close()
+    assert len(wire.posts) == 1
+
+
+@pytest.mark.asyncio
+async def test_openrouter_200_error_with_429_is_a_rate_limit(sleeps):
+    """A 200 whose error object names 429 goes through the rate-limit path: the
+    persistent case raises RateLimitError (pipeline pause), never returns text."""
+    wire = Wire([httpx.Response(200, json={"id": "gen-4", "error": {
+        "code": 429, "message": "Rate limit exceeded"}})] * 4)
+    provider = _attach(_make("openrouter", model="@preset/x", api_key=FAKE_KEY), wire)
+    try:
+        with pytest.raises(RateLimitError):
+            await provider.generate("USER")
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_finish_reason_error_partial_output_is_never_returned(sleeps):
+    """When every attempt ends mid-answer with finish_reason 'error', the request
+    fails (None) rather than returning the partial text."""
+    partial = httpx.Response(200, json={"id": "gen-5", "choices": [
+        {"message": {"role": "assistant", "content": "<TRANSLATION>Bonj"},
+         "finish_reason": "error"}], "error": {"code": 502, "message": "disconnected"}})
+    wire = Wire([partial] * 2)
+    provider = _attach(_make("openrouter", model="@preset/x", api_key=FAKE_KEY), wire)
+    try:
+        assert await provider.generate("USER") is None
+    finally:
+        await provider.close()
+    assert len(wire.posts) == 2

@@ -29,6 +29,37 @@ from ..exceptions import ProviderError
 from ..policy import RetryPolicy
 
 
+def _error_in_ok_answer(body_error: Dict[str, Any]) -> ProviderError:
+    """Classify an ``error`` object found in an HTTP 200 answer.
+
+    OpenRouter sends 200 as soon as the upstream accepts the request, so a
+    later failure lands in the body: only an ``error`` object (failed before
+    any output), or partial ``choices`` with ``finish_reason: "error"``
+    (failed mid-answer). ``error.code`` carries the HTTP-style status, so the
+    failure is classified like that status (429 rate limit, 402 not
+    retryable, 5xx retried); without a usable code it is retried. The
+    partial text is never returned as an answer.
+    """
+    code = body_error.get("code")
+    status: Optional[int] = None
+    if isinstance(code, int) and not isinstance(code, bool):
+        status = code
+    elif isinstance(code, str) and code.strip().isdigit():
+        status = int(code.strip())
+    if status is not None and not 400 <= status <= 599:
+        status = None
+    metadata = body_error.get("metadata")
+    error_type = metadata.get("error_type") if isinstance(metadata, dict) else None
+    error_code = error_type or (None if status is not None or code is None else str(code))
+    message = body_error.get("message") or str(body_error)[:300]
+    return ProviderError(
+        f"provider error in an HTTP 200 answer: {message}",
+        status_code=status,
+        error_code=str(error_code) if error_code is not None else None,
+        retryable=True if status is None else None,
+    )
+
+
 class OpenAIChatProvider(LLMProvider):
     """Base for every provider speaking the OpenAI chat-completions protocol."""
 
@@ -144,6 +175,11 @@ class OpenAIChatProvider(LLMProvider):
 
     def _parse_response(self, data: Dict[str, Any], request: LLMRequest) -> LLMResponse:
         choices = data.get("choices") if isinstance(data, dict) else None
+        body_error = data.get("error") if isinstance(data, dict) else None
+        if isinstance(body_error, dict):
+            finish = ((choices or [{}])[0] or {}).get("finish_reason")
+            if not choices or finish == "error":
+                raise _error_in_ok_answer(body_error)
         if not choices:
             raise ProviderError(
                 f"unexpected response format (no choices): {str(data)[:300]}",

@@ -376,6 +376,12 @@ See [docs/STYLE_EXTRACTION.md](STYLE_EXTRACTION.md) for the full guide.
 
 **Cause**: Network issue, CORS, or proxy problem.
 
+### "Forbidden: the Host header of this request is not allowed" (HTTP 403)
+
+**Cause**: DNS-rebinding protection. With `HOST=127.0.0.1` (the default) the server only answers requests addressed to `localhost`, `127.0.0.1` or `[::1]`. A reverse proxy, a custom local domain or a hosts-file alias sends another name. The server log shows the rejected `Host`.
+
+**Solution**: add that name to `ALLOWED_HOSTS` in `.env` (comma-separated, optional port), for example `ALLOWED_HOSTS=translate.example.com`, then restart. If `ALLOWED_HOSTS` is set together with `HOST=0.0.0.0`, LAN clients must use one of the listed names too.
+
 **Solutions**:
 1. Check browser console for WebSocket errors
 2. Verify `HOST=127.0.0.1` or `HOST=0.0.0.0` in `.env`

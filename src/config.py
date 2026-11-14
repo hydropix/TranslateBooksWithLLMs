@@ -457,6 +457,11 @@ DEFAULT_TARGET_LANGUAGE = os.getenv('DEFAULT_TARGET_LANGUAGE', '')  # Empty = us
 
 # ============================================================================
 # PROMPT OPTIONS CONFIGURATION
+# DNS-rebinding protection (src/api/host_guard.py): extra Host header values the
+# server accepts, comma-separated, optional port (e.g. "translate.example.com,nas.lan:5000").
+# Loopback names are always accepted. Enforced whenever HOST is a loopback address,
+# and also on a non-loopback bind (0.0.0.0) as soon as it is set.
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '')
 # ============================================================================
 # These options control which optional sections are included in the system prompt.
 # Each option can be enabled/disabled via the web interface or CLI.

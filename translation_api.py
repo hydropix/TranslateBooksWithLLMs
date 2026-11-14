@@ -47,6 +47,7 @@ from src.config import (
     LLM_PROVIDER,
     PORT,
     HOST,
+    ALLOWED_HOSTS,
     OUTPUT_DIR,
     warn_env_config_missing,
 )
@@ -55,6 +56,7 @@ from src.api.websocket import configure_websocket_handlers
 from src.api.handlers import start_translation_job
 from src.api.translation_state import get_state_manager
 from src.api.auth import register_auth
+from src.api.host_guard import register_host_guard
 
 
 # Initialize Flask app with static folder configuration
@@ -96,6 +98,11 @@ socketio = SocketIO(app, async_mode='threading')
 
 # Gate every /api/ route behind the per-session token (issue #210).
 register_auth(app)
+
+# DNS-rebinding protection: reject requests whose Host header is not a loopback
+# name or an ALLOWED_HOSTS entry. Installed after SocketIO(app) so the WSGI
+# middleware also wraps the /socket.io/ handshake.
+register_host_guard(app, HOST, ALLOWED_HOSTS)
 
 # Thread-safe state manager (generates unique session ID for this server instance)
 state_manager = get_state_manager()

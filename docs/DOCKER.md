@@ -126,6 +126,7 @@ Docker automatically pulls the correct architecture for your system.
 | `GEMINI_API_KEY` | Gemini API key | - |
 | `OPENAI_API_KEY` | OpenAI API key | - |
 | `PORT` | Web server port | `5000` |
+| `ALLOWED_HOSTS` | Comma-separated host names (optional port) accepted in the `Host` header; when set, requests under any other name get HTTP 403 (loopback names always pass) | - |
 | `OLLAMA_NUM_CTX` | Context window size | `2048` |
 | `REQUEST_TIMEOUT` | API timeout (seconds) | `900` |
 | `MAX_TOKENS_PER_CHUNK` | Tokens per translation chunk | `400` |

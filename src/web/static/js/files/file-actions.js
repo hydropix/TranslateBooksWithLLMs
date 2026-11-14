@@ -9,6 +9,7 @@
 import { describeApiError } from '../core/api-errors.js';
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
+import { toast } from '../ui/toast.js';
 import { t } from '../i18n/i18n.js';
 
 const ACTION_DEFS = {
@@ -51,10 +52,9 @@ export const FileActions = {
             await ApiClient.openLocalFile(filename);
             MessageLogger.addLog(t('files:open_log', { name: filename }));
         } catch (error) {
-            MessageLogger.showMessage(
-                t('files:open_error', { error: describeApiError(error, { context: 'open' }) }),
-                'error'
-            );
+            // A toast is visible from every tab; #messages lives in the
+            // Translate tab and is hidden while the Files tab is shown.
+            toast.error(t('files:open_error', { error: describeApiError(error, { context: 'open' }) }));
         }
     },
 
@@ -64,7 +64,7 @@ export const FileActions = {
             await ApiClient.revealLocalFile(filename);
             MessageLogger.addLog(t('files:reveal_log', { name: filename }));
         } catch (error) {
-            MessageLogger.showMessage(t('files:reveal_error', { error: error.message }), 'error');
+            toast.error(t('files:reveal_error', { error: describeApiError(error) }));
         }
     },
 
@@ -77,7 +77,7 @@ export const FileActions = {
                     : t('files:folder_opened_log')
             );
         } catch (error) {
-            MessageLogger.showMessage(t('files:folder_open_error', { error: error.message }), 'error');
+            toast.error(t('files:folder_open_error', { error: describeApiError(error) }));
         }
     },
 
@@ -92,12 +92,13 @@ export const FileActions = {
             return false;
         }
         try {
-            const data = await ApiClient.deleteFile(filename);
-            MessageLogger.showMessage(data.message || t('files:delete_default_msg', { name: filename }), 'success');
+            await ApiClient.deleteFile(filename);
+            // The server message is English-only; always show the localized one.
+            toast.success(t('files:delete_default_msg', { name: filename }));
             if (typeof onDeleted === 'function') onDeleted(filename);
             return true;
         } catch (error) {
-            MessageLogger.showMessage(t('files:delete_failed', { error: error.message }), 'error');
+            toast.error(t('files:delete_failed', { error: describeApiError(error) }));
             return false;
         }
     },

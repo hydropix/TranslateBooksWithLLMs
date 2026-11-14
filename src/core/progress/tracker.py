@@ -15,11 +15,11 @@ may differ (e.g. SRT refines per subtitle but translates per block) — each
 phase is scaled into its own segment independently, so that divergence no
 longer breaks the bar.
 
-This tracker is the intended driver for the engines, but it is **not** yet
-wired into the pipeline: production reaches the same math through
-:func:`snapshot_from_legacy_stats`. Today the tracker backs the unit tests and
-documents the target contract; see ``progress/__init__.py`` for the wiring
-status.
+Engines drive it through :class:`~src.core.progress.reporter.ProgressReporter`,
+which owns one tracker per run and builds the chunk-count fields of every
+stats emit from its snapshot. A refine engine begins a ``REFINING`` phase on a
+single-phase tracker (refine-only fills the whole bar); the two-phase split is
+the job runner's business, not the engine's.
 """
 
 from __future__ import annotations
@@ -62,11 +62,6 @@ class ProgressTracker:
         """Start a phase with its unit count, resetting per-phase counters."""
         if total_units < 0:
             raise ValueError("total_units must be non-negative")
-        if phase is Phase.REFINING and not self._refinement_enabled:
-            raise ValueError(
-                "cannot begin REFINING phase on a tracker created with "
-                "refinement_enabled=False"
-            )
         self._phase = phase
         self._total = total_units
         self._done = 0
@@ -82,6 +77,27 @@ class ProgressTracker:
             self._succeeded += count
         else:
             self._failed += count
+
+    def set_counts(self, *, done: int, failed: int | None = None,
+                   total: int | None = None) -> None:
+        """Overwrite the current phase's counts with absolute values.
+
+        For engines that compute their counts themselves (the EPUB book
+        loop, the metrics-driven document loops). ``failed`` and ``total``
+        keep their current value when omitted.
+        """
+        if total is not None:
+            if total < 0:
+                raise ValueError("total must be non-negative")
+            self._total = total
+        if failed is not None:
+            if failed < 0:
+                raise ValueError("failed must be non-negative")
+            self._failed = failed
+        if done < 0:
+            raise ValueError("done must be non-negative")
+        self._done = done
+        self._succeeded = max(0, done - self._failed)
 
     # -- reading the tracker -------------------------------------------------
 

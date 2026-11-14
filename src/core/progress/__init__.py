@@ -22,13 +22,17 @@ the pipeline; today it backs the unit tests and shares its segment math
 """
 
 from .legacy import snapshot_from_legacy_stats
+from .reporter import COUNT_FIELDS, ProgressReporter, progress_payload
 from .snapshot import Phase, ProgressSnapshot, global_percent
 from .tracker import ProgressTracker
 
 __all__ = [
+    "COUNT_FIELDS",
     "Phase",
+    "ProgressReporter",
     "ProgressSnapshot",
     "ProgressTracker",
+    "progress_payload",
     "global_percent",
     "snapshot_from_legacy_stats",
 ]

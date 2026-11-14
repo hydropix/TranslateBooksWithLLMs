@@ -110,7 +110,7 @@ def _extract_epub_text(file_path: str) -> str:
     import zipfile
     from lxml import etree
 
-    from src.core.epub.plain_extractor import _local_name, extract_plain_paragraphs
+    from src.core.epub.plain_extractor import extract_plain_paragraphs, local_name
 
     parts: List[str] = []
     try:
@@ -126,7 +126,7 @@ def _extract_epub_text(file_path: str) -> str:
                     continue
                 body = next(
                     (el for el in root.iter()
-                     if isinstance(el.tag, str) and _local_name(el) == "body"),
+                     if isinstance(el.tag, str) and local_name(el) == "body"),
                     root,
                 )
                 paragraphs, _tags, _images, _attrib = extract_plain_paragraphs(body)

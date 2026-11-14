@@ -72,7 +72,7 @@ EPUB_TYPE_ATTR = "{http://www.idpf.org/2007/ops}type"
 CARRIED_ATTRIBUTES = ("class", "id", "style", "dir", "title", EPUB_TYPE_ATTR)
 
 
-def _local_name(elem: etree._Element) -> str:
+def local_name(elem: etree._Element) -> str:
     """Return the lowercase local tag name, stripping XHTML namespace."""
     tag = elem.tag
     if isinstance(tag, str) and tag.startswith("{"):
@@ -110,7 +110,7 @@ def _extract_run_text(
             if include_tail and node.tail:
                 out.append(node.tail)
             return
-        name = _local_name(node)
+        name = local_name(node)
         if name in DROP_TAGS:
             # Skip subtree entirely. Still pick up its tail since it sits at
             # the parent's level.
@@ -182,7 +182,7 @@ def _enclosing_table(elem: etree._Element) -> etree._Element:
     """Return the nearest <table> ancestor, or None."""
     parent = elem.getparent()
     while parent is not None:
-        if _local_name(parent) == "table":
+        if local_name(parent) == "table":
             return parent
         parent = parent.getparent()
     return None
@@ -203,7 +203,7 @@ def _collect_table_blocks(
     flattened into their outer cell's text rather than emitted twice.
     """
     for elem in table.iter():
-        if _local_name(elem) not in TABLE_CELL_TAGS:
+        if local_name(elem) not in TABLE_CELL_TAGS:
             continue
         if _enclosing_table(elem) is not table:
             continue
@@ -225,7 +225,7 @@ def _is_inline(node: etree._Element) -> bool:
         # Comments and processing instructions: invisible, but their tail is
         # loose text of the enclosing container.
         return True
-    name = _local_name(node)
+    name = local_name(node)
     return name in INLINE_TAGS or name in DROP_TAGS or name == "img"
 
 
@@ -296,7 +296,7 @@ def _collect_blocks(
         idx = len(paragraphs_text)
         paragraphs_text.append(text)
         if only_inline and is_container:
-            paragraphs_tag.append(_local_name(root))
+            paragraphs_tag.append(local_name(root))
             paragraphs_attrib.append(dict(root.attrib))
         else:
             paragraphs_tag.append("p")
@@ -355,7 +355,7 @@ def _collect_block(
         # Comment or processing instruction: nothing to translate.
         return
 
-    name = _local_name(child)
+    name = local_name(child)
     lists = (paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph)
 
     if name in DROP_TAGS:

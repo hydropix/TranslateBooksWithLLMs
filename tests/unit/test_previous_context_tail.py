@@ -44,7 +44,11 @@ def test_long_words_do_not_start_mid_word():
 
 @pytest.mark.asyncio
 async def test_plain_text_pipeline_uses_the_bounded_tail(monkeypatch):
-    chinese = "他走进了房间，看见桌子上放着一封信。" * 40
+    chinese = "他走进了房间，看见桌子上放着一封信。" * 20
+    # Sources about as heavy as the answer, so the text-survival guard does
+    # not reject the answer as runaway output.
+    first = "First paragraph here, with enough words to carry some weight. " * 6
+    second = "Second paragraph here, with enough words to carry some weight. " * 6
     seen = []
 
     async def fake_request(*, main_content, previous_translation_context="", **kwargs):
@@ -52,10 +56,10 @@ async def test_plain_text_pipeline_uses_the_bounded_tail(monkeypatch):
         return chinese
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", fake_request)
-    # Two segments: a tiny budget puts each paragraph in its own segment.
+    # Two segments: the budget fits one paragraph, not both.
     await plain_pipeline.translate_paragraphs_plain(
-        ["First paragraph here.", "Second paragraph here."],
-        "English", "Chinese", "m", None, 8, prompt_options={},
+        [first.strip(), second.strip()],
+        "English", "Chinese", "m", None, 110, prompt_options={},
     )
     assert seen[0] == ""
     assert 0 < _weighted_length(seen[1]) <= PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS

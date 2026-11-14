@@ -5,7 +5,6 @@ Covers the artifact families seen in scraped EPUBs (social share bars, related
 posts, prev/next navigation, footers, hidden elements) and verifies that the
 EPUB3 TOC navigation document is preserved.
 """
-import pytest
 from lxml import etree
 
 from src.core.epub.boilerplate_filter import strip_web_boilerplate

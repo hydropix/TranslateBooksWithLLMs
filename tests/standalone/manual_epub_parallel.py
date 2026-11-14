@@ -17,7 +17,6 @@ import sys
 import tempfile
 import time
 import uuid
-import zipfile
 from pathlib import Path
 
 for _stream in (sys.stdout, sys.stderr):
@@ -41,8 +40,8 @@ from manual_epub_baseline import (
     _build_minimal_epub,
     _list_epub_xhtml,
     _read_epub_chapter_text,
-    CHAPTERS,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 PARALLEL = 2
@@ -120,17 +119,21 @@ async def run() -> int:
 
                 started = time.perf_counter()
                 ok = await translate_file(
-                    input_filepath=str(input_path),
-                    output_filepath=str(output_path),
-                    source_language="English",
-                    target_language="French",
-                    model_name=model,
-                    llm_provider="poe",
-                    checkpoint_manager=checkpoint_manager,
-                    translation_id=translation_id,
-                    stats_callback=stats_callback,
-                    poe_api_key=api_key,
-                    parallel_requests=PARALLEL,
+                    make_job(
+                        input_path=str(input_path),
+                        output_path=str(output_path),
+                        source_language="English",
+                        target_language="French",
+                        model=model,
+                        provider="poe",
+                        api_key=api_key,
+                        parallel_workers=PARALLEL,
+                    ),
+                    make_ctx(
+                        checkpoint_manager=checkpoint_manager,
+                        translation_id=translation_id,
+                        stats_callback=stats_callback,
+                    ),
                 )
                 elapsed_s = time.perf_counter() - started
 

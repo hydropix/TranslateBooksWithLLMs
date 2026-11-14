@@ -12,6 +12,7 @@ from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
+from src.api.services.path_validator import PathValidator
 from src.core.pricing import (
     DEFAULT_PRICING,
     LAST_UPDATED,
@@ -172,13 +173,8 @@ def _resolve_text_input(data: dict, uploads_dir: Path) -> str | None:
     if not file_path.exists():
         return None
 
-    try:
-        resolved = file_path.resolve()
-        uploads_resolved = uploads_dir.resolve()
-        if not str(resolved).startswith(str(uploads_resolved)):
-            logger.warning("Refused estimation: path outside uploads dir: %s", resolved)
-            return None
-    except OSError:
+    if not PathValidator.is_within_directory(file_path, uploads_dir):
+        logger.warning("Refused estimation: path outside uploads dir")
         return None
 
     return _extract_text_for_estimation(file_path)

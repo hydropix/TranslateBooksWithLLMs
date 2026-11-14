@@ -13,7 +13,6 @@ import os
 import re
 import zipfile
 from typing import Literal, Optional, Tuple
-from pathlib import Path
 
 FileType = Literal["txt", "epub", "srt", "pgn", "docx", "pdf"]
 

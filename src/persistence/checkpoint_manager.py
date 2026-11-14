@@ -3,18 +3,25 @@ Checkpoint manager for translation job persistence and resume functionality.
 """
 
 import os
+import logging
 import re
 import shutil
-from typing import Optional, Dict, List, Any, Tuple
+import time
+from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
 from pathlib import Path
 from .database import Database
-from src.utils.security import SecurityError, resolve_within, safe_extract_zip
+from src.utils.security import SecurityError, resolve_within
+
+if TYPE_CHECKING:
+    from src.core.epub.xhtml_translation_state import XHTMLTranslationState
 
 
 # Uploaded files are stored as "<16 hex chars>_<original name>"; the prefix is
 # an implementation detail that must never reach the user interface.
 _UPLOAD_PREFIX_RE = re.compile(r'^[0-9a-f]{16}_')
 
+
+_logger = logging.getLogger(__name__)
 
 def _strip_upload_prefix(filename: str) -> str:
     """Remove the 16-hex upload prefix from a stored filename, if present."""
@@ -26,6 +33,9 @@ class CheckpointManager:
     Manages translation job checkpoints including database persistence
     and file storage for uploaded files.
     """
+
+    # Age below which cleanup_orphan_uploads never deletes an item.
+    ORPHAN_GRACE_SECONDS = 3600
 
     def __init__(self, db_path: str = "data/jobs.db", server_session_id: Optional[str] = None):
         """
@@ -67,7 +77,8 @@ class CheckpointManager:
 
         # Create job in database with updated config and server session ID
         success = self.db.create_job(
-            translation_id, file_type, config, self.server_session_id
+            translation_id, file_type, config, self.server_session_id,
+            owner_pid=os.getpid(),
         )
 
         return success
@@ -116,7 +127,7 @@ class CheckpointManager:
 
         # Only preserve if file exists
         if not input_path.exists():
-            print(f"Warning: Input file does not exist: {input_file_path}")
+            _logger.warning(f"Warning: Input file does not exist: {input_file_path}")
             return
 
         # Always preserve uploaded files for web interface
@@ -131,9 +142,9 @@ class CheckpointManager:
             shutil.copy2(input_file_path, preserved_path)
             # Update config with preserved path (stored in DB)
             config['preserved_input_path'] = str(preserved_path)
-            print(f"Input file preserved: {preserved_path}")
+            _logger.debug(f"Input file preserved: {preserved_path}")
         except Exception as e:
-            print(f"Warning: Could not preserve input file: {e}")
+            _logger.warning(f"Warning: Could not preserve input file: {e}")
 
     def save_checkpoint(
         self,
@@ -148,7 +159,8 @@ class CheckpointManager:
         failed_chunks: Optional[int] = None,
         epub_accumulated_stats: Optional[Dict[str, Any]] = None,
         unfinished_units: Optional[Dict[str, List[int]]] = None,
-        degraded_units: Optional[Dict[str, List[int]]] = None
+        degraded_units: Optional[Dict[str, List[int]]] = None,
+        phase: str = 'translate'
     ) -> bool:
         """
         Save a checkpoint after translating a chunk.
@@ -173,6 +185,9 @@ class CheckpointManager:
                 alongside the map above, and kept separate from it on purpose:
                 those chunks are never retried automatically (D3), so they must
                 not reach the unfinished index, which drives the verdict.
+            phase: Checkpoint namespace. 'refine' units are stored apart from
+                the translation chunks and never move the job's progress
+                pointer, which belongs to the translation.
 
         Returns:
             True if saved successfully
@@ -185,8 +200,11 @@ class CheckpointManager:
             original_text,
             translated_text,
             chunk_data,
-            chunk_status
+            chunk_status,
+            phase=phase,
         )
+        if phase != 'translate':
+            return chunk_saved
 
         # Update job progress
         progress_saved = self.db.update_job_progress(
@@ -256,8 +274,24 @@ class CheckpointManager:
             'chunks': chunks,
             'resume_from_index': resume_from_index,
             'failed_chunk_indices': failed_chunk_indices,
-            'translation_context': job.get('translation_context')
+            'translation_context': job.get('translation_context'),
+            'job_phase': job.get('job_phase') or 'translate',
+            'refine_resume_index': self.refine_resume_index(translation_id),
         }
+
+    def refine_resume_index(self, translation_id: str) -> int:
+        """Index the refine pass of this job resumes from (0 when none ran)."""
+        done = [c['chunk_index'] for c in self.db.get_chunks(translation_id, phase='refine')
+                if c.get('status') == 'completed']
+        return (max(done) + 1) if done else 0
+
+    def set_job_phase(self, translation_id: str, phase: str) -> bool:
+        """Persist the phase the job is entering ('translate' or 'refine')."""
+        return self.db.set_job_phase(translation_id, phase)
+
+    def touch_owner(self, translation_id: str) -> bool:
+        """Heartbeat: this process still runs the job (see owner_still_running)."""
+        return self.db.touch_owner(translation_id, os.getpid())
 
     def get_resumable_jobs(self) -> List[Dict[str, Any]]:
         """
@@ -382,7 +416,7 @@ class CheckpointManager:
                     except (ValueError, TypeError):
                         pass
         except Exception as e:
-            print(f"Warning: Error getting old job list: {e}")
+            _logger.warning(f"Warning: Error getting old job list: {e}")
 
         # Delete from database
         jobs_deleted = self.db.cleanup_old_jobs(max_age_days)
@@ -396,7 +430,7 @@ class CheckpointManager:
                     shutil.rmtree(job_upload_dir)
                     files_cleaned += 1
                 except Exception as e:
-                    print(f"Warning: Could not delete upload directory for {job_id}: {e}")
+                    _logger.warning(f"Warning: Could not delete upload directory for {job_id}: {e}")
 
         return jobs_deleted, files_cleaned
 
@@ -406,8 +440,12 @@ class CheckpointManager:
 
         These are "orphan" items left behind from previous incomplete cleanups.
         Handles:
-        - trans_xxx folders (job ID folders)
+        - job folders (trans_xxx from the web UI, cli_xxx from the CLI, ...):
+          deleted only when no job row carries that ID
         - hash_filename files (legacy upload files)
+
+        Items modified within ORPHAN_GRACE_SECONDS are kept: another process
+        creates a job folder just before it inserts the job row.
 
         Returns:
             Number of orphan items deleted
@@ -436,7 +474,7 @@ class CheckpointManager:
                     preserved_files.add(Path(preserved_path).name)
             conn.close()
         except Exception as e:
-            print(f"Warning: Error getting job IDs: {e}")
+            _logger.warning(f"Warning: Error getting job IDs: {e}")
             return 0
 
         # Check each item in uploads directory
@@ -449,11 +487,18 @@ class CheckpointManager:
 
             is_orphan = True
 
+            try:
+                if time.time() - item.stat().st_mtime < self.ORPHAN_GRACE_SECONDS:
+                    continue
+            except OSError:
+                continue
+
             if item.is_dir():
-                # It's a folder - check if it's a job ID folder
-                if item_name.startswith('trans_'):
-                    if item_name in db_job_ids:
-                        is_orphan = False
+                # A job folder is named after its job ID, whatever the prefix
+                # (trans_ for web jobs, cli_ for CLI jobs). Only a folder no
+                # job row points to is an orphan.
+                if item_name in db_job_ids:
+                    is_orphan = False
             else:
                 # It's a file - check if it's referenced by any job
                 if item_name in preserved_files:
@@ -467,7 +512,7 @@ class CheckpointManager:
                         item.unlink()
                     orphans_deleted += 1
                 except Exception as e:
-                    print(f"Warning: Could not delete orphan {item_name}: {e}")
+                    _logger.warning(f"Warning: Could not delete orphan {item_name}: {e}")
 
         return orphans_deleted
 
@@ -553,7 +598,7 @@ class CheckpointManager:
             try:
                 shutil.rmtree(job_upload_dir)
             except Exception as e:
-                print(f"Warning: Could not delete upload directory: {e}")
+                _logger.warning(f"Warning: Could not delete upload directory: {e}")
 
         return db_deleted
 
@@ -582,7 +627,7 @@ class CheckpointManager:
             try:
                 shutil.rmtree(job_upload_dir)
             except Exception as e:
-                print(f"Warning: Could not delete upload directory: {e}")
+                _logger.warning(f"Warning: Could not delete upload directory: {e}")
 
         return ok
 
@@ -607,204 +652,6 @@ class CheckpointManager:
             return preserved_path
 
         return None
-
-    def build_translated_output(
-        self,
-        translation_id: str,
-        file_type: str
-    ) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Build the complete translated output from saved chunks.
-
-        Now uses the adapter pattern for all file formats, providing
-        consistent reconstruction logic across TXT, SRT, and EPUB.
-
-        Args:
-            translation_id: Job identifier
-            file_type: Type of file (txt, srt, epub)
-
-        Returns:
-            Tuple of (translated_text, error_message)
-        """
-        # Use the new adapter-based reconstruction
-        import asyncio
-        from src.core.adapters import build_translated_output as adapter_build_output
-
-        try:
-            output_bytes, error = asyncio.run(
-                adapter_build_output(
-                    translation_id=translation_id,
-                    checkpoint_manager=self
-                )
-            )
-
-            if error:
-                return None, error
-
-            if output_bytes:
-                # For EPUB, return as base64-encoded string for consistency with legacy code
-                if file_type == 'epub':
-                    import base64
-                    return base64.b64encode(output_bytes).decode('utf-8'), None
-                else:
-                    # For TXT/SRT, decode bytes to string
-                    return output_bytes.decode('utf-8'), None
-
-            return None, "No output generated"
-
-        except Exception as e:
-            # Fallback to legacy reconstruction if adapter fails
-            return self._build_translated_output_legacy(translation_id, file_type)
-
-    def _build_translated_output_legacy(
-        self,
-        translation_id: str,
-        file_type: str
-    ) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Legacy build method - kept as fallback.
-
-        This is the original implementation, preserved for backward compatibility
-        in case the adapter-based reconstruction fails.
-
-        Args:
-            translation_id: Job identifier
-            file_type: Type of file (txt, srt, epub)
-
-        Returns:
-            Tuple of (translated_text, error_message)
-        """
-        chunks = self.db.get_chunks(translation_id)
-
-        if not chunks:
-            return None, "No chunks found for this job"
-
-        if file_type in ['txt', 'epub_simple']:
-            # Simple concatenation for text-based formats
-            translated_parts = []
-            for chunk in chunks:
-                if chunk['status'] == 'completed' and chunk['translated_text']:
-                    translated_parts.append(chunk['translated_text'])
-                else:
-                    # Use original text if translation failed
-                    translated_parts.append(chunk['original_text'])
-
-            return '\n'.join(translated_parts), None
-
-        elif file_type == 'srt':
-            # SRT needs special handling to reconstruct from blocks
-            # Each chunk contains block_translations dict mapping subtitle index to translated text
-            job = self.db.get_job(translation_id)
-            if not job:
-                return None, "Job not found"
-
-            # Build a complete translations dictionary from all blocks
-            all_translations = {}
-            for chunk in chunks:
-                block_translations = chunk.get('chunk_data', {}).get('block_translations', {})
-                for idx_str, trans_text in block_translations.items():
-                    idx = int(idx_str)
-                    all_translations[idx] = trans_text
-
-            if not all_translations:
-                return None, "No translations found in checkpoint"
-
-            # Now we need to reconstruct the SRT file
-            # We need the original subtitle structure (timing, numbering)
-            # This should be stored in the config or we need to re-parse the original file
-            config = job['config']
-            preserved_input_path = config.get('preserved_input_path')
-
-            if not preserved_input_path or not Path(preserved_input_path).exists():
-                return None, "Original SRT file not found, cannot reconstruct"
-
-            # Re-parse the original SRT to get structure
-            from src.core.srt_processor import SRTProcessor
-            srt_processor = SRTProcessor()
-
-            with open(preserved_input_path, 'r', encoding='utf-8') as f:
-                original_content = f.read()
-
-            subtitles = srt_processor.parse_srt(original_content)
-
-            # Update subtitles with translations
-            updated_subtitles = srt_processor.update_translated_subtitles(
-                subtitles, all_translations
-            )
-
-            # Reconstruct SRT
-            translated_srt = srt_processor.reconstruct_srt(updated_subtitles)
-
-            return translated_srt, None
-
-        elif file_type == 'epub':
-            # EPUB reconstruction from checkpoint
-            # Extract original EPUB, restore translated files, and repackage
-            job = self.db.get_job(translation_id)
-            if not job:
-                return None, "Job not found"
-
-            config = job['config']
-            preserved_input_path = config.get('preserved_input_path')
-
-            if not preserved_input_path or not Path(preserved_input_path).exists():
-                return None, "Original EPUB file not found, cannot reconstruct"
-
-            try:
-                import tempfile
-                import zipfile
-                from lxml import etree
-
-                # Create temporary directory for reconstruction
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    temp_path = Path(temp_dir)
-
-                    # Extract original EPUB
-                    with zipfile.ZipFile(preserved_input_path, 'r') as zip_ref:
-                        safe_extract_zip(zip_ref, temp_path)
-
-                    # Restore translated files from checkpoint
-                    restore_success = self.restore_epub_files(translation_id, temp_path)
-
-                    if not restore_success:
-                        return None, "Failed to restore translated files from checkpoint"
-
-                    # Repackage EPUB
-                    output_path = Path(tempfile.mktemp(suffix='.epub'))
-                    try:
-                        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as epub_zip:
-                            # Add mimetype first (uncompressed)
-                            mimetype_path = temp_path / 'mimetype'
-                            if mimetype_path.exists():
-                                epub_zip.write(
-                                    mimetype_path,
-                                    'mimetype',
-                                    compress_type=zipfile.ZIP_STORED
-                                )
-
-                            # Add all other files
-                            for file_path in temp_path.rglob('*'):
-                                if file_path.is_file() and file_path.name != 'mimetype':
-                                    arcname = file_path.relative_to(temp_path)
-                                    epub_zip.write(file_path, arcname)
-
-                        # Read as string (will be written as binary by caller)
-                        with open(output_path, 'rb') as f:
-                            epub_bytes = f.read()
-
-                        # Return as base64-encoded string for storage consistency
-                        import base64
-                        return base64.b64encode(epub_bytes).decode('utf-8'), None
-
-                    finally:
-                        if output_path.exists():
-                            output_path.unlink()
-
-            except Exception as e:
-                return None, f"Error reconstructing EPUB: {str(e)}"
-
-        else:
-            return None, f"Unknown file type: {file_type}"
 
     def save_epub_file(
         self,
@@ -836,10 +683,10 @@ class CheckpointManager:
                 f.write(file_content)
             return True
         except SecurityError:
-            print(f"Refusing unsafe EPUB file href: {file_href}")
+            _logger.error(f"Refusing unsafe EPUB file href: {file_href}")
             return False
         except Exception as e:
-            print(f"Error saving EPUB file {file_href}: {e}")
+            _logger.error(f"Error saving EPUB file {file_href}: {e}")
             return False
 
     def restore_epub_files(
@@ -870,13 +717,13 @@ class CheckpointManager:
                             work_dir, str(rel_path).replace('\\', '/')
                         )
                     except SecurityError:
-                        print(f"Skipping unsafe restored EPUB path: {rel_path}")
+                        _logger.warning(f"Skipping unsafe restored EPUB path: {rel_path}")
                         continue
                     dest_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(file_path, dest_path)
             return True
         except Exception as e:
-            print(f"Error restoring EPUB files: {e}")
+            _logger.error(f"Error restoring EPUB files: {e}")
             return False
 
     def _xhtml_state_path(self, translation_id: str, file_href: str) -> Path:
@@ -886,7 +733,7 @@ class CheckpointManager:
         This is the single authority for that location. Issue #261 was caused
         by save/load/delete each recomputing their own sanitised filename
         inline: the file loop deleted with a different key (the temp-dir-
-        relative path) than the one `xhtml_translator` saved under (the
+        relative path) than the one the chunk loop saved under (the
         `content_href`), so the delete silently never matched and stale
         "finished" states blocked every retry. Routing every caller through
         this one helper makes that kind of divergence impossible.
@@ -900,6 +747,10 @@ class CheckpointManager:
         themselves.
         """
         safe_filename = file_href.replace('/', '_').replace('\\', '_')
+        # A drive prefix ('C:') would make pathlib treat the name as a
+        # drive-relative path and drop the state directory in front of it.
+        # Hrefs without ':' keep their historical file name.
+        safe_filename = safe_filename.replace(':', '_')
         return self.uploads_dir / translation_id / "xhtml_states" / f"{safe_filename}.json"
 
     def save_xhtml_partial_state(
@@ -937,7 +788,7 @@ class CheckpointManager:
             with open(state_file, 'w', encoding='utf-8') as f:
                 json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
 
-            print(f"Partial state saved: {state_file} (chunk {state.current_chunk_index}/{len(state.chunks)})")
+            _logger.debug(f"Partial state saved: {state_file} (chunk {state.current_chunk_index}/{len(state.chunks)})")
 
             # Update main checkpoint progress with global_stats if available
             # This ensures the UI shows correct progress across all XHTML files
@@ -949,11 +800,11 @@ class CheckpointManager:
                     completed_chunks=state.global_stats.get('completed_chunks'),
                     failed_chunks=state.global_stats.get('failed_chunks')
                 )
-                print(f"Updated main checkpoint with global stats: {state.global_stats.get('completed_chunks')}/{state.global_stats.get('total_chunks')} chunks")
+                _logger.debug(f"Updated main checkpoint with global stats: {state.global_stats.get('completed_chunks')}/{state.global_stats.get('total_chunks')} chunks")
 
             return True
         except Exception as e:
-            print(f"Error saving partial state: {e}")
+            _logger.error(f"Error saving partial state: {e}")
             return False
 
     def load_xhtml_partial_state(
@@ -987,13 +838,13 @@ class CheckpointManager:
 
             # Validate the loaded state
             if not state.validate():
-                print(f"Warning: Loaded state is invalid, ignoring: {state_file}")
+                _logger.warning(f"Warning: Loaded state is invalid, ignoring: {state_file}")
                 return None
 
-            print(f"Partial state loaded: {state_file} (resuming from chunk {state.current_chunk_index}/{len(state.chunks)})")
+            _logger.debug(f"Partial state loaded: {state_file} (resuming from chunk {state.current_chunk_index}/{len(state.chunks)})")
             return state
         except Exception as e:
-            print(f"Error loading partial state: {e}")
+            _logger.error(f"Error loading partial state: {e}")
             return None
 
     def delete_xhtml_partial_state(
@@ -1018,7 +869,7 @@ class CheckpointManager:
                 state_file.unlink()
                 return True
             except Exception as e:
-                print(f"Warning: Could not delete partial state: {e}")
+                _logger.warning(f"Warning: Could not delete partial state: {e}")
                 return False
         return True
 
@@ -1050,7 +901,7 @@ class CheckpointManager:
                     data = json.load(f)
                 file_href = data.get('file_href') or file_href
             except Exception as e:
-                print(f"Warning: Could not read partial state {state_file} for listing: {e}")
+                _logger.warning(f"Warning: Could not read partial state {state_file} for listing: {e}")
             states.append(file_href)
         return states
 

@@ -9,8 +9,18 @@ from typing import Any, Dict, Optional, Tuple
 
 from .constants import TAG0, TAG1, TAG2
 from .placeholder_examples import get_example_for_pair
-from .subtitle_examples import SUBTITLE_EXAMPLES
-from .output_examples import OUTPUT_FORMAT_EXAMPLES
+from .subtitle_examples import (
+    SUBTITLE_EXAMPLES,
+    SUBTITLE_EXAMPLE_FALLBACK,
+    SUBTITLE_REFINEMENT_EXAMPLES,
+    SUBTITLE_REFINEMENT_EXAMPLE_FALLBACK,
+)
+from .output_examples import (
+    TRANSLATION_OUTPUT_EXAMPLES,
+    TRANSLATION_OUTPUT_FALLBACK,
+    REFINEMENT_OUTPUT_EXAMPLES,
+    REFINEMENT_OUTPUT_FALLBACK,
+)
 from src.utils.lang_normalize import normalize_lang_key
 
 
@@ -32,24 +42,41 @@ def get_placeholder_example(
 
 
 def get_subtitle_example(target_lang: str) -> str:
-    """Get subtitle format example for a target language."""
-    return SUBTITLE_EXAMPLES.get(
-        normalize_lang_key(target_lang),
-        "[1]First translated line\n[2]Second translated line"
+    """Get the subtitle translation example ([1]/[2] markers) in the target language.
+
+    Falls back to a neutral English example when the language has no entry.
+    """
+    return SUBTITLE_EXAMPLES.get(normalize_lang_key(target_lang), SUBTITLE_EXAMPLE_FALLBACK)
+
+
+def get_subtitle_refinement_example(target_lang: str) -> str:
+    """Get the subtitle refinement example ([0]/[1] markers) in the target language.
+
+    Falls back to a neutral English example when the language has no entry.
+    """
+    return SUBTITLE_REFINEMENT_EXAMPLES.get(
+        normalize_lang_key(target_lang), SUBTITLE_REFINEMENT_EXAMPLE_FALLBACK
     )
 
 
 def get_output_format_example(target_lang: str, has_placeholders: bool = True) -> str:
-    """Get output format example for a target language."""
-    lang_key = normalize_lang_key(target_lang)
-    mode_key = "standard" if has_placeholders else "plain"
+    """Get the example line the translation prompt shows between its output tags.
 
-    if lang_key in OUTPUT_FORMAT_EXAMPLES:
-        return OUTPUT_FORMAT_EXAMPLES[lang_key][mode_key]
+    Uses the "standard" variant (mentions the placeholder marker) when the input
+    carries placeholders and the "plain" variant otherwise. An unknown target
+    language gets the same English fallback in both modes.
+    """
+    examples = TRANSLATION_OUTPUT_EXAMPLES.get(normalize_lang_key(target_lang))
+    if examples is None:
+        return TRANSLATION_OUTPUT_FALLBACK
+    return examples["standard" if has_placeholders else "plain"]
 
-    if has_placeholders:
-        return f"Your translated text here, with all {TAG0} markers preserved exactly"
-    return "Your translated text here"
+
+def get_refinement_output_example(target_lang: str) -> str:
+    """Get the example line the refinement prompt shows between its output tags."""
+    return REFINEMENT_OUTPUT_EXAMPLES.get(
+        normalize_lang_key(target_lang), REFINEMENT_OUTPUT_FALLBACK
+    )
 
 
 def build_placeholder_section(

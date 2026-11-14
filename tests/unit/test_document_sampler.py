@@ -7,7 +7,6 @@ and the upload extraction entry point (unsupported extensions, EPUB fixture).
 import sys
 from pathlib import Path
 
-import pytest
 
 # Make the project importable regardless of where pytest is invoked from.
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

@@ -23,8 +23,6 @@ import pytest
 from src.config import INPUT_TAG_IN, INPUT_TAG_OUT
 from src.core.llm.base import LLMResponse
 
-import src.core.epub.translator as translator_module
-
 
 REAL_CSS = Path(__file__).resolve().parents[2] / "fixtures" / "cjk_epub" / "main.css"
 
@@ -195,7 +193,7 @@ def _disable_attribution(monkeypatch):
     Unrelated to this phase, and its flags default from the developer's local
     .env -- pinning them off keeps the test deterministic regardless of that.
     """
-    monkeypatch.setattr(translator_module, "ATTRIBUTION_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", False)
     monkeypatch.setattr("src.core.epub.attribution_page.ATTRIBUTION_ENABLED", False)
 
 

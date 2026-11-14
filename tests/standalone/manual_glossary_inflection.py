@@ -202,8 +202,6 @@ async def translate_one(provider, paragraph: str, spec, with_glossary: bool, blo
     prompt_pair = generate_translation_prompt(
         paragraph,
         "",
-        "",
-        "",
         source_language=SOURCE_LANGUAGE,
         target_language=target_language,
         has_placeholders=False,

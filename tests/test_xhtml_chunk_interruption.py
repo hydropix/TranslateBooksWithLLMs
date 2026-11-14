@@ -9,19 +9,25 @@ Tests the complete interruption/resume cycle:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import MagicMock
 from lxml import etree
-from typing import List, Dict, Any
 
-from src.core.epub.xhtml_translator import translate_xhtml_simplified, _translate_all_chunks_with_checkpoint
+from tests.epub_engine_helpers import run_chunk_loop, translate_xhtml
 from src.core.epub.xhtml_translation_state import (
     XHTMLTranslationState,
     unfinished_chunk_indices,
     untranslated_chunk_indices,
 )
 from src.persistence.checkpoint_manager import CheckpointManager
-from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.llm.base import LLMResponse
+
+
+# The text-survival guard rejects a reply far shorter than its source, so the
+# mock translations carry roughly a paragraph of text.
+PLAUSIBLE_TRANSLATION = (
+    "Ceci est un paragraphe traduit. Il contient assez de texte pour remplacer "
+    "un paragraphe source. Le renard brun rapide saute par-dessus le chien paresseux."
+)
 
 
 def create_mock_llm_response(content: str) -> LLMResponse:
@@ -54,7 +60,7 @@ def create_mock_llm_client(default_response: str = "Texte traduit"):
 @pytest.fixture
 def mock_llm_client():
     """Create a mock LLM client that returns simple translations."""
-    return create_mock_llm_client("Texte traduit")
+    return create_mock_llm_client("Texte traduit. " + PLAUSIBLE_TRANSLATION)
 
 
 @pytest.fixture(autouse=True)
@@ -123,7 +129,7 @@ class TestChunkLevelInterruption:
         # Override LLM client to track chunks
         async def track_chunks(*args, **kwargs):
             chunks_processed.append(len(chunks_processed) + 1)
-            return create_mock_llm_response(f"Translated chunk {len(chunks_processed)}")
+            return create_mock_llm_response(f"Translated chunk {len(chunks_processed)}. {PLAUSIBLE_TRANSLATION}")
 
         mock_llm_client.generate = track_chunks
         mock_llm_client.extract_translation = lambda response: response
@@ -136,7 +142,7 @@ class TestChunkLevelInterruption:
             return interrupt_counter[0] >= 3
 
         # ========== FIRST PASS: Interruption ==========
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -172,7 +178,7 @@ class TestChunkLevelInterruption:
         chunks_processed.clear()
         interrupt_counter[0] = 0  # Don't interrupt this time
 
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -192,7 +198,7 @@ class TestChunkLevelInterruption:
         # Note: depends on how many chunks the document generates
         assert len(chunks_processed) >= 1, "Should process at least one more chunk"
 
-        # Note: translate_xhtml_simplified does not delete partial state - that's done
+        # Note: the file-level translation does not delete partial state - that's done
         # at the higher level (_translate_single_xhtml_file) after saving the file.
         final_state = temp_checkpoint_manager.load_xhtml_partial_state(translation_id, file_href)
         if final_state is not None:
@@ -219,7 +225,7 @@ class TestChunkLevelInterruption:
             interrupt_counter[0] += 1
             return interrupt_counter[0] >= 3
 
-        success, _stats = await translate_xhtml_simplified(
+        success, _stats = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -259,7 +265,7 @@ class TestChunkLevelInterruption:
 
         async def track_chunks(*args, **kwargs):
             total_chunks_processed.append(len(total_chunks_processed) + 1)
-            return create_mock_llm_response(f"Translated chunk {len(total_chunks_processed)}")
+            return create_mock_llm_response(f"Translated chunk {len(total_chunks_processed)}. {PLAUSIBLE_TRANSLATION}")
 
         mock_llm_client.generate = track_chunks
         mock_llm_client.extract_translation = lambda response: response
@@ -268,7 +274,7 @@ class TestChunkLevelInterruption:
         def interrupt_at_2():
             return len(total_chunks_processed) >= 2
 
-        success, _ = await translate_xhtml_simplified(
+        success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -291,7 +297,7 @@ class TestChunkLevelInterruption:
         def interrupt_at_4():
             return len(total_chunks_processed) >= 4
 
-        success, _ = await translate_xhtml_simplified(
+        success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -312,7 +318,7 @@ class TestChunkLevelInterruption:
         assert state2.current_chunk_index > state1.current_chunk_index, "Should have progressed past first interruption"
 
         # Final completion without interruption
-        success, _ = await translate_xhtml_simplified(
+        success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -326,7 +332,7 @@ class TestChunkLevelInterruption:
         )
 
         assert success is True
-        # Note: translate_xhtml_simplified does not delete partial state
+        # Note: the file-level translation does not delete partial state
         final_state = temp_checkpoint_manager.load_xhtml_partial_state(translation_id, file_href)
         if final_state is not None:
             assert final_state.current_chunk_index == len(final_state.chunks), "Should be fully translated"
@@ -338,7 +344,6 @@ class TestPeriodicCheckpoint:
     @pytest.mark.asyncio
     async def test_checkpoint_every_5_chunks(self, temp_checkpoint_manager):
         """Test that checkpoints are saved every 5 chunks."""
-        from datetime import datetime
 
         # Create mock data with 12 chunks
         chunks = [
@@ -368,7 +373,7 @@ class TestPeriodicCheckpoint:
         mock_client.extract_translation = lambda response: response
 
         # Run translation
-        translated_chunks, stats, was_interrupted = await _translate_all_chunks_with_checkpoint(
+        translated_chunks, stats, was_interrupted = await run_chunk_loop(
             chunks=chunks,
             source_language="English",
             target_language="French",
@@ -419,7 +424,7 @@ class TestBilingualModeWithInterruption:
             return chunks_count[0] >= 2
 
         # First pass with bilingual mode
-        success, _ = await translate_xhtml_simplified(
+        success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -444,7 +449,7 @@ class TestBilingualModeWithInterruption:
 
         # Resume with bilingual mode
         chunks_count[0] = 0
-        success, _ = await translate_xhtml_simplified(
+        success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -591,7 +596,7 @@ class TestEdgeCases:
         def interrupt_immediately():
             return True
 
-        success, _ = await translate_xhtml_simplified(
+        success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -622,7 +627,7 @@ class TestEdgeCases:
         def never_interrupt():
             return False
 
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",
@@ -637,7 +642,7 @@ class TestEdgeCases:
 
         assert success is True
 
-        # Note: translate_xhtml_simplified does not delete partial state - that's done
+        # Note: the file-level translation does not delete partial state - that's done
         # at the higher level (_translate_single_xhtml_file) after saving the file.
         # Here we just verify translation completed successfully.
         state = temp_checkpoint_manager.load_xhtml_partial_state(translation_id, file_href)
@@ -649,7 +654,7 @@ class TestEdgeCases:
     async def test_resume_without_checkpoint_manager(self, sample_xhtml_doc, mock_llm_client):
         """Test that translation works without checkpoint manager (backwards compatibility)."""
         # Should work without checkpoint_manager
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=sample_xhtml_doc,
             source_language="English",
             target_language="French",

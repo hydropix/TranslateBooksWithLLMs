@@ -12,7 +12,7 @@ from pathlib import Path
 from lxml import etree
 
 from src.core.epub.attribution_page import ATTRIBUTION_ID, add_attribution_page
-from src.core.epub.translator import _update_epub_metadata
+from src.core.epub.opf_metadata import update_epub_metadata
 from src.core.epub.lang_support import apply_target_language_to_xhtml_directory
 from src.core.epub.rtl_support import apply_rtl_to_epub_directory
 from src.config import NAMESPACES
@@ -30,7 +30,7 @@ def _enable_attribution(monkeypatch):
     """
     monkeypatch.setattr("src.core.epub.attribution_page.ATTRIBUTION_ENABLED", True)
     monkeypatch.setattr("src.core.epub.attribution_page.ATTRIBUTION_PAGE_ENABLED", True)
-    monkeypatch.setattr("src.core.epub.translator.ATTRIBUTION_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", True)
 
 
 def _build_minimal_opf(opf_dir: Path) -> Path:
@@ -74,7 +74,7 @@ def test_attribution_page_survives_metadata_write_and_inherits_target_lang(tmp_p
     assert href is not None
 
     # Step 5. The single OPF write of the whole pipeline.
-    _update_epub_metadata(opf_tree, str(opf_path), "French")
+    update_epub_metadata(opf_tree, str(opf_path), "French")
 
     # Step 6.5.
     apply_target_language_to_xhtml_directory(str(tmp_path), "French")
@@ -116,7 +116,7 @@ def test_attribution_page_receives_rtl_css_like_any_other_document(tmp_path: Pat
     href = add_attribution_page(opf_tree, str(tmp_path))
     assert href is not None
 
-    _update_epub_metadata(opf_tree, str(opf_path), "Arabic")
+    update_epub_metadata(opf_tree, str(opf_path), "Arabic")
 
     attribution_path = tmp_path / href
     before_bytes = attribution_path.read_bytes()

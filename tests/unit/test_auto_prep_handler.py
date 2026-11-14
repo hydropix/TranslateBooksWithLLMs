@@ -1,24 +1,31 @@
 """
-Unit tests for the auto-mode wiring in `src.api.handlers`
-(Phase 2 of plan/PLAN_AutoGlossaryStyle.md).
+Unit tests for the auto-mode wiring of the job prepare phase
+(``src.core.job.prepare``; Phase 2 of plan/PLAN_AutoGlossaryStyle.md).
 
-Fully offline: `auto_prep.build_auto_prompt_options` and `create_llm_client`
-are monkeypatched on the `handlers` module, so no provider is contacted and no
-Flask app is needed. The two call-site regressions (the suppressed
-"📖 Loaded glossary" line and the resume guard) are exercised by driving
-`perform_actual_translation` itself against fake state/checkpoint managers and
-a fake `translate_file`, because both live inside that coroutine.
+Fully offline: ``auto_prep.build_auto_prompt_options`` and
+``src.core.llm.factory.create_llm_provider`` are monkeypatched, so no provider
+is contacted and no Flask app is needed. The call-site regressions (the
+suppressed "📖 Loaded glossary" line and the resume guard) are exercised by
+driving ``src.api.handlers.perform_actual_translation`` itself against fake
+state/checkpoint managers and a fake ``translate_file`` engine, because both
+live in the job runner it hands the job to.
 
 Each numbered section matches the matching item in the "Validation criteria
 (Phase 2)" list of the plan.
 """
 import asyncio
+import copy
 import time
 
 import pytest
 
 from src.api import handlers
-from src.core import auto_prep
+from src.core import adapters, auto_prep
+from src.core.job import OP_REFINE, OP_TRANSLATE, JobConfig, JobResult
+from src.core.job import prepare
+from src.core.llm import factory
+from src.core.llm.exceptions import LLMClientConfigError
+from src.core.llm.provider_config import ProviderConfig
 
 
 SOURCE_TEXT = (
@@ -33,12 +40,14 @@ FRAGMENT = {
     "custom_instructions": "## Style\n- Keep sentences short.",
 }
 
+ENDPOINT = 'http://localhost:11434/api/generate'
+
 
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
 class FakeClient:
-    """Stand-in for `LLMClient`: only `close()` is ever reached from handlers."""
+    """Stand-in for an LLM provider: only `close()` is ever reached."""
 
     def __init__(self):
         self.closed = 0
@@ -48,7 +57,7 @@ class FakeClient:
 
 
 class ClientFactory:
-    """Monkeypatched `create_llm_client`: records its calls, hands back a client."""
+    """Monkeypatched `create_llm_provider`: records its calls, hands back a client."""
 
     def __init__(self, client=None):
         self.client = FakeClient() if client is None else client
@@ -60,7 +69,7 @@ class ClientFactory:
 
 
 class LogRecorder:
-    """Matches `_log_message_callback(message_key, message_content="", data=None)`."""
+    """Matches the job log callback `(message_key, message_content="", data=None)`."""
 
     def __init__(self):
         self.entries = []
@@ -72,27 +81,34 @@ class LogRecorder:
         return [key for key, _ in self.entries]
 
 
-def _base_config(prompt_options=None, **overrides):
-    config = {
-        'file_type': 'txt',
-        'text': SOURCE_TEXT,
-        'output_filename': 'out.txt',
-        'source_language': 'English',
-        'target_language': 'French',
-        'model': 'test-model',
-        'llm_provider': 'ollama',
-        'llm_api_endpoint': 'http://localhost:11434/api/generate',
-        'prompt_options': {} if prompt_options is None else prompt_options,
-    }
-    config.update(overrides)
-    return config
+def _job(prompt_options=None, **changes):
+    base = dict(
+        operation=OP_TRANSLATE,
+        file_type='txt',
+        text=SOURCE_TEXT,
+        output_path='out.txt',
+        source_language='English',
+        target_language='French',
+        provider=ProviderConfig(provider='ollama', model='test-model', endpoint=ENDPOINT),
+        prompt_options={} if prompt_options is None else prompt_options,
+        origin='web',
+    )
+    base.update(changes)
+    return JobConfig(**base)
+
+
+async def _apply(job, log, progress=None):
+    """Run the prepare helper on a private copy of the job's options, like the runner."""
+    options = job.engine_prompt_options()
+    await prepare.apply_auto_prep(job, options, log, progress)
+    return options
 
 
 @pytest.fixture
 def patched(monkeypatch):
-    """Patch the two seams `_apply_auto_prep` reaches out through.
+    """Patch the two seams `apply_auto_prep` reaches out through.
 
-    Returns a small namespace: `.factory` (the fake `create_llm_client`),
+    Returns a small namespace: `.factory` (the fake `create_llm_provider`),
     `.builder_calls` (kwargs each `build_auto_prompt_options` call received)
     and `.fragment` / `.raises` to steer what the builder does.
     """
@@ -112,74 +128,77 @@ def patched(monkeypatch):
             raise state.raises
         return dict(state.fragment)
 
-    monkeypatch.setattr(handlers, 'create_llm_client', state.factory)
+    monkeypatch.setattr(factory, 'create_llm_provider', state.factory)
     monkeypatch.setattr(auto_prep, 'build_auto_prompt_options', fake_build)
     return state
 
 
 # ---------------------------------------------------------------------------
-# 1. _auto_prep_wants across the five documented shapes
+# 1. auto_prep_wants across the five documented shapes
 # ---------------------------------------------------------------------------
 class TestAutoPrepWants:
+    @staticmethod
+    def _wants(prompt_options, **changes):
+        job = _job(prompt_options, **changes)
+        return prepare.auto_prep_wants(job, prompt_options)
+
     def test_glossary_auto_alone(self):
-        config = _base_config({'glossary_auto': True})
-        assert handlers._auto_prep_wants(config) == (True, False)
+        assert self._wants({'glossary_auto': True}) == (True, False)
 
     def test_explicit_glossary_id_wins(self):
-        config = _base_config({'glossary_auto': True, 'glossary_id': 7})
-        assert handlers._auto_prep_wants(config) == (False, False)
+        assert self._wants({'glossary_auto': True, 'glossary_id': 7}) == (False, False)
 
     def test_snapshotted_glossary_terms_win(self):
-        # The selected-glossary snapshot ran just above the call site: a
-        # non-empty snapshot means a real glossary already won.
-        config = _base_config({'glossary_auto': True, 'glossary_terms': {'a': 'b'}})
-        assert handlers._auto_prep_wants(config) == (False, False)
+        # The selected-glossary snapshot ran just before: a non-empty
+        # snapshot means a real glossary already won.
+        assert self._wants({'glossary_auto': True, 'glossary_terms': {'a': 'b'}}) == (False, False)
 
     def test_refine_only_skips_glossary(self):
-        config = _base_config({'glossary_auto': True}, refine_only=True)
-        assert handlers._auto_prep_wants(config) == (False, False)
+        assert self._wants({'glossary_auto': True}, operation=OP_REFINE) == (False, False)
 
     def test_explicit_preset_wins_over_style_auto(self):
-        config = _base_config({'style_auto': True, 'custom_instruction_file': 'x.yaml'})
-        assert handlers._auto_prep_wants(config) == (False, False)
+        options = {'style_auto': True, 'custom_instruction_file': 'x.yaml'}
+        assert self._wants(options) == (False, False)
 
     def test_sentinels_are_normalized(self):
-        config = _base_config({
+        options = {
             'glossary_id': auto_prep.AUTO_SENTINEL,
             'custom_instruction_file': auto_prep.AUTO_SENTINEL,
-        })
-        assert handlers._auto_prep_wants(config) == (True, True)
-        assert 'glossary_id' not in config['prompt_options']
-        assert config['prompt_options']['custom_instruction_file'] == ''
+        }
+        assert self._wants(options) == (True, True)
+        assert 'glossary_id' not in options
+        assert options['custom_instruction_file'] == ''
 
-    def test_missing_prompt_options_is_created(self):
-        config = {'source_language': 'English'}
-        assert handlers._auto_prep_wants(config) == (False, False)
-        assert config['prompt_options'] == {}
+    def test_empty_prompt_options_want_nothing(self):
+        assert self._wants({}) == (False, False)
 
     def test_refine_only_keeps_style_auto(self):
-        config = _base_config({'glossary_auto': True, 'style_auto': True}, refine_only=True)
-        assert handlers._auto_prep_wants(config) == (False, True)
+        options = {'glossary_auto': True, 'style_auto': True}
+        assert self._wants(options, operation=OP_REFINE) == (False, True)
+
+    def test_term_fix_wants_nothing(self):
+        options = {'glossary_auto': True, 'style_auto': True}
+        assert self._wants(options, operation='term_fix',
+                           term_fix={'mode': 'smart', 'rules_text': 'a -> b'}) == (False, False)
 
 
 # ---------------------------------------------------------------------------
-# 2-5. _apply_auto_prep
+# 2-5. apply_auto_prep
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_fragment_is_merged_and_nothing_else_is_touched(patched):
-    config = _base_config({'glossary_auto': True, 'style_auto': True})
-    before = {key: value for key, value in config.items() if key != 'prompt_options'}
+    job = _job({'glossary_auto': True, 'style_auto': True})
+    before = copy.deepcopy(dict(job.prompt_options))
     log = LogRecorder()
 
-    await handlers._apply_auto_prep(config, log)
+    options = await _apply(job, log)
 
-    for key, value in before.items():
-        assert config[key] == value
-    assert set(config) == set(before) | {'prompt_options'}
+    # Only the prompt options handed in are mutated; the frozen job is not.
+    assert dict(job.prompt_options) == before
     for key, value in FRAGMENT.items():
-        assert config['prompt_options'][key] == value
+        assert options[key] == value
     # The intent flags stay in the persisted config (plan §3.3).
-    assert config['prompt_options']['glossary_auto'] is True
+    assert options['glossary_auto'] is True
     assert patched.factory.client.closed == 1
 
     kwargs = patched.builder_calls[0]
@@ -194,13 +213,12 @@ async def test_fragment_is_merged_and_nothing_else_is_touched(patched):
 @pytest.mark.asyncio
 async def test_builder_failure_is_swallowed_and_logged(patched):
     patched.raises = RuntimeError("provider exploded")
-    config = _base_config({'glossary_auto': True})
-    prompt_options_before = dict(config['prompt_options'])
+    job = _job({'glossary_auto': True})
     log = LogRecorder()
 
-    await handlers._apply_auto_prep(config, log)
+    options = await _apply(job, log)
 
-    assert config['prompt_options'] == prompt_options_before
+    assert options == {'glossary_auto': True}
     assert log.keys().count('auto_prep_error') == 1
     assert 'provider exploded' in log.entries[0][1]
 
@@ -208,19 +226,17 @@ async def test_builder_failure_is_swallowed_and_logged(patched):
 @pytest.mark.asyncio
 async def test_client_is_closed_even_when_the_builder_raises(patched):
     patched.raises = RuntimeError("boom")
-    log = LogRecorder()
 
-    await handlers._apply_auto_prep(_base_config({'style_auto': True}), log)
+    await _apply(_job({'style_auto': True}), LogRecorder())
 
     assert patched.factory.client.closed == 1
 
 
 @pytest.mark.asyncio
 async def test_no_client_is_created_when_nothing_is_wanted(patched):
-    config = _base_config({})
     log = LogRecorder()
 
-    await handlers._apply_auto_prep(config, log)
+    await _apply(_job({}), log)
 
     assert patched.factory.calls == []
     assert patched.builder_calls == []
@@ -229,10 +245,10 @@ async def test_no_client_is_created_when_nothing_is_wanted(patched):
 
 @pytest.mark.asyncio
 async def test_unreadable_source_logs_and_returns(patched):
-    config = _base_config({'glossary_auto': True}, text=None, file_path=None)
+    job = _job({'glossary_auto': True}, text=None, input_path=None)
     log = LogRecorder()
 
-    await handlers._apply_auto_prep(config, log)
+    await _apply(job, log)
 
     assert patched.factory.calls == []
     assert log.keys() == ['auto_prep_no_text']
@@ -240,54 +256,59 @@ async def test_unreadable_source_logs_and_returns(patched):
 
 @pytest.mark.asyncio
 async def test_unknown_provider_yields_no_llm_call(monkeypatch, patched):
-    monkeypatch.setattr(handlers, 'create_llm_client', lambda *a, **k: None)
-    config = _base_config({'glossary_auto': True})
+    def unknown_provider(*args, **kwargs):
+        raise LLMClientConfigError("Unknown LLM provider 'nope'.")
+
+    monkeypatch.setattr(factory, 'create_llm_provider', unknown_provider)
     log = LogRecorder()
 
-    await handlers._apply_auto_prep(config, log)
+    options = await _apply(_job({'glossary_auto': True}), log)
 
     assert patched.builder_calls == []
     assert log.keys() == ['auto_prep_client_warning']
-    assert 'glossary_terms' not in config['prompt_options']
+    assert 'glossary_terms' not in options
 
 
 @pytest.mark.asyncio
-async def test_client_is_built_with_the_jobs_own_keys(patched):
-    config = _base_config(
+async def test_create_provider_argument_overrides_the_factory(patched):
+    own = ClientFactory()
+    job = _job({'style_auto': True})
+
+    await prepare.apply_auto_prep(job, job.engine_prompt_options(), LogRecorder(),
+                                  create_provider=own)
+
+    assert len(own.calls) == 1
+    assert patched.factory.calls == []
+    assert own.client.closed == 1
+
+
+@pytest.mark.asyncio
+async def test_client_is_built_with_the_jobs_own_provider(patched):
+    key = "sk-test-not-a-real-key"
+    job = _job(
         {'glossary_auto': True},
-        llm_provider='openrouter',
-        gemini_api_key='gk',
-        openai_api_key='ok',
-        openrouter_api_key='ork',
-        mistral_api_key='mk',
-        deepseek_api_key='dk',
-        poe_api_key='pk',
-        nim_api_key='nk',
+        provider=ProviderConfig(provider='openrouter', model='test-model',
+                                endpoint=ENDPOINT, api_key=key, context_window=4096),
     )
 
-    await handlers._apply_auto_prep(config, LogRecorder())
+    await _apply(job, LogRecorder())
 
     args, kwargs = patched.factory.calls[0]
-    assert args == ('openrouter', 'gk', config['llm_api_endpoint'], 'test-model')
-    assert kwargs == {
-        'openai_api_key': 'ok',
-        'openrouter_api_key': 'ork',
-        'mistral_api_key': 'mk',
-        'deepseek_api_key': 'dk',
-        'poe_api_key': 'pk',
-        'nim_api_key': 'nk',
-        'context_window': auto_prep.AUTO_PREP_CONTEXT_WINDOW,
-    }
+    assert kwargs == {}
+    (provider,) = args
+    assert isinstance(provider, ProviderConfig)
+    assert provider.provider == 'openrouter'
+    assert provider.model == 'test-model'
+    assert provider.endpoint == ENDPOINT
+    assert provider.api_key == key
+    assert provider.context_window == auto_prep.AUTO_PREP_CONTEXT_WINDOW
 
 
 @pytest.mark.asyncio
 async def test_refine_only_runs_style_with_target_as_source(patched):
-    config = _base_config(
-        {'glossary_auto': True, 'style_auto': True},
-        refine_only=True,
-    )
+    job = _job({'glossary_auto': True, 'style_auto': True}, operation=OP_REFINE)
 
-    await handlers._apply_auto_prep(config, LogRecorder())
+    await _apply(job, LogRecorder())
 
     kwargs = patched.builder_calls[0]
     assert kwargs['want_glossary'] is False
@@ -305,7 +326,13 @@ class FakeCheckpointManager:
         self.started = []
 
     def start_job(self, translation_id, file_type, config, input_file_path):
-        self.started.append(dict(config.get('prompt_options', {})))
+        self.started.append(copy.deepcopy(dict(config.get('prompt_options', {}))))
+
+    def update_job_config(self, translation_id, config):
+        return True
+
+    def set_job_phase(self, translation_id, phase):
+        return True
 
     def mark_completed(self, translation_id):
         return True
@@ -355,57 +382,60 @@ class FakeSocketIO:
         pass
 
 
-async def _run_job(config, tmp_path, monkeypatch):
+async def _run_job(job, tmp_path, monkeypatch, is_resume=False):
     """Drive `perform_actual_translation` with every external seam faked out."""
     checkpoint_manager = FakeCheckpointManager()
     state_manager = FakeStateManager(checkpoint_manager)
+    seen = {}
 
-    async def fake_translate_file(**kwargs):
-        with open(kwargs['output_filepath'], 'w', encoding='utf-8') as handle:
+    async def fake_translate_file(engine_job, ctx):
+        seen['prompt_options'] = copy.deepcopy(dict(engine_job.prompt_options))
+        with open(engine_job.output_path, 'w', encoding='utf-8') as handle:
             handle.write('translated')
+        stats = {'total_chunks': 1, 'completed_chunks': 1, 'failed_chunks': 0}
+        ctx.emit(stats)
+        return JobResult.from_run(stats, engine_job.output_path, engine_ok=True)
 
-    async def fake_refine_file(**kwargs):
-        with open(kwargs['output_filepath'], 'w', encoding='utf-8') as handle:
-            handle.write('refined')
-
-    monkeypatch.setattr(handlers, 'translate_file', fake_translate_file)
-    monkeypatch.setattr(handlers, 'refine_file', fake_refine_file)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(adapters, 'translate_file', fake_translate_file)
     monkeypatch.setattr(handlers, 'emit_update', lambda *a, **k: None)
-    monkeypatch.setattr(handlers, 'notify', lambda *a, **k: None)
+    monkeypatch.setattr('src.utils.notifier.notify', lambda *a, **k: None)
 
+    job = job.with_changes(output_path=str(tmp_path / 'out.txt'))
     await handlers.perform_actual_translation(
-        'job-1', config, state_manager, str(tmp_path), FakeSocketIO()
+        'job-1', job, state_manager, str(tmp_path), FakeSocketIO(), is_resume=is_resume
     )
 
     messages = [
         entry['message'] for entry in state_manager.fields.get('logs', [])
         if isinstance(entry, dict) and 'message' in entry
     ]
-    return state_manager, checkpoint_manager, messages
+    return state_manager, checkpoint_manager, messages, seen
 
 
 @pytest.mark.asyncio
 async def test_auto_glossary_suppresses_the_legacy_loaded_line(tmp_path, monkeypatch, patched):
-    config = _base_config({'glossary_auto': True, 'style_auto': True})
+    job = _job({'glossary_auto': True, 'style_auto': True})
 
-    _state, checkpoint_manager, messages = await _run_job(config, tmp_path, monkeypatch)
+    state, checkpoint_manager, messages, seen = await _run_job(job, tmp_path, monkeypatch)
 
+    assert state.fields['status'] == 'completed'
     assert not any('📖 Loaded glossary' in message for message in messages)
     # The derived snapshot is persisted with the job config (D5).
     assert checkpoint_manager.started[0]['glossary_terms'] == FRAGMENT['glossary_terms']
     assert checkpoint_manager.started[0]['glossary_source'] == 'auto'
-    # resolve_custom_instructions stayed a no-op, so the auto style survived.
-    assert config['prompt_options']['custom_instructions'] == FRAGMENT['custom_instructions']
+    # The custom-instructions snapshot stayed a no-op, so the auto style survived.
+    assert seen['prompt_options']['custom_instructions'] == FRAGMENT['custom_instructions']
 
 
 @pytest.mark.asyncio
 async def test_real_glossary_still_prints_the_loaded_line(tmp_path, monkeypatch, patched):
-    config = _base_config({
+    job = _job({
         'glossary_terms': {'Avenue': 'Avenue'},
         'glossary_name': 'My Glossary',
     })
 
-    _state, _checkpoint_manager, messages = await _run_job(config, tmp_path, monkeypatch)
+    _state, _checkpoint_manager, messages, _seen = await _run_job(job, tmp_path, monkeypatch)
 
     assert any("📖 Loaded glossary 'My Glossary' (1 terms)" in message for message in messages)
     assert patched.factory.calls == []
@@ -414,23 +444,20 @@ async def test_real_glossary_still_prints_the_loaded_line(tmp_path, monkeypatch,
 @pytest.mark.asyncio
 async def test_resume_never_recomputes_the_auto_snapshot(tmp_path, monkeypatch, patched):
     snapshot = {'Avenue': 'Avenue des Ombres'}
-    config = _base_config(
-        {
-            'glossary_auto': True,
-            'style_auto': True,
-            'glossary_terms': dict(snapshot),
-            'glossary_name': auto_prep.AUTO_GLOSSARY_NAME,
-            'glossary_source': 'auto',
-        },
-        is_resume=True,
-        resume_from_index=3,
-    )
+    job = _job({
+        'glossary_auto': True,
+        'style_auto': True,
+        'glossary_terms': dict(snapshot),
+        'glossary_name': auto_prep.AUTO_GLOSSARY_NAME,
+        'glossary_source': 'auto',
+    })
 
-    _state, checkpoint_manager, messages = await _run_job(config, tmp_path, monkeypatch)
+    _state, checkpoint_manager, messages, seen = await _run_job(
+        job, tmp_path, monkeypatch, is_resume=True)
 
     assert patched.factory.calls == []
     assert patched.builder_calls == []
-    assert config['prompt_options']['glossary_terms'] == snapshot
+    assert seen['prompt_options']['glossary_terms'] == snapshot
     # A resumed job does not re-open a checkpoint either.
     assert checkpoint_manager.started == []
     assert not any('📖 Loaded glossary' in message for message in messages)
@@ -455,10 +482,9 @@ class ProgressRecorder:
 
 @pytest.mark.asyncio
 async def test_progress_callback_brackets_the_passes(patched):
-    config = _base_config({'glossary_auto': True, 'style_auto': True})
     progress = ProgressRecorder()
 
-    await handlers._apply_auto_prep(config, LogRecorder(), progress)
+    await _apply(_job({'glossary_auto': True, 'style_auto': True}), LogRecorder(), progress)
 
     assert progress.states[0] is True
     assert progress.states[-1] is False
@@ -468,10 +494,9 @@ async def test_progress_callback_brackets_the_passes(patched):
 @pytest.mark.asyncio
 async def test_progress_callback_is_cleared_when_the_builder_raises(patched):
     patched.raises = RuntimeError("provider exploded")
-    config = _base_config({'glossary_auto': True})
     progress = ProgressRecorder()
 
-    await handlers._apply_auto_prep(config, LogRecorder(), progress)
+    await _apply(_job({'glossary_auto': True}), LogRecorder(), progress)
 
     # A failure must not strand the panel on "Preparing…".
     assert progress.states[0] is True
@@ -480,11 +505,9 @@ async def test_progress_callback_is_cleared_when_the_builder_raises(patched):
 
 @pytest.mark.asyncio
 async def test_progress_callback_is_cleared_when_the_document_is_unreadable(patched):
-    config = _base_config({'glossary_auto': True}, text='')
-    config['file_path'] = None
     progress = ProgressRecorder()
 
-    await handlers._apply_auto_prep(config, LogRecorder(), progress)
+    await _apply(_job({'glossary_auto': True}, text='', input_path=None), LogRecorder(), progress)
 
     assert progress.states == [True, False]
     assert patched.factory.calls == []
@@ -492,10 +515,9 @@ async def test_progress_callback_is_cleared_when_the_document_is_unreadable(patc
 
 @pytest.mark.asyncio
 async def test_no_progress_signal_when_no_pass_is_wanted(patched):
-    config = _base_config({})
     progress = ProgressRecorder()
 
-    await handlers._apply_auto_prep(config, LogRecorder(), progress)
+    await _apply(_job({}), LogRecorder(), progress)
 
     assert progress.states == []
 
@@ -505,15 +527,14 @@ async def test_a_raising_progress_callback_never_breaks_the_job(patched):
     def boom(active):
         raise ValueError("emit is broken")
 
-    config = _base_config({'style_auto': True})
-    await handlers._apply_auto_prep(config, LogRecorder(), boom)
+    options = await _apply(_job({'style_auto': True}), LogRecorder(), boom)
 
-    assert config['prompt_options']['custom_instructions'] == FRAGMENT['custom_instructions']
+    assert options['custom_instructions'] == FRAGMENT['custom_instructions']
 
 
 @pytest.mark.asyncio
 async def test_heartbeat_ticks_while_a_slow_pass_runs(patched, monkeypatch):
-    monkeypatch.setattr(handlers, '_AUTO_PREP_HEARTBEAT_S', 0.01)
+    monkeypatch.setattr(prepare, 'AUTO_PREP_HEARTBEAT_S', 0.01)
 
     async def slow_build(**kwargs):
         await asyncio.sleep(0.08)
@@ -522,9 +543,7 @@ async def test_heartbeat_ticks_while_a_slow_pass_runs(patched, monkeypatch):
     monkeypatch.setattr(auto_prep, 'build_auto_prompt_options', slow_build)
     progress = ProgressRecorder()
 
-    await handlers._apply_auto_prep(
-        _base_config({'glossary_auto': True}), LogRecorder(), progress
-    )
+    await _apply(_job({'glossary_auto': True}), LogRecorder(), progress)
 
     # Start signal + several heartbeats + the final clear.
     assert progress.states.count(True) >= 3

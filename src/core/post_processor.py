@@ -3,8 +3,7 @@ Post-processing module for cleaning translated text.
 Provides extensible cleaning operations for translation output.
 """
 import re
-from typing import List, Callable, Dict, Any
-from dataclasses import dataclass
+from typing import List, Dict
 from abc import ABC, abstractmethod
 
 from src.config import PLACEHOLDER_PATTERN
@@ -39,21 +38,50 @@ class RemoveResidualTagPlaceholdersRule(PostProcessingRule):
 
 
 
+def is_french_typography(target_language: str) -> bool:
+    """True when the target language puts a space before high punctuation."""
+    lang = (target_language or "").strip().lower()
+    return (
+        lang == "fr" or lang.startswith(("fr-", "fr_"))
+        or "french" in lang or "fran\u00e7ais" in lang or "francais" in lang
+    )
+
+
 class RemoveExtraWhitespaceRule(PostProcessingRule):
-    """Clean up extra whitespace created by tag removal"""
-    
+    """Clean up extra whitespace created by tag removal.
+
+    Only plain ASCII spaces (U+0020) are touched: a non-breaking space
+    (U+00A0) or narrow non-breaking space (U+202F) is always deliberate
+    typography. Leading indentation is kept (code, verse, <pre> blocks), and
+    for French targets the space before ! ? ; : is kept, since French
+    typography requires it.
+    """
+
+    def __init__(self, target_language: str = ""):
+        self.target_language = target_language
+
     def apply(self, text: str) -> str:
-        # Replace multiple spaces with single space
-        text = re.sub(r' +', ' ', text)
-        
-        # Remove spaces before punctuation
-        text = re.sub(r' +([.,!?;:])', r'\1', text)
-        
+        return self.apply_for(text, self.target_language)
+
+    @staticmethod
+    def apply_for(text: str, target_language: str = "") -> str:
+        # Collapse runs of spaces inside a line, never the indentation at its start
+        text = re.sub(r'(?<=[^ \n]) {2,}', ' ', text)
+
+        # Remove spaces before punctuation (not before high punctuation in French)
+        punctuation = '.,' if is_french_typography(target_language) else '.,!?;:'
+        text = re.sub(r'(?<=[^ \n]) +([' + re.escape(punctuation) + r'])', r'\1', text)
+
         # Clean up line breaks
-        text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
-        
-        return text.strip()
-    
+        text = re.sub(r'\n(?:[ \t]*\n){2,}', '\n\n', text)
+
+        # Drop outer blank lines and trailing spaces; keep the first line's
+        # indentation when the text spans several lines.
+        text = re.sub(r'\A(?:[ \t]*\n)+', '', text).rstrip(' \t\r\n')
+        if '\n' not in text:
+            text = text.lstrip(' \t')
+        return text
+
     def description(self) -> str:
         return "Remove extra whitespace and clean punctuation spacing"
 
@@ -107,26 +135,31 @@ class PostProcessor:
         """Remove a rule by its type"""
         self.rules = [r for r in self.rules if not isinstance(r, rule_type)]
     
-    def process(self, text: str, verbose: bool = False) -> str:
+    def process(self, text: str, verbose: bool = False, target_language: str = "") -> str:
         """
         Apply all post-processing rules to the text
-        
+
         Args:
             text: The text to clean
             verbose: If True, print which rules are being applied
-            
+            target_language: The translation's target language; it decides
+                the punctuation spacing kept (e.g. French high punctuation).
+
         Returns:
             The cleaned text
         """
         if not text:
             return text
-        
+
         result = text
         for rule in self.rules:
             if verbose:
                 print(f"Applying: {rule.description()}")
-            result = rule.apply(result)
-        
+            if isinstance(rule, RemoveExtraWhitespaceRule):
+                result = rule.apply_for(result, target_language or rule.target_language)
+            else:
+                result = rule.apply(result)
+
         return result
     
     def get_rules(self) -> List[Dict[str, str]]:
@@ -144,18 +177,20 @@ class PostProcessor:
 default_post_processor = PostProcessor()
 
 
-def clean_translated_text(text: str, verbose: bool = False) -> str:
+def clean_translated_text(text: str, verbose: bool = False, target_language: str = "") -> str:
     """
     Convenience function to clean translated text with default rules
-    
+
     Args:
         text: The translated text to clean
         verbose: If True, print which rules are being applied
-        
+        target_language: The translation's target language (see
+            RemoveExtraWhitespaceRule); pass it whenever it is known.
+
     Returns:
         The cleaned text
     """
-    return default_post_processor.process(text, verbose)
+    return default_post_processor.process(text, verbose, target_language=target_language)
 
 
 def clean_residual_tag_placeholders(text: str) -> str:

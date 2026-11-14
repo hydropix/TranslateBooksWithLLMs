@@ -5,6 +5,7 @@
  * Also checks for uncontrollable thinking models and displays warnings.
  */
 
+import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 
 /**
@@ -48,8 +49,7 @@ async function checkThinkingModelWarning(modelName) {
         // Get API endpoint for cache differentiation
         const endpoint = DomHelpers.getValue('apiEndpoint') || '';
 
-        const response = await fetch(`/api/model/warning?model=${encodeURIComponent(modelName)}&endpoint=${encodeURIComponent(endpoint)}`);
-        const data = await response.json();
+        const data = await ApiClient.getModelWarning(modelName, endpoint);
 
         if (data.warning && data.is_uncontrollable) {
             warningText.textContent = data.warning;
@@ -89,22 +89,7 @@ export const ModelDetector = {
         checkThinkingModelWarning(modelName);
     },
 
-    /**
-     * Check for thinking model warning only (called on model change)
-     * @param {string} modelName - Model name to check
-     */
-    async checkThinkingWarning(modelName) {
-        await checkThinkingModelWarning(modelName);
-    },
 
-    /**
-     * Get model size in billions of parameters
-     * @param {string} modelName - Model name
-     * @returns {number|null} Size in billions, or null if unknown
-     */
-    getModelSize(modelName) {
-        return extractModelSize(modelName);
-    },
 
     /**
      * Check if a model is small (≤12B parameters)

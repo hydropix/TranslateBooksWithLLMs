@@ -10,7 +10,6 @@ import argparse
 import asyncio
 import statistics
 import sys
-from pathlib import Path
 
 from tools.prompt_optimizer.config import load_config
 from tools.prompt_optimizer.llm_adapter import LLMAdapter

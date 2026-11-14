@@ -379,7 +379,6 @@ def prepare_population_for_evolution(
     Returns:
         List of (parent_template, mutation_strategy) tuples for non-elite slots
     """
-    import random
 
     # Sort by fitness
     sorted_pop = sorted(population, key=lambda t: t.fitness, reverse=True)

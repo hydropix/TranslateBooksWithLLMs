@@ -1,7 +1,7 @@
 {
   "output": {
     "kind": "text",
-    "text": "This is paragraph number 1. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\r\n\r\nThis is paragraph number 2. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\r\n\r\nThis is paragraph number 3. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\r\n\r\nThis is paragraph number 4. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\r\n\r\nThis is paragraph number 5. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\r\n\r\nThis is paragraph number 6. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\r\n\r\n============================================================\r\nRefined with TranslateBook with LLM (TBL)\r\nhttps://github.com/hydropix/TranslateBookWithLLM\r\n============================================================\r\n"
+    "text": "This is paragraph number 1. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\n\nThis is paragraph number 2. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\n\nThis is paragraph number 3. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\n\nThis is paragraph number 4. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\n\nThis is paragraph number 5. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\n\nThis is paragraph number 6. It contains several sentences so that the token chunker has enough material to split the document into more than one chunk. The quick brown fox jumps over the lazy dog while the patient translator carefully preserves the meaning of every clause.\n\n============================================================\nRefined with TranslateBook with LLM (TBL)\nhttps://github.com/hydropix/TranslateBookWithLLM\n============================================================\n"
   },
   "sequence": [
     {
@@ -11,63 +11,33 @@
     },
     {
       "completed_chunks": 1,
-      "completed_tokens": 51,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 16.67,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 2,
-      "completed_tokens": 102,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 33.33,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 3,
-      "completed_tokens": 153,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 50.0,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 4,
-      "completed_tokens": 204,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 66.67,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 5,
-      "completed_tokens": 255,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 83.33,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 6,
-      "completed_tokens": 306,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 100.0,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     }
   ]
 }

@@ -6,7 +6,7 @@ provider selection, voice settings, and audio encoding options.
 """
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict
 
 from src.utils.lang_normalize import normalize_lang_key
@@ -370,6 +370,18 @@ class TTSConfig:
             'ogg': '.ogg',
         }
         return format_extensions.get(self.output_format.lower(), '.opus')
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'TTSConfig':
+        """Rebuild an enabled config from ``to_dict()`` output (a job's TTS options).
+
+        Unknown keys are ignored; missing ones keep their defaults.
+        """
+        import dataclasses
+        known = {f.name for f in dataclasses.fields(cls)}
+        values = {k: v for k, v in (data or {}).items() if k in known}
+        values['enabled'] = True
+        return cls(**values)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization"""

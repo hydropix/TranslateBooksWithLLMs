@@ -1,7 +1,6 @@
 """
 Unit tests for translator fallback context isolation (issue #170 fix)
 """
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, Mock
 
@@ -33,8 +32,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -62,8 +59,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello world",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -73,7 +68,8 @@ class TestTranslatorFallbackContext:
             has_placeholders=False,
         )
 
-        assert translated == "Here is the translation: Bonjour le monde"
+        # The "Here is the translation:" preamble is not part of the translation.
+        assert translated == "Bonjour le monde"
         assert response.was_fallback is True
 
     @pytest.mark.asyncio
@@ -90,8 +86,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello world",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -140,8 +134,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",

@@ -6,7 +6,7 @@ Tests the adapter implementation for the generic orchestrator.
 
 import os
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from src.core.docx.docx_translation_adapter import DocxTranslationAdapter
 
@@ -248,7 +248,6 @@ class TestDocxTranslationAdapter:
         html_content, context = adapter.extract_content(formatted_docx_path, None)
 
         # Check HTML has formatting tags
-        original_has_tags = '<' in html_content
 
         # Preserve
         text_with_placeholders, tag_map, _ = adapter.preserve_structure(html_content, context, None)

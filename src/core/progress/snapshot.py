@@ -29,7 +29,7 @@ def global_percent(
     """Map per-phase progress onto the global ``[0, 100]`` bar.
 
     Single source of the segment math, used by both :class:`ProgressTracker`
-    and the legacy-stats bridge. Single-phase jobs fill the whole bar;
+    and :func:`snapshot_from_job_stats`. Single-phase jobs fill the whole bar;
     two-phase jobs put translation in ``[0, split]`` and refinement in
     ``[split, 100]``. Per-phase totals may differ — each phase is scaled into
     its own segment independently.

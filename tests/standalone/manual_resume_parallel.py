@@ -37,6 +37,7 @@ from src import config  # noqa: F401
 from src.core.adapters import translate_file
 from src.core.llm.providers.poe import PoeProvider
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 
 FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "sample.txt"
@@ -124,19 +125,23 @@ async def run() -> int:
                 ckpt_mgr_1 = CheckpointManager()
                 started = time.perf_counter()
                 ok1 = await translate_file(
-                    input_filepath=str(FIXTURE),
-                    output_filepath=str(output_path),
-                    source_language="English",
-                    target_language="French",
-                    model_name=model,
-                    llm_provider="poe",
-                    checkpoint_manager=ckpt_mgr_1,
-                    translation_id=translation_id,
-                    stats_callback=make_stats_cb(pass1_stats),
-                    check_interruption_callback=make_interrupt_cb(),
-                    poe_api_key=api_key,
-                    max_tokens_per_chunk=120,
-                    parallel_requests=PARALLEL,
+                    make_job(
+                        input_path=str(FIXTURE),
+                        output_path=str(output_path),
+                        source_language="English",
+                        target_language="French",
+                        model=model,
+                        provider="poe",
+                        api_key=api_key,
+                        max_tokens_per_chunk=120,
+                        parallel_workers=PARALLEL,
+                    ),
+                    make_ctx(
+                        checkpoint_manager=ckpt_mgr_1,
+                        translation_id=translation_id,
+                        stats_callback=make_stats_cb(pass1_stats),
+                        check_interruption=make_interrupt_cb(),
+                    ),
                 )
                 pass1_elapsed = time.perf_counter() - started
             finally:
@@ -154,19 +159,23 @@ async def run() -> int:
                 ckpt_mgr_2 = CheckpointManager()
                 started = time.perf_counter()
                 ok2 = await translate_file(
-                    input_filepath=str(FIXTURE),
-                    output_filepath=str(output_path),
-                    source_language="English",
-                    target_language="French",
-                    model_name=model,
-                    llm_provider="poe",
-                    checkpoint_manager=ckpt_mgr_2,
-                    translation_id=translation_id,
-                    stats_callback=make_stats_cb(pass2_stats),
-                    check_interruption_callback=None,
-                    poe_api_key=api_key,
-                    max_tokens_per_chunk=120,
-                    parallel_requests=PARALLEL,
+                    make_job(
+                        input_path=str(FIXTURE),
+                        output_path=str(output_path),
+                        source_language="English",
+                        target_language="French",
+                        model=model,
+                        provider="poe",
+                        api_key=api_key,
+                        max_tokens_per_chunk=120,
+                        parallel_workers=PARALLEL,
+                    ),
+                    make_ctx(
+                        checkpoint_manager=ckpt_mgr_2,
+                        translation_id=translation_id,
+                        stats_callback=make_stats_cb(pass2_stats),
+                        check_interruption=None,
+                    ),
                 )
                 pass2_elapsed = time.perf_counter() - started
             finally:

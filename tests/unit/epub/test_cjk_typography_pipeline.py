@@ -25,13 +25,14 @@ from src.core.epub.translator import translate_epub_file
 from src.utils.file_utils import find_partial_output_paths
 
 from tests.unit.epub.conftest import REAL_CSS, _disable_attribution, _echo_llm_client, _read
+from tests.job_helpers import make_ctx, make_job
 
 
 # `input_epub` is a fixture defined in conftest.py -- pytest injects it
 # automatically, no import needed.
 
 
-def _stub_create_llm_client(**kwargs):
+def _stub_create_llm_client(*args, **kwargs):
     return _echo_llm_client()
 
 
@@ -40,7 +41,7 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, **overrid
 
     Returns the list of (event, message) pairs the pipeline logged.
     """
-    monkeypatch.setattr(translator_module, "_create_llm_client", _stub_create_llm_client)
+    monkeypatch.setattr(translator_module, "create_llm_client", _stub_create_llm_client)
     _disable_attribution(monkeypatch)
 
     events = []
@@ -48,15 +49,12 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, **overrid
     def log_callback(event, message, **_kwargs):
         events.append((event, message))
 
-    kwargs = dict(
-        input_filepath=str(input_path),
-        output_filepath=str(output_path),
-        source_language="Chinese",
-        target_language="French",
-        log_callback=log_callback,
+    check_interruption = overrides.pop("check_interruption_callback", None)
+    await translate_epub_file(
+        make_job(str(input_path), str(output_path),
+                 source_language="Chinese", target_language="French", **overrides),
+        make_ctx(log_callback=log_callback, check_interruption=check_interruption),
     )
-    kwargs.update(overrides)
-    await translate_epub_file(**kwargs)
     return events
 
 
@@ -89,7 +87,7 @@ async def test_script_normalization_runs_by_default(tmp_path, input_epub, monkey
 async def test_script_normalization_disabled_leaves_css_and_opf_untouched(
     tmp_path, input_epub, monkeypatch
 ):
-    monkeypatch.setattr(translator_module, "EPUB_SCRIPT_NORMALIZATION_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_SCRIPT_NORMALIZATION_ENABLED", False)
     output_epub = tmp_path / "output_disabled.epub"
     events = await _translate(input_epub, output_epub, monkeypatch)
 
@@ -155,7 +153,7 @@ async def test_normalization_failure_never_fails_the_job(tmp_path, input_epub, m
         raise RuntimeError("simulated failure inside the normalization pass")
 
     monkeypatch.setattr(
-        translator_module, "apply_script_normalization_to_epub_directory", _raise
+        "src.core.epub.book_postprocess.apply_script_normalization_to_epub_directory", _raise
     )
 
     output_epub = tmp_path / "output_failure.epub"

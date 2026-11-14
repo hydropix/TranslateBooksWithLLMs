@@ -226,5 +226,16 @@
   "cost_override_note": "현재 이 모델에 대한 사용자 지정 가격이 저장되어 있습니다.",
   "cost_reset_default": "기본값으로 재설정",
   "cost_format_free": "무료",
-  "cost_format_lt_001": "<$0.01"
+  "cost_format_lt_001": "<$0.01",
+  "model_context_tooltip": "컨텍스트: {{tokens}} 토큰",
+  "provider_desc_local": "로컬",
+  "provider_desc_multi": "멀티 제공자",
+  "provider_desc_cloud_api": "클라우드 API",
+  "provider_desc_cloud": "클라우드",
+  "provider_desc_compatible": "호환",
+  "provider_desc_many_models": "200개 이상의 모델",
+  "model_limit_na": "없음",
+  "model_token_limits_tooltip": "입력: {{input}} 토큰, 출력: {{output}} 토큰",
+  "model_label_price_per_request": "{{name}} ({{price}}/요청)",
+  "model_label_price_per_million": "{{name}} (입력: {{input}}/M, 출력: {{output}}/M)"
 }

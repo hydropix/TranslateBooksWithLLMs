@@ -22,7 +22,6 @@ import pytest
 import sys
 import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent.parent

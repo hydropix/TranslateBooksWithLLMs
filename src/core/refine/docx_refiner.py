@@ -7,61 +7,69 @@ support in v1.
 
 import os
 import tempfile
-from typing import Optional, Callable, Dict
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT, MAX_TOKENS_PER_CHUNK
-from src.core.epub.xhtml_translator import _refine_epub_chunks, _escape_stray_angle_brackets
+from src.config import DEFAULT_MODEL
+from src.core.epub.body_reassembly import escape_stray_markup
+from src.core.epub.chunk_refinement import refine_chunks
+from src.core.epub.placeholder_renumberer import globalize_chunks
 from src.core.epub.container import TranslationContainer
+from src.core.epub.html_chunker import HtmlChunker
 from src.core.docx.converter import DocxHtmlConverter
+from src.core.job import JobConfig, JobContext
+from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
+from src.core.progress import Phase, ProgressReporter
 from .client_setup import build_refine_client
-from .epub_refiner import _globalize_chunk_text
 
 
-async def refine_docx_file(
-    input_filepath: str,
-    output_filepath: str,
-    target_language: str,
-    model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    llm_provider: str = "ollama",
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: int = 2048,
-    auto_adjust_context: bool = True,
-    prompt_options: Optional[Dict] = None,
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
-) -> bool:
-    """Run a refinement-only pass on an already-translated DOCX file."""
+def _write_docx(converter, tag_preserver, refined_chunks, tag_map, metadata, output_filepath,
+                source_docx_path=None) -> None:
+    """Rebuild the DOCX from refined chunks (GLOBAL placeholders) and write it."""
+    full_text = escape_stray_markup(''.join(refined_chunks))
+    final_html = tag_preserver.restore_tags(full_text, tag_map)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.docx', delete=False, encoding='utf-8') as tmp:
+        tmp_path = tmp.name
+    try:
+        converter.from_html(final_html, metadata, tmp_path, source_docx_path=source_docx_path)
+        with open(tmp_path, 'rb') as src, open(output_filepath, 'wb') as dst:
+            dst.write(src.read())
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
+    """Run a refinement-only pass on an already-translated DOCX file.
+
+    Reads ``job.input_path`` and writes ``job.output_path``.
+    ``job.max_tokens_per_chunk`` sizes the refine chunks; None reads the
+    current MAX_TOKENS_PER_CHUNK setting at call time. Returns True when the
+    refined file was written.
+    """
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    target_language = job.target_language
+    model_name = job.refine_provider_config().model or DEFAULT_MODEL
+    prompt_options = job.engine_prompt_options()
+    max_tokens_per_chunk = job.max_tokens_per_chunk
+    log_callback = ctx.log_callback
+    check_interruption_callback = ctx.check_interruption
+
+    if max_tokens_per_chunk is None:
+        from src.config import MAX_TOKENS_PER_CHUNK
+        max_tokens_per_chunk = MAX_TOKENS_PER_CHUNK
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input DOCX file '{input_filepath}' not found."
         if log_callback:
             log_callback("docx_input_file_not_found", err_msg)
         return False
 
-    llm_client, context_manager = build_refine_client(
-        model_name=model_name,
-        llm_provider=llm_provider,
-        cli_api_endpoint=cli_api_endpoint,
-        auto_adjust_context=auto_adjust_context,
-        context_window=context_window,
-        gemini_api_key=gemini_api_key,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        log_callback=log_callback,
-    )
-    if llm_client is None:
+    try:
+        llm_client, context_manager = build_refine_client(job, log_callback=log_callback)
+    except LLMClientConfigError:
+        # Already reported to the job log by build_refine_client.
         return False
 
     try:
@@ -86,7 +94,10 @@ async def refine_docx_file(
             log_callback("docx_tags_preserved",
                          f"Preserved {len(tag_map)} tag groups")
 
-        chunks = container.chunker.chunk_html_with_placeholders(
+        # The container's chunker is sized with the MAX_TOKENS_PER_CHUNK
+        # frozen at import; build one with the caller's value instead.
+        chunker = HtmlChunker(max_tokens=max_tokens_per_chunk)
+        chunks = chunker.chunk_html_with_placeholders(
             text_with_placeholders, tag_map
         )
         if not chunks:
@@ -97,23 +108,37 @@ async def refine_docx_file(
         if log_callback:
             log_callback("docx_chunks_created", f"Created {len(chunks)} chunks")
 
-        if stats_callback:
-            stats_callback({'total_chunks': len(chunks), 'completed_chunks': 0, 'failed_chunks': 0})
+        progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+        progress.begin(len(chunks))
+        progress.emit()
 
-        draft_globalized = [_globalize_chunk_text(c, placeholder_format) for c in chunks]
+        draft_globalized = globalize_chunks(chunks, placeholder_format)
 
-        refined_chunks = await _refine_epub_chunks(
-            translated_chunks=draft_globalized,
-            chunks=chunks,
-            target_language=target_language,
-            model_name=model_name,
-            llm_client=llm_client,
-            context_manager=context_manager,
-            placeholder_format=placeholder_format,
-            log_callback=log_callback,
-            prompt_options=prompt_options,
-            stats_callback=stats_callback,
-        )
+        try:
+            refined_chunks = await refine_chunks(
+                translated_chunks=draft_globalized,
+                chunks=chunks,
+                target_language=target_language,
+                model_name=model_name,
+                llm_client=llm_client,
+                context_manager=context_manager,
+                placeholder_format=placeholder_format,
+                log_callback=log_callback,
+                prompt_options=prompt_options,
+                progress=progress,
+            )
+        except RateLimitError as e:
+            # Save what was refined before pausing (the rest keeps its draft),
+            # then let the error propagate: the job runner drives the pause.
+            # Same contract as the TXT and SRT refiners.
+            parts = e.partial_result
+            if parts is not None and len(parts) == len(chunks):
+                _write_docx(converter, tag_preserver, parts, tag_map, metadata, output_filepath,
+                            source_docx_path=input_filepath)
+                if log_callback:
+                    log_callback("refine_partial_saved",
+                                 f"💾 Partial refined output saved before rate-limit pause: '{output_filepath}'")
+            raise
 
         if check_interruption_callback and check_interruption_callback():
             if log_callback:
@@ -121,22 +146,8 @@ async def refine_docx_file(
                              "Refinement interrupted before reconstruction")
             return False
 
-        full_text = ''.join(refined_chunks)
-        full_text = _escape_stray_angle_brackets(full_text)
-        final_html = tag_preserver.restore_tags(full_text, tag_map)
-
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.docx', delete=False, encoding='utf-8') as tmp:
-            tmp_path = tmp.name
-        try:
-            converter.from_html(final_html, metadata, tmp_path)
-            with open(tmp_path, 'rb') as src, open(output_filepath, 'wb') as dst:
-                dst.write(src.read())
-        finally:
-            if os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+        _write_docx(converter, tag_preserver, refined_chunks, tag_map, metadata, output_filepath,
+                    source_docx_path=input_filepath)
 
         if log_callback:
             log_callback("docx_refine_done",

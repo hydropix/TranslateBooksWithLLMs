@@ -11,6 +11,7 @@ import asyncio
 import re
 from typing import Callable, Dict, List, Optional, Sequence
 
+from src.core.progress import Phase, ProgressReporter
 from src.core.term_fix.diffing import changes_outside
 from src.core.term_fix.matcher import find_spans
 from src.core.term_fix.models import (
@@ -113,7 +114,7 @@ def check_correction(
 
 
 class SmartCorrector:
-    """LLM-backed corrector. `llm_client` is an LLMClient (make_request)."""
+    """LLM-backed corrector. `llm_client` is an LLM provider."""
 
     def __init__(
         self,
@@ -151,7 +152,7 @@ class SmartCorrector:
 
     async def _ask(self, items: Sequence[SnippetItem]) -> Dict[int, str]:
         from src.prompts.prompts import generate_term_fix_prompt
-        from src.core.epub.xhtml_translator import _request_refinement_with_adaptive_context
+        from src.core.epub.chunk_refinement import request_refinement
 
         used = sorted({r for item in items for _s, _e, r in item.spans})
         prompt = generate_term_fix_prompt(
@@ -163,8 +164,9 @@ class SmartCorrector:
             'type': 'llm_request', 'system_prompt': prompt.system,
             'user_prompt': prompt.user, 'model': self.model_name,
         })
-        response = await _request_refinement_with_adaptive_context(
-            self.llm_client, self.context_manager, prompt, self.model_name, self.log_callback
+        response = await request_refinement(
+            self.llm_client, self.context_manager, prompt, self.model_name, self.log_callback,
+            extract=False,
         )
         content = response.content if response else ""
         self._log("llm_response", "LLM Response received", data={
@@ -217,23 +219,19 @@ class SmartCorrector:
         batches = [list(items[i:i + self.batch_size])
                    for i in range(0, len(items), self.batch_size)]
         results: List[Optional[List[Correction]]] = [None] * len(batches)
-        done = 0
         semaphore = asyncio.Semaphore(self.parallel)
 
         async def run(index: int) -> None:
-            nonlocal done
             async with semaphore:
                 if self._interrupted():
                     return
                 results[index] = await self._correct_batch(batches[index])
-                done += 1
-                if self.stats_callback:
-                    self.stats_callback({'total_chunks': len(batches),
-                                         'completed_chunks': done, 'failed_chunks': 0})
+                progress.record()
+                progress.emit()
 
-        if self.stats_callback:
-            self.stats_callback({'total_chunks': len(batches),
-                                 'completed_chunks': 0, 'failed_chunks': 0})
+        progress = ProgressReporter(self.stats_callback, phase=Phase.REFINING)
+        progress.begin(len(batches))
+        progress.emit()
         self._log("term_fix_smart_start",
                   f"Term fix: {len(items)} snippet(s) in {len(batches)} LLM request(s)")
         await asyncio.gather(*(run(i) for i in range(len(batches))))

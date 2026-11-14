@@ -1,1398 +1,450 @@
 """
-Translation job handlers and processing logic
+Web adapter of the job runner.
+
+``perform_actual_translation`` hands a job to :class:`src.core.job.runner.JobRunner`
+with web sinks: the state manager (in-memory job registry) and Socket.IO. All
+orchestration (prepare, translate / refine / term fix, verdict, checkpoint
+status, rate-limit pause and auto-resume, cleanup, notifications) lives in the
+runner and is shared with the CLI.
 """
-import os
-import re
-import time
 import asyncio
 import logging
-import tempfile
+import os
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
 
-from src.utils.unified_logger import setup_web_logger, LogType
-from src.utils.file_utils import get_unique_output_path, find_partial_output_paths, generate_tts_for_translation
-from src.utils.custom_instructions import (
-    load_custom_instructions,
-    is_safe_filename,
-)
-from src.core import auto_prep
-from src.core.llm.cost_tracker import begin_job_cost_tracking, end_job_cost_tracking
-from src.core.llm.exceptions import RateLimitError
-from src.core.llm_client import create_llm_client
-from src.config import AUTO_PAUSE_ON_RATE_LIMIT, RATE_LIMIT_AUTO_RESUME_DELAY
-from src.core.adapters import translate_file, refine_file
-from src.core.progress import snapshot_from_legacy_stats
-from src.tts.tts_config import TTSConfig
-from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE, EVENT_INTERRUPTION
-from .completion_status import classify_completion
+from src.core.job import JobConfig, JobResult, JobStatus
+from src.core.job.runner import JobRunner, JobSinks
+from src.core.progress import snapshot_from_job_stats
+from src.utils.file_utils import generate_tts_for_translation, get_unique_output_path
+from src.utils.unified_logger import LogType, create_job_logger
+from .services.path_validator import PathValidator
 from .websocket import emit_update
 
-# Module logger for diagnostics that must never reach the user-facing job log
-# (the job log is driven by `_log_message_callback`, which only exists inside a
-# running job).
+# Diagnostics that must never reach the user-facing job log.
 _logger = logging.getLogger("api.handlers")
 
+# Longest string kept per field of a stored log entry's data. LLM request and
+# response entries carry whole prompts and responses; the live view already
+# received them in full over WebSocket, the stored copy only feeds the status
+# endpoint.
+_STORED_LOG_FIELD_MAX_CHARS = 2000
 
-def resolve_custom_instructions(prompt_options, custom_instructions_dir, log_callback):
-    """
-    Resolve the translation/refinement instruction prose for a configured custom-instructions
-    preset (`prompt_options['custom_instruction_file']`).
-
-    Extracted verbatim from the inline branch previously in `perform_actual_translation` so it
-    can be exercised in isolation (see tests/integration/test_style_preset_end_to_end.py).
-    Behaviour — including the logging and the error handling — is unchanged.
-
-    Args:
-        prompt_options (dict): the job's `config['prompt_options']` mapping.
-        custom_instructions_dir (Path): directory presets are loaded from.
-        log_callback: callable(message_key, message_content="", data=None), matching
-            `_log_message_callback`'s signature.
-
-    Returns:
-        tuple[str | None, str | None]: (translation_instructions, refinement_instructions).
-    """
-    custom_instruction_file = prompt_options.get('custom_instruction_file', '')
-
-    translation_instructions = None
-    refinement_instructions = None
-
-    if custom_instruction_file:
-        if not is_safe_filename(custom_instruction_file):
-            log_callback(
-                "custom_instructions_invalid",
-                f"⚠️ Custom instructions file name '{custom_instruction_file}' is invalid "
-                f"(no path separators or any of <>:\"|?*; must end in .txt, .yaml, or .yml). "
-                f"Translation will proceed without it."
-            )
-        else:
-            try:
-                loaded = load_custom_instructions(
-                    custom_instruction_file, custom_instructions_dir
-                )
-                translation_instructions = loaded.get('translation')
-                refinement_instructions = loaded.get('refinement')
-
-                if translation_instructions or refinement_instructions:
-                    phases = []
-                    if translation_instructions:
-                        phases.append('translation')
-                    if refinement_instructions:
-                        phases.append('refinement')
-                    log_callback(
-                        "custom_instructions",
-                        f"📝 Loaded custom instructions: {custom_instruction_file} "
-                        f"(phases: {', '.join(phases)})"
-                    )
-                else:
-                    log_callback(
-                        "custom_instructions_empty",
-                        f"⚠️ Custom instructions file '{custom_instruction_file}' is empty. "
-                        f"Translation will proceed without it."
-                    )
-            except FileNotFoundError:
-                log_callback(
-                    "custom_instructions_missing",
-                    f"⚠️ Custom instructions file '{custom_instruction_file}' was selected "
-                    f"but not found in {custom_instructions_dir}. Translation will proceed "
-                    f"without it."
-                )
-            except (ValueError, Exception) as e:
-                log_callback(
-                    "custom_instructions_error",
-                    f"⚠️ Failed to load custom instructions '{custom_instruction_file}': {e}. "
-                    f"Translation will proceed without it."
-                )
-
-    return translation_instructions, refinement_instructions
-
-
-def _auto_prep_wants(config):
-    """Decide whether each auto pass should run for this job.
-
-    Calls `auto_prep.normalize_auto_flags(config['prompt_options'])` — which also
-    consumes the `__auto__` sentinels sent by stale/hand-written clients — then
-    applies the precedence rules of the plan (D6, D7):
-
-      - an explicitly selected glossary always wins. By the time this runs, that
-        glossary has already been snapshotted into `prompt_options['glossary_terms']`
-        by the block just above the call site, so a non-empty snapshot means
-        "a real glossary already won"; `glossary_id` is checked too for the case
-        where the snapshot could not be taken;
-      - auto-glossary is skipped in `refine_only` mode (the input is already in
-        the target language, so source→target term pairs are meaningless);
-      - an explicitly selected custom-instructions preset always wins over
-        auto-style.
-
-    Creates `config['prompt_options']` if absent. Pure apart from that and the
-    documented in-place normalization. Never raises.
-
-    Args:
-        config (dict): the job's translation configuration.
-
-    Returns:
-        tuple[bool, bool]: (want_glossary, want_style).
-    """
-    try:
-        prompt_options = config.get('prompt_options')
-        if not isinstance(prompt_options, dict):
-            prompt_options = {}
-            config['prompt_options'] = prompt_options
-
-        glossary_requested, style_requested = auto_prep.normalize_auto_flags(prompt_options)
-        if config.get('term_fix'):
-            # A term fix sends no translation or refinement prompt, so neither
-            # an auto glossary nor an auto style would ever be used.
-            return False, False
-
-        want_glossary = bool(
-            glossary_requested
-            and not prompt_options.get('glossary_terms')
-            and not prompt_options.get('glossary_id')
-            and not config.get('refine_only')
-        )
-        want_style = bool(
-            style_requested
-            and not (prompt_options.get('custom_instruction_file') or '').strip()
-        )
-        return want_glossary, want_style
-    except Exception as exc:  # pragma: no cover - defensive: never raise
-        _logger.debug("auto prep want-detection failed: %s", exc, exc_info=True)
-        return False, False
-
-
-# How often the auto passes tell the UI they are still alive. They run before
-# the first chunk exists, so nothing else emits for as long as they take.
-_AUTO_PREP_HEARTBEAT_S = 2.0
-
-
-async def _auto_prep_heartbeat(progress_callback, interval):
-    """Re-emit the "preparing" state every `interval` seconds until cancelled.
-
-    Without this tick the whole progress panel is a still image for as long as
-    the two auto passes take: the bar cannot move (no chunk exists yet) and the
-    elapsed timer only advances when something emits. A frozen panel reads as a
-    hung job, which is exactly what the auto passes are not.
-    """
-    while True:
-        await asyncio.sleep(interval)
-        try:
-            progress_callback(True)
-        except Exception as exc:
-            _logger.debug("auto prep heartbeat emit failed: %s", exc, exc_info=True)
-
-
-async def _apply_auto_prep(config, log_callback, progress_callback=None):
-    """Compute the auto glossary/style for this job and merge them in place.
-
-    Runs before `checkpoint_manager.start_job(...)` so the derived snapshot is
-    persisted with the job config and a resume never recomputes it (D5).
-
-    Invariants:
-      - the whole body is inside `try/except Exception`: any unexpected error is
-        logged and swallowed. This function can never make a translation job fail;
-      - only `config['prompt_options']` is mutated;
-      - no LLM client is created and no LLM call is made when neither auto pass
-        is wanted, and `progress_callback` is not called either.
-
-    Args:
-        config (dict): the job's translation configuration, mutated in place.
-        log_callback: callable(message_key, message_content="", data=None),
-            matching `_log_message_callback`'s signature.
-        progress_callback: optional callable(active: bool) used to advertise the
-            "preparing" state to the UI. Called with True when the passes start
-            (then periodically while they run) and exactly once with False when
-            they end, whatever the outcome. None disables the feature — the CLI
-            has no progress panel to drive.
-    """
-    def _signal(active):
-        if progress_callback is None:
-            return
-        try:
-            progress_callback(active)
-        except Exception as exc:
-            _logger.debug("auto prep progress emit failed: %s", exc, exc_info=True)
-
-    try:
-        want_glossary, want_style = _auto_prep_wants(config)
-        if not want_glossary and not want_style:
-            return
-
-        # From here on the job is doing invisible work; say so before the first
-        # blocking call, and clear the flag on every exit path below.
-        _signal(True)
-        try:
-            source_text = auto_prep.extract_source_text(
-                file_path=config.get('file_path'),
-                text=config.get('text'),
-            )
-            if not source_text or not source_text.strip():
-                log_callback(
-                    "auto_prep_no_text",
-                    "⚠️ Auto mode: could not read the source document — "
-                    "translating without an auto glossary or style."
-                )
-                return
-
-            source_language = config.get('source_language')
-            target_language = config.get('target_language')
-            if config.get('refine_only'):
-                # D7: the input is already in the target language, so the style pass
-                # must read it as such ("keep this text's voice").
-                source_language = target_language
-
-            llm_provider = config.get('llm_provider', 'ollama')
-            client = create_llm_client(
-                llm_provider,
-                config.get('gemini_api_key', ''),
-                config['llm_api_endpoint'],
-                config['model'],
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
-                context_window=auto_prep.AUTO_PREP_CONTEXT_WINDOW,
-            )
-            if client is None:
-                log_callback(
-                    "auto_prep_client_warning",
-                    f"⚠️ Auto mode: no LLM client could be built for provider "
-                    f"'{llm_provider}' — translating without an auto glossary or style."
-                )
-                return
-
-            heartbeat = None
-            if progress_callback is not None:
-                # Read the interval at call time so it stays tunable (and
-                # testable) rather than frozen into a default argument.
-                heartbeat = asyncio.create_task(
-                    _auto_prep_heartbeat(_signal, _AUTO_PREP_HEARTBEAT_S)
-                )
-            try:
-                fragment = await auto_prep.build_auto_prompt_options(
-                    source_text=source_text,
-                    source_language=source_language,
-                    target_language=target_language,
-                    want_glossary=want_glossary,
-                    want_style=want_style,
-                    llm_client=client,
-                    log=log_callback,
-                )
-            finally:
-                if heartbeat is not None:
-                    heartbeat.cancel()
-                    try:
-                        await heartbeat
-                    except asyncio.CancelledError:
-                        pass
-                # The client is ours: close it whatever happened, and never let a
-                # close error mask the real outcome.
-                try:
-                    await client.close()
-                except Exception as close_exc:
-                    _logger.debug("auto prep client close failed: %s", close_exc, exc_info=True)
-
-            if fragment:
-                config.setdefault('prompt_options', {}).update(fragment)
-        finally:
-            # Whatever happened, the panel must stop saying "Preparing".
-            _signal(False)
-    except Exception as exc:
-        log_callback(
-            "auto_prep_error",
-            f"⚠️ Auto mode failed: {exc} — translating without it."
-        )
-
-
-def _degraded_chunk_count(stats):
-    """Chunks that are translated but carry only approximate tag positions.
-
-    Read from the LIVE map the EPUB pipeline emits (``degraded_files``, with
-    ``degraded_chunks`` as its total), never from ``token_alignment_used``: that
-    counter is an accumulated, cross-pass tally of Phase 2 *events*, so it stays
-    positive after those chunks have been repaired and would keep a checkpoint
-    alive for a book that has nothing left to fix.
-
-    Precedence, deliberately identical to what the completion card applies
-    (`_buildCompletionWarningBlock` in translation-tracker.js) so retention and
-    the button it enables can never disagree: the map wins when present, its
-    flat total is the fallback, and an absent pair means zero — not "unknown".
-
-    Args:
-        stats: The job stats payload.
-
-    Returns:
-        Number of approximately-tagged chunks currently in the output (>= 0).
-    """
-    files = stats.get('degraded_files')
-    if isinstance(files, dict):
-        return sum(len(indices or ()) for indices in files.values())
-    try:
-        return max(0, int(stats.get('degraded_chunks') or 0))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _format_stats_summary(config, stats, verdict):
-    """Build the ' | 8/10 chunks (1 failed) (1 untranslated)' log suffix.
-
-    Shared by the three outcomes of the finalization branch so they all report
-    the same counters. Returns an empty string when the job has no chunks.
-
-    Args:
-        config: Translation config (only 'file_type' is read).
-        stats: The job stats payload.
-        verdict: The CompletionVerdict for this job.
-
-    Returns:
-        The formatted suffix, or "" when total_chunks is 0.
-    """
-    total = stats.get('total_chunks', 0) or 0
-    if total <= 0:
-        return ""
-
-    completed = stats.get('completed_chunks', 0)
-    unit = 'subtitles' if config['file_type'] == 'srt' else 'chunks'
-    summary = f" | {completed}/{total} {unit}"
-    if verdict.failed_chunks > 0:
-        summary += f" ({verdict.failed_chunks} failed)"
-    # verdict.unfinished_chunks (not fallback_chunks) is what is still
-    # untranslated as of this verdict — fallback_used is a historical tally
-    # that stays positive even after every fallen-back chunk was retried
-    # to a successful outcome, which would otherwise misreport a completed
-    # job as having untranslated content (issue #261, D9/D10).
-    if verdict.unfinished_chunks > 0:
-        summary += f" ({verdict.unfinished_chunks} untranslated)"
-    return summary
-
-
-def _notification_context(config, translation_id, elapsed_time, error=None):
-    """Build the context dict passed to webhook notifications."""
-    ctx = {
-        'translation_id': translation_id,
-        'file': config.get('original_filename') or config.get('input_filename') or config.get('file_path'),
-        'output': config.get('output_filename'),
-        'duration_seconds': elapsed_time,
-        'provider': config.get('llm_provider'),
-        'model': config.get('model'),
-        'source_lang': config.get('source_language'),
-        'target_lang': config.get('target_language'),
-    }
-    if error:
-        ctx['error'] = error
-    return ctx
+# Engine log keys that are debug noise in the web log.
+_SKIPPED_LOG_KEYS = ("llm_prompt_debug", "llm_raw_response_preview")
 
 
 def resolve_output_path(output_dir, output_filename, is_resume):
-    """Resolve the file a run writes to, inside ``output_dir``.
+    """The file a web run writes to, inside ``output_dir``.
 
-    A fresh job never overwrites: a colliding name gets a " (1)" suffix, so two
-    independent translations of the same book keep both results.
-
-    A resume does the opposite. It rebuilds the whole document from the
-    checkpoint, so its output legitimately *replaces* the file the previous pass
-    wrote — that is the whole point of retrying the unfinished chunks. Adding a
-    suffix here would leave the stale, half-translated file next to the fixed
-    one (with no way for the user to tell them apart) and climb " (2)", " (3)"…
-    on every further retry.
-
-    The path is returned as-is on a resume even when nothing is there yet (the
-    user deleted the previous output): the run recreates it.
+    A fresh job never overwrites (a " (1)" suffix); a resume rewrites the file
+    the previous pass produced. The name is reduced to a safe bare filename
+    and must resolve inside ``output_dir`` (ValueError otherwise).
     """
-    tentative_output_path = os.path.join(output_dir, output_filename)
-    if is_resume:
-        return tentative_output_path
-    return get_unique_output_path(tentative_output_path)
+    path = str(PathValidator.resolve_output_file(output_dir, output_filename))
+    return path if is_resume else get_unique_output_path(path)
 
 
-def run_translation_async_wrapper(translation_id, config, state_manager, output_dir, socketio):
-    """
-    Wrapper for running translation in async context
-    
-    Args:
-        translation_id (str): Translation job ID
-        config (dict): Translation configuration
-        state_manager: State manager instance
-        output_dir (str): Output directory path
-        socketio: SocketIO instance
-    """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(perform_actual_translation(translation_id, config, state_manager, output_dir, socketio))
-    except Exception as e:
-        error_msg = f"Uncaught major error in translation wrapper {translation_id}: {str(e)}"
-        if state_manager.exists(translation_id):
-            state_manager.set_translation_field(translation_id, 'status', 'error')
-            state_manager.set_translation_field(translation_id, 'error', error_msg)
-            logs = state_manager.get_translation_field(translation_id, 'logs')
-            if logs is None:
-                logs = []
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] CRITICAL WRAPPER ERROR: {error_msg}")
-            state_manager.set_translation_field(translation_id, 'logs', logs)
-            emit_update(socketio, translation_id, {'error': error_msg, 'status': 'error', 'log': f"CRITICAL WRAPPER ERROR: {error_msg}"}, state_manager)
-    finally:
-        loop.close()
+def _compact_log_entry(log_entry):
+    """Return a copy of ``log_entry`` with long data strings truncated."""
+    data = log_entry.get('data') if isinstance(log_entry, dict) else None
+    if not isinstance(data, dict):
+        return log_entry
+    compact = {}
+    for key, value in data.items():
+        if isinstance(value, str) and len(value) > _STORED_LOG_FIELD_MAX_CHARS:
+            value = value[:_STORED_LOG_FIELD_MAX_CHARS] + ' [...]'
+        compact[key] = value
+    return {**log_entry, 'data': compact}
 
 
-async def perform_actual_translation(translation_id, config, state_manager, output_dir, socketio):
-    """
-    Perform the actual translation job
-    
-    Args:
-        translation_id (str): Translation job ID
-        config (dict): Translation configuration
-        state_manager: State manager instance
-        output_dir (str): Output directory path
-        socketio: SocketIO instance
-    """
-    if not state_manager.exists(translation_id):
+def _store_log_entry(state_manager, translation_id, entry):
+    """Append to the job's in-memory log (bounded by the state manager)."""
+    append = getattr(state_manager, 'append_log', None)
+    if append is not None:
+        append(translation_id, entry)
         return
+    logs = state_manager.get_translation_field(translation_id, 'logs') or []
+    logs.append(entry)
+    state_manager.set_translation_field(translation_id, 'logs', logs)
 
-    state_manager.set_translation_field(translation_id, 'status', 'running')
-    emit_update(socketio, translation_id, {'status': 'running', 'log': 'Translation task started by worker.'}, state_manager)
 
-    def should_interrupt_current_task():
-        if state_manager.exists(translation_id) and state_manager.get_translation_field(translation_id, 'interrupted'):
-            _log_message_callback("interruption_check", f"Interruption signal detected for job {translation_id}. Halting processing.")
-            return True
-        return False
+def _mark_job_error_in_db(state_manager, translation_id, checkpoint_manager=None):
+    """Record a terminal 'error' status in SQLite, never raising (a row left
+    at 'running' is excluded from the resumable list until a restart)."""
+    try:
+        manager = checkpoint_manager or state_manager.get_checkpoint_manager()
+        if manager is not None:
+            manager.mark_error(translation_id)
+    except Exception as exc:  # pragma: no cover - best effort only
+        _logger.warning("Could not mark job %s as error in the database: %s", translation_id, exc)
 
-    # Setup unified logger for web interface
-    def web_callback(log_entry):
-        """Callback for WebSocket emission"""
-        logs = state_manager.get_translation_field(translation_id, 'logs')
-        if logs is None:
-            logs = []
-        logs.append(log_entry)
-        state_manager.set_translation_field(translation_id, 'logs', logs)
-        # Send full log entry for structured processing on client side
-        emit_update(socketio, translation_id, {'log': log_entry['message'], 'log_entry': log_entry}, state_manager)
-    
-    def storage_callback(log_entry):
-        """Callback for storing logs"""
-        logs = state_manager.get_translation_field(translation_id, 'logs')
-        if logs is None:
-            logs = []
-        logs.append(log_entry)
-        state_manager.set_translation_field(translation_id, 'logs', logs)
-    
-    logger = setup_web_logger(web_callback, storage_callback)
-    
-    def _log_message_callback(message_key_from_translate_module, message_content="", data=None):
-        """Legacy callback wrapper for backward compatibility"""
-        # Skip debug messages for web interface
-        if message_key_from_translate_module in ["llm_prompt_debug", "llm_raw_response_preview"]:
+
+class WebJobSinks(JobSinks):
+    """Runner sinks for a web job: state manager + Socket.IO + a per-job logger."""
+
+    def __init__(self, translation_id, state_manager, socketio):
+        self.translation_id = translation_id
+        self.state = state_manager
+        self.socketio = socketio
+        # Monotonic floor on the canonical percent: the bar never moves back,
+        # across the translate -> refine boundary included.
+        self._progress_floor = 0.0
+        # The logger calls both callbacks for every entry: the web callback
+        # only emits (full entry), the storage callback keeps a compact copy.
+        # A logger of its own: concurrent jobs never cross-log.
+        self.logger = create_job_logger(self._web_log, self._store_log)
+
+    # -- logging -----------------------------------------------------------
+
+    def _web_log(self, log_entry):
+        self._emit({'log': log_entry['message'], 'log_entry': log_entry})
+
+    def _store_log(self, log_entry):
+        _store_log_entry(self.state, self.translation_id, _compact_log_entry(log_entry))
+
+    def log(self, key, message="", data=None):
+        if key in _SKIPPED_LOG_KEYS:
             return
-        
-        # Handle structured data from new logging system
+        logger = self.logger
         if data and isinstance(data, dict):
             log_type = data.get('type')
             if log_type == 'llm_request':
                 logger.debug("LLM Request", LogType.LLM_REQUEST, data)
             elif log_type == 'llm_response':
-                # Use INFO level to ensure translation preview works even when DEBUG_MODE=false
+                # INFO so the translation preview works with DEBUG_MODE off.
                 logger.info("LLM Response", LogType.LLM_RESPONSE, data)
             elif log_type == 'refinement_request':
-                # Refinement uses same log type as LLM request for UI display
                 logger.debug("Refinement Request", LogType.LLM_REQUEST, data)
             elif log_type == 'refinement_response':
-                # Refinement uses same log type as LLM response for UI display
-                # Use INFO level to ensure translation preview works even when DEBUG_MODE=false
                 logger.info("Refinement Response", LogType.LLM_RESPONSE, data)
             elif log_type == 'progress':
                 logger.info("Progress Update", LogType.PROGRESS, data)
             else:
-                logger.info(message_content, data=data)
+                logger.info(message, data=data)
+        elif "error" in key.lower():
+            logger.error(message)
+        elif "warning" in key.lower():
+            logger.warning(message)
         else:
-            # Map specific message patterns to appropriate log types
-            if "error" in message_key_from_translate_module.lower():
-                logger.error(message_content)
-            elif "warning" in message_key_from_translate_module.lower():
-                logger.warning(message_content)
-            else:
-                logger.info(message_content)
+            logger.info(message)
 
-    # Single progress-emit seam. The translate_file → refine_file orchestration
-    # still runs two independent engine-side trackers, but the *workflow phase*
-    # is now owned here and passed explicitly per phase (TRANSLATING vs
-    # REFINING) by whichever call is driving the emit — replacing the old
-    # mutable `_workflow_meta` side-channel. A monotonic floor on the canonical
-    # `percent` guarantees the bar never regresses across the phase boundary,
-    # which is what previously required a manual counter reset at the
-    # transition.
-    _progress_floor = {'value': 0.0}
+    # -- state -------------------------------------------------------------
 
-    def _emit_progress(new_stats_dict, phase_meta):
-        if not state_manager.exists(translation_id):
+    def _emit(self, payload):
+        emit_update(self.socketio, self.translation_id, payload, self.state)
+
+    def _socket_event(self, name, payload):
+        if self.socketio is not None:
+            self.socketio.emit(name, payload, namespace='/')
+
+    def _exists(self):
+        return self.state.exists(self.translation_id)
+
+    def emit_stats(self, stats):
+        """Merge, derive the canonical ``percent`` / ``phase`` from the merged
+        job stats (the one place they are derived), emit."""
+        if not self._exists():
             return
-        state_manager.update_stats(translation_id, {**new_stats_dict, **phase_meta})
-        current_stats = state_manager.get_translation_field(translation_id, 'stats') or {}
-        current_stats['elapsed_time'] = time.time() - current_stats.get('start_time', time.time())
-        # Attach the canonical progress contract alongside the legacy fields,
-        # applying the monotonic floor so the global bar never moves backward.
-        snapshot = snapshot_from_legacy_stats(current_stats).to_dict()
-        if snapshot['percent'] < _progress_floor['value']:
-            snapshot['percent'] = _progress_floor['value']
-        else:
-            _progress_floor['value'] = snapshot['percent']
-        current_stats.update(snapshot)
-        state_manager.set_translation_field(translation_id, 'stats', current_stats)
-        emit_update(socketio, translation_id, {'stats': current_stats}, state_manager)
 
-        # Update logger progress for CLI display
-        completed = current_stats.get('completed_chunks', 0)
-        total = current_stats.get('total_chunks', 0)
+        def finalize(current):
+            current['elapsed_time'] = time.time() - current.get('start_time', time.time())
+            snapshot = snapshot_from_job_stats(current).to_dict()
+            if snapshot['percent'] < self._progress_floor:
+                snapshot['percent'] = self._progress_floor
+            else:
+                self._progress_floor = snapshot['percent']
+            current.update(snapshot)
+
+        merged = self._merge_stats(stats, finalize)
+        if merged is None:
+            return
+        self._emit({'stats': merged})
+        total = merged.get('total_chunks', 0)
         if total > 0:
-            logger.update_progress(completed, total)
+            self.logger.update_progress(merged.get('completed_chunks', 0), total)
 
-    def _translate_stats_callback(new_stats_dict):
-        # Phase 1. enable_refinement advertises the two-phase bar up-front when
-        # a refine-after pass will follow, so phase 1 maps to the [0, 50] band.
-        _emit_progress(new_stats_dict, {
-            'enable_refinement': bool(config.get('refine_after')),
-            'current_phase': 1,
+    def record_elapsed(self, elapsed):
+        """Fold the final elapsed time into the stored stats without an emit:
+        the terminal payload (job_finished) carries the merged stats, so a
+        separate progress payload would repeat the same 100% tick."""
+        if not self._exists():
+            return
+
+        def finalize(current):
+            current['elapsed_time'] = time.time() - current.get('start_time', time.time())
+
+        self._merge_stats({}, finalize)
+
+    def _merge_stats(self, stats, finalize):
+        merge = getattr(self.state, 'merge_stats', None)
+        if merge is not None:
+            return merge(self.translation_id, stats, finalize)
+        # Minimal state managers (tests).
+        self.state.update_stats(self.translation_id, stats)
+        current = dict(self.state.get_translation_field(self.translation_id, 'stats') or {})
+        finalize(current)
+        self.state.set_translation_field(self.translation_id, 'stats', current)
+        return current
+
+    def current_stats(self):
+        get = getattr(self.state, 'get_stats', None)
+        if get is not None:
+            return get(self.translation_id)
+        return dict(self.state.get_translation_field(self.translation_id, 'stats') or {})
+
+    def is_interrupted(self):
+        return bool(self._exists() and self.state.get_translation_field(self.translation_id, 'interrupted'))
+
+    def set_status(self, status, message=None):
+        if not self._exists():
+            return
+        self.state.set_translation_field(self.translation_id, 'status', status)
+        payload = {'status': status}
+        if message:
+            payload['log'] = message
+        self._emit(payload)
+
+    def job_changed(self, job):
+        if self._exists():
+            self.state.set_translation_field(self.translation_id, 'config', job.to_persisted())
+
+    def job_started(self, job, is_resume):
+        self.logger.info("Translation Started", LogType.TRANSLATION_START, {
+            'source_lang': job.source_language,
+            'target_lang': job.target_language,
+            'file_type': job.file_type.upper(),
+            'model': job.model,
+            'translation_id': self.translation_id,
+            'output_file': job.output_filename,
+            'api_endpoint': job.endpoint,
+            'chunk_size': job.max_tokens_per_chunk or 'default',
         })
 
-    def _refine_after_stats_callback(new_stats_dict):
-        # Phase 2 of a refine-after workflow: maps to the [50, 100] band.
-        _emit_progress(new_stats_dict, {'enable_refinement': True, 'current_phase': 2})
-
-    def _refine_only_stats_callback(new_stats_dict):
-        # Single-phase refine-only: the whole bar is the refinement pass.
-        _emit_progress(new_stats_dict, {
-            'enable_refinement': False, 'refine_only': True, 'current_phase': 1,
-        })
-
-    def _term_fix_stats_callback(new_stats_dict):
-        # Single-phase like refine-only (same progress mapping); the extra flag
-        # lets the UI name the work "Fixing terms" instead of "Refining".
-        _emit_progress(new_stats_dict, {
-            'enable_refinement': False, 'refine_only': True, 'term_fix': True,
-            'current_phase': 1,
-        })
-
-    def _finalize_stats_callback(new_stats_dict):
-        # Finalization pushes (e.g. final elapsed_time) must not re-assert a
-        # phase; the stored stats already carry the terminal phase/percent.
-        _emit_progress(new_stats_dict, {})
-
-    def _auto_prep_progress_callback(active):
-        # Auto mode runs before the first chunk exists, so there is no chunk
-        # progress to report — only the fact that work is happening. The flag
-        # makes the header read "Preparing…" instead of a frozen "Translating
-        # 0/0", and each emit refreshes elapsed_time so the panel stays alive.
-        _emit_progress({}, {'auto_prep_active': bool(active)})
-
-    def _openrouter_cost_callback(cost_data):
-        """Update OpenRouter cost in state. No emit: this callback runs on the
-        job's event loop thread (inside the provider call), and an emit from
-        here can overtake the stats emit on the wire (showing a stale snapshot and
-        rolling the progress bar backward). The cost is picked up by the next
-        chunk's stats_callback, which is the same thread that owns progress."""
-        if state_manager.exists(translation_id):
-            state_manager.update_stats(translation_id, {
+    def on_cost(self, cost_data):
+        """No emit here: this runs on the provider call, and an emit could
+        overtake the stats emit on the wire. The next stats emit carries it."""
+        if self._exists():
+            self.state.update_stats(self.translation_id, {
                 'openrouter_cost': cost_data['session_cost'],
                 'openrouter_prompt_tokens': cost_data['total_prompt_tokens'],
                 'openrouter_completion_tokens': cost_data['total_completion_tokens'],
-                # True when any request fell back to a rate estimate
                 'openrouter_cost_estimated': cost_data.get('cost_is_estimated', False),
             })
 
-    # Per-job cost tracking (ContextVar): concurrent jobs keep separate totals.
-    cost_tracking_token = None
-    if config.get('llm_provider') == 'openrouter':
-        _, cost_tracking_token = begin_job_cost_tracking(_openrouter_cost_callback)
+    # -- terminal outcomes -------------------------------------------------
 
-    # Get checkpoint manager and handle resume
-    checkpoint_manager = state_manager.get_checkpoint_manager()
-    resume_from_index = config.get('resume_from_index', 0)
-    is_resume = config.get('is_resume', False)
+    def job_finished(self, job, result: JobResult, elapsed):
+        if not self._exists():
+            return
+        tid = self.translation_id
+        output_path = result.output_path or job.output_path
+        status = result.status.web_status
+        file_type_upper = job.file_type.upper()
+        if os.path.exists(output_path) and status != 'error':
+            self.state.set_translation_field(tid, 'result', f"[{file_type_upper} file translated - download to view]")
+        elif not os.path.exists(output_path):
+            self.state.set_translation_field(
+                tid, 'result',
+                f"[{file_type_upper} file (partially) translated - content not loaded for preview or write failed]")
+        self.state.set_translation_field(tid, 'output_filepath', output_path)
+        self.state.set_translation_field(tid, 'status', status)
+        if result.error and status == 'error':
+            self.state.set_translation_field(tid, 'error', result.error)
+            if result.verdict and result.verdict.nothing_translated:
+                self.state.set_translation_field(tid, 'error_code', 'nothing_translated')
 
-    # Snapshot the active glossary into prompt_options BEFORE persisting the
-    # job, so the snapshot survives resume even if the source glossary is
-    # later edited or deleted. On resume, the snapshot is already in the
-    # restored config and we skip the reload.
-    if not is_resume:
-        glossary_id = config.get('prompt_options', {}).get('glossary_id')
-        if glossary_id and not config.get('prompt_options', {}).get('glossary_terms'):
-            try:
-                from src.api.translation_state import get_state_manager
-                store = get_state_manager().get_glossary_store()
-                glossary = store.get_glossary(int(glossary_id))
-                if glossary and glossary.terms:
-                    if 'prompt_options' not in config:
-                        config['prompt_options'] = {}
-                    config['prompt_options']['glossary_terms'] = glossary.terms_dict
-                    config['prompt_options']['glossary_name'] = glossary.name
-                    metadata = glossary.terms_metadata
-                    if metadata:
-                        config['prompt_options']['glossary_term_metadata'] = metadata
-            except Exception as e:
-                # Non-fatal: log later once the logger is wired in.
-                config.setdefault('prompt_options', {})['glossary_load_error'] = str(e)
+        payload = {
+            'result': self.state.get_translation_field(tid, 'result'),
+            'output_filename': job.output_filename,
+            'output_dir': os.path.dirname(os.path.abspath(output_path)),
+            'file_type': job.file_type,
+            # A partial job keeps its checkpoint; the completion card offers a
+            # retry on another model, seeded with this. Never an API key.
+            'translation_id': tid,
+            'model': job.model,
+            'llm_provider': job.llm_provider,
+            'status': status,
+        }
+        if job.endpoint:
+            payload['llm_api_endpoint'] = job.endpoint
+        if status == 'error':
+            payload['error'] = result.error
+            if result.verdict and result.verdict.nothing_translated:
+                # The run finished but no unit got a translation: the UI
+                # shows its own localized message, and the job is resumable.
+                payload['error_code'] = 'nothing_translated'
+        if result.status is JobStatus.INTERRUPTED:
+            self._socket_event('checkpoint_created', {
+                'translation_id': tid,
+                'status': 'interrupted',
+                'message': 'Translation paused - checkpoint created',
+            })
+        payload['stats'] = self.current_stats()
+        self._emit(payload)
+        if os.path.exists(output_path) and status in ('completed', 'interrupted', 'partial'):
+            self._socket_event('file_list_changed', {'reason': status, 'filename': job.output_filename})
 
-        # Auto mode: derive a throwaway glossary/style from this very document.
-        # Runs after the snapshot above so an explicitly selected glossary is
-        # already visible to the precedence check (D6), and before start_job so
-        # the derived snapshot is persisted with the job config — a resume
-        # reuses it instead of recomputing it (D5).
-        await _apply_auto_prep(config, _log_message_callback, _auto_prep_progress_callback)
+    def job_rate_limited(self, job, message):
+        if not self._exists():
+            return
+        tid = self.translation_id
+        self.state.set_translation_field(tid, 'status', 'rate_limited')
+        self.state.set_translation_field(tid, 'interrupted', True)
+        self._emit({
+            'status': 'rate_limited',
+            'log': message,
+            'result': self.state.get_translation_field(tid, 'result') or "Translation paused (rate limited)",
+        })
+        self._socket_event('checkpoint_created', {
+            'translation_id': tid, 'status': 'rate_limited', 'message': message,
+        })
+        output_path = self.state.get_translation_field(tid, 'output_filepath') or job.output_path
+        if output_path and os.path.exists(output_path):
+            self._socket_event('file_list_changed', {'reason': 'rate_limited', 'filename': job.output_filename})
 
-    try:
-        # Create checkpoint for new jobs (not for resumed jobs)
-        if not is_resume:
-            file_type = config['file_type']
-            input_file_path = config.get('file_path')
-            checkpoint_manager.start_job(
-                translation_id,
-                file_type,
-                config,
-                input_file_path
-            )
-
-        # PHASE 2: Configuration validation is now handled by AdaptiveContextManager during translation
-
-        # Resolve the output file. Fresh jobs get a unique name; a resume
-        # overwrites the file the previous pass produced (see
-        # resolve_output_path) and therefore never logs a renaming.
-        output_filepath_on_server = resolve_output_path(
-            output_dir, config['output_filename'], is_resume
-        )
-
-        # Update config with the actual filename (may have been modified).
-        # Never on a resume: it reuses the name as-is, so any difference could
-        # only be a path artifact and the "renamed to avoid overwriting" line
-        # would be a lie.
-        actual_output_filename = os.path.basename(output_filepath_on_server)
-        if not is_resume and actual_output_filename != config['output_filename']:
-            _log_message_callback("output_filename_modified",
-                f"ℹ️ Output filename modified to avoid overwriting: {config['output_filename']} → {actual_output_filename}")
-            config['output_filename'] = actual_output_filename
-            # Persist the name this run actually writes. start_job (above) saved
-            # the pre-collision name, and a user-initiated resume reloads the
-            # config from the database — without this it would target the
-            # unrelated file we just avoided instead of its own output.
-            checkpoint_manager.update_job_config(translation_id, config)
-
-        # Log translation start with unified logger
-        logger.info("Translation Started", LogType.TRANSLATION_START, {
-            'source_lang': config['source_language'],
-            'target_lang': config['target_language'],
-            'file_type': config['file_type'].upper(),
-            'model': config['model'],
-            'translation_id': translation_id,
-            'output_file': config['output_filename'],
-            'api_endpoint': config['llm_api_endpoint'],
-            'chunk_size': config.get('chunk_size', 'default')
+    def job_failed(self, job, error):
+        if not self._exists():
+            return
+        tid = self.translation_id
+        self.state.set_translation_field(tid, 'status', 'error')
+        self.state.set_translation_field(tid, 'error', error)
+        self._emit({
+            'error': error,
+            'status': 'error',
+            'result': self.state.get_translation_field(tid, 'result') or f"Translation failed: {error}",
         })
 
-        # Make the resumed portion's model/provider explicit in the job log so a
-        # resume that switched model/provider (issue #183) is auditable.
-        if is_resume:
-            _log_message_callback(
-                "resume_model_info",
-                f"↻ Resuming from chunk {resume_from_index} using "
-                f"{config.get('llm_provider', 'ollama')} / {config['model']}."
-            )
+    async def run_tts(self, job, output_path):
+        await _perform_tts_generation(self.translation_id, job, output_path, self.state,
+                                      self.socketio, self.log)
 
-        input_path_for_translate_module = config.get('file_path')
 
-        # Handle special case for TXT with inline text content (no file upload)
-        temp_txt_file_path = None
-        if config['file_type'] == 'txt' and 'text' in config and input_path_for_translate_module is None:
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt", dir=output_dir) as tmp_f:
-                tmp_f.write(config['text'])
-                temp_txt_file_path = tmp_f.name
-            input_path_for_translate_module = temp_txt_file_path
+def run_translation_async_wrapper(translation_id, job, state_manager, output_dir, socketio,
+                                  is_resume=False):
+    """Thread body of a web job: its own event loop, one worker per job."""
+    # The worker registry keeps a second worker off this job for as long as
+    # this thread lives (auto-resume waits included). The resume route claims
+    # the slot before starting us; a fresh job is recorded here.
+    mark_active = getattr(state_manager, 'mark_worker_active', None)
+    if mark_active is not None:
+        mark_active(translation_id)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        _run_worker_loop(loop, translation_id, job, state_manager, output_dir, socketio, is_resume)
+    finally:
+        release = getattr(state_manager, 'release_worker', None)
+        if release is not None:
+            release(translation_id)
 
-        # Validate input file path
-        if not input_path_for_translate_module:
-            _log_message_callback("error_no_path", f"❌ {config['file_type'].upper()} translation requires a file path from upload.")
-            raise Exception(f"{config['file_type'].upper()} translation requires a file_path.")
 
-        # Read custom instruction file if specified
-        project_root = Path(os.getcwd())
-        custom_instructions_dir = project_root / 'Custom_Instructions'
-        translation_instructions, refinement_instructions = resolve_custom_instructions(
-            config.get('prompt_options', {}), custom_instructions_dir, _log_message_callback
-        )
-
-        # Inject phase-specific custom instructions into prompt_options
-        if translation_instructions or refinement_instructions:
-            if 'prompt_options' not in config:
-                config['prompt_options'] = {}
-            if translation_instructions:
-                config['prompt_options']['custom_instructions'] = translation_instructions
-            if refinement_instructions:
-                config['prompt_options']['refinement_instructions'] = refinement_instructions
-
-        # Surface glossary load result (snapshot was taken earlier, before start_job).
-        glossary_terms_snapshot = config.get('prompt_options', {}).get('glossary_terms')
-        glossary_load_error = config.get('prompt_options', {}).pop('glossary_load_error', None)
-        if glossary_terms_snapshot:
-            # An auto-derived glossary already announced itself with its own
-            # "🧠 Auto glossary:" line, so this one would only be a duplicate.
-            if config.get('prompt_options', {}).get('glossary_source') != 'auto':
-                glossary_name = config.get('prompt_options', {}).get('glossary_name', '?')
-                _log_message_callback(
-                    "glossary_loaded",
-                    f"📖 Loaded glossary '{glossary_name}' ({len(glossary_terms_snapshot)} terms)"
-                )
-        elif glossary_load_error:
-            _log_message_callback(
-                "glossary_error",
-                f"⚠️ Could not load glossary: {glossary_load_error}"
-            )
-
-        if config.get('term_fix'):
-            from src.core.adapters import term_fix_file
-            from src.core.term_fix import parse_rules_text
-            term_fix = config['term_fix']
-            _log_message_callback(
-                "term_fix_mode",
-                f"🔤 Term-fix mode ({term_fix.get('mode', 'smart')}): only the listed "
-                f"wrong renderings are changed, the rest of the file is kept as is."
-            )
-            await term_fix_file(
-                input_filepath=input_path_for_translate_module,
-                output_filepath=output_filepath_on_server,
-                rules=parse_rules_text(term_fix['rules_text']),
-                mode=term_fix.get('mode', 'smart'),
-                target_language=config['target_language'],
-                model_name=config['model'],
-                llm_provider=config.get('llm_provider', 'ollama'),
-                llm_api_endpoint=config['llm_api_endpoint'],
-                gemini_api_key=config.get('gemini_api_key', ''),
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
-                context_window=config.get('context_window', 2048),
-                auto_adjust_context=config.get('auto_adjust_context', True),
-                parallel_workers=config.get('parallel_workers', 1),
-                log_callback=_log_message_callback,
-                stats_callback=_term_fix_stats_callback,
-                check_interruption_callback=should_interrupt_current_task,
-                # Uploads carry a random prefix; the report names the user's file.
-                source_name=config.get('input_filename'),
-            )
-        elif config.get('refine_only'):
-            _log_message_callback(
-                "refine_only_mode",
-                "✨ Refine-only mode: skipping translation, polishing the input file as-is."
-            )
-            src_lang = config.get('source_language')
-            tgt_lang = config.get('target_language')
-            if src_lang and tgt_lang and src_lang != tgt_lang:
-                _log_message_callback(
-                    "refine_only_lang_mismatch",
-                    f"⚠️ source_language ({src_lang}) ≠ target_language ({tgt_lang}). "
-                    f"Refinement is monolingual; the file will be polished as {tgt_lang}."
-                )
-            await refine_file(
-                input_filepath=input_path_for_translate_module,
-                output_filepath=output_filepath_on_server,
-                target_language=config['target_language'],
-                model_name=config['model'],
-                llm_provider=config.get('llm_provider', 'ollama'),
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                log_callback=_log_message_callback,
-                stats_callback=_refine_only_stats_callback,
-                check_interruption_callback=should_interrupt_current_task,
-                resume_from_index=resume_from_index,
-                llm_api_endpoint=config['llm_api_endpoint'],
-                gemini_api_key=config.get('gemini_api_key', ''),
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
-                context_window=config.get('context_window', 2048),
-                auto_adjust_context=config.get('auto_adjust_context', True),
-                max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
-                prompt_options=config.get('prompt_options', {}),
-            )
-        else:
-            # The translate-phase callback advertises the two-phase workflow
-            # up-front (via enable_refinement) when a refine-after pass will
-            # follow, so the UI renders the phase bar from the start of phase 1.
-            await translate_file(
-                input_filepath=input_path_for_translate_module,
-                output_filepath=output_filepath_on_server,
-                source_language=config['source_language'],
-                target_language=config['target_language'],
-                model_name=config['model'],
-                llm_provider=config.get('llm_provider', 'ollama'),
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                log_callback=_log_message_callback,
-                stats_callback=_translate_stats_callback,
-                check_interruption_callback=should_interrupt_current_task,
-                resume_from_index=resume_from_index,
-                llm_api_endpoint=config['llm_api_endpoint'],
-                gemini_api_key=config.get('gemini_api_key', ''),
-                openai_api_key=config.get('openai_api_key', ''),
-                openrouter_api_key=config.get('openrouter_api_key', ''),
-                mistral_api_key=config.get('mistral_api_key', ''),
-                deepseek_api_key=config.get('deepseek_api_key', ''),
-                poe_api_key=config.get('poe_api_key', ''),
-                nim_api_key=config.get('nim_api_key', ''),
-                context_window=config.get('context_window', 2048),
-                auto_adjust_context=config.get('auto_adjust_context', True),
-                min_chunk_size=config.get('min_chunk_size', 5),
-                max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
-                prompt_options=config.get('prompt_options', {}),
-                bilingual_output=config.get('bilingual_output', False),
-                parallel_workers=config.get('parallel_workers', 1),
-                # Opt-in repair of the EPUB chunks token alignment translated
-                # with approximate tag positions. Set only by the resume
-                # endpoint, from the completion card's explicit action; absent
-                # (hence False) on every normal run and every normal resume.
-                retry_token_aligned=bool(config.get('retry_token_aligned', False))
-            )
-
-            # Optional chained refinement pass on the translated output.
-            should_refine_after = (
-                config.get('refine_after')
-                and os.path.exists(output_filepath_on_server)
-                and not state_manager.get_translation_field(translation_id, 'interrupted')
-                and state_manager.get_translation_field(translation_id, 'status')
-                    not in ('error', 'partial', 'rate_limited')
-                and config.get('file_type') not in ('pdf', 'pgn')
-            )
-            if config.get('refine_after') and config.get('file_type') in ('pdf', 'pgn'):
-                _log_message_callback(
-                    "refine_after_unsupported_format",
-                    f"ℹ️ Refinement is not available for {config['file_type'].upper()} files yet; "
-                    f"the translated file is kept as is."
-                )
-            if should_refine_after:
-                # Phase 2. No manual counter reset is needed: the refine-phase
-                # callback always tags emits as phase 2 with the refine engine's
-                # own counters (starting at 0), so a stale phase-1 count can
-                # never pair with phase 2, and the monotonic floor in
-                # _emit_progress keeps the bar from regressing across the
-                # transition.
-                _log_message_callback(
-                    "refine_after_start",
-                    "✨ Translation done — running refinement pass on the output."
-                )
-                await refine_file(
-                    input_filepath=output_filepath_on_server,
-                    output_filepath=output_filepath_on_server,
-                    target_language=config['target_language'],
-                    model_name=config['model'],
-                    llm_provider=config.get('llm_provider', 'ollama'),
-                    checkpoint_manager=checkpoint_manager,
-                    translation_id=translation_id,
-                    log_callback=_log_message_callback,
-                    stats_callback=_refine_after_stats_callback,
-                    check_interruption_callback=should_interrupt_current_task,
-                    resume_from_index=0,
-                    llm_api_endpoint=config['llm_api_endpoint'],
-                    gemini_api_key=config.get('gemini_api_key', ''),
-                    openai_api_key=config.get('openai_api_key', ''),
-                    openrouter_api_key=config.get('openrouter_api_key', ''),
-                    mistral_api_key=config.get('mistral_api_key', ''),
-                    deepseek_api_key=config.get('deepseek_api_key', ''),
-                    poe_api_key=config.get('poe_api_key', ''),
-                    nim_api_key=config.get('nim_api_key', ''),
-                    context_window=config.get('context_window', 2048),
-                    auto_adjust_context=config.get('auto_adjust_context', True),
-                    max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
-                    prompt_options=config.get('prompt_options', {}),
-                )
-
-        # If an EPUB translation was paused, the file was saved with a `[partial NN%]`
-        # prefix. Re-point the tracking variables to the actual file on disk so the
-        # download endpoint and UI list the right name.
-        if (config['file_type'] == 'epub'
-                and state_manager.get_translation_field(translation_id, 'interrupted')
-                and not os.path.exists(output_filepath_on_server)):
-            candidates = find_partial_output_paths(output_filepath_on_server)
-            if candidates:
-                # Pick the most recently written one if several exist
-                actual = max(candidates, key=lambda p: os.path.getmtime(p))
-                output_filepath_on_server = actual
-                config['output_filename'] = os.path.basename(actual)
-                _log_message_callback("output_marked_partial",
-                    f"💾 Partial EPUB saved as: {config['output_filename']}")
-
-        # Set result message based on file type
-        file_type_upper = config['file_type'].upper()
-        if os.path.exists(output_filepath_on_server) and state_manager.get_translation_field(translation_id, 'status') not in ['error', 'interrupted_before_save']:
-            state_manager.set_translation_field(translation_id, 'result', f"[{file_type_upper} file translated - download to view]")
-        elif not os.path.exists(output_filepath_on_server):
-            state_manager.set_translation_field(translation_id, 'result', f"[{file_type_upper} file (partially) translated - content not loaded for preview or write failed]")
-
-        # Clean up temporary text file if created
-        if temp_txt_file_path and os.path.exists(temp_txt_file_path):
-            os.remove(temp_txt_file_path)
-
-        state_manager.set_translation_field(translation_id, 'output_filepath', output_filepath_on_server)
-
-        stats = state_manager.get_translation_field(translation_id, 'stats') or {}
-        elapsed_time = time.time() - stats.get('start_time', time.time())
-        _finalize_stats_callback({'elapsed_time': elapsed_time})
-
-        final_status_payload = {
-            'result': state_manager.get_translation_field(translation_id, 'result'),
-            'output_filename': config['output_filename'],
-            'output_dir': os.path.dirname(os.path.abspath(output_filepath_on_server)),
-            'file_type': config['file_type'],
-            # Issue #261: a `partial` job keeps its checkpoint, so the completion
-            # card offers an inline "retry the unfinished chunks on a better
-            # model" action. It needs the job id (emit_update stamps it on the
-            # wire too; stated here so the payload is self-describing for any
-            # other consumer) plus the model/provider seed for the picker.
-            # NEVER an API key: same rule as _strip_api_keys in
-            # src/api/blueprints/translation_routes.py — endpoints are fine, and
-            # the resumable-job card already ships llm_api_endpoint.
-            'translation_id': translation_id,
-            'model': config.get('model'),
-            'llm_provider': config.get('llm_provider', 'ollama'),
-        }
-        if config.get('llm_api_endpoint'):
-            final_status_payload['llm_api_endpoint'] = config['llm_api_endpoint']
-
-        if state_manager.get_translation_field(translation_id, 'interrupted'):
-            state_manager.set_translation_field(translation_id, 'status', 'interrupted')
-            _log_message_callback("summary_interrupted", f"🛑 Translation interrupted - partial result saved ({elapsed_time:.2f}s)")
-            final_status_payload['status'] = 'interrupted'
-            await asyncio.to_thread(notify, EVENT_INTERRUPTION,
-                _notification_context(config, translation_id, elapsed_time))
-
-            # Mark checkpoint as interrupted in database
-            checkpoint_manager.mark_interrupted(translation_id)
-
-            # Emit checkpoint_created event to trigger UI update
-            socketio.emit('checkpoint_created', {
-                'translation_id': translation_id,
-                'status': 'interrupted',
-                'message': 'Translation paused - checkpoint created'
-            }, namespace='/')
-
-            # DON'T clean up uploaded file on interruption - keep it for resume capability
-            # The file will be preserved in the job-specific directory by checkpoint_manager
-            # Only clean up if the preserved file exists (meaning backup was successful)
-            preserved_path = config.get('preserved_input_path')
-            if preserved_path and Path(preserved_path).exists():
-                # Preserved file exists, we can safely delete the original upload
-                if 'file_path' in config and config['file_path']:
-                    uploaded_file_path = config['file_path']
-                    upload_path = Path(uploaded_file_path)
-
-                    if upload_path.exists() and upload_path != Path(preserved_path):
-                        try:
-                            # Only delete if it's in the uploads directory root (not in a job subdirectory)
-                            uploads_dir = Path(output_dir) / 'uploads'
-                            resolved_path = upload_path.resolve()
-
-                            # Check if file is directly in uploads/ (not in a job subdirectory)
-                            if resolved_path.parent.resolve() == uploads_dir.resolve():
-                                upload_path.unlink()
-                                _log_message_callback("cleanup_uploaded_file", f"🗑️ Cleaned up uploaded source file (preserved copy exists): {upload_path.name}")
-                            else:
-                                _log_message_callback("cleanup_skipped", f"ℹ️ Skipped cleanup - file is not in uploads root directory")
-                        except Exception as e:
-                            _log_message_callback("cleanup_error", f"⚠️ Could not delete uploaded file {upload_path.name}: {str(e)}")
-                else:
-                    _log_message_callback("cleanup_info", "ℹ️ Original upload file not found or already cleaned up")
-            else:
-                _log_message_callback("cleanup_skipped_no_preserve", "ℹ️ Skipped cleanup - preserved file not found, keeping original for resume")
-
-        elif state_manager.get_translation_field(translation_id, 'status') != 'error':
-            # Single source of truth for "did this job actually succeed?".
-            # Reads the stats directly, so it is not gated by file type.
-            verdict = classify_completion(stats, output_filepath_on_server)
-            stats_summary = _format_stats_summary(config, stats, verdict)
-
-            if verdict.status == 'error':
-                # The translation loop ran to the end but produced no usable
-                # output file. Report it honestly instead of claiming success.
-                state_manager.set_translation_field(translation_id, 'status', 'error')
-                state_manager.set_translation_field(translation_id, 'error', verdict.error)
-                _log_message_callback("summary_error_no_output",
-                    f"❌ Translation finished without a usable output file in {elapsed_time:.2f}s"
-                    f"{stats_summary} — {verdict.error}")
-                final_status_payload['status'] = 'error'
-                final_status_payload['error'] = verdict.error
-                checkpoint_manager.mark_error(translation_id)
-                await asyncio.to_thread(notify, EVENT_FAILURE,
-                    _notification_context(config, translation_id, elapsed_time,
-                                          error=verdict.error))
-                # No pruning — the checkpoint is deliberately kept, it is the
-                # only way back for this job.
-            elif verdict.status == 'partial':
-                # Chunks failed outright and/or fell back to their source text.
-                # Keep the job resumable instead of marking it 'completed' and
-                # deleting the checkpoint, so the user can retry those chunks.
-                state_manager.set_translation_field(translation_id, 'status', 'partial')
-                _log_message_callback("summary_partial",
-                    f"⚠️ Translation finished with {verdict.failed_chunks} failed "
-                    f"and {verdict.unfinished_chunks} chunk(s) still untranslated "
-                    f"in {elapsed_time:.2f}s{stats_summary} — checkpoint kept for retry")
-                final_status_payload['status'] = 'partial'
-                checkpoint_manager.mark_partial(translation_id)
-                # No pruning — the checkpoint is deliberately kept for retry.
-            else:
-                state_manager.set_translation_field(translation_id, 'status', 'completed')
-                _log_message_callback("summary_completed", f"✅ Translation completed in {elapsed_time:.2f}s{stats_summary}")
-                final_status_payload['status'] = 'completed'
-                await asyncio.to_thread(notify, EVENT_SUCCESS,
-                    _notification_context(config, translation_id, elapsed_time))
-
-                # The job is marked 'completed' in the database and the row is
-                # KEPT: it does NOT appear in get_resumable_jobs (a finished
-                # book must never show up in a list of unfinished work), a
-                # server restart's reset_running_jobs cannot turn it into
-                # 'interrupted', and it is what /api/history lists. The row is
-                # eventually swept by the existing cleanup_old_jobs(max_age_days=30),
-                # which already includes 'completed'.
-                #
-                # What is dropped is only the bulky resume data — the checkpoint
-                # chunks and uploads/<job>/ — via prune_job_data. That pruning is
-                # skipped when the book still holds chunks that token alignment
-                # translated with approximate tag positions. Those chunks are
-                # not a defect the verdict cares about (the job is and stays
-                # 'completed', design decision D3), but the completion card
-                # offers an explicit "retry them with another model" action, and
-                # that action needs the checkpoint plus the per-file XHTML
-                # states plus the preserved input file.
-                if _degraded_chunk_count(stats) > 0:
-                    checkpoint_manager.mark_completed(translation_id)
-                    _log_message_callback("checkpoint_kept_degraded",
-                        f"📌 Checkpoint kept: {_degraded_chunk_count(stats)} chunk(s) "
-                        f"have approximate tag placement and can be retried from "
-                        f"the completion card while it is on screen")
-                else:
-                    checkpoint_manager.mark_completed(translation_id)
-                    checkpoint_manager.prune_job_data(translation_id)
-
-            # Clean up uploaded file if it exists and is in the uploads directory
-            # On completion (or a partial run) we can safely delete the original
-            # upload. Never on the 'error' outcome: with no output file, the
-            # uploaded source is the only way to resume.
-            if verdict.status != 'error' and 'file_path' in config and config['file_path']:
-                uploaded_file_path = config['file_path']
-                # Convert to Path object for reliable path operations
-                upload_path = Path(uploaded_file_path)
-
-                # Check if file exists
-                if upload_path.exists():
-                    try:
-                        # Only delete if it's in the uploads directory root (not in a job subdirectory)
-                        uploads_dir = Path(output_dir) / 'uploads'
-                        resolved_path = upload_path.resolve()
-
-                        # Check if file is directly in uploads/ (not in a job subdirectory)
-                        if resolved_path.parent.resolve() == uploads_dir.resolve():
-                            upload_path.unlink()
-                            # Removed verbose cleanup message - file cleanup is automatic
-                    except Exception as e:
-                        _log_message_callback("cleanup_error", f"⚠️ Could not delete uploaded file {upload_path.name}: {str(e)}")
-        else:
-            _log_message_callback("summary_error_final", f"❌ Translation finished with errors ({elapsed_time:.2f}s)")
-            final_status_payload['status'] = 'error'
-            final_status_payload['error'] = state_manager.get_translation_field(translation_id, 'error') or 'Unknown error during finalization.'
-            await asyncio.to_thread(notify, EVENT_FAILURE,
-                _notification_context(config, translation_id, elapsed_time,
-                                      error=final_status_payload['error']))
-
-        # Stats are now included in the consolidated completion message above
-
-        # Log OpenRouter cost summary if applicable
-        if config.get('llm_provider') == 'openrouter':
-            cost = stats.get('openrouter_cost', 0.0)
-            cost_estimated = stats.get('openrouter_cost_estimated', False)
-            prompt_tokens = stats.get('openrouter_prompt_tokens', 0)
-            completion_tokens = stats.get('openrouter_completion_tokens', 0)
-            total_tokens = prompt_tokens + completion_tokens
-            if cost > 0 or total_tokens > 0:
-                _log_message_callback("openrouter_cost_final",
-                    f"💰 OpenRouter Cost{' (estimate, usage.cost missing)' if cost_estimated else ''}: ${cost:.4f} | Tokens: {total_tokens:,} ({prompt_tokens:,} prompt + {completion_tokens:,} completion)")
-
-        # TTS Generation (if enabled and translation completed successfully)
-        if config.get('tts_enabled') and final_status_payload.get('status') == 'completed':
-            await _perform_tts_generation(
-                translation_id,
-                config,
-                output_filepath_on_server,
-                state_manager,
-                socketio,
-                _log_message_callback
-            )
-
-        # Attach final stats so the completion card can render its summary
-        # (cost, tokens, failed chunks…). emit_update no longer auto-attaches.
-        final_status_payload['stats'] = state_manager.get_translation_field(translation_id, 'stats') or {}
-        emit_update(socketio, translation_id, final_status_payload, state_manager)
-
-        # Trigger file list refresh in the frontend if a file was saved
-        if os.path.exists(output_filepath_on_server) and final_status_payload['status'] in ['completed', 'interrupted', 'partial']:
-            socketio.emit('file_list_changed', {
-                'reason': final_status_payload['status'],
-                'filename': config.get('output_filename', 'unknown')
-            }, namespace='/')
-
-    except RateLimitError as e:
-        auto_pause = config.get('auto_pause_on_rate_limit', AUTO_PAUSE_ON_RATE_LIMIT)
-        retry_msg = f" Retry suggested after ~{e.retry_after}s." if e.retry_after else ""
-        provider_name = e.provider or config.get('llm_provider', 'API')
-
-        if not state_manager.exists(translation_id):
-            return
-
-        # Auto-resume mode keeps the job running: wait, then re-enter from the checkpoint.
-        if not auto_pause:
-            wait_seconds = e.retry_after or RATE_LIMIT_AUTO_RESUME_DELAY
-            wait_msg = (f"⏳ Rate limited by {provider_name}.{retry_msg} "
-                        f"Auto-resume in {wait_seconds}s (auto-pause disabled).")
-            _log_message_callback("rate_limit_auto_resume", wait_msg)
-
-            # Surface 'rate_limited' transiently so the UI shows what's happening.
-            state_manager.set_translation_field(translation_id, 'status', 'rate_limited')
-            emit_update(socketio, translation_id, {
-                'status': 'rate_limited',
-                'log': wait_msg
-            }, state_manager)
-
-            await asyncio.sleep(wait_seconds)
-
-            # Honor an interrupt that arrived during the wait by falling through to pause.
-            if state_manager.get_translation_field(translation_id, 'interrupted'):
-                _log_message_callback("rate_limit_auto_resume_cancelled",
-                    "🛑 Auto-resume cancelled by user, pausing instead.")
-            else:
-                cp_data = checkpoint_manager.load_checkpoint(translation_id)
-                if cp_data:
-                    # Track consecutive auto-resume cycles that fail without
-                    # translating any chunk past the checkpoint. After three
-                    # such cycles the daily quota is probably exhausted and
-                    # the loop is just burning time, so we warn the user.
-                    # We keep auto-resuming because they explicitly opted in,
-                    # but the warning lets them choose to pause manually.
-                    resume_index = cp_data['resume_from_index']
-                    last_resume_index = config.get('_auto_resume_last_index')
-                    stuck_count = config.get('_auto_resume_stuck_count', 0)
-                    if last_resume_index == resume_index:
-                        stuck_count += 1
-                    else:
-                        stuck_count = 1
-                    if stuck_count >= 3:
-                        _log_message_callback(
-                            "rate_limit_auto_resume_stuck",
-                            f"⚠️ Auto-resume has looped {stuck_count} times without "
-                            f"progress (still stuck at chunk {resume_index}). Your "
-                            f"daily quota may be exhausted or the provider is "
-                            f"throttling this account; consider interrupting now "
-                            f"and checking your provider's quota dashboard. "
-                            f"Auto-resume will keep trying but may be wasting time."
-                        )
-
-                    new_config = dict(config)
-                    new_config['is_resume'] = True
-                    new_config['resume_from_index'] = resume_index
-                    new_config['_auto_resume_last_index'] = resume_index
-                    new_config['_auto_resume_stuck_count'] = stuck_count
-                    checkpoint_manager.mark_running(translation_id)
-                    state_manager.set_translation_field(translation_id, 'status', 'running')
-                    emit_update(socketio, translation_id, {
-                        'status': 'running',
-                        'log': f"▶️ Auto-resuming from chunk {resume_index}..."
-                    }, state_manager)
-                    await perform_actual_translation(
-                        translation_id, new_config, state_manager, output_dir, socketio
-                    )
-                    return
-                # No checkpoint available, fall through to the pause path below.
-                _log_message_callback("rate_limit_no_checkpoint",
-                    "⚠️ Auto-resume requested but no checkpoint found, falling back to pause.")
-
-        pause_msg = f"⏸️ Rate limited by {provider_name}.{retry_msg} Translation auto-paused, you can resume when ready."
-        _log_message_callback("rate_limit_auto_pause", pause_msg)
-
-        state_manager.set_translation_field(translation_id, 'status', 'rate_limited')
-        state_manager.set_translation_field(translation_id, 'interrupted', True)
-        checkpoint_manager.mark_interrupted(translation_id)
-
-        stats = state_manager.get_translation_field(translation_id, 'stats') or {}
-        elapsed_time = time.time() - stats.get('start_time', time.time())
-        _finalize_stats_callback({'elapsed_time': elapsed_time})
-
-        emit_update(socketio, translation_id, {
-            'status': 'rate_limited',
-            'log': pause_msg,
-            'result': state_manager.get_translation_field(translation_id, 'result') or f"Translation paused (rate limited)"
-        }, state_manager)
-
-        socketio.emit('checkpoint_created', {
-            'translation_id': translation_id,
-            'status': 'rate_limited',
-            'message': pause_msg
-        }, namespace='/')
-
-        output_filepath = state_manager.get_translation_field(translation_id, 'output_filepath')
-        if output_filepath and os.path.exists(output_filepath):
-            socketio.emit('file_list_changed', {
-                'reason': 'rate_limited',
-                'filename': config.get('output_filename', 'unknown')
-            }, namespace='/')
-
+def _run_worker_loop(loop, translation_id, job, state_manager, output_dir, socketio, is_resume=False):
+    try:
+        loop.run_until_complete(perform_actual_translation(
+            translation_id, job, state_manager, output_dir, socketio, is_resume=is_resume))
     except Exception as e:
-        critical_error_msg = f"Critical error during translation task ({translation_id}): {str(e)}"
-        _log_message_callback("critical_error_perform_task", critical_error_msg)
-        import traceback
-        tb_str = traceback.format_exc()
-        _log_message_callback("critical_error_perform_task_traceback", tb_str)
-
+        error_msg = f"Uncaught major error in translation wrapper {translation_id}: {str(e)}"
         if state_manager.exists(translation_id):
             state_manager.set_translation_field(translation_id, 'status', 'error')
-            state_manager.set_translation_field(translation_id, 'error', critical_error_msg)
-
-            emit_update(socketio, translation_id, {
-                'error': critical_error_msg,
-                'status': 'error',
-                'result': state_manager.get_translation_field(translation_id, 'result') or f"Translation failed: {critical_error_msg}"
-            }, state_manager)
-
-            stats = state_manager.get_translation_field(translation_id, 'stats') or {}
-            elapsed_time = time.time() - stats.get('start_time', time.time())
-            await asyncio.to_thread(notify, EVENT_FAILURE,
-                _notification_context(config, translation_id, elapsed_time,
-                                      error=critical_error_msg))
+            state_manager.set_translation_field(translation_id, 'error', error_msg)
+            _store_log_entry(
+                state_manager, translation_id,
+                f"[{datetime.now().strftime('%H:%M:%S')}] CRITICAL WRAPPER ERROR: {error_msg}")
+            emit_update(socketio, translation_id, {'error': error_msg, 'status': 'error',
+                                                   'log': f"CRITICAL WRAPPER ERROR: {error_msg}"},
+                        state_manager)
+            _mark_job_error_in_db(state_manager, translation_id)
     finally:
-        if cost_tracking_token is not None:
-            end_job_cost_tracking(cost_tracking_token)
+        loop.close()
 
 
-async def _perform_tts_generation(translation_id, config, output_filepath, state_manager, socketio, log_callback):
-    """
-    Perform TTS generation after successful translation.
+async def perform_actual_translation(translation_id, job, state_manager, output_dir, socketio,
+                                     is_resume=False):
+    """Run one web job through the shared :class:`JobRunner`.
 
     Args:
-        translation_id: Translation job ID
-        config: Translation configuration dict
-        output_filepath: Path to the translated file
-        state_manager: State manager instance
-        socketio: SocketIO instance for WebSocket events
-        log_callback: Logging callback function
+        translation_id: Job id.
+        job: The :class:`JobConfig` (or its persisted dict form, keys from .env).
+        state_manager: The in-memory job registry.
+        output_dir: Server output directory (uploads live in ``<output_dir>/uploads``).
+        socketio: Socket.IO server, or None.
+        is_resume: Continue the stored job instead of starting it.
     """
+    if not state_manager.exists(translation_id):
+        return None
+    if not isinstance(job, JobConfig):
+        job = JobConfig.from_persisted(job, output_dir=str(output_dir))
+
+    state_manager.set_translation_field(translation_id, 'status', 'running')
+    emit_update(socketio, translation_id, {'status': 'running', 'log': 'Translation task started by worker.'},
+                state_manager)
+
+    runner = JobRunner(
+        job,
+        translation_id=translation_id,
+        checkpoint_manager=state_manager.get_checkpoint_manager(),
+        sinks=WebJobSinks(translation_id, state_manager, socketio),
+        is_resume=is_resume,
+        glossary_store=getattr(state_manager, 'get_glossary_store', None),
+        custom_instructions_dir=Path(os.getcwd()) / 'Custom_Instructions',
+        temp_dir=str(output_dir),
+    )
+    return await runner.run()
+
+
+async def _perform_tts_generation(translation_id, job, output_filepath, state_manager, socketio, log_callback):
+    """Generate audio for a finished web job, reporting over Socket.IO."""
+    from src.tts.tts_config import TTSConfig
+
+    def emit(payload):
+        if socketio is not None:
+            socketio.emit('tts_update', {'translation_id': translation_id, **payload}, namespace='/')
+
     try:
         log_callback("tts_phase_start", "🔊 Starting TTS audio generation...")
+        emit({'status': 'started', 'message': 'TTS generation started'})
+        tts_config = TTSConfig.from_dict(dict(job.tts or {}))
 
-        # Emit TTS started event
-        socketio.emit('tts_update', {
-            'translation_id': translation_id,
-            'status': 'started',
-            'message': 'TTS generation started'
-        }, namespace='/')
-
-        # Reconstruct TTSConfig from dict
-        tts_config_dict = config.get('tts_config', {})
-        tts_config = TTSConfig(
-            enabled=True,
-            provider=tts_config_dict.get('provider', 'edge-tts'),
-            voice=tts_config_dict.get('voice', ''),
-            rate=tts_config_dict.get('rate', '+0%'),
-            volume=tts_config_dict.get('volume', '+0%'),
-            pitch=tts_config_dict.get('pitch', '+0Hz'),
-            output_format=tts_config_dict.get('output_format', 'opus'),
-            bitrate=tts_config_dict.get('bitrate', '64k'),
-            sample_rate=tts_config_dict.get('sample_rate', 24000),
-            chunk_size=tts_config_dict.get('chunk_size', 5000),
-            pause_between_chunks=tts_config_dict.get('pause_between_chunks', 0.5)
-        )
-
-        target_language = config.get('target_language', '')
-
-        # Create TTS progress callback
         def tts_progress_callback(current, total, message):
             progress_pct = int((current / total) * 100) if total > 0 else 0
             log_callback("tts_chunk_progress", f"🔊 TTS: {message}")
-            socketio.emit('tts_update', {
-                'translation_id': translation_id,
-                'status': 'processing',
-                'progress': progress_pct,
-                'current_chunk': current,
-                'total_chunks': total,
-                'message': message
-            }, namespace='/')
+            emit({'status': 'processing', 'progress': progress_pct, 'current_chunk': current,
+                  'total_chunks': total, 'message': message})
 
-        # Generate TTS
         success, message, audio_path = await generate_tts_for_translation(
             translated_filepath=output_filepath,
-            target_language=target_language,
+            target_language=job.target_language or '',
             tts_config=tts_config,
             log_callback=log_callback,
-            progress_callback=tts_progress_callback
+            progress_callback=tts_progress_callback,
         )
-
         if success:
             log_callback("tts_complete", f"✅ TTS audio generated: {os.path.basename(audio_path)}")
-
-            # Store audio file path in state
             state_manager.set_translation_field(translation_id, 'audio_filepath', audio_path)
             state_manager.set_translation_field(translation_id, 'audio_filename', os.path.basename(audio_path))
-
-            # Emit success event
-            socketio.emit('tts_update', {
-                'translation_id': translation_id,
-                'status': 'completed',
-                'progress': 100,
-                'audio_filename': os.path.basename(audio_path),
-                'message': 'TTS generation completed successfully'
-            }, namespace='/')
-
-            # Trigger file list refresh
-            socketio.emit('file_list_changed', {
-                'reason': 'tts_completed',
-                'filename': os.path.basename(audio_path)
-            }, namespace='/')
-
+            emit({'status': 'completed', 'progress': 100, 'audio_filename': os.path.basename(audio_path),
+                  'message': 'TTS generation completed successfully'})
+            if socketio is not None:
+                socketio.emit('file_list_changed', {'reason': 'tts_completed',
+                                                    'filename': os.path.basename(audio_path)}, namespace='/')
         else:
             log_callback("tts_failed", f"❌ TTS generation failed: {message}")
-            socketio.emit('tts_update', {
-                'translation_id': translation_id,
-                'status': 'failed',
-                'error': message,
-                'message': f'TTS generation failed: {message}'
-            }, namespace='/')
-
+            emit({'status': 'failed', 'error': message, 'message': f'TTS generation failed: {message}'})
     except Exception as e:
         error_msg = f"TTS generation error: {str(e)}"
         log_callback("tts_error", f"❌ {error_msg}")
-        socketio.emit('tts_update', {
-            'translation_id': translation_id,
-            'status': 'failed',
-            'error': error_msg,
-            'message': error_msg
-        }, namespace='/')
+        emit({'status': 'failed', 'error': error_msg, 'message': error_msg})
 
 
-def start_translation_job(translation_id, config, state_manager, output_dir, socketio):
-    """
-    Start a translation job in a separate thread
-
-    Args:
-        translation_id (str): Translation job ID
-        config (dict): Translation configuration
-        state_manager: State manager instance
-        output_dir (str): Output directory path
-        socketio: SocketIO instance
-    """
+def start_translation_job(translation_id, job, state_manager, output_dir, socketio, is_resume=False):
+    """Start a web job in its own daemon thread."""
     thread = threading.Thread(
         target=run_translation_async_wrapper,
-        args=(translation_id, config, state_manager, output_dir, socketio)
+        args=(translation_id, job, state_manager, output_dir, socketio),
+        kwargs={'is_resume': is_resume},
     )
     thread.daemon = True
     thread.start()

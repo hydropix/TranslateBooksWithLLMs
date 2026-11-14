@@ -55,6 +55,7 @@ from tests.unit.epub.conftest import (
     _write,
     _zip_dir_as_epub,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 # A chapter body mixing ordinary paragraphs, the very-short reaction lines
@@ -75,7 +76,7 @@ CHAPTER_XHTML = (
 )
 
 
-def _stub_create_llm_client(**kwargs):
+def _stub_create_llm_client(*args, **kwargs):
     return _echo_llm_client()
 
 
@@ -90,16 +91,13 @@ def _count_p_elements(xhtml_text: str) -> int:
 
 
 async def _translate(input_epub: Path, output_epub: Path, monkeypatch, **overrides) -> None:
-    monkeypatch.setattr(translator_module, "_create_llm_client", _stub_create_llm_client)
+    monkeypatch.setattr(translator_module, "create_llm_client", _stub_create_llm_client)
     _disable_attribution(monkeypatch)
-    kwargs = dict(
-        input_filepath=str(input_epub),
-        output_filepath=str(output_epub),
-        source_language="Chinese",
-        target_language="French",
+    await translate_epub_file(
+        make_job(str(input_epub), str(output_epub),
+                 source_language="Chinese", target_language="French", **overrides),
+        make_ctx(),
     )
-    kwargs.update(overrides)
-    await translate_epub_file(**kwargs)
 
 
 @pytest.fixture

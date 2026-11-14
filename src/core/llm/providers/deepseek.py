@@ -12,18 +12,17 @@ Features:
     - Auto-disables V4 reasoning by default (translation-friendly)
 """
 
-from typing import List, Optional, Union
-import httpx
-import asyncio
-import json
+import logging
+from typing import Any, Dict, List, Optional, Union
 
-from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
-from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError
-from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from ..base import LLMRequest
+from ..policy import RetryPolicy
+from .openai_chat import OpenAIChatProvider
+
+logger = logging.getLogger("llm.deepseek")
 
 
-class DeepSeekProvider(LLMProvider):
+class DeepSeekProvider(OpenAIChatProvider):
     """
     Provider for DeepSeek API.
 
@@ -61,6 +60,10 @@ class DeepSeekProvider(LLMProvider):
         "deepseek-v4-flash",
     ]
 
+    DEFAULT_CONTEXT_LIMIT = 64000
+    DISPLAY_NAME = "DeepSeek"
+    STATUS_HINTS = {404: "model not found, check https://platform.deepseek.com/"}
+
     THINKING_MODELS = ["deepseek-reasoner", "deepseek-r1"]
     THINKING_BY_DEFAULT_MODELS = ["deepseek-v4"]
 
@@ -69,7 +72,11 @@ class DeepSeekProvider(LLMProvider):
         api_key: Union[str, List[str]],
         model: str = "deepseek-v4-pro",
         api_endpoint: Optional[str] = None,
-        disable_thinking: bool = True
+        disable_thinking: bool = True,
+        *,
+        retry_policy: Optional[RetryPolicy] = None,
+        temperature: Optional[float] = None,
+        log_callback=None,
     ):
         """
         Initialize the DeepSeek provider.
@@ -81,22 +88,11 @@ class DeepSeekProvider(LLMProvider):
             disable_thinking: For models that think by default (V4 family),
                 inject ``thinking={"type":"disabled"}`` to skip reasoning tokens.
         """
-        super().__init__(model, api_keys=api_key, provider_name="deepseek")
-        self.api_endpoint = api_endpoint or self.API_URL
+        super().__init__(
+            api_key=api_key, model=model, api_endpoint=api_endpoint, provider_name="deepseek",
+            retry_policy=retry_policy, temperature=temperature, log_callback=log_callback,
+        )
         self.disable_thinking = disable_thinking
-
-    def _get_context_limit(self) -> int:
-        """
-        Determine context limit based on model name.
-
-        Returns:
-            Context limit in tokens
-        """
-        model_lower = self.model.lower()
-        for prefix, limit in self.MODEL_CONTEXT_SIZES.items():
-            if prefix in model_lower:
-                return limit
-        return 64000  # Default for DeepSeek
 
     def _is_thinking_model(self) -> bool:
         """Check if the current model uses thinking mode."""
@@ -164,7 +160,7 @@ class DeepSeekProvider(LLMProvider):
             return filtered_models
 
         except Exception as e:
-            print(f"⚠️ Failed to fetch DeepSeek models: {e}")
+            logger.warning(f"Failed to fetch DeepSeek models: {e}")
             return self._get_fallback_models()
 
     def _get_fallback_models(self) -> list:
@@ -180,161 +176,11 @@ class DeepSeekProvider(LLMProvider):
 
     def _get_context_limit_for_model(self, model_name: str) -> int:
         """Get context limit for a specific model name."""
-        model_lower = model_name.lower()
-        for prefix, limit in self.MODEL_CONTEXT_SIZES.items():
-            if prefix in model_lower:
-                return limit
-        return 64000
+        return self._context_limit_for(model_name)
 
-    async def generate(
-        self,
-        prompt: str,
-        timeout: int = REQUEST_TIMEOUT,
-        system_prompt: Optional[str] = None
-    ) -> Optional[LLMResponse]:
-        """
-        Generate text using DeepSeek API.
-
-        Args:
-            prompt: The user prompt (content to translate)
-            timeout: Request timeout in seconds
-            system_prompt: Optional system prompt (role/instructions)
-
-        Returns:
-            LLMResponse with content and token usage info, or None if failed
-
-        Raises:
-            ContextOverflowError: If input exceeds model's context window
-        """
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": TEMPERATURE,
-            "stream": False
-        }
-
-        if self._thinking_enabled_by_default() and self.disable_thinking:
-            payload["thinking"] = {"type": "disabled"}
-
-        client = await self._get_client()
-        # 429s have their own budget (rate_limit_events): rotating to a spare
-        # key must not consume a transient-retry attempt (issue #217).
-        attempt = 0
-        rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
-            headers = {
-                "Authorization": f"Bearer {current_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-            try:
-                response = await client.post(
-                    self.api_endpoint,
-                    headers=headers,
-                    json=payload,
-                    timeout=timeout
-                )
-
-                if response.status_code == 429:
-                    rate_limit_events += 1
-                    await handle_rate_limit(
-                        self._key_pool, current_key, response.headers,
-                        rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
-                    )
-                    continue
-
-                response.raise_for_status()
-                result = response.json()
-
-                if "choices" not in result or len(result["choices"]) == 0:
-                    print(f"⚠️ DeepSeek: Unexpected response format: {result}")
-                    return None
-
-                response_text = result["choices"][0].get("message", {}).get("content", "")
-                finish_reason = result["choices"][0].get("finish_reason")
-
-                usage = result.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-
-                print(f"💬 DeepSeek: {prompt_tokens}+{completion_tokens} tokens")
-
-                return LLMResponse(
-                    content=response_text,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    context_used=prompt_tokens + completion_tokens,
-                    context_limit=self._get_context_limit(),
-                    was_truncated=False,
-                    finish_reason=finish_reason,
-                    output_truncated=is_output_limit_finish(finish_reason)
-                )
-
-            except httpx.TimeoutException as e:
-                print(f"DeepSeek API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-            except httpx.HTTPStatusError as e:
-                error_body = ""
-                error_message = str(e)
-                if hasattr(e, 'response') and hasattr(e.response, 'text'):
-                    error_body = e.response.text[:500]
-                    error_message = f"{e} - {error_body}"
-
-                if e.response.status_code == 404:
-                    print(f"❌ DeepSeek: Model '{self.model}' not found!")
-                    print(f"   Check available models at https://platform.deepseek.com/")
-                elif e.response.status_code == 401:
-                    print(f"❌ DeepSeek: Invalid API key!")
-                elif e.response.status_code == 402:
-                    print(f"❌ DeepSeek: Insufficient credits!")
-                else:
-                    print(f"DeepSeek API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                    print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
-
-                context_overflow_keywords = [
-                    "context_length", "maximum context", "token limit",
-                    "too many tokens", "reduce the length", "max_tokens",
-                    "context window", "exceeds"
-                ]
-                if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
-                    raise ContextOverflowError(f"DeepSeek context overflow: {error_message}")
-
-                # Client errors (404 model, 401 key, 402 credits, 400) won't
-                # recover on retry — fail fast.
-                if not is_retryable_http_status(e.response.status_code):
-                    return None
-
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-            except json.JSONDecodeError as e:
-                print(f"DeepSeek API JSON Decode Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-            except Exception as e:
-                print(f"DeepSeek API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-        return None
+    async def _fixed_params(self, request: LLMRequest) -> Dict[str, Any]:
+        # V4 models think unless told not to; reasoning tokens are billed.
+        model_lower = request.model.lower()
+        if self.disable_thinking and any(tm in model_lower for tm in self.THINKING_BY_DEFAULT_MODELS):
+            return {"thinking": {"type": "disabled"}}
+        return {}

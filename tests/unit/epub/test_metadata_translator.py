@@ -43,6 +43,7 @@ from src.core.llm.base import LLMResponse
 from src.core.llm.utils.extraction import TranslationExtractor
 
 from tests.unit.epub.conftest import _disable_attribution, _echo_llm_client, _read
+from tests.job_helpers import make_ctx, make_job
 
 
 SOURCE_TITLE = "被渣后和前夫破镜重圆了"
@@ -106,10 +107,12 @@ class StubClient:
         self._response = response
         self.context_window = 2048
         self.calls = []
+        self.call_kwargs = []
         self._extractor = TranslationExtractor(TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT)
 
     async def generate(self, prompt, system_prompt=None, **kwargs):
         self.calls.append((prompt, system_prompt, self.context_window))
+        self.call_kwargs.append(dict(kwargs))
         if self._exception is not None:
             raise self._exception
         if self._response is not None:
@@ -220,6 +223,31 @@ async def test_good_answer_translates_both_fields_and_the_ncx_title(book):
     assert SOURCE_TITLE not in book.written_opf()
     assert SOURCE_TITLE not in book.written_ncx()
     assert "epub_metadata_translated" in book.event_names()
+
+
+@pytest.mark.asyncio
+async def test_large_prompt_sizes_its_window_per_request_without_mutating_the_client(book):
+    """A prompt larger than the client's window is sent with a per-request
+    ``context_window``; the shared client keeps its own window throughout."""
+    client = StubClient(_tagged_answer(FRENCH_TITLE, FRENCH_DESCRIPTION))
+    client.context_window = 16
+    await book.run(client)
+
+    assert len(client.calls) == 1
+    # The client was never mutated, not even during the call.
+    assert client.calls[0][2] == 16
+    assert client.context_window == 16
+    sent = client.call_kwargs[0].get('context_window')
+    assert isinstance(sent, int) and sent > 16
+
+
+@pytest.mark.asyncio
+async def test_small_prompt_uses_the_client_window(book):
+    client = StubClient(_tagged_answer(FRENCH_TITLE, FRENCH_DESCRIPTION))
+    client.context_window = 32768
+    await book.run(client)
+
+    assert 'context_window' not in client.call_kwargs[0]
 
 
 # ---------------------------------------------------------------------------
@@ -554,10 +582,10 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, client,
     so pinning it keeps the assertions deterministic); one test turns it on to
     exercise the real `_update_epub_metadata` signature interplay.
     """
-    monkeypatch.setattr(translator_module, "_create_llm_client",
-                        lambda **kwargs: client)
+    monkeypatch.setattr(translator_module, "create_llm_client",
+                        lambda *args, **kwargs: client)
     if attribution:
-        monkeypatch.setattr(translator_module, "ATTRIBUTION_ENABLED", True)
+        monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", True)
         monkeypatch.setattr(
             "src.core.epub.attribution_page.ATTRIBUTION_ENABLED", False)
     else:
@@ -569,11 +597,13 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, client,
         events.append((event, message))
 
     await translate_epub_file(
-        input_filepath=str(input_path),
-        output_filepath=str(output_path),
-        source_language="Chinese",
-        target_language="French",
-        log_callback=log_callback,
+        make_job(
+            input_path=str(input_path),
+            output_path=str(output_path),
+            source_language="Chinese",
+            target_language="French",
+        ),
+        make_ctx(log_callback=log_callback),
     )
     return events
 
@@ -589,7 +619,7 @@ async def test_pipeline_writes_the_translated_title_without_undoing_step_6_6(
     translated `dc:title` (5.5) and the removed `duokan-body-font` meta (6.6).
     Running 5.5 after 6.6 would revert the meta removal.
     """
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", True)
     client = _pipeline_client()
     output_epub = tmp_path / "output.epub"
     events = await _translate(input_epub, output_epub, monkeypatch, client)
@@ -619,7 +649,7 @@ async def test_pipeline_writes_the_translated_title_without_undoing_step_6_6(
 async def test_pipeline_flag_off_makes_no_llm_call_and_keeps_the_source_title(
     tmp_path, input_epub, monkeypatch
 ):
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", False)
     client = _pipeline_client()
     output_epub = tmp_path / "output_disabled.epub"
     events = await _translate(input_epub, output_epub, monkeypatch, client)
@@ -642,7 +672,7 @@ async def test_pipeline_signature_only_description_survives_untouched(
     recognize that shape, translate the title only, and leave the signature in
     place exactly once.
     """
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", True)
     client = _pipeline_client()
     output_epub = tmp_path / "output_signed.epub"
     await _translate(input_epub, output_epub, monkeypatch, client,
@@ -659,12 +689,12 @@ async def test_pipeline_signature_only_description_survives_untouched(
 async def test_pipeline_metadata_failure_never_fails_the_job(
     tmp_path, input_epub, monkeypatch
 ):
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", True)
 
     async def _raise(**kwargs):
         raise RuntimeError("simulated failure inside the metadata pass")
 
-    monkeypatch.setattr(translator_module, "translate_opf_metadata", _raise)
+    monkeypatch.setattr("src.core.epub.book_postprocess.translate_opf_metadata", _raise)
 
     output_epub = tmp_path / "output_failure.epub"
     events = await _translate(input_epub, output_epub, monkeypatch,

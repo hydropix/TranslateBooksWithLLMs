@@ -129,7 +129,7 @@ class ScriptedLLM:
         self.builders = list(builders)
         self.prompts = []
 
-    async def make_request(self, prompt, model=None, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         self.prompts.append(prompt)
         items = re.findall(r'<snippet id="(\d+)">(.*?)</snippet>', prompt, re.DOTALL)
         builder = self.builders.pop(0) if self.builders else (lambda i, t: None)

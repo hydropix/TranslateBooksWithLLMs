@@ -16,9 +16,11 @@ to the LLM so the term is inflected; see docs/design/TERM_FIX_PASS.md.
 import os
 import shutil
 import zipfile
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from .exceptions import UnsupportedFormatError
+from src.core.job import JobConfig, JobContext, JobResult, JobStatus
+from src.core.progress import Phase, ProgressReporter
 from src.core.term_fix import (
     MODE_LITERAL,
     MODE_SMART,
@@ -200,46 +202,44 @@ async def scan_file(input_filepath: str, rules: Sequence[TermRule]) -> List[Rule
 
 
 async def term_fix_file(
-    input_filepath: str,
-    output_filepath: str,
+    job: JobConfig,
+    ctx: JobContext,
     rules: Sequence[TermRule],
-    mode: str = MODE_LITERAL,
-    target_language: str = "",
-    model_name: Optional[str] = None,
-    llm_provider: str = "ollama",
-    llm_api_endpoint: Optional[str] = None,
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: int = 2048,
-    auto_adjust_context: bool = True,
-    parallel_workers: int = 1,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
+    *,
     report_filepath: Optional[str] = None,
-    source_name: Optional[str] = None,
-) -> TermFixResult:
-    """Apply `rules` to `input_filepath`, write the result and a change report.
+) -> JobResult:
+    """Apply `rules` to ``job.input_path``, write ``job.output_path`` and a report.
 
-    The report goes to `report_filepath`, or `<output stem>.term-fix.md` by
-    default; its title names `source_name` (the input's base name by default). Raises UnsupportedFormatError for unsupported formats, ValueError
-    for an unknown mode or a rule literal mode cannot apply, and RuntimeError
-    when the smart-mode LLM client cannot be created.
+    The mode comes from ``job.term_fix['mode']`` (literal when unset), the
+    target language from the job and, in smart mode, the LLM client from the
+    job's refine provider. The report goes to `report_filepath`, or
+    `<output stem>.term-fix.md` by default; its title names
+    ``job.input_filename`` (the input's base name when unset).
+
+    Returns:
+        A :class:`JobResult` whose ``detail`` is the :class:`TermFixResult`:
+        COMPLETED, or INTERRUPTED when occurrences were skipped because the
+        user stopped the pass. ``output_paths`` holds the output and the
+        report.
+
+    Raises:
+        UnsupportedFormatError: unsupported format.
+        ValueError: an unknown mode or a rule literal mode cannot apply.
+        RuntimeError: the smart-mode LLM client cannot be created.
     """
-    def log(key: str, message: str) -> None:
-        if log_callback:
-            log_callback(key, message)
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    mode = (job.term_fix or {}).get('mode') or MODE_LITERAL
+    target_language = job.target_language
+    ctx, seen_stats = ctx.tap_stats()
+    stats_callback = ctx.stats_callback
+    log = ctx.log
 
     if mode not in MODES:
         raise ValueError(f"Unknown term-fix mode '{mode}' (expected one of {', '.join(MODES)}).")
     if mode == MODE_LITERAL:
         check_literal_rules(rules)
-    if not os.path.exists(input_filepath):
+    if not input_filepath or not os.path.exists(input_filepath):
         raise FileNotFoundError(input_filepath)
 
     document = _load(input_filepath)
@@ -250,42 +250,37 @@ async def term_fix_file(
     corrector = None
     try:
         if mode == MODE_SMART:
-            from src.config import DEFAULT_MODEL, API_ENDPOINT
+            from src.config import DEFAULT_MODEL
+            from src.core.llm.exceptions import LLMClientConfigError
             from src.core.refine.client_setup import build_refine_client
-            llm_client, context_manager = build_refine_client(
-                model_name=model_name or DEFAULT_MODEL,
-                llm_provider=llm_provider,
-                cli_api_endpoint=llm_api_endpoint or API_ENDPOINT,
-                auto_adjust_context=auto_adjust_context,
-                context_window=context_window,
-                gemini_api_key=gemini_api_key,
-                openai_api_key=openai_api_key,
-                openrouter_api_key=openrouter_api_key,
-                mistral_api_key=mistral_api_key,
-                deepseek_api_key=deepseek_api_key,
-                poe_api_key=poe_api_key,
-                nim_api_key=nim_api_key,
-                log_callback=log_callback,
-            )
-            if llm_client is None:
-                raise RuntimeError(f"Could not create an LLM client for provider '{llm_provider}'.")
+            provider = job.refine_provider_config()
+            llm_provider = provider.provider or "ollama"
+            model_name = provider.model or DEFAULT_MODEL
+            try:
+                llm_client, context_manager = build_refine_client(
+                    job, log_callback=ctx.log_callback)
+            except LLMClientConfigError as e:
+                raise RuntimeError(
+                    f"Could not create an LLM client for provider '{llm_provider}'.") from e
             # Local providers serve one request at a time.
-            parallel = 1 if llm_provider == "ollama" else max(1, parallel_workers)
+            parallel = 1 if llm_provider == "ollama" else max(1, job.parallel_workers)
             corrector = SmartCorrector(
                 llm_client=llm_client,
-                model_name=model_name or DEFAULT_MODEL,
+                model_name=model_name,
                 target_language=target_language or "the same language",
                 rules=rules,
                 context_manager=context_manager,
                 parallel=parallel,
-                log_callback=log_callback,
+                log_callback=ctx.log_callback,
                 stats_callback=stats_callback,
-                check_interruption_callback=check_interruption_callback,
+                check_interruption_callback=ctx.check_interruption,
             )
         result = await fix_units(document.units, rules, document.locate, corrector=corrector)
-        if corrector is None and stats_callback:
+        if corrector is None:
             # Literal mode is a single instant step; report it as done.
-            stats_callback({'total_chunks': 1, 'completed_chunks': 1, 'failed_chunks': 0})
+            progress = ProgressReporter(stats_callback, phase=Phase.REFINING)
+            progress.begin(1, done=1)
+            progress.emit()
     finally:
         if llm_client is not None and hasattr(llm_client, "close"):
             try:
@@ -309,7 +304,13 @@ async def term_fix_file(
 
     report_filepath = report_filepath or report_path_for(output_filepath)
     with open(report_filepath, "w", encoding="utf-8") as f:
-        f.write(render_report(source_name or os.path.basename(input_filepath),
+        f.write(render_report(job.input_filename or os.path.basename(input_filepath),
                               rules, result.occurrences))
     log("term_fix_report", f"Term fix report: '{report_filepath}'")
-    return result
+    return JobResult(
+        status=JobStatus.INTERRUPTED if skipped else JobStatus.COMPLETED,
+        output_path=output_filepath,
+        output_paths=(output_filepath, report_filepath),
+        stats=dict(seen_stats),
+        detail=result,
+    )

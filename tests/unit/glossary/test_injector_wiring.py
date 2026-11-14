@@ -79,8 +79,6 @@ class TestTranslationPathCarriesTargetLanguage:
 
         await _make_llm_request_with_adaptive_context(
             main_content=CHUNK,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="Russian",
@@ -102,8 +100,6 @@ class TestTranslationPathCarriesTargetLanguage:
 
         await _make_llm_request_with_adaptive_context(
             main_content=CHUNK,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="Chinese",
@@ -129,7 +125,9 @@ class TestRefinementPathCarriesTargetLanguage:
         captured = _capture(monkeypatch, "generate_refinement_prompt")
 
         await _make_refinement_request(
-            draft_translation="The Muggle spoke to nobody.",
+            # The refinement input is the Russian draft: the glossary is
+            # matched on its target form, here inflected (магла).
+            draft_translation="Он увидел магла у двери.",
             context_before="",
             context_after="",
             previous_refined_context="",

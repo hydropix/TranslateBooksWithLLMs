@@ -69,10 +69,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from src import config  # noqa: F401  (loads .env)
-import src.core.epub.xhtml_translator as xhtml_translator_module
+import src.core.epub.chunk_fallback as chunk_fallback_module
+import src.core.epub.chunk_loop as chunk_loop_module
 from src.api.completion_status import classify_completion
 from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 # The sabotaged chunk is identified by this sentinel: the wrapper below returns
 # None for any chunk containing it, in both Phase 1 (with placeholders) and
@@ -226,8 +228,8 @@ class ChunkSabotage:
 
     def __init__(self, starve):
         self.starve = starve
-        self._original_request = xhtml_translator_module.generate_translation_request
-        self._original_chunk = xhtml_translator_module.translate_chunk_with_fallback
+        self._original_request = chunk_fallback_module.generate_translation_request
+        self._original_chunk = chunk_loop_module.translate_chunk_with_fallback
         self.llm_calls = 0
         self.sabotaged_llm_calls = 0
         self.chunk_attempts = 0
@@ -254,13 +256,13 @@ class ChunkSabotage:
                 self.sabotaged_chunk_attempts += 1
             return await original_chunk(*args, **kwargs)
 
-        xhtml_translator_module.generate_translation_request = wrapped_request
-        xhtml_translator_module.translate_chunk_with_fallback = wrapped_chunk
+        chunk_fallback_module.generate_translation_request = wrapped_request
+        chunk_loop_module.translate_chunk_with_fallback = wrapped_chunk
         return self
 
     def __exit__(self, *exc):
-        xhtml_translator_module.generate_translation_request = self._original_request
-        xhtml_translator_module.translate_chunk_with_fallback = self._original_chunk
+        chunk_fallback_module.generate_translation_request = self._original_request
+        chunk_loop_module.translate_chunk_with_fallback = self._original_chunk
         return False
 
 
@@ -326,22 +328,26 @@ async def _run_pass(label, cm, translation_id, input_path, output_path,
 
     with ChunkSabotage(starve=starve) as sabotage:
         await translate_file(
-            input_filepath=str(input_path),
-            output_filepath=str(output_path),
-            source_language="English",
-            target_language="French",
-            model_name=MODEL,
-            llm_provider="ollama",
-            checkpoint_manager=cm,
-            translation_id=translation_id,
-            log_callback=log_callback,
-            stats_callback=stats_callback,
-            resume_from_index=resume_from_index,
-            llm_api_endpoint=os.getenv("OLLAMA_API_ENDPOINT"),
-            context_window=4096,
-            auto_adjust_context=True,
-            max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
-            prompt_options={},
+            make_job(
+                input_path=str(input_path),
+                output_path=str(output_path),
+                source_language="English",
+                target_language="French",
+                model=MODEL,
+                provider="ollama",
+                endpoint=os.getenv("OLLAMA_API_ENDPOINT"),
+                context_window=4096,
+                auto_adjust_context=True,
+                max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
+                prompt_options={},
+            ),
+            make_ctx(
+                checkpoint_manager=cm,
+                translation_id=translation_id,
+                log_callback=log_callback,
+                stats_callback=stats_callback,
+                resume_from_index=resume_from_index,
+            ),
         )
 
     print("  %s: starvation=%s chunk attempts=%d (on the sabotaged chunk=%d)"

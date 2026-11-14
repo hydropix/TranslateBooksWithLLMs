@@ -8,7 +8,7 @@ import mimetypes
 import logging
 import zipfile
 from pathlib import Path
-from typing import Set, Optional, Dict, Any, Iterable, Union
+from typing import Set, Optional, Iterable, Union
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -70,25 +70,31 @@ def find_unsafe_archive_member(entry_names: Iterable[str]) -> Optional[str]:
     return None
 
 
-def _is_within(base: Union[str, Path], target: Union[str, Path]) -> bool:
+def is_within_directory(path: Union[str, Path], directory: Union[str, Path]) -> bool:
     """
-    Return True only if `target` resolves to a location inside `base`.
+    Return True only if `path` resolves to a location inside `directory`.
 
-    This mirrors PathValidator.is_within_directory (resolve both sides, then
-    compare with Path.relative_to — never str.startswith, which would treat
-    '/uploads-evil' as inside '/uploads'). It is reimplemented here on purpose:
-    src/utils must not import from src/api.
+    The single containment check of the code base (PathValidator delegates
+    here, since src/utils must not import from src/api). Both sides are
+    resolved (symlinks followed, '..' normalized) and compared with
+    Path.relative_to, never str.startswith, which would treat
+    '/uploads-evil' as inside '/uploads'.
     """
     try:
-        base_resolved = Path(base).resolve()
-        target_resolved = Path(target).resolve()
-    except OSError:
+        dir_resolved = Path(directory).resolve()
+        path_resolved = Path(path).resolve()
+    except (OSError, ValueError):
         return False
     try:
-        target_resolved.relative_to(base_resolved)
+        path_resolved.relative_to(dir_resolved)
         return True
     except ValueError:
         return False
+
+
+def _is_within(base: Union[str, Path], target: Union[str, Path]) -> bool:
+    """Argument-order alias of is_within_directory (target inside base)."""
+    return is_within_directory(target, base)
 
 
 def safe_extract_zip(zip_ref: zipfile.ZipFile, destination: Union[str, Path]) -> None:
@@ -359,13 +365,10 @@ class SecureFileHandler:
         file_path = self.upload_dir / filename
         
         # Resolve path and ensure it's within upload directory
-        resolved_path = file_path.resolve()
-        upload_dir_resolved = self.upload_dir.resolve()
-        
-        if not str(resolved_path).startswith(str(upload_dir_resolved)):
+        if not is_within_directory(file_path, self.upload_dir):
             raise SecurityError("Path traversal attempt detected")
-        
-        return resolved_path
+
+        return file_path.resolve()
     
     def _validate_file_content(self, file_path: Path, original_filename: str) -> FileValidationResult:
         """Validate file content based on type"""

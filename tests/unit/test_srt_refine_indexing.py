@@ -12,6 +12,7 @@ import pytest
 
 from src.config import INPUT_TAG_IN, INPUT_TAG_OUT, TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
 from src.core.srt_processor import SRTProcessor
+from tests.job_helpers import make_ctx, make_job
 
 
 class FakeLLMResponse:
@@ -27,7 +28,7 @@ class FakeLLMClient:
     sent and only changes the casing of the text.
     """
 
-    async def make_request(self, prompt, model_name, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         match = re.search(
             re.escape(INPUT_TAG_IN) + r"\n(.*?)\n" + re.escape(INPUT_TAG_OUT),
             prompt,
@@ -82,10 +83,11 @@ def _parse_output(content):
 
 
 async def _refine(tmp_path, monkeypatch, srt_content):
+    import src.core.llm.factory as llm_factory
     import src.core.refine.srt_refiner as srt_refiner
 
     monkeypatch.setattr(
-        srt_refiner, "create_llm_client", lambda *args, **kwargs: FakeLLMClient()
+        llm_factory, "create_llm_provider", lambda *args, **kwargs: FakeLLMClient()
     )
 
     input_file = tmp_path / "input.srt"
@@ -93,9 +95,9 @@ async def _refine(tmp_path, monkeypatch, srt_content):
     input_file.write_text(srt_content, encoding="utf-8")
 
     ok = await srt_refiner.refine_srt_file(
-        input_filepath=str(input_file),
-        output_filepath=str(output_file),
-        target_language="French",
+        make_job(str(input_file), str(output_file), operation="refine",
+                 target_language="French"),
+        make_ctx(),
     )
     assert ok, "refine_srt_file reported failure"
     return output_file.read_text(encoding="utf-8")

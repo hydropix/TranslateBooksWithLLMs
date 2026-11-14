@@ -1,0 +1,21 @@
+# Tool configuration only. The project is not packaged with this file.
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = [
+    "venv",
+    "build",
+    "dist",
+    ".claude",
+    "promo",
+]
+
+[tool.ruff.lint]
+# Deliberately conservative: syntax errors, undefined names, unused imports
+# and unused variables only. No style or formatting rules.
+select = ["E9", "F63", "F7", "F82", "F401", "F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# config.py assigns its reloadable settings through globals() in
+# _apply_reloadable_env_settings(), which static analysis cannot see.
+"src/config.py" = ["F821"]

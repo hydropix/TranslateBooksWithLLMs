@@ -3,7 +3,6 @@ Unit tests for proportional placeholder reinsertion
 
 Note: We extract the function code to avoid circular import issues.
 """
-import pytest
 
 
 def find_nearest_word_boundary(text: str, pos: int) -> int:

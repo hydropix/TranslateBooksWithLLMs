@@ -13,7 +13,6 @@ Token counts are derived from string length so cost/token fields are stable
 too (the recorder strips them anyway).
 """
 
-from typing import Optional
 
 from src.config import (
     INPUT_TAG_IN,
@@ -21,7 +20,8 @@ from src.config import (
     TRANSLATE_TAG_IN,
     TRANSLATE_TAG_OUT,
 )
-from src.core.llm.base import LLMProvider, LLMResponse
+from src.core.llm.base import LLMProvider, LLMRequest, LLMResponse
+from src.core.llm.provider_config import ProviderConfig
 
 
 def _extract_source_block(prompt: str) -> str:
@@ -50,12 +50,9 @@ class FakeEchoProvider(LLMProvider):
         self.context_window = _kwargs.get("context_window") or 4096
         self._is_thinking_model = False
 
-    async def generate(
-        self,
-        prompt: str,
-        timeout: int = 0,
-        system_prompt: Optional[str] = None,
-    ) -> Optional[LLMResponse]:
+    async def _send(self, request: LLMRequest) -> LLMResponse:
+        # Goes through the real LLMProvider request loop; only the transport is fake.
+        prompt = request.prompt
         source = _extract_source_block(prompt)
         content = f"{TRANSLATE_TAG_IN}{source}{TRANSLATE_TAG_OUT}"
         prompt_tokens = max(1, len(prompt) // 4)
@@ -65,17 +62,21 @@ class FakeEchoProvider(LLMProvider):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             context_used=prompt_tokens + completion_tokens,
-            context_limit=self.context_window,
+            context_limit=request.context_window or self.context_window,
             was_truncated=False,
             was_fallback=False,
         )
 
-    async def _detect_thinking_model(self) -> bool:
-        return False
 
+def _fake_create_llm_provider(provider_type="ollama", **kwargs) -> FakeEchoProvider:
+    """Drop-in replacement for ``create_llm_provider`` used by monkeypatching.
 
-def _fake_create_llm_provider(provider_type: str = "ollama", **kwargs) -> FakeEchoProvider:
-    """Drop-in replacement for ``create_llm_provider`` used by monkeypatching."""
+    Accepts a ``ProviderConfig`` (what the engines pass) or the legacy
+    provider type plus keyword arguments.
+    """
+    if isinstance(provider_type, ProviderConfig):
+        return FakeEchoProvider(model=provider_type.model or "fake-echo",
+                                context_window=provider_type.context_window)
     return FakeEchoProvider(model=kwargs.get("model", "fake-echo"), **{
         k: v for k, v in kwargs.items() if k == "context_window"
     })
@@ -88,11 +89,27 @@ def _fake_create_llm_provider(provider_type: str = "ollama", **kwargs) -> FakeEc
 _PATCH_TARGETS = (
     "src.core.llm.factory.create_llm_provider",
     "src.core.llm.create_llm_provider",
-    "src.core.llm_client.create_llm_provider",
 )
 
 
 def install(monkeypatch) -> None:
-    """Patch all ``create_llm_provider`` lookup sites to the echo provider."""
+    """Patch all ``create_llm_provider`` lookup sites to the echo provider.
+
+    The echo provider copies the source back by design, which the TXT/SRT/PGN
+    acceptance rules reject when source and target languages differ
+    (``request_core.tagged_answer_problem``). With this fake installed, the
+    languages are treated as equal for that one rule, so the characterization
+    runs keep exercising the happy path.
+    """
     for target in _PATCH_TARGETS:
         monkeypatch.setattr(target, _fake_create_llm_provider, raising=True)
+    allow_echo(monkeypatch)
+
+
+def allow_echo(monkeypatch) -> None:
+    """Accept an answer equal to its source (see :func:`install`).
+
+    For tests that patch an echo provider of their own onto ``_PATCH_TARGETS``.
+    """
+    monkeypatch.setattr("src.core.request_core.languages_differ",
+                        lambda *_args, **_kwargs: False, raising=True)

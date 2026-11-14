@@ -26,7 +26,7 @@ from src.core.llm.providers.mistral import MistralProvider
         (DeepSeekProvider, "DeepSeek"),
     ],
 )
-async def test_invalid_api_key_is_not_retried(monkeypatch, capsys, provider_class, label):
+async def test_invalid_api_key_is_not_retried(monkeypatch, caplog, provider_class, label):
     provider = provider_class(api_key="sk-xxxxxxxx")
     unauthorized = httpx.Response(401, request=httpx.Request("POST", provider.api_endpoint))
     client = MagicMock()
@@ -37,9 +37,10 @@ async def test_invalid_api_key_is_not_retried(monkeypatch, capsys, provider_clas
 
     result = await provider.generate("Hello")
 
-    output = capsys.readouterr().out
+    output = caplog.text
     assert result is None
     assert client.post.await_count == 1
     sleep.assert_not_awaited()
-    assert f"{label}: Invalid API key" in output
-    assert "Unknown Error" not in output
+    assert f"[{label}] HTTP 401" in output
+    assert "invalid API key" in output
+    assert "unexpected error" not in output

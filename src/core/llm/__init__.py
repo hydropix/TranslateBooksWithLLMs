@@ -4,12 +4,13 @@ LLM Provider System
 This package provides a modular system for interacting with various LLM providers.
 
 Public API:
-    - Exceptions: ContextOverflowError, RepetitionLoopError
-    - Base classes: LLMProvider, LLMResponse
+    - Exceptions: ContextOverflowError, RepetitionLoopError, RateLimitError, LLMClientConfigError
+    - Base classes: LLMProvider (owns the shared request loop), LLMRequest, LLMResponse
+    - Configuration: ProviderConfig, RetryPolicy
     - Thinking system: ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message, detect_repetition_loop
     - Utilities: ContextDetector, TranslationExtractor
     - Providers: OllamaProvider, OpenAICompatibleProvider, OpenRouterProvider, GeminiProvider
-    - Factory: create_llm_provider
+    - Factory: create_llm_provider (the only construction path)
 
 Example usage:
     >>> from src.core.llm import create_llm_provider, OllamaProvider
@@ -18,10 +19,14 @@ Example usage:
 """
 
 # Exceptions
-from .exceptions import ContextOverflowError, RepetitionLoopError, RateLimitError
+from .exceptions import (
+    ContextOverflowError, RepetitionLoopError, RateLimitError, LLMClientConfigError,
+)
 
-# Base classes
-from .base import LLMProvider, LLMResponse
+# Base classes, configuration and policy
+from .base import LLMProvider, LLMRequest, LLMResponse
+from .policy import RetryPolicy, begin_job_retry_policy, current_retry_policy, end_job_retry_policy
+from .provider_config import ProviderConfig
 
 # Thinking system
 from .thinking.behavior import ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message
@@ -35,11 +40,13 @@ from .utils.extraction import TranslationExtractor
 # Providers
 from .providers.ollama import OllamaProvider
 from .providers.openai import OpenAICompatibleProvider
+from .providers.openai_chat import OpenAIChatProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.gemini import GeminiProvider
 from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
+from .providers.litellm import LiteLLMProvider
 
 # Factory
 from .factory import create_llm_provider
@@ -49,10 +56,17 @@ __all__ = [
     'ContextOverflowError',
     'RepetitionLoopError',
     'RateLimitError',
+    'LLMClientConfigError',
 
     # Base
     'LLMProvider',
+    'LLMRequest',
     'LLMResponse',
+    'RetryPolicy',
+    'begin_job_retry_policy',
+    'current_retry_policy',
+    'end_job_retry_policy',
+    'ProviderConfig',
 
     # Thinking
     'ThinkingBehavior',
@@ -69,6 +83,8 @@ __all__ = [
     # Providers
     'OllamaProvider',
     'OpenAICompatibleProvider',
+    'OpenAIChatProvider',
+    'LiteLLMProvider',
     'OpenRouterProvider',
     'GeminiProvider',
     'MistralProvider',

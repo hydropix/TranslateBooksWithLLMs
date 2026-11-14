@@ -5,7 +5,6 @@ Tests for SrtAdapter.
 import pytest
 import tempfile
 from pathlib import Path
-import asyncio
 
 from src.core.adapters import SrtAdapter, TranslationUnit
 
@@ -122,7 +121,7 @@ class TestSrtAdapter:
         )
 
         await adapter.prepare_for_translation()
-        units = adapter.get_translation_units()
+        adapter.get_translation_units()
 
         # Simulate translation of first block
         # Original: "[0]Hello, this is the first subtitle.\n[1]This is the second subtitle."

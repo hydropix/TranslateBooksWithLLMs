@@ -305,30 +305,179 @@ async def _request_metadata_translation(
     the pipeline's main translation path (`src/core/translator.py`), the client
     was built for `model_name` already, which is why that argument is only used
     for logging.
-    """
-    previous_context: Optional[int] = None
-    try:
-        current = getattr(llm_client, 'context_window', None)
-        if isinstance(current, int):
-            # One CJK character is worth roughly one token, so character count
-            # is a safe upper bound for what this prompt needs.
-            needed = min(
-                len(system_prompt) + len(user_prompt) + _CONTEXT_HEADROOM_TOKENS,
-                _MAX_CONTEXT_TOKENS,
-            )
-            if needed > current:
-                previous_context = current
-                llm_client.context_window = needed
 
-        response = await llm_client.generate(user_prompt, system_prompt=system_prompt)
-    finally:
-        if previous_context is not None:
-            llm_client.context_window = previous_context
+    When the prompt needs a larger window than the client's own, the larger
+    window is passed for this request only (``generate(context_window=...)``,
+    the same per-request path the chunk requests use); the shared client is
+    never mutated.
+    """
+    kwargs = {'system_prompt': system_prompt}
+    current = getattr(llm_client, 'context_window', None)
+    if isinstance(current, int):
+        # One CJK character is worth roughly one token, so character count
+        # is a safe upper bound for what this prompt needs.
+        needed = min(
+            len(system_prompt) + len(user_prompt) + _CONTEXT_HEADROOM_TOKENS,
+            _MAX_CONTEXT_TOKENS,
+        )
+        if needed > current:
+            kwargs['context_window'] = needed
+
+    response = await llm_client.generate(user_prompt, **kwargs)
 
     if response is None or not getattr(response, 'content', None):
         return None
     extracted = llm_client.extract_translation(response.content)
     return extracted if extracted else response.content
+
+
+def _requested_fields(
+    metadata: etree._Element,
+    result: dict,
+    log_callback: Optional[Callable],
+) -> Tuple[Any, Any, Optional[str], Optional[str], str]:
+    """Locate the fields to translate and decide which ones are requested.
+
+    Returns ``(title_el, desc_el, requested_title, requested_description,
+    signature)``. A description over the size limit is dropped from the request
+    (and the skip recorded) while the title stays requested.
+    """
+    title_el = metadata.find('.//dc:title', namespaces=NAMESPACES)
+    desc_el = metadata.find('.//dc:description', namespaces=NAMESPACES)
+    # dc:creator is deliberately absent from this function: author names are
+    # never translated nor transliterated.
+
+    source_title = (title_el.text or "").strip() if title_el is not None else ""
+    raw_description = desc_el.text or "" if desc_el is not None else ""
+    description_body, signature = _split_signature(raw_description)
+
+    requested_title: Optional[str] = source_title or None
+    requested_description: Optional[str] = description_body.strip() or None
+
+    if requested_description and len(requested_description) > DESCRIPTION_MAX_CHARS:
+        _set_reason(result, 'description_too_long')
+        _log(log_callback, "epub_metadata_description_skipped",
+             f"ℹ️ Book description left untranslated: "
+             f"{len(requested_description)} characters exceeds the "
+             f"{DESCRIPTION_MAX_CHARS}-character limit")
+        requested_description = None
+
+    return title_el, desc_el, requested_title, requested_description, signature
+
+
+async def _fetch_payload(
+    llm_client: Any,
+    requested_title: Optional[str],
+    requested_description: Optional[str],
+    source_language: str,
+    target_language: str,
+    result: dict,
+    log_callback: Optional[Callable],
+) -> Optional[str]:
+    """Run the single LLM request; on failure record the reason and return None."""
+    system_prompt, user_prompt = build_metadata_prompt(
+        requested_title, requested_description, source_language, target_language)
+
+    try:
+        payload = await _request_metadata_translation(
+            llm_client, system_prompt, user_prompt)
+    except Exception as exc:
+        _set_reason(result, 'llm_error')
+        _log(log_callback, "epub_metadata_translation_failed",
+             f"⚠️ Packaging metadata left in {source_language}, the request "
+             f"failed: {exc}")
+        return None
+
+    if payload is None:
+        _set_reason(result, 'llm_no_response')
+        _log(log_callback, "epub_metadata_translation_failed",
+             f"⚠️ Packaging metadata left in {source_language}: the model "
+             f"returned no usable answer")
+        return None
+
+    return payload
+
+
+def _apply_title(payload: str, title_el: Any, requested_title: str,
+                 source_language: str, target_language: str, result: dict,
+                 log_callback: Optional[Callable]) -> bool:
+    """Write the accepted title into `title_el`. Returns True when it changed."""
+    candidate = _extract_field(payload, _TITLE_TAG_IN, _TITLE_TAG_OUT)
+    reason = _rejection_reason(candidate, requested_title, target_language,
+                               single_line=True)
+    if reason is None:
+        title_el.text = candidate.strip()
+        result['title_translated'] = True
+        return True
+    _set_reason(result, 'title_rejected')
+    _log(log_callback, "epub_metadata_title_rejected",
+         f"⚠️ Book title kept in {source_language}: {reason}")
+    return False
+
+
+def _apply_description(payload: str, desc_el: Any, requested_description: str,
+                       signature: str, source_language: str,
+                       target_language: str, result: dict,
+                       log_callback: Optional[Callable]) -> bool:
+    """Write the accepted description into `desc_el`. Returns True when it changed."""
+    candidate = _extract_field(payload, _DESC_TAG_IN, _DESC_TAG_OUT)
+    reason = _rejection_reason(candidate, requested_description,
+                               target_language, single_line=False)
+    if reason is None:
+        # The attribution signature was stripped before the request and is
+        # re-appended verbatim here, so it survives exactly once.
+        desc_el.text = candidate.strip() + signature
+        result['description_translated'] = True
+        return True
+    _set_reason(result, 'description_rejected')
+    _log(log_callback, "epub_metadata_description_rejected",
+         f"⚠️ Book description kept in {source_language}: {reason}")
+    return False
+
+
+def _write_opf(opf_tree: etree._ElementTree, opf_path: str,
+               source_language: str, result: dict,
+               log_callback: Optional[Callable]) -> bool:
+    """Persist the edited OPF. Returns False (and resets the result) on failure."""
+    # This pass owns its OPF write: it runs after `_update_epub_metadata`,
+    # which performs the pipeline's single OPF write, so these edits would
+    # otherwise be dropped. See the ordering note at the call site.
+    try:
+        opf_tree.write(opf_path, encoding='utf-8', xml_declaration=True,
+                       pretty_print=True)
+    except Exception as exc:
+        # Nothing reached the disk, so nothing is reported as translated and
+        # nothing is propagated to the NCX: the book keeps its original
+        # packaging metadata, consistently across all its files.
+        _set_reason(result, 'opf_write_failed')
+        _log(log_callback, "epub_metadata_opf_write_failed",
+             f"⚠️ Packaging metadata left in {source_language}, the OPF "
+             f"could not be written: {exc}")
+        result['title_translated'] = False
+        result['description_translated'] = False
+        return False
+    return True
+
+
+def _propagate_title_to_ncx(opf_dir: str, translated_title: str, result: dict,
+                            log_callback: Optional[Callable]) -> None:
+    """Copy the accepted title into every NCX `docTitle/text`."""
+    for ncx_path in _iter_ncx_paths(opf_dir):
+        if _update_ncx_doctitle(ncx_path, translated_title, log_callback):
+            result['ncx_doctitle_updated'] += 1
+
+
+def _log_localized_summary(result: dict, log_callback: Optional[Callable]) -> None:
+    """Log which packaging fields ended up localized."""
+    localized = []
+    if result['title_translated']:
+        localized.append("title")
+    if result['description_translated']:
+        localized.append("description")
+    message = f"🏷️ Packaging metadata localized: {', '.join(localized)}"
+    if result['ncx_doctitle_updated']:
+        message += f", {result['ncx_doctitle_updated']} NCX title(s)"
+    _log(log_callback, "epub_metadata_translated", message)
 
 
 # ---------------------------------------------------------------------------
@@ -376,25 +525,8 @@ async def translate_opf_metadata(
         _set_reason(result, 'no_translatable_metadata')
         return result
 
-    title_el = metadata.find('.//dc:title', namespaces=NAMESPACES)
-    desc_el = metadata.find('.//dc:description', namespaces=NAMESPACES)
-    # dc:creator is deliberately absent from this function: author names are
-    # never translated nor transliterated.
-
-    source_title = (title_el.text or "").strip() if title_el is not None else ""
-    raw_description = desc_el.text or "" if desc_el is not None else ""
-    description_body, signature = _split_signature(raw_description)
-
-    requested_title: Optional[str] = source_title or None
-    requested_description: Optional[str] = description_body.strip() or None
-
-    if requested_description and len(requested_description) > DESCRIPTION_MAX_CHARS:
-        _set_reason(result, 'description_too_long')
-        _log(log_callback, "epub_metadata_description_skipped",
-             f"ℹ️ Book description left untranslated: "
-             f"{len(requested_description)} characters exceeds the "
-             f"{DESCRIPTION_MAX_CHARS}-character limit")
-        requested_description = None
+    (title_el, desc_el, requested_title, requested_description,
+     signature) = _requested_fields(metadata, result, log_callback)
 
     if requested_title is None and requested_description is None:
         _set_reason(result, 'no_translatable_metadata')
@@ -405,92 +537,33 @@ async def translate_opf_metadata(
     _log(log_callback, "epub_metadata_translation_start",
          f"🏷️ Localizing packaging metadata with {model_name}...")
 
-    system_prompt, user_prompt = build_metadata_prompt(
-        requested_title, requested_description, source_language, target_language)
-
-    try:
-        payload = await _request_metadata_translation(
-            llm_client, system_prompt, user_prompt)
-    except Exception as exc:
-        _set_reason(result, 'llm_error')
-        _log(log_callback, "epub_metadata_translation_failed",
-             f"⚠️ Packaging metadata left in {source_language}, the request "
-             f"failed: {exc}")
-        return result
-
+    payload = await _fetch_payload(
+        llm_client, requested_title, requested_description,
+        source_language, target_language, result, log_callback)
     if payload is None:
-        _set_reason(result, 'llm_no_response')
-        _log(log_callback, "epub_metadata_translation_failed",
-             f"⚠️ Packaging metadata left in {source_language}: the model "
-             f"returned no usable answer")
         return result
 
     changed = False
-
     if requested_title is not None:
-        candidate = _extract_field(payload, _TITLE_TAG_IN, _TITLE_TAG_OUT)
-        reason = _rejection_reason(candidate, requested_title, target_language,
-                                   single_line=True)
-        if reason is None:
-            title_el.text = candidate.strip()
-            result['title_translated'] = True
-            changed = True
-        else:
-            _set_reason(result, 'title_rejected')
-            _log(log_callback, "epub_metadata_title_rejected",
-                 f"⚠️ Book title kept in {source_language}: {reason}")
-
+        changed |= _apply_title(payload, title_el, requested_title,
+                                source_language, target_language, result,
+                                log_callback)
     if requested_description is not None:
-        candidate = _extract_field(payload, _DESC_TAG_IN, _DESC_TAG_OUT)
-        reason = _rejection_reason(candidate, requested_description,
-                                   target_language, single_line=False)
-        if reason is None:
-            # The attribution signature was stripped before the request and is
-            # re-appended verbatim here, so it survives exactly once.
-            desc_el.text = candidate.strip() + signature
-            result['description_translated'] = True
-            changed = True
-        else:
-            _set_reason(result, 'description_rejected')
-            _log(log_callback, "epub_metadata_description_rejected",
-                 f"⚠️ Book description kept in {source_language}: {reason}")
+        changed |= _apply_description(payload, desc_el, requested_description,
+                                      signature, source_language,
+                                      target_language, result, log_callback)
 
-    if changed:
-        # This pass owns its OPF write: it runs after `_update_epub_metadata`,
-        # which performs the pipeline's single OPF write, so these edits would
-        # otherwise be dropped. See the ordering note at the call site.
-        try:
-            opf_tree.write(opf_path, encoding='utf-8', xml_declaration=True,
-                           pretty_print=True)
-        except Exception as exc:
-            # Nothing reached the disk, so nothing is reported as translated and
-            # nothing is propagated to the NCX: the book keeps its original
-            # packaging metadata, consistently across all its files.
-            _set_reason(result, 'opf_write_failed')
-            _log(log_callback, "epub_metadata_opf_write_failed",
-                 f"⚠️ Packaging metadata left in {source_language}, the OPF "
-                 f"could not be written: {exc}")
-            result['title_translated'] = False
-            result['description_translated'] = False
-            return result
+    if changed and not _write_opf(opf_tree, opf_path, source_language, result,
+                                  log_callback):
+        return result
 
     if result['title_translated']:
         # Never invent an NCX title: propagation happens only with an accepted
         # translation of a title the book already had.
-        translated_title = title_el.text or ""
-        for ncx_path in _iter_ncx_paths(opf_dir):
-            if _update_ncx_doctitle(ncx_path, translated_title, log_callback):
-                result['ncx_doctitle_updated'] += 1
+        _propagate_title_to_ncx(opf_dir, title_el.text or "", result,
+                                log_callback)
 
     if changed:
-        localized = []
-        if result['title_translated']:
-            localized.append("title")
-        if result['description_translated']:
-            localized.append("description")
-        message = f"🏷️ Packaging metadata localized: {', '.join(localized)}"
-        if result['ncx_doctitle_updated']:
-            message += f", {result['ncx_doctitle_updated']} NCX title(s)"
-        _log(log_callback, "epub_metadata_translated", message)
+        _log_localized_summary(result, log_callback)
 
     return result

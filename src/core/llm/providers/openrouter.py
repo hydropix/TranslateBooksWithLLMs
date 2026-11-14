@@ -1,56 +1,42 @@
 """
 OpenRouter provider implementation.
 
-This module provides the OpenRouterProvider class for interacting with
-OpenRouter's API, which provides access to 200+ models.
+OpenRouter gives unified access to 200+ models through the OpenAI
+chat-completions protocol (shared implementation in ``openai_chat``). This
+module only configures it:
 
-Features:
-    - Access to 200+ models (Claude, GPT-4, Llama, Mistral, etc.)
-    - Built-in cost tracking
-    - Model validation
-    - Automatic context size detection
-    - Reasoning disabled by default (translation-friendly), per model metadata
-    - Account presets (@preset/<slug>) listed with the models. Presets hold
+    - endpoints, attribution headers and the model / preset listings;
+    - billed cost read from ``usage.cost`` (flat-rate estimate when absent);
+    - reasoning disabled by default (translation-friendly), per the model
+      metadata of the catalog; mandatory-reasoning models get their lowest
+      effort instead;
+    - account presets (@preset/<slug>) listed with the models. Presets hold
       settings TBL has no options for (provider routing, model fallbacks),
-      edited on openrouter.ai
+      edited on openrouter.ai, so no sampling or reasoning override is sent
+      for them.
 """
 
-from typing import List, Optional, Dict, Any, Callable, Union
-import httpx
-import asyncio
-import json
+import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.config import (
-    REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, OPENROUTER_DISABLE_THINKING
-)
-from ..base import LLMProvider, LLMResponse, is_output_limit_finish
-from ..exceptions import ContextOverflowError
-from ..cost_tracker import CostTracker, get_current_cost_tracker
-from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from src.config import OPENROUTER_DISABLE_THINKING
+
+from ..base import LLMRequest
+from ..catalog import CatalogCache
+from ..policy import RetryPolicy
+from .openai_chat import OpenAIChatProvider
+
+logger = logging.getLogger("llm.openrouter")
 
 
-class OpenRouterProvider(LLMProvider):
+class OpenRouterProvider(OpenAIChatProvider):
     """
     Provider for OpenRouter API.
 
-    OpenRouter provides unified access to multiple LLM providers including:
-        - Anthropic (Claude)
-        - OpenAI (GPT-4, GPT-3.5)
-        - Meta (Llama)
-        - Google (Gemini, PaLM)
-        - Mistral AI
-        - And 200+ more models
-
-    Features:
-        - Automatic model validation
-        - Per-request cost tracking
-        - Session cost accumulation
-        - Context size detection
-
     Configuration:
         endpoint: https://openrouter.ai/api/v1/chat/completions
-        model: Model identifier (e.g., "anthropic/claude-3-opus")
-        api_key: OpenRouter API key
+        model: Model identifier (e.g., "anthropic/claude-3-opus") or "@preset/<slug>"
+        api_key: OpenRouter API key (one key or a comma-separated pool)
 
     Example:
         >>> provider = OpenRouterProvider(
@@ -65,6 +51,12 @@ class OpenRouterProvider(LLMProvider):
     API_URL = "https://openrouter.ai/api/v1/chat/completions"
     MODELS_URL = "https://openrouter.ai/api/v1/models"
     PRESETS_URL = "https://openrouter.ai/api/v1/presets"
+
+    DISPLAY_NAME = "OpenRouter"
+    STATUS_HINTS = {
+        404: "model not found, check https://openrouter.ai/models",
+        402: "insufficient OpenRouter credits",
+    }
 
     # Presets are referenced as a model string: "@preset/<slug>"
     PRESET_PREFIX = "@preset/"
@@ -106,10 +98,11 @@ class OpenRouterProvider(LLMProvider):
     # Effort levels ordered least-thinking first.
     REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
-    # Model catalog entries, fetched once per process: {model_id: model_dict}
-    _model_catalog: Optional[Dict[str, Dict[str, Any]]] = None
-    _model_catalog_failed = False
-    _model_catalog_lock: Optional[asyncio.Lock] = None
+    # Model catalog entries, fetched once per process: {model_id: model_dict}.
+    # A failed fetch is retried after CATALOG_RETRY_SECONDS. The cache is safe
+    # to share across the per-job event loops (see CatalogCache).
+    CATALOG_RETRY_SECONDS = 300
+    _catalog = CatalogCache("OpenRouter", retry_seconds=CATALOG_RETRY_SECONDS)
     # Resolved override per model: {model_id: reasoning dict, or {} for none}
     _reasoning_overrides: Dict[str, Dict[str, Any]] = {}
 
@@ -117,7 +110,11 @@ class OpenRouterProvider(LLMProvider):
         self,
         api_key: Union[str, List[str]],
         model: str = "anthropic/claude-sonnet-4",
-        disable_thinking: bool = OPENROUTER_DISABLE_THINKING
+        disable_thinking: bool = OPENROUTER_DISABLE_THINKING,
+        *,
+        retry_policy: Optional[RetryPolicy] = None,
+        temperature: Optional[float] = None,
+        log_callback=None,
     ):
         """
         Initialize the OpenRouter provider.
@@ -130,51 +127,33 @@ class OpenRouterProvider(LLMProvider):
                 as output: DeepSeek V4.1 Flash was seen producing 4.7k-31k
                 output tokens for ~3k-token translation chunks with it on.
         """
-        super().__init__(model, api_keys=api_key, provider_name="openrouter")
+        super().__init__(
+            api_key=api_key, model=model, provider_name="openrouter",
+            retry_policy=retry_policy, temperature=temperature, log_callback=log_callback,
+        )
         self.disable_thinking = disable_thinking
         self._warned_reasoning_tokens = False
-        # Used when no per-job tracker is active (direct use outside a job).
-        self._cost_tracker = CostTracker()
 
+    # ------------------------------------------------------- reasoning
     async def _load_model_catalog(self) -> Optional[Dict[str, Dict[str, Any]]]:
         """
-        Fetch OpenRouter's model catalog (reasoning metadata included).
+        OpenRouter's model catalog (reasoning metadata included).
 
-        Fetched once per process and cached class-side. Returns None when the
-        catalog is unreachable, which means "unknown" and not "no models".
+        Fetched once per process. Returns None when the catalog is
+        unreachable, which means "unknown" and not "no models"; the fetch is
+        retried once CATALOG_RETRY_SECONDS have passed.
         """
-        if OpenRouterProvider._model_catalog is not None:
-            return OpenRouterProvider._model_catalog
-        if OpenRouterProvider._model_catalog_failed:
-            return None
+        async def fetch():
+            client = await self._get_client()
+            response = await client.get(
+                self.MODELS_URL,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=30
+            )
+            response.raise_for_status()
+            return {m["id"]: m for m in response.json().get("data", []) if m.get("id")}
 
-        # Safe to create here without a double-check race: no await between the
-        # test and the assignment, so the event loop cannot interleave.
-        if OpenRouterProvider._model_catalog_lock is None:
-            OpenRouterProvider._model_catalog_lock = asyncio.Lock()
-
-        async with OpenRouterProvider._model_catalog_lock:
-            if OpenRouterProvider._model_catalog is not None:
-                return OpenRouterProvider._model_catalog
-            if OpenRouterProvider._model_catalog_failed:
-                return None
-            try:
-                client = await self._get_client()
-                response = await client.get(
-                    self.MODELS_URL,
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    timeout=30
-                )
-                response.raise_for_status()
-                OpenRouterProvider._model_catalog = {
-                    m["id"]: m for m in response.json().get("data", []) if m.get("id")
-                }
-                return OpenRouterProvider._model_catalog
-            except Exception as e:
-                print(f"[OpenRouter] WARN: could not read the model catalog ({e}); "
-                      f"reasoning stays at the model default")
-                OpenRouterProvider._model_catalog_failed = True
-                return None
+        return await type(self)._catalog.get(fetch)
 
     def _pick_reasoning_override(self, model_info: Dict[str, Any]) -> Dict[str, Any]:
         """Map a model's catalog entry to the `reasoning` value translation wants."""
@@ -193,16 +172,17 @@ class OpenRouterProvider(LLMProvider):
                 return {"effort": effort}
         return {}
 
-    async def _get_reasoning_override(self) -> Dict[str, Any]:
-        """Return the `reasoning` request value for this model ({} = send none)."""
+    async def _get_reasoning_override(self, model: Optional[str] = None) -> Dict[str, Any]:
+        """Return the `reasoning` request value for the model ({} = send none)."""
+        model = model or self.model
         if not self.disable_thinking:
             return {}
 
         # A preset carries its own model and reasoning config; don't override it.
-        if self.model.startswith(self.PRESET_PREFIX):
+        if model.startswith(self.PRESET_PREFIX):
             return {}
 
-        cached = OpenRouterProvider._reasoning_overrides.get(self.model)
+        cached = OpenRouterProvider._reasoning_overrides.get(model)
         if cached is not None:
             return dict(cached)
 
@@ -210,48 +190,42 @@ class OpenRouterProvider(LLMProvider):
         if catalog is None:
             return {}
 
-        model_info = catalog.get(self.model)
+        model_info = catalog.get(model)
         if model_info is None:
-            print(f"[OpenRouter] WARN: '{self.model}' is not in the model catalog; "
-                  f"reasoning stays at the model default")
+            logger.warning(f"[OpenRouter] '{model}' is not in the model catalog; "
+                           f"reasoning stays at the model default")
             override = {}
         else:
             override = self._pick_reasoning_override(model_info)
             if (model_info.get("reasoning") or {}).get("mandatory"):
-                print(f"[OpenRouter] WARN: '{self.model}' always reasons and cannot "
-                      f"turn it off; reasoning tokens are billed as output "
-                      f"(requested: {override or 'model default'})")
+                logger.warning(f"[OpenRouter] '{model}' always reasons and cannot "
+                               f"turn it off; reasoning tokens are billed as output "
+                               f"(requested: {override or 'model default'})")
             elif override:
-                print(f"[OpenRouter] {self.model}: reasoning disabled")
+                logger.info(f"[OpenRouter] {model}: reasoning disabled")
 
-        OpenRouterProvider._reasoning_overrides[self.model] = override
+        OpenRouterProvider._reasoning_overrides[model] = override
         return dict(override)
 
-    def get_session_cost(self) -> tuple:
-        """
-        Get this provider instance's cost and token usage.
+    # ------------------------------------------------- chat-completions hooks
+    def _headers(self, request: LLMRequest) -> Dict[str, str]:
+        headers = super()._headers(request)
+        headers["HTTP-Referer"] = "https://github.com/hydropix/TranslateBookWithLLM"
+        headers["X-Title"] = "TranslateBookWithLLM"
+        return headers
 
-        Returns:
-            Tuple of (total_cost_usd, token_counts_dict)
-        """
-        return self._cost_tracker.snapshot()
+    def _response_context_limit(self, request: LLMRequest) -> int:
+        return 0  # OpenRouter manages context internally
 
-    def reset_session_cost(self) -> None:
-        """Reset this provider instance's cost tracking."""
-        self._cost_tracker.reset()
-
-    def set_cost_callback(self, callback: Optional[Callable[[Dict[str, Any]], None]]) -> None:
-        """
-        Set a callback receiving cost updates for this instance after each call.
-
-        Jobs should use ``begin_job_cost_tracking`` instead, which covers every
-        provider instance created during the job.
-
-        Callback payload: request_cost, request_cost_estimated, session_cost,
-        cost_is_estimated, prompt_tokens, completion_tokens,
-        total_prompt_tokens, total_completion_tokens.
-        """
-        self._cost_tracker.callback = callback
+    async def _optional_params(self, request: LLMRequest) -> Dict[str, Any]:
+        # A preset carries its own sampling and reasoning settings.
+        if request.model.startswith(self.PRESET_PREFIX):
+            return {}
+        params = await super()._optional_params(request)
+        reasoning = await self._get_reasoning_override(request.model)
+        if reasoning:
+            params["reasoning"] = reasoning
+        return params
 
     @staticmethod
     def _extract_cost(usage: Dict[str, Any]) -> Optional[float]:
@@ -264,6 +238,29 @@ class OpenRouterProvider(LLMProvider):
         except (TypeError, ValueError):
             return None
 
+    def _parse_cost(self, usage: Dict[str, Any], prompt_tokens: int,
+                    completion_tokens: int) -> Tuple[Optional[float], bool]:
+        cost = self._extract_cost(usage)
+        if cost is not None:
+            return cost, False
+        # usage.cost is returned automatically (the old usage.include request
+        # flag is deprecated); fall back to flat rates if it is absent.
+        return (
+            prompt_tokens * self.FALLBACK_PROMPT_RATE_PER_M / 1_000_000
+            + completion_tokens * self.FALLBACK_COMPLETION_RATE_PER_M / 1_000_000
+        ), True
+
+    def _inspect_usage(self, usage: Dict[str, Any], request: LLMRequest) -> None:
+        details = usage.get("completion_tokens_details") or {}
+        reasoning_tokens = details.get("reasoning_tokens") or 0
+        sent = (request.state.get("optional") or {}).get("reasoning") or {}
+        if reasoning_tokens and sent.get("enabled") is False and not self._warned_reasoning_tokens:
+            self._warned_reasoning_tokens = True
+            logger.warning(f"[OpenRouter] '{request.model}' still produced {reasoning_tokens} "
+                           f"reasoning tokens with reasoning disabled; the upstream provider "
+                           f"may ignore the setting")
+
+    # ---------------------------------------------------------- listings
     async def get_available_models(self, text_only: bool = True) -> list:
         """
         Fetch available OpenRouter models from API.
@@ -340,7 +337,7 @@ class OpenRouterProvider(LLMProvider):
             return await self.get_presets() + filtered_models
 
         except Exception as e:
-            print(f"[OpenRouter] WARN: Failed to fetch models: {e}")
+            logger.warning(f"[OpenRouter] Failed to fetch models: {e}")
             return self._get_fallback_models()
 
     async def get_presets(self) -> list:
@@ -392,7 +389,7 @@ class OpenRouterProvider(LLMProvider):
                     break
 
         except Exception as e:
-            print(f"[OpenRouter] WARN: Failed to fetch presets: {e}")
+            logger.warning(f"[OpenRouter] Failed to fetch presets: {e}")
 
         presets.sort(key=lambda p: p["id"])
         return presets
@@ -401,184 +398,3 @@ class OpenRouterProvider(LLMProvider):
         """Return fallback models list when API fetch fails."""
         return [{"id": m, "name": m, "pricing": {"prompt": 0, "completion": 0}}
                 for m in self.FALLBACK_MODELS]
-
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
-                      system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
-        """
-        Generate text using OpenRouter API with cost tracking.
-
-        Args:
-            prompt: The user prompt (content to translate)
-            timeout: Request timeout in seconds
-            system_prompt: Optional system prompt (role/instructions)
-
-        Returns:
-            LLMResponse with content and token usage info, or None if failed
-
-        Raises:
-            ContextOverflowError: If input exceeds model's context window
-        """
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-        }
-        reasoning_override = await self._get_reasoning_override()
-        if reasoning_override:
-            payload["reasoning"] = reasoning_override
-
-        client = await self._get_client()
-        # 429s have their own budget (rate_limit_events): rotating to a spare
-        # key must not consume a transient-retry attempt (issue #217).
-        attempt = 0
-        rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
-            headers = {
-                "Authorization": f"Bearer {current_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/hydropix/TranslateBookWithLLM",
-                "X-Title": "TranslateBookWithLLM",
-            }
-            try:
-                response = await client.post(
-                    self.API_URL,
-                    headers=headers,
-                    json=payload,
-                    timeout=timeout
-                )
-                response.raise_for_status()
-
-                result = response.json()
-
-                if "choices" not in result or len(result["choices"]) == 0:
-                    print(f"[OpenRouter] WARN: Unexpected response format: {result}")
-                    return None
-
-                # NOTE: a present-but-null "content" makes .get(..., "") return None,
-                # so coalesce with `or ""` to guarantee a string downstream.
-                response_text = result["choices"][0].get("message", {}).get("content") or ""
-                finish_reason = result["choices"][0].get("finish_reason")
-
-                usage = result.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-                reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
-
-                if (reasoning_tokens and reasoning_override.get("enabled") is False
-                        and not self._warned_reasoning_tokens):
-                    self._warned_reasoning_tokens = True
-                    print(f"[OpenRouter] WARN: '{self.model}' still produced "
-                          f"{reasoning_tokens} reasoning tokens with reasoning disabled; "
-                          f"the upstream provider may ignore the setting")
-
-                if not response_text.strip():
-                    print(f"[OpenRouter] WARN: Empty response from model '{self.model}' "
-                          f"({prompt_tokens}+{completion_tokens} tokens). The model likely "
-                          f"refused or filtered this chunk (sensitive/policy-flagged content "
-                          f"or provider-side moderation). Try a different model.")
-
-                cost = self._extract_cost(usage)
-                estimated = cost is None
-                if estimated:
-                    # usage.cost is returned automatically (the old usage.include
-                    # request flag is deprecated); fall back to flat rates if absent
-                    cost = (
-                        prompt_tokens * self.FALLBACK_PROMPT_RATE_PER_M / 1_000_000
-                        + completion_tokens * self.FALLBACK_COMPLETION_RATE_PER_M / 1_000_000
-                    )
-
-                # Instance totals always; the job tracker (if any) is per job.
-                self._cost_tracker.record(cost, prompt_tokens, completion_tokens, estimated)
-                job_tracker = get_current_cost_tracker()
-                if job_tracker is not None:
-                    job_tracker.record(cost, prompt_tokens, completion_tokens, estimated)
-                session_cost = (job_tracker or self._cost_tracker).snapshot()[0]
-
-                reasoning_note = f" ({reasoning_tokens} reasoning)" if reasoning_tokens else ""
-                cost_label = "Estimated cost (usage.cost missing)" if estimated else "Cost"
-                print(f"[OpenRouter] {prompt_tokens}+{completion_tokens} tokens{reasoning_note} | "
-                      f"{cost_label}: ${cost:.6f} (session: ${session_cost:.4f})")
-
-                return LLMResponse(
-                    content=response_text,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    context_used=prompt_tokens + completion_tokens,
-                    context_limit=0,  # OpenRouter manages context internally
-                    was_truncated=False,
-                    finish_reason=finish_reason,
-                    output_truncated=is_output_limit_finish(finish_reason)
-                )
-
-            except httpx.TimeoutException as e:
-                print(f"OpenRouter API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-            except httpx.HTTPStatusError as e:
-                error_body = ""
-                error_message = str(e)
-                if hasattr(e, 'response') and hasattr(e.response, 'text'):
-                    error_body = e.response.text[:500]
-                    error_message = f"{e} - {error_body}"
-
-                if e.response.status_code == 429:
-                    rate_limit_events += 1
-                    await handle_rate_limit(
-                        self._key_pool, current_key, e.response.headers,
-                        rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
-                    )
-                    continue
-
-                if e.response.status_code == 404:
-                    print(f"[OpenRouter] ERROR: Model '{self.model}' not found!")
-                    print(f"   Check available models at https://openrouter.ai/models")
-                    print(f"   Response: {error_body}")
-                elif e.response.status_code == 401:
-                    print(f"[OpenRouter] ERROR: Invalid API key!")
-                elif e.response.status_code == 402:
-                    print(f"[OpenRouter] ERROR: Insufficient credits!")
-                else:
-                    print(f"OpenRouter API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                    print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
-
-                context_overflow_keywords = ["context_length", "maximum context", "token limit",
-                                              "too many tokens", "reduce the length", "max_tokens",
-                                              "context window", "exceeds"]
-                if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
-                    raise ContextOverflowError(f"OpenRouter context overflow: {error_message}")
-
-                # Client errors (404 model, 401 key, 402 credits, 400) won't
-                # recover on retry — fail fast instead of retrying 3x.
-                if not is_retryable_http_status(e.response.status_code):
-                    return None
-
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-            except json.JSONDecodeError as e:
-                print(f"OpenRouter API JSON Decode Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-            except Exception as e:
-                print(f"OpenRouter API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
-                attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
-                    await asyncio.sleep(2)
-                    continue
-                return None
-
-        return None

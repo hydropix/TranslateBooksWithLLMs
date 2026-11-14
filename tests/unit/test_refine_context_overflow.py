@@ -11,10 +11,12 @@ from pathlib import Path
 
 import pytest
 
+from tests.job_helpers import make_job
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.context_optimizer import AdaptiveContextManager, REFINEMENT_MIN_CONTEXT
-from src.core.epub.xhtml_translator import _refine_epub_chunks
+from src.core.epub.chunk_refinement import refine_chunks
 from src.core.llm import ContextOverflowError, RepetitionLoopError
 from src.core.refine import client_setup
 
@@ -37,8 +39,9 @@ class _OverflowOnceClient:
         self.context_window = context_window
         self.calls = []  # context_window seen by each request
 
-    async def make_request(self, prompt, model, system_prompt=None):
-        self.calls.append(self.context_window)
+    async def generate(self, prompt, system_prompt=None, **kwargs):
+        # The context size travels with each request (the provider is never mutated).
+        self.calls.append(kwargs.get("context_window", self.context_window))
         if len(self.calls) == 1:
             raise self.error
         return _FakeResponse("<TRANSLATION>Refined text.</TRANSLATION>")
@@ -52,16 +55,18 @@ def _chunks():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [
-    ContextOverflowError("overflow"),
-    RepetitionLoopError("Context overflow detected during streaming."),
+@pytest.mark.parametrize("error, grown_context", [
+    (ContextOverflowError("overflow"), 4096),
+    # A repetition loop grows the window two steps, as in every pass (shared
+    # request core).
+    (RepetitionLoopError("Context overflow detected during streaming."), 6144),
 ])
-async def test_refine_retries_with_larger_context_on_overflow(error):
+async def test_refine_retries_with_larger_context_on_overflow(error, grown_context):
     translated, chunks = _chunks()
     client = _OverflowOnceClient(error)
     manager = AdaptiveContextManager(initial_context=2048, context_step=2048, max_context=8192)
 
-    refined = await _refine_epub_chunks(
+    refined = await refine_chunks(
         translated_chunks=translated,
         chunks=chunks,
         target_language="French",
@@ -74,7 +79,7 @@ async def test_refine_retries_with_larger_context_on_overflow(error):
     )
 
     assert refined == ["Refined text."]
-    assert client.calls == [2048, 4096]
+    assert client.calls == [2048, grown_context]
 
 
 @pytest.mark.asyncio
@@ -82,7 +87,7 @@ async def test_refine_falls_back_to_draft_without_context_manager():
     translated, chunks = _chunks()
     client = _OverflowOnceClient(ContextOverflowError("overflow"))
 
-    refined = await _refine_epub_chunks(
+    refined = await refine_chunks(
         translated_chunks=translated,
         chunks=chunks,
         target_language="French",
@@ -102,18 +107,19 @@ async def test_refine_falls_back_to_draft_without_context_manager():
 def test_refine_client_starts_at_refinement_floor(monkeypatch, auto_adjust, context_window):
     seen = {}
 
-    def fake_create_llm_client(**kwargs):
-        seen["initial_context"] = kwargs["initial_context"]
+    def fake_create_llm_client(job, initial_context, log_callback=None, *, refine=False):
+        seen["initial_context"] = initial_context
+        seen["refine"] = refine
         return object()
 
-    monkeypatch.setattr(client_setup, "_create_llm_client", fake_create_llm_client)
+    monkeypatch.setattr(client_setup, "create_llm_client", fake_create_llm_client)
 
-    client_setup.build_refine_client(
-        model_name="dummy",
-        llm_provider="ollama",
-        cli_api_endpoint="http://localhost:11434/api/generate",
+    client_setup.build_refine_client(make_job(
+        provider="ollama", model="dummy",
+        endpoint="http://localhost:11434/api/generate",
         auto_adjust_context=auto_adjust,
         context_window=context_window,
-    )
+    ))
 
     assert seen["initial_context"] >= REFINEMENT_MIN_CONTEXT
+    assert seen["refine"] is True

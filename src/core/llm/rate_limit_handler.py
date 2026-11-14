@@ -21,11 +21,15 @@ trying every key (issue #217).
 """
 
 import asyncio
+import logging
+import math
 import time
 from typing import Callable, Mapping, Optional
 
 from .exceptions import RateLimitError
 from .key_pool import KeyPool
+
+logger = logging.getLogger("llm.rate_limit")
 
 
 def is_retryable_http_status(status_code: int) -> bool:
@@ -154,7 +158,10 @@ async def handle_rate_limit(
 
     # All keys throttled (or single-key pool) — wait for the earliest recovery.
     remaining = await pool.time_until_next_available()
-    sleep_for = max(int(remaining) if remaining > 0 else wait_time, 1)
+    # Round up: the cooldown is measured from a monotonic timestamp, so a
+    # 7 s Retry-After reads as 6.99... a moment later. Truncating would retry
+    # up to a second before the server allows it.
+    sleep_for = max(math.ceil(remaining) if remaining > 0 else wait_time, 1)
     _log(
         log_callback,
         "llm_rate_limit",
@@ -165,11 +172,11 @@ async def handle_rate_limit(
 
 
 def _log(log_callback: Optional[Callable], event: str, message: str) -> None:
-    """Best-effort logging: callback if provided, else stdout via print."""
+    """Best-effort logging: callback if provided, else the module logger."""
     if log_callback:
         try:
             log_callback(event, message)
             return
         except Exception:
             pass
-    print(message)
+    logger.warning(message)

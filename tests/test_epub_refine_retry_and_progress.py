@@ -2,8 +2,9 @@
 import asyncio
 from types import SimpleNamespace
 
-from src.core.epub import xhtml_translator as xt
+from src.core.epub import chunk_refinement
 from src.core.refine import epub_refiner
+from tests.job_helpers import make_ctx, make_job
 
 FMT = ("[id", "]")
 DRAFT = "[id0]Hello[id1]"
@@ -16,7 +17,7 @@ class FakeClient:
         self.replies = list(replies)
         self.prompts = []
 
-    async def make_request(self, user, model, system_prompt=None):
+    async def generate(self, user, system_prompt=None, **kwargs):
         self.prompts.append(user)
         content = self.replies.pop(0)
         return SimpleNamespace(content=content, prompt_tokens=1, completion_tokens=1,
@@ -27,7 +28,7 @@ class FakeClient:
 
 
 def _refine(client, retries):
-    return asyncio.run(xt._refine_epub_chunks(
+    return asyncio.run(chunk_refinement.refine_chunks(
         [DRAFT], [CHUNK], "French", "m", client, None, FMT, None, None,
         max_refine_retries=retries))
 
@@ -57,19 +58,19 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
     files = {"a.xhtml": 3, "b.xhtml": 2, "c.xhtml": 4}
     monkeypatch.setattr(epub_refiner, "_count_file_chunks",
                         lambda root, _m: int(root.get("n")))
-    monkeypatch.setattr(epub_refiner, "_extract_epub", lambda *a, **k: None)
-    monkeypatch.setattr(epub_refiner, "_parse_epub_manifest", lambda *a, **k: {
+    monkeypatch.setattr(epub_refiner, "extract_epub", lambda *a, **k: None)
+    monkeypatch.setattr(epub_refiner, "parse_epub_manifest", lambda *a, **k: {
         "content_files": list(files), "opf_dir": str(tmp_path)})
-    monkeypatch.setattr(epub_refiner, "_repackage_epub", lambda **k: None)
+    monkeypatch.setattr(epub_refiner, "repackage_epub", lambda **k: None)
     monkeypatch.setattr(epub_refiner, "build_refine_client",
-                        lambda **k: (SimpleNamespace(), None))
+                        lambda *a, **k: (SimpleNamespace(), None))
     for name, n in files.items():
         (tmp_path / name).write_text(f'<html xmlns="http://www.w3.org/1999/xhtml" n="{n}"><body/></html>')
 
-    async def fake_refine_one(doc_root, stats_callback=None, **kw):
-        n = int(doc_root.get("n"))
-        for i in range(1, n + 1):
-            stats_callback({"total_chunks": n, "completed_chunks": i, "failed_chunks": 0})
+    async def fake_refine_one(doc_root, progress=None, **kw):
+        for _ in range(int(doc_root.get("n"))):
+            progress.record()
+            progress.emit()
         return True
 
     monkeypatch.setattr(epub_refiner, "_refine_one_xhtml", fake_refine_one)
@@ -77,7 +78,9 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
     epub = tmp_path / "in.epub"
     epub.write_bytes(b"")
     ok = asyncio.run(epub_refiner.refine_epub_file(
-        str(epub), str(tmp_path / "out.epub"), "French", stats_callback=seen.append))
+        make_job(str(epub), str(tmp_path / "out.epub"), operation="refine",
+                 target_language="French"),
+        make_ctx(stats_callback=seen.append)))
     assert ok
     assert seen[0]["total_chunks"] == 9
     assert all(s["total_chunks"] == 9 and s["completed_chunks"] <= 9 for s in seen)
@@ -89,6 +92,6 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
 
 def test_reminder_lists_placeholders_in_numeric_order():
     tag_map = {f"[id{i}]": "<x>" for i in range(13)}
-    reminder = xt._build_refine_placeholder_reminder(tag_map)
+    reminder = chunk_refinement.build_refine_placeholder_reminder(tag_map)
     expected = ", ".join(f"[id{i}]" for i in range(13))
     assert expected in reminder

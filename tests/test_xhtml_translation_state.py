@@ -3,7 +3,6 @@ Unit tests for XHTMLTranslationState serialization and validation.
 """
 
 import pytest
-from datetime import datetime
 from src.core.epub.xhtml_translation_state import (
     CHUNK_PENDING,
     CHUNK_TOKEN_ALIGNED,
@@ -62,7 +61,6 @@ def create_sample_state() -> XHTMLTranslationState:
         prompt_options={'temperature': 0.7},
         bilingual=False,
         original_chunks=None,
-        protect_technical=True,
         created_at='2026-01-17T10:00:00Z',
         updated_at='2026-01-17T10:05:00Z',
     )
@@ -99,7 +97,6 @@ def test_serialization_roundtrip():
     assert restored_state.prompt_options == original_state.prompt_options
     assert restored_state.bilingual == original_state.bilingual
     assert restored_state.original_chunks == original_state.original_chunks
-    assert restored_state.protect_technical == original_state.protect_technical
     assert restored_state.created_at == original_state.created_at
     assert restored_state.updated_at == original_state.updated_at
 
@@ -143,7 +140,6 @@ def test_optional_fields():
         prompt_options=None,  # Optional
         bilingual=False,
         original_chunks=None,  # Optional
-        protect_technical=True,
         created_at='2026-01-17T10:00:00Z',
         updated_at='2026-01-17T10:00:00Z',
     )
@@ -328,7 +324,18 @@ def test_default_values():
     assert state.prompt_options is None
     assert state.bilingual is False
     assert state.original_chunks is None
-    assert state.protect_technical is True  # Default should be True
+
+
+def test_old_state_with_removed_protect_technical_key_still_loads():
+    """Checkpoints written before technical-content protection was removed
+    carry a 'protect_technical' key: loading them must ignore it."""
+    data = create_sample_state().to_dict()
+    data['protect_technical'] = True
+
+    state = XHTMLTranslationState.from_dict(data)
+
+    assert state.chunks == create_sample_state().chunks
+    assert 'protect_technical' not in state.to_dict()
 
 
 def test_complex_chunks():

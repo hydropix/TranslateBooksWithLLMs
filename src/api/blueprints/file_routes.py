@@ -224,6 +224,8 @@ def create_file_blueprint(output_dir):
                 })
             else:
                 current_app.logger.error(f"Error opening file {filename}: {message}")
+                if "not allowed" in message.lower():
+                    return jsonify({"error": message}), 403
                 return jsonify({"error": message}), 404 if "not found" in message.lower() else 500
 
         except Exception as e:

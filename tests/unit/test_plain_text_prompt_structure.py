@@ -18,8 +18,6 @@ from src.prompts.prompts import (
 def _prompt(has_placeholders, prompt_options=None):
     return generate_translation_prompt(
         main_content="Paragraph one.\n\nParagraph two.",
-        context_before="",
-        context_after="",
         previous_translation_context="",
         source_language="English",
         target_language="French",
@@ -47,10 +45,11 @@ def test_plain_text_cleanup_forbids_merging():
     assert "Merge incorrectly split paragraphs" not in result.system
 
 
-def test_placeholder_cleanup_still_merges():
-    """The non-plain path keeps today's cleanup wording unchanged."""
+def test_placeholder_cleanup_does_not_merge():
+    """The placeholder path demands the exact layout, so cleanup must not ask to merge."""
     result = _prompt(has_placeholders=True, prompt_options={"text_cleanup": True})
-    assert "Merge incorrectly split paragraphs" in result.system
+    assert "never merge or split paragraphs" in result.system
+    assert "Merge incorrectly split paragraphs" not in result.system
 
 
 def test_first_attempt_never_carries_the_retry_rules():
@@ -105,8 +104,6 @@ def test_other_sections_and_their_order_are_unchanged():
     for has_placeholders in (False, True):
         result = generate_translation_prompt(
             main_content="Paragraph one.\n\nParagraph two.",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",

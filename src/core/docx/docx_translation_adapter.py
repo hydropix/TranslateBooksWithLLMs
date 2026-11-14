@@ -10,18 +10,28 @@ Pipeline:
 - HTML → Document (python-docx)
 """
 
-import io
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from docx import Document
 
-from ..common.translation_orchestrator import TranslationAdapter
 from .converter import DocxHtmlConverter
-from ..epub.tag_preservation import TagPreserver
-from ..epub.html_chunker import HtmlChunker
+from ..epub.chunk_settings import ChunkLoopSettings
 from ..epub.container import TranslationContainer
 
 
-class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
+@dataclass
+class _DocxChunkPlan:
+    """The chunks of a DOCX document and where their translation stands."""
+
+    chunks: List[Dict]
+    global_tag_map: Dict[str, str]
+    placeholder_format: Tuple[str, str]
+    translated_chunks: List[str]
+    start_chunk_index: int
+    stats: Any
+    context: Dict[str, Any]
+
+
+class DocxTranslationAdapter:
     """
     Adaptateur pour traduire des documents DOCX.
 
@@ -118,7 +128,9 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         Returns:
             List of chunks
         """
-        chunks = self.html_chunker.chunk_html_with_placeholders(
+        # The caller's max_tokens (the user's chunk size) wins over the
+        # container's default configuration.
+        chunks = self.container.chunker_for(max_tokens).chunk_html_with_placeholders(
             text, structure_map
         )
 
@@ -163,7 +175,7 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
 
         Args:
             reconstructed_content: Reconstructed HTML content
-            source: Source file path (not used, metadata from context)
+            source: Source DOCX path (headers and footers are copied from it)
             context: Context dict avec metadata
             log_callback: Callback de logging
 
@@ -174,8 +186,6 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         metadata = context['metadata']
 
         # Convert HTML → DOCX in memory
-        output_buffer = io.BytesIO()
-
         # Create temporary file for conversion
         # (python-docx requires a file path or file object)
         import tempfile
@@ -186,7 +196,10 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
 
         try:
             # Convert and save to temp file
-            self.converter.from_html(reconstructed_content, metadata, tmp_path)
+            # The source carries the headers and footers mammoth never read.
+            source_docx = context.get('source_path') or source
+            self.converter.from_html(reconstructed_content, metadata, tmp_path,
+                                     source_docx_path=source_docx)
 
             # Read back as bytes
             with open(tmp_path, 'rb') as f:
@@ -204,8 +217,6 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
     async def translate_content(
         self,
         raw_content: Any,
-        structure_map: Dict[str, Any],
-        context: Dict[str, Any],
         source_language: str,
         target_language: str,
         model_name: str,
@@ -226,13 +237,12 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         """
         Translate DOCX content with checkpoint support.
 
-        This method bypasses the generic orchestrator to use _translate_all_chunks_with_checkpoint
-        for chunk-level interruption and resume support.
+        Uses the EPUB chunk loop (``chunk_loop.translate_chunks``) for
+        chunk-level interruption and resume support. A document with no text is rebuilt
+        as an empty DOCX without any LLM call.
 
         Args:
             raw_content: DOCX file path (str)
-            structure_map: Not used (kept for interface compatibility)
-            context: Context dict with preservation info
             source_language: Source language
             target_language: Target language
             model_name: Model name
@@ -253,9 +263,6 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         Returns:
             (docx_bytes, stats)
         """
-        from ..epub.xhtml_translator import _translate_all_chunks_with_checkpoint
-        from ..epub.translation_metrics import TranslationMetrics
-
         source_path = raw_content  # DOCX file path
         parallel_workers = kwargs.get('parallel_workers', 1)
 
@@ -286,10 +293,49 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
                 resume_state=resume_state,
             )
 
-        # A Plain Text Mode checkpoint carries no tag map and an empty
-        # placeholder format, so replaying it here would restore a prefix under
-        # a placeholder scheme that never produced it. Mirror of the guard the
-        # plain pipeline applies: each mode resumes only its own state.
+        resume_state = self._placeholder_resume_state(resume_state, log_callback)
+        if resume_state:
+            plan = self._plan_from_resume(resume_state, source_path, log_callback)
+        else:
+            plan, context = self._fresh_plan(source_path, max_tokens_per_chunk, log_callback)
+            if plan is None:
+                from ..epub.translation_metrics import TranslationMetrics
+                if log_callback:
+                    log_callback("no_content", "No content to translate")
+                return self.finalize_output("", source_path, context, log_callback), TranslationMetrics()
+
+        settings = ChunkLoopSettings(
+            source_language=source_language,
+            target_language=target_language,
+            model_name=model_name,
+            llm_client=llm_client,
+            max_retries=max_retries,
+            context_manager=context_manager,
+            prompt_options=prompt_options,
+            log_callback=log_callback,
+            stats_callback=stats_callback,
+            check_interruption=check_interruption_callback,
+            parallel_workers=parallel_workers,
+            max_tokens_per_chunk=max_tokens_per_chunk,
+            checkpoint_manager=checkpoint_manager,
+            translation_id=translation_id,
+            file_href=file_href,
+            file_path=source_path,
+            # A single document: the global counters are its own.
+            global_total_chunks=len(plan.chunks),
+            global_completed_chunks=len(plan.translated_chunks) if plan.translated_chunks else 0,
+        )
+        return await self._translate_plan(plan, source_path, settings, log_callback)
+
+    def _placeholder_resume_state(self, resume_state: Optional[Any],
+                                  log_callback: Optional[Callable]) -> Optional[Any]:
+        """``resume_state`` when it is a placeholder-mode state, else None.
+
+        A Plain Text Mode checkpoint carries no tag map and an empty
+        placeholder format, so replaying it here would restore a prefix under
+        a placeholder scheme that never produced it. Mirror of the guard the
+        plain pipeline applies: each mode resumes only its own state.
+        """
         from src.core.common.plain_text_checkpoint import is_plain_text_state
         if is_plain_text_state(resume_state):
             if log_callback:
@@ -298,121 +344,90 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
                     "⚠️ Checkpoint was written in Plain Text Mode; restarting "
                     "this file with placeholder translation"
                 )
-            resume_state = None
+            return None
+        return resume_state
 
-        # === RESUME FROM PARTIAL STATE ===
-        if resume_state:
-            if log_callback:
-                log_callback("docx_resume_partial",
-                    f"📂 Resuming DOCX translation from chunk {resume_state.current_chunk_index}/{len(resume_state.chunks)}")
+    def _plan_from_resume(self, resume_state: Any, source_path: str,
+                          log_callback: Optional[Callable]) -> "_DocxChunkPlan":
+        """Restore the chunks and progress of a resumed document."""
+        from ..epub.translation_metrics import TranslationMetrics
 
-            # Restore state from checkpoint
-            chunks = resume_state.chunks
-            global_tag_map = resume_state.global_tag_map
-            placeholder_format = resume_state.placeholder_format
-            translated_chunks = resume_state.translated_chunks.copy()
-            start_chunk_index = resume_state.current_chunk_index
-            html_content = resume_state.original_body_html
+        if log_callback:
+            log_callback("docx_resume_partial",
+                f"📂 Resuming DOCX translation from chunk {resume_state.current_chunk_index}/{len(resume_state.chunks)}")
 
-            # Restore statistics
-            stats = TranslationMetrics.from_dict(resume_state.stats) if resume_state.stats else TranslationMetrics()
-            stats.total_chunks = len(chunks)  # Ensure total_chunks is set from restored chunks
+        chunks = resume_state.chunks
+        placeholder_format = resume_state.placeholder_format
+        stats = TranslationMetrics.from_dict(resume_state.stats) if resume_state.stats else TranslationMetrics()
+        stats.total_chunks = len(chunks)  # Ensure total_chunks is set from restored chunks
 
-            # Restore tag_preserver
-            tag_preserver = self.tag_preserver
-            tag_preserver.placeholder_format.prefix = placeholder_format[0]
-            tag_preserver.placeholder_format.suffix = placeholder_format[1]
-
-            # Restore context
-            metadata = resume_state.doc_metadata
-            context = {
-                'metadata': metadata,
-                'preserver': tag_preserver,
-                'source_path': source_path
-            }
-
-        else:
-            # === NORMAL INITIALIZATION (NO RESUME) ===
-            # 1. Extract content
-            html_content, context = self.extract_content(source_path, log_callback)
-
-            # 2. Preserve structure
-            text_with_placeholders, global_tag_map, placeholder_format = \
-                self.preserve_structure(html_content, context, log_callback)
-
-            # 3. Create chunks
-            chunks = self.create_chunks(
-                text_with_placeholders,
-                global_tag_map,
-                max_tokens_per_chunk,
-                log_callback
-            )
-
-            # Initialize variables for new translation
-            translated_chunks = []
-            start_chunk_index = 0
-            stats = TranslationMetrics()
-            stats.total_chunks = len(chunks)
-            tag_preserver = self.tag_preserver
-            metadata = context['metadata']
-
-        # 4. Translation with checkpoint support
-        # For DOCX, we have a single file so global stats = local stats
-        total_chunks = len(chunks)
-        completed_chunks = len(translated_chunks) if translated_chunks else 0
-
-        translated_chunks, stats, was_interrupted = await _translate_all_chunks_with_checkpoint(
+        tag_preserver = self.tag_preserver
+        tag_preserver.placeholder_format.prefix = placeholder_format[0]
+        tag_preserver.placeholder_format.suffix = placeholder_format[1]
+        context = {
+            'metadata': resume_state.doc_metadata,
+            'preserver': tag_preserver,
+            'source_path': source_path
+        }
+        return _DocxChunkPlan(
             chunks=chunks,
-            source_language=source_language,
-            target_language=target_language,
-            model_name=model_name,
-            llm_client=llm_client,
-            max_retries=max_retries,
-            context_manager=context_manager,
+            global_tag_map=resume_state.global_tag_map,
             placeholder_format=placeholder_format,
-            log_callback=log_callback,
-            stats_callback=stats_callback,
-            checkpoint_manager=checkpoint_manager,
-            translation_id=translation_id,
-            file_href=file_href,
-            file_path=source_path,
-            check_interruption_callback=check_interruption_callback,
-            start_chunk_index=start_chunk_index,
-            translated_chunks=translated_chunks,
-            global_tag_map=global_tag_map,
+            translated_chunks=resume_state.translated_chunks.copy(),
+            start_chunk_index=resume_state.current_chunk_index,
             stats=stats,
-            prompt_options=prompt_options,
-            # Pass global stats for DOCX (single file = global stats)
-            global_total_chunks=total_chunks,
-            global_completed_chunks=completed_chunks,
-            parallel_workers=parallel_workers,
+            context=context,
         )
 
-        # If interrupted, save state and return partial result
+    def _fresh_plan(self, source_path: str, max_tokens_per_chunk: int,
+                    log_callback: Optional[Callable]) -> Tuple[Optional["_DocxChunkPlan"], Dict[str, Any]]:
+        """Extract, tag-preserve and chunk the document; ``(plan, context)``,
+        with no plan when the document has no text."""
+        from ..epub.translation_metrics import TranslationMetrics
+
+        html_content, context = self.extract_content(source_path, log_callback)
+        if not html_content or not html_content.strip():
+            return None, context
+        text_with_placeholders, global_tag_map, placeholder_format = \
+            self.preserve_structure(html_content, context, log_callback)
+        chunks = self.create_chunks(text_with_placeholders, global_tag_map,
+                                    max_tokens_per_chunk, log_callback)
+        stats = TranslationMetrics()
+        stats.total_chunks = len(chunks)
+        return _DocxChunkPlan(
+            chunks=chunks,
+            global_tag_map=global_tag_map,
+            placeholder_format=placeholder_format,
+            translated_chunks=[],
+            start_chunk_index=0,
+            stats=stats,
+            context=context,
+        ), context
+
+    async def _translate_plan(self, plan: "_DocxChunkPlan", source_path: str,
+                              settings: ChunkLoopSettings,
+                              log_callback: Optional[Callable]) -> Tuple[bytes, Any]:
+        """Translate the chunks with checkpoint support, then rebuild the DOCX."""
+        from ..epub.chunk_loop import translate_chunks
+
+        translated_chunks, stats, was_interrupted = await translate_chunks(
+            plan.chunks, settings, plan.placeholder_format,
+            global_tag_map=plan.global_tag_map,
+            start_chunk_index=plan.start_chunk_index,
+            translated_chunks=plan.translated_chunks,
+            stats=plan.stats,
+        )
         if was_interrupted:
             if log_callback:
                 log_callback("docx_interrupted", "DOCX translation interrupted - state saved")
-            # Return empty bytes to indicate incomplete translation
+            # Empty bytes signal an incomplete translation.
             return b'', stats
 
-        # 5. Reconstruct content
         if log_callback:
             log_callback("reconstruct_start", "Reconstructing DOCX content")
-
-        reconstructed_html = self.reconstruct_content(
-            translated_chunks,
-            global_tag_map,
-            context
-        )
-
-        # 6. Finalize output
-        docx_bytes = self.finalize_output(
-            reconstructed_html,
-            source_path,
-            context,
-            log_callback
-        )
-
+        reconstructed_html = self.reconstruct_content(translated_chunks, plan.global_tag_map,
+                                                      plan.context)
+        docx_bytes = self.finalize_output(reconstructed_html, source_path, plan.context, log_callback)
         return docx_bytes, stats
 
     async def _translate_plain_text(

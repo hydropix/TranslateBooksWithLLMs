@@ -1,68 +1,40 @@
 """EPUB refine-only mode.
 
 Walks each XHTML content file of an already-translated EPUB, refines its
-body in place, and repackages. Interruption stops cleanly between chunks
-but does not persist partial state (no resume support in v1).
+body in place, and repackages. An interruption or a rate limit writes the
+book as refined so far to a ``[partial ...]`` output; there is no chunk-level
+resume.
 """
 
 import os
 import tempfile
-from typing import Optional, Callable, Dict, Any, List, Tuple
+from typing import Optional, Callable, Dict, Any, List
 from lxml import etree
 
 from src.config import (
-    DEFAULT_MODEL, API_ENDPOINT, MAX_TOKENS_PER_CHUNK, THINKING_MODELS,
-    ADAPTIVE_CONTEXT_INITIAL_THINKING,
+    DEFAULT_MODEL, MAX_TOKENS_PER_CHUNK,
 )
-from src.core.epub.translator import (
-    _extract_epub, _parse_epub_manifest, _create_llm_client,
-    _create_context_manager, _repackage_epub,
+from src.core.epub.archive import (
+    extract_epub, parse_epub_manifest, repackage_epub,
 )
-from src.core.epub.xhtml_translator import (
-    _setup_translation, _preserve_tags, _create_chunks,
-    _replace_body, _escape_stray_angle_brackets, _refine_epub_chunks,
-)
+from src.core.epub.body_reassembly import escape_stray_markup, replace_body
+from src.core.epub.chunk_refinement import refine_chunks
+from src.core.epub.document_chunking import chunk_document, tag_preserver_for
+from src.core.epub.placeholder_renumberer import globalize_chunks
 from src.core.epub.container import TranslationContainer
-from src.core.context_optimizer import INITIAL_CONTEXT_SIZE
+from src.core.job import JobConfig, JobContext
+from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
+from src.core.progress import Phase, ProgressReporter
 from .client_setup import build_refine_client
-
-
-def _globalize_chunk_text(
-    chunk: Dict,
-    placeholder_format: Tuple[str, str],
-) -> str:
-    """Convert a chunk's placeholders from local to global indices.
-
-    `_refine_epub_chunks` expects globally-numbered placeholders because it
-    re-localizes internally before sending to the LLM. In translate-mode the
-    chunks already carry global indices; in refine-only mode they come fresh
-    from HtmlChunker with local indices, so we re-globalize here.
-    """
-    text = chunk['text']
-    global_indices = chunk.get('global_indices', [])
-    if not global_indices:
-        return text
-
-    prefix, suffix = placeholder_format
-    for local_idx, global_idx in enumerate(global_indices):
-        local_ph = f"{prefix}{local_idx}{suffix}"
-        text = text.replace(local_ph, f"__TEMP_GLOBAL_{global_idx}__")
-    for global_idx in global_indices:
-        text = text.replace(f"__TEMP_GLOBAL_{global_idx}__",
-                            f"{prefix}{global_idx}{suffix}")
-    return text
 
 
 def _count_file_chunks(doc_root, max_tokens_per_chunk: int) -> int:
     """Count the chunks a content file will be split into (no LLM call)."""
     try:
-        body_html, body_element, tag_preserver = _setup_translation(doc_root, None, None)
-        if not body_html or body_element is None:
+        body_element, prepared = chunk_document(doc_root, max_tokens_per_chunk)
+        if body_element is None or prepared.is_empty:
             return 0
-        text, tag_map, _ = _preserve_tags(
-            body_html, tag_preserver, None, protect_technical=True
-        )
-        return len(_create_chunks(text, tag_map, max_tokens_per_chunk, None, None))
+        return len(prepared.chunks)
     except Exception:
         return 0
 
@@ -78,34 +50,33 @@ async def _refine_one_xhtml(
     prompt_options: Optional[Dict],
     check_interruption_callback: Optional[Callable],
     container: Optional[TranslationContainer] = None,
-    stats_callback: Optional[Callable] = None,
+    progress: Optional[ProgressReporter] = None,
 ) -> bool:
-    """Refine a single parsed XHTML document in place."""
-    body_html, body_element, tag_preserver = _setup_translation(
-        doc_root, log_callback, container
+    """Refine a single parsed XHTML document in place.
+
+    The body is chunked exactly like the translation chunked it.
+    """
+    body_element, prepared = chunk_document(
+        doc_root, max_tokens_per_chunk, container=container, log_callback=log_callback
     )
-    if not body_html or body_element is None:
+    if body_element is None or prepared.is_empty:
         if log_callback:
             log_callback("no_body", "No <body> element found")
         return False
 
-    text_with_placeholders, global_tag_map, placeholder_format = _preserve_tags(
-        body_html, tag_preserver, log_callback, protect_technical=True
-    )
-
-    chunks = _create_chunks(
-        text_with_placeholders, global_tag_map, max_tokens_per_chunk,
-        log_callback, container,
-    )
-
+    chunks = prepared.chunks
+    global_tag_map = prepared.global_tag_map
+    placeholder_format = prepared.placeholder_format
     if not chunks:
         if log_callback:
             log_callback("no_chunks", "No translatable chunks in this XHTML, skipping")
         return True
 
-    draft_globalized = [_globalize_chunk_text(c, placeholder_format) for c in chunks]
+    # Fresh chunks carry local indices; refine_chunks expects the draft with
+    # global ones (it re-localizes each chunk before sending it).
+    draft_globalized = globalize_chunks(chunks, placeholder_format)
 
-    refined_chunks = await _refine_epub_chunks(
+    refined_chunks = await refine_chunks(
         translated_chunks=draft_globalized,
         chunks=chunks,
         target_language=target_language,
@@ -115,7 +86,7 @@ async def _refine_one_xhtml(
         placeholder_format=placeholder_format,
         log_callback=log_callback,
         prompt_options=prompt_options,
-        stats_callback=stats_callback,
+        progress=progress,
     )
 
     if check_interruption_callback and check_interruption_callback():
@@ -124,64 +95,62 @@ async def _refine_one_xhtml(
                          "Refinement interrupted before reconstruction")
         return False
 
-    full_text = ''.join(refined_chunks)
-    full_text = _escape_stray_angle_brackets(full_text)
-    final_html = tag_preserver.restore_tags(full_text, global_tag_map)
+    full_text = escape_stray_markup(''.join(refined_chunks))
+    final_html = tag_preserver_for(placeholder_format, container).restore_tags(full_text, global_tag_map)
 
-    return _replace_body(body_element, final_html, log_callback)
+    return replace_body(body_element, final_html, log_callback)
 
 
-async def refine_epub_file(
-    input_filepath: str,
-    output_filepath: str,
-    target_language: str,
-    model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    llm_provider: str = "ollama",
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: int = 2048,
-    auto_adjust_context: bool = True,
-    prompt_options: Optional[Dict] = None,
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
-) -> bool:
-    """Run a refinement-only pass on an already-translated EPUB."""
+def _save_partial_epub(temp_dir: str, output_filepath: str,
+                       log_callback: Optional[Callable]) -> None:
+    """Package the book as refined so far into the ``[partial ...]`` output."""
+    from src.utils.file_utils import get_partial_output_path
+    partial_path = get_partial_output_path(output_filepath)
+    try:
+        repackage_epub(temp_dir=temp_dir, output_filepath=partial_path, log_callback=log_callback)
+    except Exception as e:
+        if log_callback:
+            log_callback("refine_partial_save_failed",
+                         f"⚠️ Could not save the partial refined EPUB: {e}")
+        return
+    if log_callback:
+        log_callback("refine_partial_saved",
+                     f"💾 Partial refined output saved before rate-limit pause: '{partial_path}'")
+
+
+async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
+    """Run a refinement-only pass on an already-translated EPUB.
+
+    Reads ``job.input_path`` and writes ``job.output_path`` (the
+    ``[partial ...]`` sibling when interrupted). Returns True only when every
+    content file was refined and the run was not interrupted.
+    """
+    input_filepath = job.input_path
+    output_filepath = job.output_path
+    target_language = job.target_language
+    model_name = job.refine_provider_config().model or DEFAULT_MODEL
+    prompt_options = job.engine_prompt_options()
+    max_tokens_per_chunk = (job.max_tokens_per_chunk if job.max_tokens_per_chunk is not None
+                            else MAX_TOKENS_PER_CHUNK)
+    log_callback = ctx.log_callback
+    check_interruption_callback = ctx.check_interruption
+
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input EPUB file '{input_filepath}' not found."
         if log_callback:
             log_callback("epub_input_file_not_found", err_msg)
         return False
 
-    llm_client, context_manager = build_refine_client(
-        model_name=model_name,
-        llm_provider=llm_provider,
-        cli_api_endpoint=cli_api_endpoint,
-        auto_adjust_context=auto_adjust_context,
-        context_window=context_window,
-        gemini_api_key=gemini_api_key,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        log_callback=log_callback,
-    )
-    if llm_client is None:
+    try:
+        llm_client, context_manager = build_refine_client(job, log_callback=log_callback)
+    except LLMClientConfigError:
+        # Already reported to the job log by build_refine_client.
         return False
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
-            _extract_epub(input_filepath, temp_dir, log_callback)
-            manifest_data = _parse_epub_manifest(temp_dir, log_callback)
+            extract_epub(input_filepath, temp_dir, log_callback)
+            manifest_data = parse_epub_manifest(temp_dir, log_callback)
 
             content_files: List[str] = manifest_data['content_files']
             opf_dir: str = manifest_data['opf_dir']
@@ -210,16 +179,16 @@ async def refine_epub_file(
             chunks_done = 0  # chunks of files already handled (refined, failed or skipped)
             failed_chunks = 0
 
-            def _emit(done: int, failed_c: int) -> None:
-                if stats_callback:
-                    stats_callback({
-                        'total_chunks': total_chunks,
-                        'completed_chunks': min(done, total_chunks),
-                        'failed_chunks': failed_c,
-                    })
+            # Each refined chunk ticks the reporter; every file end sets the
+            # book-level counts again, so a file whose actual chunks differ
+            # from its precount cannot push the count past the total.
+            progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+            progress.begin(total_chunks)
+            progress.emit()
 
-            if stats_callback:
-                stats_callback({'total_chunks': total_chunks, 'completed_chunks': 0, 'failed_chunks': 0})
+            def _emit_file_done() -> None:
+                progress.set_counts(min(chunks_done, total_chunks), failed=failed_chunks)
+                progress.emit()
 
             completed, failed, interrupted = 0, 0, False
             for idx, href in enumerate(content_files):
@@ -254,19 +223,25 @@ async def refine_epub_file(
                     failed += 1
                     continue
 
-                ok = await _refine_one_xhtml(
-                    doc_root=doc_root,
-                    target_language=target_language,
-                    model_name=model_name,
-                    llm_client=llm_client,
-                    max_tokens_per_chunk=max_tokens_per_chunk,
-                    log_callback=log_callback,
-                    context_manager=context_manager,
-                    prompt_options=prompt_options,
-                    check_interruption_callback=check_interruption_callback,
-                    stats_callback=lambda st, base=chunks_done: _emit(
-                        base + st.get('completed_chunks', 0), failed_chunks),
-                )
+                try:
+                    ok = await _refine_one_xhtml(
+                        doc_root=doc_root,
+                        target_language=target_language,
+                        model_name=model_name,
+                        llm_client=llm_client,
+                        max_tokens_per_chunk=max_tokens_per_chunk,
+                        log_callback=log_callback,
+                        context_manager=context_manager,
+                        prompt_options=prompt_options,
+                        check_interruption_callback=check_interruption_callback,
+                        progress=progress,
+                    )
+                except RateLimitError:
+                    # Keep the files refined so far, exactly as an interruption
+                    # does (the file in flight keeps its draft), then let the
+                    # error propagate: the job runner drives the pause.
+                    _save_partial_epub(temp_dir, output_filepath, log_callback)
+                    raise
 
                 if ok:
                     try:
@@ -279,7 +254,7 @@ async def refine_epub_file(
                         failed += 1
                         failed_chunks += file_chunks
                         chunks_done += file_chunks
-                        _emit(chunks_done, failed_chunks)
+                        _emit_file_done()
                         continue
                     completed += 1
                 else:
@@ -287,14 +262,14 @@ async def refine_epub_file(
                     failed_chunks += file_chunks
 
                 chunks_done += file_chunks
-                _emit(chunks_done, failed_chunks)
+                _emit_file_done()
 
             from src.utils.file_utils import get_partial_output_path
             final_output = (
                 get_partial_output_path(output_filepath) if interrupted
                 else output_filepath
             )
-            _repackage_epub(temp_dir=temp_dir,
+            repackage_epub(temp_dir=temp_dir,
                             output_filepath=final_output,
                             log_callback=log_callback)
 

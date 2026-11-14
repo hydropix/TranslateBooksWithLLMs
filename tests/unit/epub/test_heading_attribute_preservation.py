@@ -31,8 +31,7 @@ from typing import List
 import pytest
 from lxml import etree
 
-from src.core.epub.epub_translation_adapter import EpubTranslationAdapter
-from src.core.epub.xhtml_translator import translate_xhtml_simplified
+from tests.epub_engine_helpers import translate_xhtml
 from src.core.llm.base import LLMResponse
 
 
@@ -151,7 +150,7 @@ async def test_placeholder_path_preserves_heading_class(monkeypatch):
     """Control: the default path keeps `class="head"` end to end.
 
     This is the round-trip the planner already verified on strings, re-run
-    through `translate_xhtml_simplified` with a stubbed LLM: body extraction,
+    through `translate_xhtml_document` with a stubbed LLM: body extraction,
     tag preservation, chunking, placeholder renumbering, reconstruction and
     body reinjection all keep the attribute.
     """
@@ -164,7 +163,7 @@ async def test_placeholder_path_preserves_heading_class(monkeypatch):
     doc_root = _parse_doc()
     client = StubLLMClient([WELL_BEHAVED_RESPONSE])
 
-    success, _stats = await translate_xhtml_simplified(
+    success, _stats = await translate_xhtml(
         doc_root=doc_root,
         source_language='Chinese',
         target_language='French',
@@ -197,7 +196,7 @@ async def test_placeholder_path_preserves_heading_class_when_model_emits_literal
     doc_root = _parse_doc()
     client = StubLLMClient([LITERAL_TAGS_RESPONSE])
 
-    success, _stats = await translate_xhtml_simplified(
+    success, _stats = await translate_xhtml(
         doc_root=doc_root,
         source_language='Chinese',
         target_language='French',
@@ -217,12 +216,8 @@ async def test_plain_text_mode_preserves_heading_class():
     """Regression: Plain Text Mode keeps `class="head"` on the translated heading."""
     doc_root = _parse_doc()
     client = EchoPlaceholdersClient()
-    adapter = EpubTranslationAdapter()
-
-    success, _stats = await adapter.translate_content(
-        raw_content=doc_root,
-        structure_map={},
-        context={},
+    success, _stats = await translate_xhtml(
+        doc_root,
         source_language='Chinese',
         target_language='French',
         model_name='stub-model',

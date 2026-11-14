@@ -8,7 +8,6 @@ Covers:
     - LLMProvider.api_key backwards-compat property
     - base.normalize_api_keys: comma/newline parsing
 """
-import asyncio
 import time
 
 import pytest
@@ -263,9 +262,10 @@ class TestRotationDoesNotConsumeAttempts:
     RateLimitError (so the pipeline auto-pause never engaged)."""
 
     def _make_provider(self, monkeypatch, keys, responder):
+        from src.core.llm.policy import RetryPolicy
         from src.core.llm.providers import gemini as gemini_mod
-        monkeypatch.setattr(gemini_mod, "MAX_TRANSLATION_ATTEMPTS", 2)
-        provider = gemini_mod.GeminiProvider(api_key=keys)
+        provider = gemini_mod.GeminiProvider(
+            api_key=keys, retry_policy=RetryPolicy(max_attempts=2, base_delay=0))
 
         used_keys = []
 

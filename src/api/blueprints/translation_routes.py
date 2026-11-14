@@ -2,160 +2,24 @@
 Translation job management routes
 """
 import logging
-import os
-import re
 import time
-import copy
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 
-import src.config as _config
 from src.api.services.path_validator import PathValidator
-from src.api.services.endpoint_validator import EndpointValidator
-from src.config import (
-    REQUEST_TIMEOUT,
-    OLLAMA_NUM_CTX,
-    AUTO_PAUSE_ON_RATE_LIMIT,
-    PARALLEL_TRANSLATIONS,
-    MAX_PARALLEL_TRANSLATIONS,
-)
-from src.tts.tts_config import TTSConfig
-from src.api.api_keys import (
-    resolve_api_key as _resolve_api_key,
-    provider_env_var as _provider_env_var,
-    USE_ENV_SENTINEL,
-)
+from src.api.translation_state import new_job_id
+from src.core.job import JobConfig, JobConfigError
+from src.core.job.config import parse_term_fix_request
 
 logger = logging.getLogger('translation_routes')
-
-
-def _clamp_parallel_workers(value):
-    """Clamp the requested worker count to [1, MAX_PARALLEL_TRANSLATIONS].
-
-    Falls back to the PARALLEL_TRANSLATIONS default when absent or malformed.
-    Local-provider gating happens later in resolve_parallel_workers().
-    """
-    if value is None:
-        return PARALLEL_TRANSLATIONS
-    try:
-        return max(1, min(MAX_PARALLEL_TRANSLATIONS, int(value)))
-    except (TypeError, ValueError):
-        return PARALLEL_TRANSLATIONS
-
-
-# Cloud providers whose key lives in config['<provider>_api_key'] and env var
-# '<PROVIDER>_API_KEY'. The mapping is mechanical, so supporting a new provider
-# in the resume-override path requires only adding it here (and nowhere else in
-# this file).
-_KEY_PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim')
-
-# Providers that talk to a user-supplied endpoint; the others use a built-in one.
-_ENDPOINT_PROVIDERS = ('ollama', 'openai')
-
-# Providers whose client actually reads config['llm_api_endpoint'].
-# Source: src/core/llm/factory.py:87 (ollama), :93 (openai), :170 (nim).
-# The others use a constant or a .env endpoint and ignore the request field,
-# so an endpoint sent alongside them is inert and must not be treated as an
-# override — the frontend sends llm_api_endpoint unconditionally.
-_ENDPOINT_CONSUMING_PROVIDERS = ('ollama', 'openai', 'nim')
-
-
-def _server_default_endpoint(provider):
-    """Return the .env-configured endpoint for an endpoint-consuming provider.
-
-    Read from src.config at call time so reload_config() is honoured.
-    """
-    provider = (provider or '').lower()
-    if provider == 'ollama':
-        return _config.API_ENDPOINT
-    if provider == 'openai':
-        return _config.OPENAI_API_ENDPOINT
-    if provider == 'nim':
-        return _config.NIM_API_ENDPOINT
-    return ''
-
-
-def _normalize_endpoint(value):
-    """Normalize an endpoint for comparison (trim whitespace and trailing '/')."""
-    return (value or '').strip().rstrip('/')
-
-
-def _is_endpoint_override(config, requested_endpoint):
-    """True when the request chose an endpoint the selected provider actually
-    reads and that differs from the server default.
-
-    Providers outside _ENDPOINT_CONSUMING_PROVIDERS ignore the request field
-    entirely, so an endpoint sent with them is never an override.
-    """
-    provider = (config.get('llm_provider') or 'ollama').lower()
-    if provider not in _ENDPOINT_CONSUMING_PROVIDERS:
-        return False
-    normalized = _normalize_endpoint(requested_endpoint)
-    return bool(normalized) and normalized != _normalize_endpoint(
-        _server_default_endpoint(provider)
-    )
-
-
-def _validate_endpoint_and_key_pairing(config, requested_endpoint, request_key=None):
-    """Reject a disallowed endpoint, and refuse to pair an overridden endpoint
-    with the server's stored key.
-
-    A request that chooses its own host must also bring its own credential:
-    otherwise the server would forward a .env key to a destination the client
-    picked. Providers that ignore the request's endpoint are exempt from both
-    checks — the field is inert for them — and 'ollama' has no key to leak so
-    it needs no pairing.
-
-    Args:
-        config: The job config being built or resumed.
-        requested_endpoint: The endpoint the request supplied, if any.
-        request_key: The raw key the request supplied for the selected provider
-            (may be the '__USE_ENV__' sentinel, empty, or absent).
-
-    Returns a Flask (response, status) tuple to abort with, or None when the
-    request is acceptable.
-    """
-    provider = (config.get('llm_provider') or 'ollama').lower()
-
-    # The frontend sends llm_api_endpoint unconditionally, so a provider that
-    # never reads it still carries whatever host sits in the Ollama field. That
-    # value reaches no HTTP client, so validating it would reject a perfectly
-    # valid cloud job over a stale field (issue #263).
-    if provider not in _ENDPOINT_CONSUMING_PROVIDERS:
-        return None
-
-    ok, err = EndpointValidator.validate(requested_endpoint)
-    if not ok:
-        logger.warning(
-            "Rejected client-supplied endpoint for provider '%s': %s", provider, err
-        )
-        return jsonify({"error": "Endpoint not allowed", "message": err}), 400
-
-    if not _is_endpoint_override(config, requested_endpoint):
-        return None
-
-    if provider in _KEY_PROVIDERS and (not request_key or request_key == USE_ENV_SENTINEL):
-        # Only refuse when a stored key actually exists, i.e. when there is
-        # something to leak. 'openai' also covers keyless local servers
-        # (LM Studio, llama.cpp, vLLM) — same carve-out as
-        # _validate_provider_credentials, and it keeps that path working.
-        if os.getenv(_provider_env_var(provider) or ''):
-            return jsonify({
-                "error": "Endpoint override requires its own API key",
-                "message": (f"A custom '{provider}' endpoint was supplied, so the server's "
-                            "stored key will not be used. Send the key with the request or "
-                            "restore the default endpoint."),
-            }), 400
-
-    return None
 
 
 def _strip_api_keys(config):
     """Remove every API key from a config dict in place (for API responses).
 
-    Persisted checkpoints no longer hold keys (issue #213), but the in-memory
-    config of a live job does — it must never be echoed back to the browser,
-    since '__USE_ENV__' requests get their key resolved from .env server-side.
+    Persisted configs and the in-memory job registry hold no keys any more
+    (JobConfig.to_persisted strips them), so this is a defensive no-op on
+    current data; it still guards configs written by older versions.
     """
     if isinstance(config, dict):
         for key in [k for k in config if k == 'api_key' or k.endswith('_api_key')]:
@@ -163,24 +27,10 @@ def _strip_api_keys(config):
     return config
 
 
-_UPLOAD_PREFIX_RE = re.compile(r'^[0-9a-f]{16}_')
-
-
-def _display_input_filename(requested: object, safe_path: Path | None) -> str | None:
-    """Derive a human-readable source filename for the job config.
-
-    Prefers the client-supplied `input_filename` (basename-only, truncated,
-    so a path or an oversized value cannot leak through); falls back to the
-    validated upload path with its random `_create_secure_filename` prefix
-    stripped, so a second device can show a meaningful name in the progress
-    panel (issue #271). Returns None when neither source is available.
-    """
-    if isinstance(requested, str) and requested.strip():
-        return os.path.basename(requested.strip())[:200]
-    if safe_path is not None:
-        name = safe_path.name
-        return _UPLOAD_PREFIX_RE.sub('', name, count=1)
-    return None
+def _config_error_response(error: JobConfigError):
+    if error.status == 400 and 'endpoint' in str(error).lower():
+        logger.warning("Rejected client-supplied endpoint: %s", error)
+    return jsonify(error.payload), error.status
 
 
 _HISTORY_FIELDS = (
@@ -208,168 +58,6 @@ def _history_item(job):
     return {field: job.get(field) for field in _HISTORY_FIELDS}
 
 
-def _validate_provider_credentials(config):
-    """Check that the provider in `config` has what it needs to run.
-
-    A cloud provider needs a key from the config (resume override or live
-    request) or from .env; an endpoint-driven provider needs an endpoint.
-    Persisted checkpoints carry no keys (issue #213), so for a resumed job
-    .env is the normal source — this guard turns a missing key into an
-    immediate 400 instead of a mid-translation failure.
-
-    Returns a Flask (response, status) tuple on failure, or None on success.
-    """
-    provider = (config.get('llm_provider') or 'ollama').lower()
-
-    if provider in _KEY_PROVIDERS:
-        env_var = f"{provider.upper()}_API_KEY"
-        # 'openai' also covers OpenAI-compatible local endpoints (llama.cpp,
-        # LM Studio, vLLM) where a key is legitimately absent — only require
-        # one for the official API, mirroring the factory's heuristic.
-        key_required = (provider != 'openai'
-                        or 'api.openai.com' in (config.get('llm_api_endpoint') or ''))
-        if key_required:
-            resolved = config.get(f"{provider}_api_key") or os.getenv(env_var)
-            if not resolved:
-                return jsonify({
-                    "error": "Missing API key for provider",
-                    "message": (f"Resuming with '{provider}' requires an API key. "
-                                f"Set {env_var} in .env or include it in the request."),
-                }), 400
-            config[f"{provider}_api_key"] = resolved
-
-    if provider in _ENDPOINT_PROVIDERS and not config.get('llm_api_endpoint'):
-        return jsonify({
-            "error": "Missing API endpoint for provider",
-            "message": f"Resuming with '{provider}' requires an API endpoint.",
-        }), 400
-
-    return None
-
-
-def _apply_resume_overrides(config, overrides):
-    """Merge optional model/provider override fields into a resume config in place.
-
-    Lets the resume request switch model/provider for the remaining chunks
-    (issue #183). An empty/absent body leaves model, provider and endpoint
-    untouched; `auto_pause_on_rate_limit` is refreshed either way, see below.
-    API keys flow through `_resolve_api_key` exactly like the start endpoint,
-    and a multi-key string is passed through unchanged so the key-rotation
-    pool still works.
-
-    Credentials are validated even with an empty body: checkpoints no longer
-    persist API keys (issue #213), so every resume must find its key in .env
-    or in the request.
-
-    `retry_token_aligned` is the completion card's explicit "retranslate the
-    approximately-tagged chunks" action (issue #261). It is set from the request
-    on every resume - including to False when the body says nothing - so a
-    stored value can never make a routine resume silently retranslate chunks
-    that are already translated. Those chunks are never in the automatic work
-    set (design decision D3); this flag is the one thing that widens it, and
-    only for the pass it travels with.
-
-    auto_pause_on_rate_limit isn't a secret, but a job's config is otherwise a
-    snapshot taken at creation time, so it has the same staleness problem as
-    the credentials above: without refreshing it here, flipping "Disable
-    Auto-Pause" in Settings after a job started would never take effect on
-    that job's resumes. Refreshed from the live setting on every resume,
-    unless this specific resume overrides it.
-
-    Note: this reads `_config.DISABLE_AUTO_PAUSE` as already refreshed by
-    `/api/settings` (which calls `reload_config()` itself after writing to
-    .env) rather than calling `reload_config()` here. `reload_config()` does
-    `load_dotenv(..., override=True)`, which would clobber any provider API
-    key set via a real environment variable (docker/shell) rather than via
-    the .env file -- not something a routine resume should ever do.
-
-    Returns a Flask (response, status) tuple to abort with on validation failure,
-    or None on success.
-    """
-    raw_key = None
-
-    retry_token_aligned = (overrides.get('retry_token_aligned')
-                           if isinstance(overrides, dict) else None)
-    if retry_token_aligned is not None and not isinstance(retry_token_aligned, bool):
-        return jsonify({"error": "retry_token_aligned must be a boolean"}), 400
-    config['retry_token_aligned'] = bool(retry_token_aligned)
-
-    if isinstance(overrides, dict) and overrides.get('auto_pause_on_rate_limit') is not None:
-        config['auto_pause_on_rate_limit'] = bool(overrides['auto_pause_on_rate_limit'])
-    else:
-        config['auto_pause_on_rate_limit'] = not (
-            str(_config.DISABLE_AUTO_PAUSE).strip().lower() == 'true'
-        )
-
-    if isinstance(overrides, dict) and overrides:
-        if overrides.get('model'):
-            config['model'] = overrides['model']
-        if overrides.get('llm_provider'):
-            config['llm_provider'] = str(overrides['llm_provider']).lower()
-        if overrides.get('llm_api_endpoint'):
-            config['llm_api_endpoint'] = overrides['llm_api_endpoint']
-        if overrides.get('context_window') is not None:
-            try:
-                config['context_window'] = int(overrides['context_window'])
-            except (TypeError, ValueError):
-                return jsonify({"error": "context_window must be an integer"}), 400
-
-        # A single generic api_key override maps to the chosen provider's key
-        # field, resolved through .env like every other entry point.
-        provider = (config.get('llm_provider') or 'ollama').lower()
-        raw_key = overrides.get('api_key')
-        if provider in _KEY_PROVIDERS and raw_key not in (None, ''):
-            env_var = f"{provider.upper()}_API_KEY"
-            config[f"{provider}_api_key"] = _resolve_api_key(raw_key, env_var)
-
-    # A resume can point the job at a different host, either through the
-    # override body or through the endpoint stored in the checkpoint. The same
-    # pairing rule as the start endpoint applies, so the .env key never
-    # follows a non-default endpoint.
-    requested_endpoint = config.get('llm_api_endpoint')
-    pairing_error = _validate_endpoint_and_key_pairing(
-        config, requested_endpoint, request_key=raw_key
-    )
-    if pairing_error is not None:
-        return pairing_error
-
-    provider = (config.get('llm_provider') or 'ollama').lower()
-    if provider in _KEY_PROVIDERS and _is_endpoint_override(config, requested_endpoint):
-        config[f"{provider}_api_key"] = _resolve_api_key(
-            raw_key, _provider_env_var(provider), allow_env_fallback=False
-        )
-
-    return _validate_provider_credentials(config)
-
-
-def _parse_term_fix_request(raw, check_mode: bool = True):
-    """Validate a `term_fix` request field: {rules_text, mode}.
-
-    Returns (normalized dict, None) or (None, error message). The rules are
-    parsed here so a malformed rule fails the request with its line number
-    instead of failing the job later.
-    """
-    from src.core.term_fix import (
-        MODE_LITERAL, MODE_SMART, MODES, RuleParseError, check_literal_rules, parse_rules_text,
-    )
-
-    if not isinstance(raw, dict):
-        return None, "term_fix must be an object with 'rules_text' and 'mode'."
-    rules_text = raw.get('rules_text')
-    if not isinstance(rules_text, str) or not rules_text.strip():
-        return None, "Term fix: no correction rule given."
-    mode = raw.get('mode') or MODE_SMART
-    if check_mode and mode not in MODES:
-        return None, f"Term fix: unknown mode '{mode}'."
-    try:
-        rules = parse_rules_text(rules_text)
-        if check_mode and mode == MODE_LITERAL:
-            check_literal_rules(rules)
-    except (RuleParseError, ValueError) as e:
-        return None, f"Term fix: {e}"
-    return {'rules_text': rules_text, 'mode': mode}, None
-
-
 def create_translation_blueprint(state_manager, start_translation_job, output_dir):
     """
     Create and configure the translation blueprint
@@ -388,125 +76,23 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
     @bp.route('/api/translate', methods=['POST'])
     def start_translation_request():
         """Start a new translation job"""
-        data = request.json
+        data = request.get_json(silent=True)
+        try:
+            job = JobConfig.from_web_request(data, output_dir=output_dir, uploads_dir=uploads_dir)
+        except JobConfigError as e:
+            return _config_error_response(e)
 
-        # Validate required fields
-        if 'file_path' in data:
-            required_fields = ['file_path', 'source_language', 'target_language',
-                             'model', 'llm_api_endpoint', 'output_filename', 'file_type']
-        else:
-            required_fields = ['text', 'source_language', 'target_language',
-                             'model', 'llm_api_endpoint', 'output_filename']
-
-        for field in required_fields:
-            if field not in data or (isinstance(data[field], str) and not data[field].strip()) or (not isinstance(data[field], str) and data[field] is None):
-                if field == 'text' and data.get('file_type') == 'txt' and data.get('text') == "":
-                    pass
-                else:
-                    return jsonify({"error": f"Missing or empty field: {field}"}), 400
-
-        # Generate unique translation ID
-        translation_id = f"trans_{int(time.time() * 1000)}"
-
-        # Build configuration
-        config = {
-            'source_language': data['source_language'],
-            'target_language': data['target_language'],
-            'model': data['model'],
-            'llm_api_endpoint': data['llm_api_endpoint'],
-            'request_timeout': int(data.get('timeout', REQUEST_TIMEOUT)),
-            'context_window': int(data.get('context_window', OLLAMA_NUM_CTX)),
-            'max_attempts': int(data.get('max_attempts', 2)),
-            'retry_delay': int(data.get('retry_delay', 2)),
-            'parallel_workers': _clamp_parallel_workers(data.get('parallel_workers')),
-            'output_filename': data['output_filename'],
-            'llm_provider': data.get('llm_provider', 'ollama'),
-            'gemini_api_key': _resolve_api_key(data.get('gemini_api_key'), 'GEMINI_API_KEY'),
-            'openai_api_key': _resolve_api_key(data.get('openai_api_key'), 'OPENAI_API_KEY'),
-            'openrouter_api_key': _resolve_api_key(data.get('openrouter_api_key'), 'OPENROUTER_API_KEY'),
-            # Prompt options (optional instructions to include in the system prompt)
-            'prompt_options': data.get('prompt_options', {}),
-            # Auto-pause on rate limit toggle (request overrides .env default)
-            'auto_pause_on_rate_limit': data.get('auto_pause_on_rate_limit', AUTO_PAUSE_ON_RATE_LIMIT),
-            # Bilingual output (original + translation interleaved)
-            'bilingual_output': data.get('bilingual_output', False),
-            # Refine-only mode (skip translation, run only refinement on input)
-            'refine_only': data.get('refine_only', False),
-            # Chained refinement pass after translation
-            'refine_after': data.get('refine_after', False),
-            # Term-fix mode (correct wrong renderings of a term, no translation)
-            'term_fix': None,
-            # TTS configuration
-            'tts_enabled': data.get('tts_enabled', False),
-            'tts_config': TTSConfig.from_web_request(data).to_dict() if data.get('tts_enabled') else None
-        }
-
-        if data.get('term_fix') is not None:
-            term_fix, term_fix_error = _parse_term_fix_request(data.get('term_fix'))
-            if term_fix_error is not None:
-                return jsonify({"error": term_fix_error}), 400
-            config['term_fix'] = term_fix
-            # Mutually exclusive with the refine paths.
-            config['refine_only'] = False
-            config['refine_after'] = False
-
-        # Add file-specific or text-specific configuration
-        safe_path = None
-        if 'file_path' in data:
-            # The client supplies this path, so it must be confined to the
-            # uploads directory — otherwise any server-readable file (.env, SSH
-            # keys, /etc/passwd) could be "translated" into a downloadable
-            # output. See issue #209.
-            safe_path, path_error = PathValidator.validate_upload_path(
-                data['file_path'], uploads_dir
-            )
-            if path_error is not None:
-                return jsonify({"error": path_error}), 403
-            config['file_path'] = str(safe_path)
-            config['file_type'] = data['file_type']
-        else:
-            config['text'] = data['text']
-            config['file_type'] = data.get('file_type', 'txt')
-
-        # Human-readable source filename so any device can restore the
-        # progress panel (issue #271). Omit the key entirely when it cannot
-        # be determined, so get_translation_summaries() keeps emitting null.
-        display_input_filename = _display_input_filename(data.get('input_filename'), safe_path)
-        if display_input_filename is not None:
-            config['input_filename'] = display_input_filename
-
-        # A request-chosen endpoint must be allowlisted, and must carry its own
-        # key: the server's .env key never travels to a host the client picked.
-        requested_endpoint = data.get('llm_api_endpoint')
-        provider = (config.get('llm_provider') or 'ollama').lower()
-        pairing_error = _validate_endpoint_and_key_pairing(
-            config, requested_endpoint, request_key=data.get(f'{provider}_api_key')
-        )
-        if pairing_error is not None:
-            return pairing_error
-
-        if provider in _KEY_PROVIDERS and _is_endpoint_override(config, requested_endpoint):
-            # Belt and braces: re-resolve without the .env fallback so the
-            # invariant "no stored key with an overridden endpoint" is local
-            # and testable. The guard above already ensured a real key is present.
-            config[f'{provider}_api_key'] = _resolve_api_key(
-                data.get(f'{provider}_api_key'),
-                _provider_env_var(provider),
-                allow_env_fallback=False,
-            )
-
-        # Create translation in state manager
+        translation_id = new_job_id()
+        # The registry holds the persisted (secret-free) form; the worker gets
+        # the JobConfig, whose credentials only live in memory.
+        config = job.to_persisted()
         state_manager.create_translation(translation_id, config)
-
-        # Start translation job
-        start_translation_job(translation_id, config)
+        start_translation_job(translation_id, job)
 
         return jsonify({
             "translation_id": translation_id,
             "message": "Translation queued.",
-            # Strip keys from a copy — `config` is the live job's dict, and a
-            # '__USE_ENV__' request must not get the resolved .env key back.
-            "config_received": _strip_api_keys(dict(config))
+            "config_received": _strip_api_keys(dict(config)),
         })
 
     @bp.route('/api/term-fix/scan', methods=['POST'])
@@ -518,7 +104,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         from src.core.term_fix import scan_to_dict
 
         data = request.json or {}
-        term_fix, term_fix_error = _parse_term_fix_request(
+        term_fix, term_fix_error = parse_term_fix_request(
             {'rules_text': data.get('rules_text'), 'mode': 'literal'}, check_mode=False)
         if term_fix_error is not None:
             return jsonify({"error": term_fix_error}), 400
@@ -562,7 +148,10 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             "translation_id": translation_id,
             "status": job_data.get('status'),
             "progress": job_data.get('progress'),
+            # Every stat the Socket.IO updates carry, so a reconnecting client
+            # can resync its progress panel and replay a completion card.
             "stats": {
+                **stats,
                 'total_chunks': stats.get('total_chunks', 0),
                 'completed_chunks': stats.get('completed_chunks', 0),
                 'failed_chunks': stats.get('failed_chunks', 0),
@@ -641,13 +230,40 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
 
     @bp.route('/api/resume/<translation_id>', methods=['POST'])
     def resume_translation_job_endpoint(translation_id):
-        """Resume a paused or interrupted translation job"""
-        # Check if there are any active translations
+        """Resume a paused or interrupted translation job.
+
+        The job is reserved for one worker before anything else happens, and
+        released again on every path that does not start the worker: without
+        it, a double click (or a manual resume while the job sleeps before an
+        auto-resume) ran two workers on one checkpoint.
+        """
+        claim = getattr(state_manager, 'try_claim_worker', None)
+        if claim is not None and not claim(translation_id):
+            return jsonify({
+                "error": "Cannot resume: this translation is already running",
+                "message": "A worker is already processing this translation "
+                           "(possibly waiting to auto-resume after a rate limit).",
+            }), 409
+
+        outcome = {'started': False}
+        try:
+            return _resume_claimed_job(translation_id, outcome)
+        finally:
+            if not outcome['started'] and claim is not None:
+                state_manager.release_worker(translation_id)
+
+    def _resume_claimed_job(translation_id, outcome):
+        """Body of the resume route. Sets outcome['started'] once the worker
+        thread has been started (it then owns the claim)."""
+        # Check if there are any active translations. A 'rate_limited' job
+        # that is not interrupted still has a worker asleep before its
+        # auto-resume, so it counts as active.
         all_translations = state_manager.get_all_translations()
         active_translations = []
         for tid, tdata in all_translations.items():
             status = tdata.get('status')
-            if status in ['running', 'queued']:
+            if status in ['running', 'queued'] or (
+                    status == 'rate_limited' and not tdata.get('interrupted')):
                 active_translations.append({
                     'id': tid,
                     'status': status,
@@ -672,60 +288,50 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         if not restored:
             return jsonify({"error": "Failed to restore job from checkpoint"}), 500
 
-        # Get job config and add resume parameters
-        job = checkpoint_data['job']
-        config = copy.deepcopy(job['config'])  # Create a deep copy to avoid mutating the stored config
+        stored_config = checkpoint_data['job']['config']
 
-        # Get preserved input file path if exists
-        # Always use preserved_input_path from config (stored during job creation)
-        # This ensures consistent file path across multiple resume cycles
-        preserved_path = config.get('preserved_input_path')
+        # The preserved copy taken at job creation is the input of every
+        # resume cycle.
+        preserved_path = stored_config.get('preserved_input_path')
         if preserved_path:
-            # Verify that the preserved file actually exists
-            from pathlib import Path
-            if Path(preserved_path).exists():
-                config['file_path'] = preserved_path
-            else:
+            if not Path(preserved_path).exists():
                 return jsonify({
                     "error": "Preserved input file not found",
                     "message": f"The preserved input file for this job no longer exists: {preserved_path}",
                     "suggestion": "This job cannot be resumed. Please delete this checkpoint and start a new translation."
                 }), 404
+            input_path = preserved_path
         else:
-            # Fallback: try to get it from checkpoint manager
-            preserved_path_fallback = state_manager.checkpoint_manager.get_preserved_input_path(translation_id)
-            if preserved_path_fallback:
-                config['file_path'] = preserved_path_fallback
-            else:
+            input_path = state_manager.checkpoint_manager.get_preserved_input_path(translation_id)
+            if not input_path:
                 return jsonify({
                     "error": "No preserved input file",
                     "message": "This job has no preserved input file and cannot be resumed.",
                     "suggestion": "Please delete this checkpoint and start a new translation."
                 }), 404
 
-        # Add resume parameters to config
-        config['resume_from_index'] = checkpoint_data['resume_from_index']
-        config['is_resume'] = True
-
-        # Optional model/provider overrides for the remaining chunks (issue #183).
-        # No body = unchanged behavior.
+        # Optional model/provider overrides for the remaining work (issue
+        # #183); credentials re-resolved and validated (issue #213).
         overrides = request.get_json(silent=True) or {}
-        override_error = _apply_resume_overrides(config, overrides)
-        if override_error is not None:
-            return override_error
+        try:
+            job = JobConfig.from_checkpoint(stored_config, output_dir=output_dir,
+                                            input_path=input_path, overrides=overrides)
+        except JobConfigError as e:
+            return _config_error_response(e)
 
-        # Mark as running in database
         state_manager.checkpoint_manager.mark_running(translation_id)
+        start_translation_job(translation_id, job, is_resume=True)
+        outcome['started'] = True
 
-        # Start the translation job (the wrapper will inject dependencies)
-        start_translation_job(translation_id, config)
-
+        resume_index = checkpoint_data['resume_from_index']
+        if checkpoint_data.get('job_phase') == 'refine':
+            resume_index = checkpoint_data.get('refine_resume_index', 0)
         return jsonify({
             "translation_id": translation_id,
             "message": "Translation resumed successfully",
-            "resume_from_chunk": checkpoint_data['resume_from_index'],
-            "model": config.get('model'),
-            "llm_provider": config.get('llm_provider')
+            "resume_from_chunk": resume_index,
+            "model": job.model,
+            "llm_provider": job.llm_provider
         }), 200
 
     @bp.route('/api/checkpoint/<translation_id>', methods=['DELETE'])

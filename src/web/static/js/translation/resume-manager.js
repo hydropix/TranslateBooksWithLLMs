@@ -5,13 +5,14 @@
  * Manages resumable jobs UI and state synchronization.
  */
 
+import { knownApiErrorMessage } from '../core/api-errors.js';
 import { StateManager } from '../core/state-manager.js';
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { ProgressManager } from './progress-manager.js';
 import { TranslationTracker } from './translation-tracker.js';
-import { t, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
+import { t, tHtml, getCurrentLocale, applyToDOM } from '../i18n/i18n.js';
 import {
     overridePanelHtml,
     toggleOverridePanel,
@@ -49,11 +50,11 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
     const fileType = (job.file_type || 'txt').toUpperCase();
     const isPartial = job.status === 'partial';
 
-    const failedBadgeLabel = t('translation:job_card_failed_badge', { count: failedChunks });
+    const failedBadgeLabel = tHtml('translation:job_card_failed_badge', { count: failedChunks });
     const statusBadge = isPartial
-        ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px;" title="${t('translation:job_card_partial_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
+        ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--warning-light-text); background: var(--warning-light-bg); border: 1px solid var(--warning-light-border); border-radius: 4px;" title="${tHtml('translation:job_card_partial_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
         : (failedChunks > 0
-            ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px;" title="${t('translation:job_card_failed_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
+            ? `<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--warning-light-text); background: var(--warning-light-bg); border: 1px solid var(--warning-light-border); border-radius: 4px;" title="${tHtml('translation:job_card_failed_title', { count: failedChunks })}">${failedBadgeLabel}</span>`
             : '');
 
     const naText = t('translation:job_card_na');
@@ -77,7 +78,7 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
     const displayNameFormatted = displayName.charAt(0).toUpperCase() + displayName.slice(1);
 
     const idValue = inputHash || job.translation_id.replace('trans_', '');
-    const typeIdLine = t('translation:job_card_type_id', { type: fileType, id: idValue });
+    const typeIdLine = tHtml('translation:job_card_type_id', { type: fileType, id: idValue });
     const resumeTitle = hasActiveTranslation
         ? t('translation:cannot_resume_in_progress_title')
         : t('translation:resume_btn_title');
@@ -90,51 +91,57 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
     const origModel = cfg.model || '';
     const origEndpoint = cfg.llm_api_endpoint || '';
 
+    // The id is a server value: HTML-escape it for attributes, and JSON-encode
+    // it first where it lands inside an inline-handler JS string literal.
+    const safeTid = DomHelpers.escapeHtml(job.translation_id);
+    const jsTid = DomHelpers.escapeHtml(JSON.stringify(String(job.translation_id)));
+    const safePercent = Number(progressPercent) || 0;
+
     return `
-        <div class="resumable-job-card" style="border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 15px; border-radius: 8px; background: #f9fafb;">
+        <div class="resumable-job-card" style="border: 1px solid var(--border-light); padding: 20px; margin-bottom: 15px; border-radius: 8px; background: var(--background-inset);">
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; gap: 15px;">
                 <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 18px; font-weight: 600; color: #1f2937; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${DomHelpers.escapeHtml(displayNameFormatted)}">
+                    <div style="font-size: 18px; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${DomHelpers.escapeHtml(displayNameFormatted)}">
                         ${DomHelpers.escapeHtml(displayNameFormatted)}
                     </div>
-                    <div style="font-size: 14px; color: #6b7280; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="→ ${DomHelpers.escapeHtml(outputFilename)}">
+                    <div style="font-size: 14px; color: var(--text-muted-light); margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="→ ${DomHelpers.escapeHtml(outputFilename)}">
                         → ${DomHelpers.escapeHtml(outputFilename)}
                     </div>
-                    <div style="font-size: 12px; color: #9ca3af; margin-top: 8px;">
+                    <div style="font-size: 12px; color: var(--text-faint); margin-top: 8px;">
                         ${typeIdLine}${statusBadge}
                     </div>
                 </div>
 
                 <div style="display: flex; gap: 10px; flex-shrink: 0;">
-                    <button class="btn btn-primary" onclick="resumeJob('${job.translation_id}')"
+                    <button class="btn btn-primary" onclick="resumeJob(${jsTid})"
                             title="${resumeTitle}"
                             ${hasActiveTranslation ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
                         ${t('translation:job_card_resume_btn')}
                     </button>
-                    <button class="btn btn-danger" onclick="deleteCheckpoint('${job.translation_id}')" title="${t('translation:job_card_delete_title')}">
+                    <button class="btn btn-danger" onclick="deleteCheckpoint(${jsTid})" title="${t('translation:job_card_delete_title')}">
                         ${t('translation:job_card_delete_btn')}
                     </button>
                 </div>
             </div>
 
             <div style="margin-bottom: 10px;">
-                <div style="display: flex; justify-content: space-between; font-size: 13px; color: #6b7280; margin-bottom: 5px;">
-                    <span>${t('translation:job_card_progress', { completed: completedChunks, total: totalChunks, percent: progressPercent })}</span>
+                <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted-light); margin-bottom: 5px;">
+                    <span>${tHtml('translation:job_card_progress', { completed: completedChunks, total: totalChunks, percent: progressPercent })}</span>
                 </div>
-                <div style="width: 100%; background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
-                    <div style="width: ${progressPercent}%; background: #3b82f6; height: 100%; transition: width 0.3s;"></div>
+                <div style="width: 100%; background: var(--border-light); border-radius: 4px; height: 8px; overflow: hidden;">
+                    <div style="width: ${safePercent}%; background: var(--primary-light); height: 100%; transition: width 0.3s;"></div>
                 </div>
             </div>
 
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: 12px; color: #9ca3af;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: 12px; color: var(--text-faint);">
                 <div style="display: flex; gap: 20px;">
                     <span>${t('translation:job_card_created', { date: createdDate })}</span>
                     <span>${t('translation:job_card_paused', { date: pausedDate })}</span>
                 </div>
-                <button class="resume-change-model" data-tid="${job.translation_id}"
+                <button class="resume-change-model" data-tid="${safeTid}"
                         title="${t('translation:resume_change_model_title')}"
                         ${hasActiveTranslation ? 'disabled' : ''}
-                        style="display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 2px 4px; font-size: 12px; color: #3b82f6; cursor: pointer; white-space: nowrap;${hasActiveTranslation ? ' opacity: 0.5; cursor: not-allowed;' : ''}">
+                        style="display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 2px 4px; font-size: 12px; color: var(--primary-light); cursor: pointer; white-space: nowrap;${hasActiveTranslation ? ' opacity: 0.5; cursor: not-allowed;' : ''}">
                     <span class="material-symbols-outlined" style="font-size: 0.95rem;">tune</span>
                     <span data-i18n="translation:resume_change_model">Change model</span>
                 </button>
@@ -163,12 +170,12 @@ function createWarningBanner(activeJobs) {
     const activeNames = activeJobs.map(job => job.output_filename || t('translation:job_card_unknown')).join(', ');
 
     return `
-        <div class="active-translation-warning" style="background: #fef3c7; border: 1px solid #f59e0b; padding: 12px; margin-bottom: 15px; border-radius: 6px;">
+        <div class="active-translation-warning" style="background: var(--warning-light-bg); border: 1px solid var(--warning-light-border); padding: 12px; margin-bottom: 15px; border-radius: 6px;">
             <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-size: 20px;">⚠️</span>
                 <div style="flex: 1;">
-                    <strong style="color: #92400e;">${t('translation:active_translation_warning_title')}</strong>
-                    <p style="margin: 5px 0 0 0; font-size: 13px; color: #78350f;">
+                    <strong style="color: var(--warning-light-text);">${t('translation:active_translation_warning_title')}</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; color: var(--warning-light-text);">
                         ${t('translation:active_translation_warning_desc', { names: DomHelpers.escapeHtml(activeNames) })}
                     </p>
                 </div>
@@ -272,7 +279,7 @@ export const ResumeManager = {
             if (loading) loading.style.display = 'none';
             if (emptyMessage) {
                 emptyMessage.style.display = 'block';
-                emptyMessage.innerHTML = `<p style="color: #ef4444;">${t('translation:paused_load_error', { error: DomHelpers.escapeHtml(error.message) })}</p>`;
+                emptyMessage.innerHTML = `<p style="color: var(--danger-light);">${t('translation:paused_load_error', { error: DomHelpers.escapeHtml(error.message) })}</p>`;
             }
             // Hide section on error
             if (section) section.style.display = 'none';
@@ -397,15 +404,20 @@ export const ResumeManager = {
 
         } catch (error) {
             // Enhanced error message for active translation conflicts
-            if (error.status === 409 && error.data?.active_translations) {
-                const activeList = error.data.active_translations
+            // The parsed body is error.body (ApiClient); it used to be read
+            // from a non-existent error.data, so this branch never ran.
+            if (error.status === 409 && error.body?.active_translations) {
+                const activeList = error.body.active_translations
                     .map(item => `• ${item.output_filename} (${item.status})`)
                     .join('\n');
                 MessageLogger.showMessage(
                     t('translation:cannot_resume_with_list', { list: activeList }),
                     'error'
                 );
-                MessageLogger.addLog(`⚠️ ${error.data.message}`);
+                if (error.body.message) MessageLogger.addLog(`⚠️ ${error.body.message}`);
+            } else if (knownApiErrorMessage(error, { context: 'resume' })) {
+                MessageLogger.showMessage(knownApiErrorMessage(error, { context: 'resume' }), 'error');
+                MessageLogger.addLog(t('translation:resume_network_error_log', { error: error.message }));
             } else {
                 MessageLogger.showMessage(t('translation:resume_error', { error: error.message }), 'error');
                 MessageLogger.addLog(t('translation:resume_network_error_log', { error: error.message }));

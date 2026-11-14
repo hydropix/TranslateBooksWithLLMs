@@ -4,14 +4,17 @@ Body serialization for simplified EPUB processing
 This module handles extracting and replacing the content of <body> elements
 in XHTML documents, enabling full-document translation instead of per-element processing.
 """
+import logging
 from lxml import etree
-from typing import Tuple, Optional
+from typing import Callable, List, Tuple, Optional
+import html as _html
 import re
 
-from src.utils.unified_logger import info, LogType
 from .boilerplate_filter import strip_web_boilerplate
 from .exceptions import XmlParsingError, BodyExtractionError
 from .ruby_annotations import fold_ruby_annotations
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_whitespace(html: str) -> str:
@@ -86,6 +89,14 @@ def normalize_whitespace(html: str) -> str:
     return html
 
 
+def find_body(doc_root: etree._Element) -> Optional[etree._Element]:
+    """The document's <body>: XHTML namespace first, then no namespace."""
+    body = doc_root.find('.//{http://www.w3.org/1999/xhtml}body')
+    if body is None:
+        body = doc_root.find('.//body')
+    return body
+
+
 def extract_body_html(
     doc_root: etree._Element,
     normalize: bool = True,
@@ -113,11 +124,7 @@ def extract_body_html(
     translation paths replace the body content afterwards, so the removed
     elements simply never appear in the output.
     """
-    # Try XHTML namespace first, then fallback to no namespace
-    body = doc_root.find('.//{http://www.w3.org/1999/xhtml}body')
-    if body is None:
-        body = doc_root.find('.//body')
-
+    body = find_body(doc_root)
     if body is None:
         return "", None
 
@@ -145,27 +152,59 @@ def extract_body_html(
     return inner_html, body
 
 
-def replace_body_content(body_element: etree._Element, new_html: str) -> None:
-    """
-    Replace the content of <body> with new translated HTML.
+# Maximum share of visible text the re-parse of a translated body may lose.
+# lxml's recover mode silently drops content after a mis-nested or broken
+# tag; a parse that keeps less than this is treated as a failure instead of
+# erasing part of a chapter. A parse that needed recovery is held to a much
+# tighter bound than a clean one (which should lose nothing at all).
+MAX_VISIBLE_TEXT_LOSS = 0.10
+MAX_VISIBLE_TEXT_LOSS_WITH_RECOVERY = 0.02
 
-    Args:
-        body_element: The <body> element to modify
-        new_html: New translated HTML content
+_OPS_NS = 'http://www.idpf.org/2007/ops'
+_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
+_ANY_TAG_RE = re.compile(r'<[^>]*>')
+_WHITESPACE_RE = re.compile(r'\s+')
+
+
+def _visible_text_length(markup: str) -> int:
+    """Count non-whitespace characters of the text in a markup string."""
+    text = _ANY_TAG_RE.sub('', _COMMENT_RE.sub('', markup))
+    return len(_WHITESPACE_RE.sub('', _html.unescape(text)))
+
+
+def _parsed_text_length(element: etree._Element) -> int:
+    """Count non-whitespace characters of the text held by a parsed element."""
+    parts = []
+    for node in element.iter():
+        if not isinstance(node.tag, str):
+            # Comments and processing instructions: only their tail is text.
+            if node.tail:
+                parts.append(node.tail)
+            continue
+        if node.text:
+            parts.append(node.text)
+        if node is not element and node.tail:
+            parts.append(node.tail)
+    return len(_WHITESPACE_RE.sub('', ''.join(parts)))
+
+
+def _parse_translated_body(new_html: str) -> Tuple[etree._Element, str, List[str]]:
+    """Parse translated body markup into a detached <temp> wrapper element.
+
+    Returns ``(temp, parse_method, parse_warnings)``. Nothing is mutated.
 
     Raises:
-        BodyExtractionError: if new_html is empty while the body still holds
-            content. INVARIANT: a populated body is never emptied. Replacing an
-            already-empty body with empty content stays a no-op.
+        XmlParsingError: if every parsing method failed.
     """
-    # Checked before anything is mutated, so the element is left untouched.
-    if new_html.strip() == "" and (len(body_element) > 0 or (body_element.text or "").strip()):
-        raise BodyExtractionError("refusing to replace populated <body> with empty content")
-
-    # Parse the new content FIRST before clearing the body
-    # This prevents data loss if parsing fails
-    # Wrap in a temp element to handle multiple root elements
-    wrapped = f"<temp xmlns='http://www.w3.org/1999/xhtml'>{new_html}</temp>"
+    # Wrap in a temp element to handle multiple root elements. The body was
+    # serialized out of its document, so prefixes declared on <html> are not
+    # in scope here: declare the EPUB ops prefix too, or every epub:type
+    # attribute is a namespace error and every EPUB 3 body parses in recover
+    # mode (noisy logs, and the tighter loss bound applied to clean bodies).
+    wrapped = (
+        "<temp xmlns='http://www.w3.org/1999/xhtml' "
+        f"xmlns:epub='{_OPS_NS}'>{new_html}</temp>"
+    )
 
     # Try XML parser first with huge_tree option to handle large documents
     # This preserves exact XML structure without HTML normalization
@@ -183,7 +222,7 @@ def replace_body_content(body_element: etree._Element, new_html: str) -> None:
         temp = etree.fromstring(wrapped.encode('utf-8'), parser)
         if parser.error_log:
             parse_warnings.append(f"recovered from {len(parser.error_log)} errors")
-    except etree.XMLSyntaxError as e:
+    except etree.XMLSyntaxError:
         # Fallback: try without namespace
         wrapped_no_ns = f"<temp>{new_html}</temp>"
         try:
@@ -210,7 +249,34 @@ def replace_body_content(body_element: etree._Element, new_html: str) -> None:
                     content_preview=new_html[:200]
                 )
 
-    # NOW clear the body (only after successful parsing)
+    return temp, parse_method, parse_warnings
+
+
+def _check_visible_text_kept(
+    new_html: str,
+    temp: etree._Element,
+    parse_method: str,
+    parse_warnings: List[str],
+) -> None:
+    """Raise XmlParsingError when the parse lost too much visible text."""
+    # Refuse a parse that lost a significant part of the visible text: a
+    # mis-nested restoration recovered by lxml can come back empty or
+    # truncated, and writing it would silently erase part of the chapter.
+    expected_len = _visible_text_length(new_html)
+    if expected_len:
+        parsed_len = _parsed_text_length(temp)
+        recovered = bool(parse_warnings) or parse_method != "XML"
+        max_loss = MAX_VISIBLE_TEXT_LOSS_WITH_RECOVERY if recovered else MAX_VISIBLE_TEXT_LOSS
+        if parsed_len < expected_len * (1 - max_loss):
+            raise XmlParsingError(
+                f"Re-parsed body lost visible text: {parsed_len}/{expected_len} "
+                f"characters kept [{parse_method}]",
+                content_preview=new_html[:200]
+            )
+
+
+def _move_children_into_body(body_element: etree._Element, temp: etree._Element) -> int:
+    """Clear the body, then move the parsed content into it. Returns the child count."""
     body_element.text = None
     for child in list(body_element):
         body_element.remove(child)
@@ -221,7 +287,49 @@ def replace_body_content(body_element: etree._Element, new_html: str) -> None:
     for child in temp:
         body_element.append(child)
         child_count += 1
+    return child_count
+
+
+def replace_body_content(
+    body_element: etree._Element,
+    new_html: str,
+    log_callback: Optional[Callable] = None,
+) -> None:
+    """
+    Replace the content of <body> with new translated HTML.
+
+    Args:
+        body_element: The <body> element to modify
+        new_html: New translated HTML content
+        log_callback: The job's log callback; the reconstruction summary goes
+            there, or to this module's logger when there is none
+
+    Raises:
+        BodyExtractionError: if new_html is empty while the body still holds
+            content. INVARIANT: a populated body is never emptied. Replacing an
+            already-empty body with empty content stays a no-op.
+        XmlParsingError: if new_html cannot be parsed, or if the parsed result
+            lost a significant share of its visible text (see
+            MAX_VISIBLE_TEXT_LOSS). The body is left untouched in both cases.
+    """
+    # Checked before anything is mutated, so the element is left untouched.
+    if new_html.strip() == "" and (len(body_element) > 0 or (body_element.text or "").strip()):
+        raise BodyExtractionError("refusing to replace populated <body> with empty content")
+
+    # Parse the new content FIRST before clearing the body
+    # This prevents data loss if parsing fails
+    temp, parse_method, parse_warnings = _parse_translated_body(new_html)
+
+    _check_visible_text_kept(new_html, temp, parse_method, parse_warnings)
+
+    # NOW clear the body (only after successful parsing)
+    child_count = _move_children_into_body(body_element, temp)
 
     # Single consolidated log message
     warnings_str = f" ({', '.join(parse_warnings)})" if parse_warnings else ""
-    info(f"📄 Body reconstructed: {len(new_html)} chars → {child_count} elements [{parse_method}{warnings_str}]")
+    message = (f"📄 Body reconstructed: {len(new_html)} chars → {child_count} elements "
+               f"[{parse_method}{warnings_str}]")
+    if log_callback:
+        log_callback("body_reconstructed", message)
+    else:
+        logger.info(message)

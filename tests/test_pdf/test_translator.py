@@ -12,6 +12,7 @@ from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.pdf.content import PdfNoTextLayerError
 from src.core.pdf.extractor import extract_pdf_paragraphs
 from src.core.pdf.translator import translate_pdf_file
+from tests.job_helpers import make_ctx, make_job
 
 PIPELINE = "src.core.pdf.translator.translate_paragraphs_plain"
 
@@ -31,15 +32,16 @@ def _normalized_text(path):
     return " ".join(unicodedata.normalize("NFKC", text).split())
 
 
+_CTX_FIELDS = ("log_callback", "checkpoint_manager", "translation_id", "stats_callback")
+
+
 async def _translate(input_path, output_path, **kwargs):
+    ctx_fields = {k: kwargs.pop(k) for k in _CTX_FIELDS if k in kwargs}
     return await translate_pdf_file(
-        input_filepath=input_path,
-        output_filepath=output_path,
-        source_language="English",
-        target_language="French",
-        model_name="test-model",
+        make_job(input_path, output_path, model="test-model",
+                 source_language="English", target_language="French", **kwargs),
+        make_ctx(**ctx_fields),
         llm_client=Mock(),
-        **kwargs,
     )
 
 

@@ -24,6 +24,7 @@ def _hash_member(data: bytes) -> str:
 
 from src.core.adapters import translate_file, refine_file
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 # Only these stats fields are kept in the golden snapshot. Everything else
 # (start_time, elapsed_time, openrouter_*, ETA, token rates) is time/cost
@@ -33,18 +34,12 @@ STABLE_KEYS = (
     "completed_chunks",
     "failed_chunks",
     "processed_chunks",
-    "refinement_chunks_completed",
-    "refinement_phase",
-    "enable_refinement",
-    "current_phase",
     "successful_first_try",
     "successful_after_retry",
     "fallback_used",
     "token_alignment_used",
     "placeholder_errors",
     "total_tokens",
-    "completed_tokens",
-    "progress_percent",
 )
 
 
@@ -108,20 +103,18 @@ def record_translation(
 
     async def factory():
         await translate_file(
-            input_filepath=str(input_path),
-            output_filepath=str(output_path),
-            source_language="English",
-            target_language="French",
-            model_name="fake-echo",
-            llm_provider="poe",
-            checkpoint_manager=checkpoint_manager,
-            translation_id="char_translate",
-            stats_callback=stats_callback,
-            poe_api_key="UNUSED_FAKE_KEY",
-            max_tokens_per_chunk=max_tokens_per_chunk,
-            context_window=4096,
-            auto_adjust_context=False,
-            prompt_options=prompt_options or {},
+            make_job(
+                str(input_path), str(output_path),
+                provider="poe", model="fake-echo", api_key="UNUSED_FAKE_KEY",
+                source_language="English", target_language="French",
+                max_tokens_per_chunk=max_tokens_per_chunk,
+                context_window=4096,
+                auto_adjust_context=False,
+                prompt_options=prompt_options or {},
+            ),
+            make_ctx(translation_id="char_translate",
+                     checkpoint_manager=checkpoint_manager,
+                     stats_callback=stats_callback),
         )
 
     asyncio.run(_run(factory, work_dir))
@@ -146,19 +139,18 @@ def record_refine(
 
     async def factory():
         await refine_file(
-            input_filepath=str(input_path),
-            output_filepath=str(output_path),
-            target_language="French",
-            model_name="fake-echo",
-            llm_provider="poe",
-            checkpoint_manager=checkpoint_manager,
-            translation_id="char_refine",
-            stats_callback=stats_callback,
-            poe_api_key="UNUSED_FAKE_KEY",
-            max_tokens_per_chunk=max_tokens_per_chunk,
-            context_window=4096,
-            auto_adjust_context=False,
-            prompt_options=prompt_options or {},
+            make_job(
+                str(input_path), str(output_path), operation='refine',
+                provider="poe", model="fake-echo", api_key="UNUSED_FAKE_KEY",
+                source_language="French", target_language="French",
+                max_tokens_per_chunk=max_tokens_per_chunk,
+                context_window=4096,
+                auto_adjust_context=False,
+                prompt_options=prompt_options or {},
+            ),
+            make_ctx(translation_id="char_refine",
+                     checkpoint_manager=checkpoint_manager,
+                     stats_callback=stats_callback),
         )
 
     asyncio.run(_run(factory, work_dir))

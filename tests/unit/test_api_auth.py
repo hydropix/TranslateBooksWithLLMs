@@ -9,7 +9,6 @@ and static assets stay public.
 import pytest
 from flask import Flask, jsonify
 
-from src.api import auth
 from src.api.auth import register_auth, is_authorized, API_TOKEN
 
 

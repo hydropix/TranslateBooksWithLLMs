@@ -21,5 +21,11 @@
   "api_key_required_mistral": "Bei Verwendung des Mistral-Anbieters ist ein Mistral-API-Schlüssel erforderlich.",
   "api_key_required_deepseek": "Bei Verwendung des DeepSeek-Anbieters ist ein DeepSeek-API-Schlüssel erforderlich.",
   "api_key_required_poe": "Ein Poe-API-Schlüssel ist erforderlich. Schlüssel unter poe.com/api_key abrufen",
-  "api_key_required_nim": "Bei Verwendung des NIM-Anbieters ist ein NVIDIA NIM-API-Schlüssel erforderlich."
+  "api_key_required_nim": "Bei Verwendung des NIM-Anbieters ist ein NVIDIA NIM-API-Schlüssel erforderlich.",
+  "request_too_large": "Die Datei ist zu groß für den Server. Das Limit legt MAX_REQUEST_SIZE_MB fest (standardmäßig 200 MB).",
+  "endpoint_rejected": "Der Server hat diesen Endpunkt abgelehnt: {{detail}}",
+  "endpoint_override_needs_key": "Ein eigener Endpunkt braucht einen eigenen API-Schlüssel: Der auf dem Server gespeicherte Schlüssel wird nie an einen von Ihnen gewählten Endpunkt gesendet. Geben Sie den Schlüssel ein oder stellen Sie den Standard-Endpunkt wieder her.",
+  "resume_already_running": "Diese Übersetzung läuft bereits (sie wartet möglicherweise auf die automatische Fortsetzung nach einem Ratenlimit).",
+  "resume_active_conflict": "Eine andere Übersetzung läuft. Warten Sie, bis sie fertig ist, oder brechen Sie sie ab, bevor Sie fortsetzen.",
+  "file_type_not_allowed": "Dieser Dateityp kann nicht aus der App geöffnet werden."
 }

@@ -64,7 +64,6 @@ def submission_to_run(
     model_id = submission["model"]["id"]
     provider = submission["model"]["provider"]
     submitted_by = submission.get("submission", {}).get("submitted_by", "unknown")
-    original_judge = submission.get("environment", {}).get("judge_id", "unknown")
 
     target_codes = sorted({r["target_lang"] for r in submission["results"]})
 
@@ -78,11 +77,6 @@ def submission_to_run(
         evaluator_model="skipped",
         results=[],
         status="completed",
-    )
-
-    note = (
-        f"reconstructed from submission by {submitted_by} "
-        f"(original judge: {original_judge})"
     )
 
     for r in submission["results"]:

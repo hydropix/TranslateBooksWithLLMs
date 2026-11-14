@@ -98,6 +98,11 @@ class FileService:
         if filename.endswith('.tmp'):
             return False
 
+        # Exclude the refine pass's working copy of a translated output; it
+        # only lives while a refine-after pass is paused (see JobRunner).
+        if filename.endswith('.pre-refine'):
+            return False
+
         # Exclude tmpXXXXXX pattern files (from text input processing)
         # These are created by tempfile.NamedTemporaryFile()
         if filename.startswith('tmp') and len(filename) > 3:
@@ -145,15 +150,13 @@ class FileService:
         Returns:
             Tuple of (success, error_message)
         """
+        from .path_validator import PathValidator
+
         try:
             file_path = Path(file_path_str)
 
-            # Resolve to absolute paths for comparison
-            file_path_resolved = file_path.resolve()
-            upload_dir_resolved = self.uploads_dir.resolve()
-
             # Security check - ensure file is within uploads directory
-            if not str(file_path_resolved).startswith(str(upload_dir_resolved)):
+            if not PathValidator.is_within_directory(file_path, self.uploads_dir):
                 return False, "Security: File not in uploads directory"
 
             # Delete the file if it exists
@@ -193,11 +196,21 @@ class FileService:
         import subprocess
         import platform
 
+        from .path_validator import PathValidator
+
+        # os.startfile / open / xdg-open run whatever handler the OS maps to
+        # the extension, so only translated documents and TTS audio qualify:
+        # never a script or executable that landed in the output directory.
+        if not PathValidator.is_openable(filename):
+            return False, "Opening this file type is not allowed", None
+
         file_path = self.find_file(filename)
         if not file_path:
             return False, "File not found", None
 
         abs_path = str(file_path.resolve())
+        if not PathValidator.is_openable(abs_path):
+            return False, "Opening this file type is not allowed", None
         system = platform.system()
 
         try:

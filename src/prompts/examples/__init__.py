@@ -24,7 +24,9 @@ from .output_examples import OUTPUT_FORMAT_EXAMPLES
 from .helpers import (
     get_placeholder_example,
     get_subtitle_example,
+    get_subtitle_refinement_example,
     get_output_format_example,
+    get_refinement_output_example,
     build_placeholder_section,
     has_example_for_pair,
     ensure_example_ready,
@@ -42,7 +44,9 @@ __all__ = [
     # Helper functions
     "get_placeholder_example",
     "get_subtitle_example",
+    "get_subtitle_refinement_example",
     "get_output_format_example",
+    "get_refinement_output_example",
     "build_placeholder_section",
     "has_example_for_pair",
     "ensure_example_ready",

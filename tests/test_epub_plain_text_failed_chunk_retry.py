@@ -46,6 +46,7 @@ from tests.test_epub_retry_failed_chunks import (
     _build_epub,
     _chapter_text,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 MAX_TOKENS_PER_CHUNK = 2000
@@ -78,9 +79,10 @@ def plain_job(tmp_path, monkeypatch):
         input_file_path=str(input_path),
     )
 
-    monkeypatch.setattr(epub_translator, "_create_llm_client",
-                        lambda **kwargs: MagicMock())
-    monkeypatch.setattr(epub_translator, "EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr(epub_translator, "create_llm_client",
+                        lambda *args, **kwargs: MagicMock())
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr(epub_translator, "MAX_TRANSLATION_ATTEMPTS", 1)
 
     return {
         'input': input_path,
@@ -109,21 +111,24 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve, bilingual=False
     stats = {}
 
     await epub_translator.translate_epub_file(
-        input_filepath=str(job['input']),
-        output_filepath=str(job['output']),
-        source_language="English",
-        target_language="French",
-        model_name=MODEL,
-        llm_provider="ollama",
-        checkpoint_manager=job['manager'],
-        translation_id=job['translation_id'],
-        resume_from_index=resume_from_index,
-        log_callback=lambda kind, message, **kwargs: logs.append((kind, message)),
-        stats_callback=stats.update,
-        check_interruption_callback=check_interruption,
-        max_tokens_per_chunk=max_tokens,
-        max_attempts=1,
-        prompt_options={'plain_text_mode': True, 'bilingual': bilingual},
+        make_job(
+            input_path=str(job['input']),
+            output_path=str(job['output']),
+            source_language="English",
+            target_language="French",
+            model=MODEL,
+            provider="ollama",
+            max_tokens_per_chunk=max_tokens,
+            prompt_options={'plain_text_mode': True, 'bilingual': bilingual},
+        ),
+        make_ctx(
+            checkpoint_manager=job['manager'],
+            translation_id=job['translation_id'],
+            resume_from_index=resume_from_index,
+            log_callback=lambda kind, message, **kwargs: logs.append((kind, message)),
+            stats_callback=stats.update,
+            check_interruption=check_interruption,
+        ),
     )
     return stats, requests, logs
 
@@ -332,7 +337,7 @@ async def _pipeline(fake, **overrides):
 
 @pytest.fixture
 def identity_cleanup(monkeypatch):
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
 
 def _llm(monkeypatch, seen, fail_on=(), rate_limit_on=()):

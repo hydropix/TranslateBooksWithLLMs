@@ -5,56 +5,25 @@ is assumed to already be in the target language, and only a refinement
 pass is applied.
 """
 
+import importlib
 import os
-from typing import Optional, Callable, Dict, Any
 
 from .exceptions import UnsupportedFormatError
+from src.core.job import JobConfig, JobContext, JobResult
 from src.utils.file_detector import detect_file_type, detect_file_type_by_content
 
+#: Detected file type -> (refiner module, refiner function). Every refiner is
+#: called as ``await refiner(job, ctx)`` and returns True when its output was
+#: written in full.
+_REFINERS = {
+    'txt': ('src.core.refine.txt_refiner', 'refine_txt_file'),
+    'epub': ('src.core.refine.epub_refiner', 'refine_epub_file'),
+    'docx': ('src.core.refine.docx_refiner', 'refine_docx_file'),
+    'srt': ('src.core.refine.srt_refiner', 'refine_srt_file'),
+}
 
-async def refine_file(
-    input_filepath: str,
-    output_filepath: str,
-    target_language: str,
-    model_name: str,
-    llm_provider: str,
-    checkpoint_manager: Any = None,
-    translation_id: Optional[str] = None,
-    log_callback: Optional[Callable] = None,
-    stats_callback: Optional[Callable] = None,
-    check_interruption_callback: Optional[Callable] = None,
-    resume_from_index: int = 0,
-    llm_api_endpoint: Optional[str] = None,
-    gemini_api_key: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
-    openrouter_api_key: Optional[str] = None,
-    mistral_api_key: Optional[str] = None,
-    deepseek_api_key: Optional[str] = None,
-    poe_api_key: Optional[str] = None,
-    nim_api_key: Optional[str] = None,
-    context_window: Optional[int] = None,
-    auto_adjust_context: bool = True,
-    max_tokens_per_chunk: Optional[int] = None,
-    prompt_options: Optional[Dict[str, Any]] = None,
-    **additional_config,
-) -> bool:
-    """Run a refinement-only pass on an already-translated file.
 
-    `target_language` names the language the file is already in: refinement
-    is monolingual and does not translate.
-
-    Raises UnsupportedFormatError when the file format cannot be refined.
-    """
-    if prompt_options is None:
-        prompt_options = {}
-
-    # Resolve max_tokens_per_chunk lazily so a reload_config() between calls is
-    # honoured for subsequent runs (the .env value can change at runtime via
-    # the /api/settings endpoint).
-    if max_tokens_per_chunk is None:
-        from src.config import MAX_TOKENS_PER_CHUNK as _DEFAULT_MAX_TOKENS
-        max_tokens_per_chunk = _DEFAULT_MAX_TOKENS
-
+def _detect_type(input_filepath: str, ctx: JobContext) -> str:
     _, ext = os.path.splitext(input_filepath.lower())
     try:
         detected_type = detect_file_type(input_filepath)
@@ -66,112 +35,55 @@ async def refine_file(
                 f"The file does not appear to be a supported format."
             )
 
-    if log_callback and detected_type != ext.lstrip('.'):
-        log_callback("file_type_detected",
-                     f"📄 File with extension '{ext}' detected as '{detected_type.upper()}' format")
+    if detected_type != ext.lstrip('.'):
+        ctx.log("file_type_detected",
+                f"📄 File with extension '{ext}' detected as '{detected_type.upper()}' format")
+    return detected_type
 
-    if detected_type == 'txt':
-        from src.core.refine.txt_refiner import refine_txt_file
-        return await refine_txt_file(
-            input_filepath=input_filepath,
-            output_filepath=output_filepath,
-            target_language=target_language,
-            model_name=model_name,
-            cli_api_endpoint=llm_api_endpoint,
-            log_callback=log_callback,
-            stats_callback=stats_callback,
-            check_interruption_callback=check_interruption_callback,
-            llm_provider=llm_provider,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            context_window=context_window or 2048,
-            auto_adjust_context=auto_adjust_context,
-            max_tokens_per_chunk=max_tokens_per_chunk,
-            prompt_options=prompt_options,
+
+async def refine_file(job: JobConfig, ctx: JobContext) -> JobResult:
+    """Run a refinement-only pass on an already-translated file.
+
+    Reads ``job.input_path`` and writes ``job.output_path``. The client is
+    built from the job's refine provider (``job.provider_for(refine=True)``).
+    ``job.target_language`` names the language the file is already in:
+    refinement is monolingual and does not translate.
+
+    Returns:
+        The run's :class:`JobResult` (INTERRUPTED when the user stopped it;
+        an interrupted EPUB refine reports the ``[partial ...]`` file it
+        wrote as ``output_path``).
+
+    Raises:
+        UnsupportedFormatError: the file format cannot be refined.
+        RateLimitError: propagated unchanged so the caller can pause.
+    """
+    # Resolve max_tokens_per_chunk lazily so a reload_config() between calls is
+    # honoured for subsequent runs (the .env value can change at runtime via
+    # the /api/settings endpoint).
+    if job.max_tokens_per_chunk is None:
+        from src.config import MAX_TOKENS_PER_CHUNK as _DEFAULT_MAX_TOKENS
+        job = job.with_changes(max_tokens_per_chunk=_DEFAULT_MAX_TOKENS)
+
+    detected_type = _detect_type(job.input_path, ctx)
+    target = _REFINERS.get(detected_type)
+    if target is None:
+        supported = ', '.join(_REFINERS)
+        raise UnsupportedFormatError(
+            f"Unsupported file format for refine-only: {detected_type}. "
+            f"Supported formats: {supported}"
         )
 
-    if detected_type == 'epub':
-        from src.core.refine.epub_refiner import refine_epub_file
-        return await refine_epub_file(
-            input_filepath=input_filepath,
-            output_filepath=output_filepath,
-            target_language=target_language,
-            model_name=model_name,
-            cli_api_endpoint=llm_api_endpoint,
-            log_callback=log_callback,
-            stats_callback=stats_callback,
-            check_interruption_callback=check_interruption_callback,
-            llm_provider=llm_provider,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            context_window=context_window or 2048,
-            auto_adjust_context=auto_adjust_context,
-            max_tokens_per_chunk=max_tokens_per_chunk,
-            prompt_options=prompt_options,
-        )
+    module_name, function_name = target
+    refiner = getattr(importlib.import_module(module_name), function_name)
 
-    if detected_type == 'docx':
-        from src.core.refine.docx_refiner import refine_docx_file
-        return await refine_docx_file(
-            input_filepath=input_filepath,
-            output_filepath=output_filepath,
-            target_language=target_language,
-            model_name=model_name,
-            cli_api_endpoint=llm_api_endpoint,
-            log_callback=log_callback,
-            stats_callback=stats_callback,
-            check_interruption_callback=check_interruption_callback,
-            llm_provider=llm_provider,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            context_window=context_window or 2048,
-            auto_adjust_context=auto_adjust_context,
-            max_tokens_per_chunk=max_tokens_per_chunk,
-            prompt_options=prompt_options,
-        )
+    ctx, seen_stats = ctx.tap_stats()
+    ok = await refiner(job, ctx)
 
-    if detected_type == 'srt':
-        from src.core.refine.srt_refiner import refine_srt_file
-        return await refine_srt_file(
-            input_filepath=input_filepath,
-            output_filepath=output_filepath,
-            target_language=target_language,
-            model_name=model_name,
-            cli_api_endpoint=llm_api_endpoint,
-            log_callback=log_callback,
-            stats_callback=stats_callback,
-            check_interruption_callback=check_interruption_callback,
-            llm_provider=llm_provider,
-            gemini_api_key=gemini_api_key,
-            openai_api_key=openai_api_key,
-            openrouter_api_key=openrouter_api_key,
-            mistral_api_key=mistral_api_key,
-            deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key,
-            nim_api_key=nim_api_key,
-            prompt_options=prompt_options,
-            checkpoint_manager=checkpoint_manager,
-            translation_id=translation_id,
-            resume_from_index=resume_from_index,
-        )
-
-    supported = ', '.join(['txt', 'epub', 'srt', 'docx'])
-    raise UnsupportedFormatError(
-        f"Unsupported file format for refine-only: {detected_type}. "
-        f"Supported formats: {supported}"
-    )
+    interrupted = ctx.interrupted()
+    output_path = job.output_path
+    if interrupted and detected_type == 'epub':
+        from src.utils.file_utils import get_partial_output_path
+        output_path = get_partial_output_path(job.output_path)
+    return JobResult.from_run(seen_stats, output_path, engine_ok=bool(ok),
+                              interrupted=interrupted)

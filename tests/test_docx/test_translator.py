@@ -6,10 +6,11 @@ Tests the complete translate_docx_file function with mocked LLM.
 
 import os
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import Mock
 from docx import Document
 
 from src.core.docx.translator import translate_docx_file
+from tests.job_helpers import make_ctx, make_job
 
 
 class MockLLMProvider:
@@ -64,17 +65,18 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_simple.docx')
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+                max_tokens_per_chunk=450,
+                prompt_options=None,
+            ),
+            make_ctx(log_callback=None),
             llm_client=mock_llm_provider,
-            max_tokens_per_chunk=450,
-            log_callback=None,
-            progress_callback=None,
-            prompt_options=None,
-            max_retries=1
+            max_retries=1,
         )
 
         # Check result structure
@@ -96,13 +98,16 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_formatted.docx')
 
         result = await translate_docx_file(
-            input_filepath=formatted_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='Spanish',
-            model_name='test-model',
+            make_job(
+                input_path=formatted_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='Spanish',
+                model='test-model',
+                max_tokens_per_chunk=450,
+            ),
+            make_ctx(),
             llm_client=mock_llm_provider,
-            max_tokens_per_chunk=450
         )
 
         assert result['success'] is True
@@ -118,12 +123,15 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_table.docx')
 
         result = await translate_docx_file(
-            input_filepath=table_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='German',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+            make_job(
+                input_path=table_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='German',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         assert result['success'] is True
@@ -142,14 +150,15 @@ class TestTranslateDocxFile:
         stats_callback = Mock()
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(log_callback=log_callback, stats_callback=stats_callback),
             llm_client=mock_llm_provider,
-            log_callback=log_callback,
-            stats_callback=stats_callback
         )
 
         assert result['success'] is True
@@ -164,12 +173,15 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_stats.docx')
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         # Check stats structure
@@ -187,13 +199,16 @@ class TestTranslateDocxFile:
         prompt_options = {'refine': True}
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+                prompt_options=prompt_options,
+            ),
+            make_ctx(),
             llm_client=mock_llm_provider,
-            prompt_options=prompt_options
         )
 
         assert result['success'] is True
@@ -205,13 +220,16 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_retries.docx')
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
             llm_client=mock_llm_provider,
-            max_retries=3
+            max_retries=3,
         )
 
         assert result['success'] is True
@@ -222,13 +240,16 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_chunks.docx')
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+                max_tokens_per_chunk=200,
+            ),
+            make_ctx(),
             llm_client=mock_llm_provider,
-            max_tokens_per_chunk=200  # Smaller chunks
         )
 
         assert result['success'] is True
@@ -239,13 +260,16 @@ class TestTranslateDocxFile:
         """Test that output file is valid DOCX."""
         output_path = os.path.join(temp_dir, 'translated_valid.docx')
 
-        result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+        await translate_docx_file(
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         # Check file exists and is readable
@@ -263,12 +287,15 @@ class TestTranslateDocxFile:
 
         with pytest.raises(Exception):
             await translate_docx_file(
-                input_filepath='/nonexistent/input.docx',
-                output_filepath=output_path,
-                source_language='English',
-                target_language='French',
-                model_name='test-model',
-                llm_client=mock_llm_provider
+                make_job(
+                    input_path='/nonexistent/input.docx',
+                    output_path=output_path,
+                    source_language='English',
+                    target_language='French',
+                    model='test-model',
+                ),
+                make_ctx(),
+                llm_client=mock_llm_provider,
             )
 
     @pytest.mark.asyncio
@@ -283,12 +310,15 @@ class TestTranslateDocxFile:
 
         # Translate
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         assert result['success'] is True
@@ -311,13 +341,16 @@ class TestTranslateDocxFile:
         context_manager = Mock()
 
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
             llm_client=mock_llm_provider,
-            context_manager=context_manager
+            context_manager=context_manager,
         )
 
         assert result['success'] is True
@@ -333,12 +366,15 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_empty.docx')
 
         result = await translate_docx_file(
-            input_filepath=empty_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+            make_job(
+                input_path=empty_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         # Should succeed even with empty content
@@ -359,12 +395,15 @@ class TestTranslateDocxFile:
         output_path = os.path.join(temp_dir, 'translated_multi_para.docx')
 
         result = await translate_docx_file(
-            input_filepath=input_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+            make_job(
+                input_path=input_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         assert result['success'] is True
@@ -381,12 +420,15 @@ class TestTranslateDocxFile:
 
         # The function should use GenericTranslationOrchestrator internally
         result = await translate_docx_file(
-            input_filepath=simple_docx_path,
-            output_filepath=output_path,
-            source_language='English',
-            target_language='French',
-            model_name='test-model',
-            llm_client=mock_llm_provider
+            make_job(
+                input_path=simple_docx_path,
+                output_path=output_path,
+                source_language='English',
+                target_language='French',
+                model='test-model',
+            ),
+            make_ctx(),
+            llm_client=mock_llm_provider,
         )
 
         # Should complete successfully via orchestrator

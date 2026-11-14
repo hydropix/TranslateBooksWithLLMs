@@ -7,8 +7,10 @@
  * window (see <script> tags in translation_interface.html).
  */
 
+import { DomHelpers } from '../ui/dom-helpers.js';
+
 export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko'];
-export const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'tts', 'errors', 'sample', 'style'];
+const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'tts', 'errors', 'sample', 'style'];
 
 let ready = false;
 let readyPromise = null;
@@ -56,9 +58,11 @@ export function initI18n() {
         .then(() => {
             ready = true;
             applyToDOM(document.body);
+            applyDocumentTitle();
             window.i18next.on('languageChanged', () => {
                 document.documentElement.setAttribute('lang', window.i18next.language);
                 applyToDOM(document.body);
+                applyDocumentTitle();
                 window.dispatchEvent(new CustomEvent('localeChanged', {
                     detail: { locale: window.i18next.language }
                 }));
@@ -73,6 +77,15 @@ export function initI18n() {
 }
 
 /**
+ * The template's static <title> cannot carry a data-i18n marker that
+ * applyToDOM() reaches (it only walks document.body), so set it here.
+ */
+function applyDocumentTitle() {
+    const title = t('common:app_subtitle');
+    if (title && title !== 'common:app_subtitle') document.title = title;
+}
+
+/**
  * Translate a key. Falls back to the key itself if i18next isn't ready
  * (e.g. during very early boot or if the CDN failed to load).
  */
@@ -84,6 +97,42 @@ export function t(key, options) {
         return options.defaultValue;
     }
     return key;
+}
+
+/**
+ * Translate a key for an innerHTML sink. i18next runs with
+ * `escapeValue: false` (several locale values carry trusted markup), so
+ * interpolated params are inserted raw; this helper HTML-escapes every string
+ * param first. Use it whenever a param can come from the server, a file name,
+ * a model or the user. Non-string params (numbers, `count`) pass through.
+ * @param {string} key
+ * @param {Object} [params]
+ * @returns {string} Translated HTML with escaped params
+ */
+export function tHtml(key, params) {
+    if (!params || typeof params !== 'object') return t(key, params);
+    const safe = {};
+    for (const [name, value] of Object.entries(params)) {
+        safe[name] = typeof value === 'string' ? DomHelpers.escapeHtml(value) : value;
+    }
+    return t(key, safe);
+}
+
+/**
+ * Build a reactive, escaped text span for HTML built in JS: the span carries
+ * data-i18n (+ data-i18n-params), so applyToDOM() re-translates it on a
+ * locale switch, and both the initial text and the params are escaped.
+ * @param {string} key
+ * @param {Object} [params]
+ * @param {string} [attrs] - Extra trusted attributes for the span (e.g. 'class="x"')
+ * @returns {string} HTML
+ */
+export function i18nSpan(key, params, attrs = '') {
+    const paramsAttr = params
+        ? ` data-i18n-params="${DomHelpers.escapeHtml(JSON.stringify(params))}"`
+        : '';
+    const extra = attrs ? ` ${attrs}` : '';
+    return `<span data-i18n="${DomHelpers.escapeHtml(key)}"${paramsAttr}${extra}>${DomHelpers.escapeHtml(t(key, params))}</span>`;
 }
 
 /**
@@ -139,7 +188,8 @@ export function applyToDOM(root) {
         const key = el.getAttribute('data-i18n-html');
         if (!key) return;
         const params = parseParams(el.getAttribute('data-i18n-params'));
-        el.innerHTML = t(key, params);
+        // The key's markup is trusted; its params are not, so escape them.
+        el.innerHTML = tHtml(key, params);
     });
 
     root.querySelectorAll('[data-i18n-attr]').forEach((el) => {
@@ -166,8 +216,4 @@ function parseParams(raw) {
         return undefined;
     }
 }
-
-/** Convenience: await initI18n then call cb. Useful for late-bound modules. */
-export function whenReady(cb) {
-    initI18n().then(cb);
-}
+

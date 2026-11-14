@@ -35,6 +35,7 @@ from src import config  # noqa: F401
 import src.core.translator as translator_module
 from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 
 FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "sample.txt"
@@ -106,18 +107,22 @@ async def run() -> int:
                 translation_id = f"t10_{uuid.uuid4().hex[:8]}"
 
                 ok = await translate_file(
-                    input_filepath=str(FIXTURE),
-                    output_filepath=str(output_path),
-                    source_language="English",
-                    target_language="French",
-                    model_name=model,
-                    llm_provider="poe",
-                    checkpoint_manager=checkpoint_manager,
-                    translation_id=translation_id,
-                    stats_callback=stats_callback,
-                    poe_api_key=api_key,
-                    max_tokens_per_chunk=120,
-                    parallel_requests=PARALLEL,
+                    make_job(
+                        input_path=str(FIXTURE),
+                        output_path=str(output_path),
+                        source_language="English",
+                        target_language="French",
+                        model=model,
+                        provider="poe",
+                        api_key=api_key,
+                        max_tokens_per_chunk=120,
+                        parallel_workers=PARALLEL,
+                    ),
+                    make_ctx(
+                        checkpoint_manager=checkpoint_manager,
+                        translation_id=translation_id,
+                        stats_callback=stats_callback,
+                    ),
                 )
 
                 print(f"Result:     ok={ok}")

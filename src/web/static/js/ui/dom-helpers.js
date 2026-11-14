@@ -7,10 +7,15 @@
 export const DomHelpers = {
     /**
      * Escape HTML to prevent XSS
-     * @param {string} unsafe - Unsafe HTML string
+     * Numbers and booleans are stringified; null, undefined and objects
+     * yield an empty string.
+     * @param {string|number|boolean} unsafe - Unsafe value
      * @returns {string} Escaped HTML
      */
     escapeHtml(unsafe) {
+        if (typeof unsafe === 'number' || typeof unsafe === 'boolean') {
+            unsafe = String(unsafe);
+        }
         if (typeof unsafe !== 'string') return '';
 
         return unsafe
@@ -104,16 +109,6 @@ export const DomHelpers = {
         if (el) el.classList.remove(className);
     },
 
-    /**
-     * Toggle class on element
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {string} className - Class name
-     * @param {boolean} [force] - Force add (true) or remove (false)
-     */
-    toggleClass(element, className, force) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.classList.toggle(className, force);
-    },
 
     /**
      * Set text content
@@ -183,26 +178,7 @@ export const DomHelpers = {
         if (el) el.disabled = disabled;
     },
 
-    /**
-     * Set element attribute
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {string} attr - Attribute name
-     * @param {string} value - Attribute value
-     */
-    setAttr(element, attr, value) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.setAttribute(attr, value);
-    },
 
-    /**
-     * Remove element attribute
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {string} attr - Attribute name
-     */
-    removeAttr(element, attr) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.removeAttribute(attr);
-    },
 
     /**
      * Create element with properties

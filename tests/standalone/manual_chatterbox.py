@@ -34,7 +34,7 @@ def test_imports():
 
     # Test import spécifique de ChatterboxTTS
     try:
-        from chatterbox import ChatterboxTTS
+        from chatterbox import ChatterboxTTS  # noqa: F401 - import check
         print(f"✓ ChatterboxTTS class: OK")
     except ImportError as e:
         print(f"✗ ChatterboxTTS class: ERREUR - {e}")
@@ -169,7 +169,7 @@ def test_performance_comparison():
         try:
             tts_cpu = ChatterboxTTS(device="cpu")
             start = time.time()
-            audio_cpu = tts_cpu.tts(test_text)
+            tts_cpu.tts(test_text)
             cpu_time = time.time() - start
             results['cpu'] = cpu_time
             print(f"  Temps CPU: {cpu_time:.2f}s")
@@ -185,7 +185,7 @@ def test_performance_comparison():
                 _ = tts_gpu.tts("warmup")
 
                 start = time.time()
-                audio_gpu = tts_gpu.tts(test_text)
+                tts_gpu.tts(test_text)
                 gpu_time = time.time() - start
                 results['gpu'] = gpu_time
                 print(f"  Temps GPU: {gpu_time:.2f}s")

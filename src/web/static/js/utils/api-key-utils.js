@@ -7,6 +7,7 @@
 
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { t } from '../i18n/i18n.js';
+import { openaiEndpointRequiresKey } from './openai-endpoint.js';
 
 /**
  * Map of field IDs to their status span IDs
@@ -102,16 +103,6 @@ export const ApiKeyUtils = {
         return this.getValue(fieldId);
     },
 
-    /**
-     * Check if API key is available for a specific provider
-     * @param {string} provider - Provider name
-     * @returns {boolean} True if key is available
-     */
-    isAvailableForProvider(provider) {
-        const fieldId = this.getFieldIdForProvider(provider);
-        if (!fieldId) return false;
-        return this.isAvailable(fieldId);
-    },
 
     /**
      * Setup API key field with proper placeholder/indicator and status badge.
@@ -182,15 +173,10 @@ export const ApiKeyUtils = {
             return { valid: false, message: t('errors:api_key_required_gemini') };
         }
 
-        if (provider === 'openai' && !isAvailable) {
-            // OpenAI API key is only required for official OpenAI endpoint
-            // Local servers (llama.cpp, LM Studio, vLLM, etc.) don't need an API key
-            const isLocalEndpoint = endpoint.includes('localhost') || endpoint.includes('127.0.0.1');
-            const isOfficialEndpoint = endpoint.includes('api.openai.com');
-
-            if (isOfficialEndpoint || !isLocalEndpoint) {
-                return { valid: false, message: t('errors:api_key_required_openai') };
-            }
+        if (provider === 'openai' && !isAvailable && openaiEndpointRequiresKey(endpoint)) {
+            // Only the official OpenAI API needs a key; self-hosted
+            // OpenAI-compatible servers on the LAN may run keyless.
+            return { valid: false, message: t('errors:api_key_required_openai') };
         }
 
         if (provider === 'openrouter' && !isAvailable) {

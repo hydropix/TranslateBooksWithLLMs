@@ -2,9 +2,13 @@
 Per-chunk glossary filtering.
 
 Latin terms are matched with word boundaries (so "Fan" does not match "Fantasy").
-CJK terms are matched as substrings (no word boundary concept in CJK scripts).
+Boundaries apply per edge, and only on an edge that is a word character, so
+terms like "C++" or "Ph.D." still match. CJK terms are matched as substrings
+(no word boundary concept in CJK scripts). Overlapping occurrences resolve to
+the longest one, so a one-character CJK name does not fire inside a longer
+glossary term that contains it (the term-fix matcher shares this logic).
 The filter returns only the subset of glossary entries that actually appear in
-the chunk, sorted by source-term length (longest first) to handle overlaps.
+the chunk, sorted by source-term length (longest first).
 
 When the per-chunk cap is hit, the kept subset is selected by occurrence count
 (most frequent first, length as tiebreaker), then re-sorted by length for
@@ -27,11 +31,43 @@ def _is_cjk(text: str) -> bool:
     return bool(_CJK_RE.search(text))
 
 
-def _has_word_char_at_edge(term: str) -> bool:
-    """True if the term starts or ends with a regex \\w character (Latin/digit/underscore)."""
-    if not term:
-        return False
-    return bool(re.match(r'\w', term[0])) or bool(re.match(r'\w', term[-1]))
+_WORD_CHAR_RE = re.compile(r'\w')
+
+
+def term_pattern(term: str, prefix: bool = False) -> str:
+    """Regex for one term, shared by the glossary filter and the term-fix matcher.
+
+    CJK terms are plain substrings. Otherwise each edge gets its own boundary,
+    and only when that edge is a word character: "C++" is anchored on the
+    left only, "Ph.D." too, "(x)" on neither side. With `prefix`, the term
+    may be followed by more word characters (a "term*" wildcard).
+    """
+    body = re.escape(term)
+    if _is_cjk(term):
+        return body
+    left = r"(?<!\w)" if _WORD_CHAR_RE.match(term[0]) else ""
+    if prefix:
+        right = r"\w*"
+    else:
+        right = r"(?!\w)" if _WORD_CHAR_RE.match(term[-1]) else ""
+    return f"{left}{body}{right}"
+
+
+def longest_non_overlapping(candidates: List[Tuple]) -> List[Tuple]:
+    """Keep non-overlapping (start, end, ...) matches.
+
+    On overlap the match that starts first wins; at the same start the longest
+    one wins. Returned in text order.
+    """
+    ordered = sorted(candidates, key=lambda c: (c[0], -(c[1] - c[0])))
+    kept: List[Tuple] = []
+    last_end = -1
+    for cand in ordered:
+        if cand[0] < last_end:
+            continue
+        kept.append(cand)
+        last_end = cand[1]
+    return kept
 
 
 def _split_alternatives(source: str) -> List[str]:
@@ -48,19 +84,11 @@ def _max_alt_length(source: str) -> int:
     return max((len(a) for a in alts), default=0)
 
 
-def _count_alternative(alt: str, chunk: str, haystack: str, flags: int, case_sensitive: bool) -> int:
-    """Count occurrences of a single alternative form in the chunk."""
-    if _is_cjk(alt) or not _has_word_char_at_edge(alt):
-        needle = alt if case_sensitive else alt.lower()
-        return haystack.count(needle)
-    pattern = r'\b' + re.escape(alt) + r'\b'
-    return len(re.findall(pattern, chunk, flags))
-
-
 def filter_glossary(
     chunk: str,
     glossary_terms: Dict[str, str],
     config: GlossaryConfig = None,
+    prefix: bool = False,
 ) -> Tuple[Dict[str, str], bool]:
     """
     Return only the glossary entries that appear in the chunk.
@@ -70,6 +98,8 @@ def filter_glossary(
         glossary_terms: {source_term: translated_term}. A source_term may
             declare alternative inflected forms separated by '|'.
         config: GlossaryConfig (max_entries cap, case sensitivity).
+        prefix: also match a non-CJK term followed by more word characters
+            (an inflected ending), e.g. when matching target-language forms.
 
     Returns:
         (filtered_terms, capped) where filtered_terms preserves order
@@ -89,20 +119,25 @@ def filter_glossary(
         reverse=True,
     )
 
-    matched: List[Tuple[str, str, int]] = []  # (source, target, occurrence_count)
-    haystack = chunk if config.case_sensitive else chunk.lower()
+    # Every occurrence of every alternative, then overlaps resolved to the
+    # longest match: an occurrence inside a longer matched term does not
+    # count for the shorter one.
+    candidates: List[Tuple[int, int, int]] = []  # (start, end, entry_index)
+    for entry_index, (source, _target) in enumerate(sorted_terms):
+        for alt in _split_alternatives(source):
+            for m in re.finditer(term_pattern(alt, prefix=prefix), chunk, flags):
+                if m.end() > m.start():
+                    candidates.append((m.start(), m.end(), entry_index))
 
-    for source, target in sorted_terms:
-        alternatives = _split_alternatives(source)
-        if not alternatives:
-            continue
+    counts: Dict[int, int] = {}
+    for _start, _end, entry_index in longest_non_overlapping(candidates):
+        counts[entry_index] = counts.get(entry_index, 0) + 1
 
-        total_count = sum(
-            _count_alternative(alt, chunk, haystack, flags, config.case_sensitive)
-            for alt in alternatives
-        )
-        if total_count > 0:
-            matched.append((source, target, total_count))
+    matched: List[Tuple[str, str, int]] = [  # (source, target, occurrence_count)
+        (source, target, counts[entry_index])
+        for entry_index, (source, target) in enumerate(sorted_terms)
+        if counts.get(entry_index)
+    ]
 
     capped = False
     if config.max_entries and len(matched) > config.max_entries:

@@ -8,7 +8,7 @@ using Ollama, OpenAI-compatible, or OpenRouter models for benchmark testing.
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Optional, Callable, Union
+from typing import Optional, Callable
 
 from benchmark.config import BenchmarkConfig
 from benchmark.models import ReferenceText, TranslationResult

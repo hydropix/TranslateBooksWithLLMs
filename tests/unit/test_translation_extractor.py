@@ -1,7 +1,6 @@
 """
 Unit tests for TranslationExtractor (issue #170 fixes)
 """
-import pytest
 from src.core.llm.utils.extraction import TranslationExtractor
 
 
@@ -68,3 +67,91 @@ class TestTranslationExtractor:
         extractor = TranslationExtractor("<TRANSLATION>", "</TRANSLATION>")
         result = extractor.extract("<TRANSLATION>Hello</TRANATION>")
         assert result == "Hello"
+
+
+TAG_IN = "<TRANSLATION>"
+TAG_OUT = "</TRANSLATION>"
+
+
+def _extract(raw):
+    return TranslationExtractor(TAG_IN, TAG_OUT).extract(raw)
+
+
+class TestMultipleBlocks:
+    """A response holding several tagged blocks must never leak a literal tag."""
+
+    def test_two_blocks_at_boundaries_return_no_literal_tag(self):
+        result = _extract("<TRANSLATION>A</TRANSLATION>\n<TRANSLATION>B</TRANSLATION>")
+        assert TAG_IN not in result and TAG_OUT not in result
+        assert result == "B"
+
+    def test_echoed_prompt_example_blocks_are_not_extracted(self):
+        raw = (
+            "**CORRECT format (ONLY this):**\n"
+            "✅ <TRANSLATION>\nYour translated text here\n</TRANSLATION>\n"
+            "REMINDER: Output ONLY your translation in this exact format:\n"
+            "<TRANSLATION>\nyour translation here\n</TRANSLATION>\n"
+            "<TRANSLATION>\nBonjour le monde\n</TRANSLATION>"
+        )
+        assert _extract(raw) == "Bonjour le monde"
+
+    def test_placeholder_block_after_real_answer_is_skipped(self):
+        raw = (
+            "<TRANSLATION>Bonjour</TRANSLATION>\n"
+            "<TRANSLATION>your translation here</TRANSLATION>"
+        )
+        assert _extract(raw) == "Bonjour"
+
+    def test_unbalanced_opening_tag_does_not_leak(self):
+        raw = "<TRANSLATION>draft <TRANSLATION>Bonjour</TRANSLATION>"
+        assert _extract(raw) == "Bonjour"
+
+    def test_fuzzy_closing_tag_does_not_leak_opening_tag(self):
+        raw = "<TRANSLATION>draft <TRANSLATION>Bonjour</TRANATION>"
+        assert _extract(raw) == "Bonjour"
+
+
+class TestThinkingRemoval:
+    def test_unclosed_think_before_translation(self):
+        raw = "<think>Let me reason about this...\n<TRANSLATION>Bonjour</TRANSLATION>"
+        assert _extract(raw) == "Bonjour"
+
+    def test_unclosed_think_without_translation_returns_none(self):
+        assert _extract("<think>I am still reasoning and never stop") is None
+
+    def test_unclosed_think_quoting_a_full_block(self):
+        raw = ("<think>The format is <TRANSLATION>x</TRANSLATION>, fine.\n"
+               "<TRANSLATION>Bonjour</TRANSLATION>")
+        assert _extract(raw) == "Bonjour"
+
+    def test_reasoning_quoting_translation_tag(self):
+        raw = ("<think>I must wrap the answer in <TRANSLATION> and </TRANSLATION>."
+               "</think><TRANSLATION>Bonjour</TRANSLATION>")
+        assert _extract(raw) == "Bonjour"
+
+    def test_orphan_close_after_reasoning_quoting_translation_tag(self):
+        raw = ("I must output <TRANSLATION>x</TRANSLATION> exactly.</think>\n"
+               "<TRANSLATION>Bonjour</TRANSLATION>")
+        assert _extract(raw) == "Bonjour"
+
+    def test_reasoning_quoting_the_closing_think_tag(self):
+        raw = ("<think>Never emit </think> early. Done.</think>"
+               "<TRANSLATION>Bonjour</TRANSLATION>")
+        assert _extract(raw) == "Bonjour"
+
+    def test_thinking_variant(self):
+        raw = ("<thinking>use <TRANSLATION>x</TRANSLATION></thinking>"
+               "<TRANSLATION>Bonjour</TRANSLATION>")
+        assert _extract(raw) == "Bonjour"
+
+    def test_reasoning_variant_case_insensitive(self):
+        raw = ("<Reasoning>use <TRANSLATION>x</TRANSLATION></Reasoning>"
+               "<TRANSLATION>Bonjour</TRANSLATION>")
+        assert _extract(raw) == "Bonjour"
+
+
+def test_extractor_does_not_print(capsys):
+    _extract("Some reasoning...</think>\n<TRANSLATION>Hello</TRANSLATION>")
+    _extract("<TRANSLATION>Hello</TRANATION>")
+    _extract("Preface <TRANSLATION>Hello</TRANSLATION> trailing")
+    assert capsys.readouterr().out == ""

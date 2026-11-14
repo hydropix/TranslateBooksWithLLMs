@@ -20,7 +20,6 @@ import sys
 import logging
 import webbrowser
 import threading
-from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask
 from flask_socketio import SocketIO
@@ -48,6 +47,7 @@ from src.config import (
     LLM_PROVIDER,
     PORT,
     HOST,
+    ALLOWED_HOSTS,
     OUTPUT_DIR,
     warn_env_config_missing,
 )
@@ -56,6 +56,7 @@ from src.api.websocket import configure_websocket_handlers
 from src.api.handlers import start_translation_job
 from src.api.translation_state import get_state_manager
 from src.api.auth import register_auth
+from src.api.host_guard import register_host_guard
 
 
 # Initialize Flask app with static folder configuration
@@ -97,6 +98,11 @@ socketio = SocketIO(app, async_mode='threading')
 
 # Gate every /api/ route behind the per-session token (issue #210).
 register_auth(app)
+
+# DNS-rebinding protection: reject requests whose Host header is not a loopback
+# name or an ALLOWED_HOSTS entry. Installed after SocketIO(app) so the WSGI
+# middleware also wraps the /socket.io/ handshake.
+register_host_guard(app, HOST, ALLOWED_HOSTS)
 
 # Thread-safe state manager (generates unique session ID for this server instance)
 state_manager = get_state_manager()
@@ -195,9 +201,10 @@ logger.info(f"Output folder '{OUTPUT_DIR}' is ready")
 # Static files are now handled automatically by Flask
 
 # Wrapper function for starting translation jobs
-def start_job_wrapper(translation_id, config):
+def start_job_wrapper(translation_id, job, is_resume=False):
     """Wrapper to inject dependencies into job starter"""
-    start_translation_job(translation_id, config, state_manager, OUTPUT_DIR, socketio)
+    start_translation_job(translation_id, job, state_manager, OUTPUT_DIR, socketio,
+                          is_resume=is_resume)
 
 # Configure routes and WebSocket handlers
 configure_routes(app, state_manager, OUTPUT_DIR, start_job_wrapper, socketio)
@@ -311,7 +318,8 @@ def start_server():
         logger.info(f"  LLM Provider: {provider}")
         if provider == 'ollama':
             logger.info(f"  Ollama Endpoint: {DEFAULT_OLLAMA_API_ENDPOINT}")
-        logger.info(f"  Supported formats: .txt, .epub, .srt")
+        from src.core.adapters.translate_file import FILE_TYPE_BY_EXTENSION
+        logger.info(f"  Supported formats: {', '.join(FILE_TYPE_BY_EXTENSION)}")
         logger.info("")
 
         # Only probe Ollama when it is the configured provider: with another

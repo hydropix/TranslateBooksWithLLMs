@@ -9,7 +9,7 @@ import pytest
 from lxml import etree
 
 from src.config import NAMESPACES
-from src.core.epub.translator import _update_epub_metadata
+from src.core.epub.opf_metadata import update_epub_metadata
 
 OPF_ROLE = "{http://www.idpf.org/2007/opf}role"
 
@@ -34,7 +34,7 @@ def _write_opf(tmp_path: Path, version: str, extra_metadata: str = "") -> Path:
 
 
 def _run(opf_path: Path) -> etree._Element:
-    _update_epub_metadata(etree.parse(str(opf_path)), str(opf_path), "French")
+    update_epub_metadata(etree.parse(str(opf_path)), str(opf_path), "French")
     return etree.parse(str(opf_path)).getroot()
 
 
@@ -44,7 +44,7 @@ def _contributors(root):
 
 @pytest.fixture
 def attribution_on(monkeypatch):
-    monkeypatch.setattr("src.core.epub.translator.ATTRIBUTION_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", True)
 
 
 @pytest.mark.parametrize("version", ["3.0", "3.3"])
@@ -83,7 +83,7 @@ def test_epub3_id_does_not_collide_with_existing_one(tmp_path, attribution_on):
 
 
 def test_attribution_disabled_adds_nothing(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.core.epub.translator.ATTRIBUTION_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", False)
     root = _run(_write_opf(tmp_path, "3.0"))
 
     assert _contributors(root) == []

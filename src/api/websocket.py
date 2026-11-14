@@ -1,11 +1,15 @@
 """
 WebSocket handlers for real-time communication
 """
+import logging
+
 from flask import request
 from flask_socketio import emit
 
 from .auth import is_authorized
 from .socket_events import EVENT_TRANSLATION_UPDATE, LLM_RESPONSE_TYPES
+
+logger = logging.getLogger(__name__)
 
 
 def configure_websocket_handlers(socketio, state_manager):
@@ -18,14 +22,14 @@ def configure_websocket_handlers(socketio, state_manager):
         # neither read nor guess it. Returning False refuses the connection.
         token = auth.get('token') if isinstance(auth, dict) else None
         if not is_authorized(token):
-            print(f'🚫 WebSocket handshake rejected (bad token): {request.sid}')
+            logger.warning('WebSocket handshake rejected (bad token): %s', request.sid)
             return False
-        print(f'🔌 WebSocket client connected: {request.sid}')
+        logger.info('WebSocket client connected: %s', request.sid)
         emit('connected', {'message': 'Connected to translation server via WebSocket'})
 
     @socketio.on('disconnect')
     def handle_websocket_disconnect():
-        print(f'🔌 WebSocket client disconnected: {request.sid}')
+        logger.info('WebSocket client disconnected: %s', request.sid)
 
 
 def emit_update(socketio, translation_id, data_to_emit, state_manager):
@@ -63,4 +67,4 @@ def emit_update(socketio, translation_id, data_to_emit, state_manager):
 
         socketio.emit(EVENT_TRANSLATION_UPDATE, data_to_emit, namespace='/')
     except Exception as e:
-        print(f"WebSocket emission error for {translation_id}: {e}")
+        logger.error("WebSocket emission error for %s: %s", translation_id, e)

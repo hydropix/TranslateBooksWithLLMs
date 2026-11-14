@@ -4,11 +4,14 @@
  * Handles dark/light mode theme switching and persistence.
  */
 
-export class ThemeManager {
+class ThemeManager {
     constructor() {
         this.htmlElement = document.documentElement;
         this.themeIcon = document.getElementById('themeIcon');
         this.STORAGE_KEY = 'tbl-theme-preference';
+
+        document.getElementById('themeToggleBtn')
+            ?.addEventListener('click', () => this.toggleTheme());
 
         // Initialize theme from localStorage or system preference
         this.initializeTheme();
@@ -94,13 +97,13 @@ export function initializeThemeManager() {
  * Get theme manager instance
  * @returns {ThemeManager}
  */
-export function getThemeManager() {
+function getThemeManager() {
     return themeManagerInstance;
 }
 
 /**
- * Global function for onclick handler
- * Called from HTML template
+ * Global toggle, kept for callers that use the window API. The header button
+ * is wired by ThemeManager itself.
  */
 window.toggleTheme = function() {
     const manager = getThemeManager();

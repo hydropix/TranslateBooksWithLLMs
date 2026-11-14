@@ -15,6 +15,7 @@ import pytest
 from src.config import INPUT_TAG_IN, INPUT_TAG_OUT, TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
 from src.core.llm.exceptions import RateLimitError
 from src.core.srt_processor import SRTProcessor
+from tests.job_helpers import make_ctx, make_job
 
 
 # Gapped numbering and two-cue blocks: 6 cues -> 3 blocks of 2.
@@ -44,7 +45,7 @@ class FakeLLMClient:
         self.calls = 0
         self.seen = []
 
-    async def make_request(self, prompt, model_name, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         call = self.calls
         self.calls += 1
         if call == self.fail_at_call:
@@ -97,9 +98,10 @@ def _parse(path):
 
 
 async def _refine(tmp_path, monkeypatch, client, **kwargs):
+    import src.core.llm.factory as llm_factory
     import src.core.refine.srt_refiner as srt_refiner
 
-    monkeypatch.setattr(srt_refiner, "create_llm_client", lambda *a, **kw: client)
+    monkeypatch.setattr(llm_factory, "create_llm_provider", lambda *a, **kw: client)
     monkeypatch.setattr(srt_refiner, "SRT_LINES_PER_BLOCK", BLOCK_SIZE)
 
     input_file = tmp_path / "input.srt"
@@ -107,11 +109,10 @@ async def _refine(tmp_path, monkeypatch, client, **kwargs):
     input_file.write_text(_build_srt(CUES), encoding="utf-8")
     log_events = []
     result = await srt_refiner.refine_srt_file(
-        input_filepath=str(input_file),
-        output_filepath=str(output_file),
-        target_language="English",
-        log_callback=lambda event, message, **kw: log_events.append(event),
-        **kwargs,
+        make_job(str(input_file), str(output_file), operation="refine",
+                 target_language="English"),
+        make_ctx(log_callback=lambda event, message, **kw: log_events.append(event),
+                 **kwargs),
     )
     return result, output_file, log_events
 
@@ -142,6 +143,25 @@ async def test_rate_limit_writes_partial_srt_and_re_raises(tmp_path, monkeypatch
     assert saved['translated_text'] == CUES[BLOCK_SIZE - 1][3].upper()
     assert saved['completed_chunks'] == BLOCK_SIZE
     assert saved['total_chunks'] == len(CUES)
+    # Refine units live in their own namespace, never in the translation chunks.
+    assert saved['phase'] == 'refine'
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_checkpoint_never_touches_translation_chunks(tmp_path, monkeypatch):
+    from src.persistence.checkpoint_manager import CheckpointManager
+
+    manager = CheckpointManager(db_path=str(tmp_path / "jobs.db"))
+    try:
+        manager.start_job("job-1", "srt", {}, str(tmp_path / "input.srt"))
+        with pytest.raises(RateLimitError):
+            await _refine(tmp_path, monkeypatch, FakeLLMClient(fail_at_call=1),
+                          checkpoint_manager=manager, translation_id="job-1")
+
+        assert manager.db.get_chunks("job-1", phase='translate') == []
+        assert manager.refine_resume_index("job-1") == BLOCK_SIZE
+    finally:
+        manager.close()
 
 
 @pytest.mark.asyncio

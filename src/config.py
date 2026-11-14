@@ -5,7 +5,7 @@ import os
 import sys
 import logging
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -134,7 +134,8 @@ OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '4096'))
 # byte-for-byte identical to the legacy behavior, including cross-chunk
 # translation context chaining). Values > 1 dispatch that many LLM requests at
 # once in ordered windows; the per-chunk "previous translation" context is
-# dropped in that mode (source context_before/after is still used).
+# dropped in that mode, so each chunk is sent with no cross-chunk context at
+# all (the source text around a chunk is never part of the prompt).
 #
 # Only cloud providers benefit: a single local Ollama instance serializes
 # requests anyway, so resolve_parallel_workers() forces local providers back to
@@ -286,10 +287,28 @@ if _max_retries_legacy and not os.getenv('MAX_TRANSLATION_ATTEMPTS'):
 else:
     MAX_TRANSLATION_ATTEMPTS = int(os.getenv('MAX_TRANSLATION_ATTEMPTS', '2'))
 
-# Sampling temperature applied to cloud LLM providers (gemini, deepseek, mistral,
-# poe). Lower values favor consistent translations; higher values produce more
-# variation. Ollama is unaffected because it uses its own server-side defaults.
+# Sampling temperature sent with every request by the OpenAI-compatible
+# providers (OpenAI, NVIDIA NIM and local OpenAI-compatible servers), OpenRouter,
+# Mistral, DeepSeek, Poe, Gemini and LiteLLM. Lower values favor consistent
+# translations; higher values produce more variation. Exceptions: Ollama keeps
+# the sampling parameters of the model's Modelfile (thinking models ship tuned
+# values there, and low temperatures make them loop), and OpenRouter presets
+# carry their own. A model that rejects the parameter (some OpenAI reasoning
+# models) gets the request re-sent once without it.
 TEMPERATURE = float(os.getenv('TEMPERATURE', '0.3'))
+
+# Retry policy of every LLM request (see src/core/llm/policy.py). Transient
+# failures (timeouts, 5xx, connection errors) are retried up to
+# MAX_TRANSLATION_ATTEMPTS times, waiting RETRY_BASE_DELAY seconds before the
+# second attempt and RETRY_BACKOFF_FACTOR times longer before each next one
+# (capped at RETRY_MAX_DELAY), plus up to RETRY_JITTER of random extra so
+# parallel workers do not retry in lockstep. A web job's own timeout /
+# attempts / retry delay settings override these. HTTP 429 has its own budget
+# (key rotation never consumes an attempt).
+RETRY_BASE_DELAY = float(os.getenv('RETRY_BASE_DELAY', '2'))
+RETRY_BACKOFF_FACTOR = float(os.getenv('RETRY_BACKOFF_FACTOR', '2'))
+RETRY_MAX_DELAY = float(os.getenv('RETRY_MAX_DELAY', '30'))
+RETRY_JITTER = float(os.getenv('RETRY_JITTER', '0.25'))
 
 # Gemini safety filter threshold applied to all four harm categories
 # (HARASSMENT, HATE_SPEECH, SEXUALLY_EXPLICIT, DANGEROUS_CONTENT). Default is
@@ -342,13 +361,6 @@ peuvent être 2x plus longues que la source)"""
 
 TRANSLATION_TAG_OVERHEAD = 50
 """Tokens réservés pour les balises XML de traduction (<Translated>...</Translated>)"""
-
-# === Placeholder Validation ===
-MAX_PLACEHOLDER_RETRIES = 3
-"""Nombre maximum de tentatives de validation des placeholders"""
-
-MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 2
-"""Nombre maximum de tentatives de correction LLM pour les placeholders malformés"""
 
 try:
     MAX_REFINE_RETRIES = max(0, int(os.getenv('MAX_REFINE_RETRIES', '1')))
@@ -443,19 +455,13 @@ METADATA_VERSION = "1.0"
 DEFAULT_SOURCE_LANGUAGE = os.getenv('DEFAULT_SOURCE_LANGUAGE', '')  # Empty = auto-detect
 DEFAULT_TARGET_LANGUAGE = os.getenv('DEFAULT_TARGET_LANGUAGE', '')  # Empty = use browser language
 
-# ============================================================================
-# PROMPT OPTIONS CONFIGURATION
-# ============================================================================
-# These options control which optional sections are included in the system prompt.
-# Each option can be enabled/disabled via the web interface or CLI.
-
-# Technical Content Preservation (always enabled)
-# Automatically detects and preserves code, paths, URLs, formulas, etc.
-# This is always active as it has no negative impact on literary texts.
-PROMPT_PRESERVE_TECHNICAL_CONTENT = True
-
 # Server configuration
 HOST = os.getenv('HOST', '127.0.0.1')
+# DNS-rebinding protection (src/api/host_guard.py): extra Host header values the
+# server accepts, comma-separated, optional port (e.g. "translate.example.com,nas.lan:5000").
+# Loopback names are always accepted. Enforced whenever HOST is a loopback address,
+# and also on a non-loopback bind (0.0.0.0) as soon as it is set.
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '')
 # Resolve OUTPUT_DIR to an absolute path so downstream code (file listing, writes,
 # checkpoints) is independent of any later cwd change. A relative value still
 # anchors to the cwd at config-load time, which matches the previous behavior
@@ -553,13 +559,6 @@ PLACEHOLDER_SUFFIX = "]"
 
 PLACEHOLDER_PATTERN = r'\[id(\d+)\]'
 """Regex pattern for placeholders (e.g., [id0])"""
-
-# Maximum retries for placeholder validation before falling back to source text
-MAX_PLACEHOLDER_RETRIES = 0
-"""Number of retry attempts when placeholder validation fails"""
-
-MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 0
-"""Number of LLM correction attempts before falling back to proportional insertion (0 = skip correction phase entirely)"""
 
 # =============================================================================
 # TOKEN ALIGNMENT FALLBACK CONFIGURATION (Phase 2)
@@ -706,44 +705,47 @@ MODEL_FAMILY_CONTEXT_DEFAULTS = {
 DEFAULT_CONTEXT_FALLBACK = 2048
 
 
+def _live(name: str):
+    """Dataclass default resolved at instantiation from this module's globals."""
+    return field(default_factory=lambda: globals()[name])
+
+
 @dataclass
 class TranslationConfig:
-    """Unified configuration for both CLI and web interfaces"""
+    """Unified configuration for both CLI and web interfaces.
+
+    Defaults that come from settings are resolved when an instance is
+    created, from the current module globals, so values refreshed by
+    reload_config() (or patched in tests) reach new instances.
+    """
     
     # Core settings
-    source_language: str = DEFAULT_SOURCE_LANGUAGE
-    target_language: str = DEFAULT_TARGET_LANGUAGE
-    model: str = DEFAULT_MODEL
-    api_endpoint: str = API_ENDPOINT
+    source_language: str = _live('DEFAULT_SOURCE_LANGUAGE')
+    target_language: str = _live('DEFAULT_TARGET_LANGUAGE')
+    model: str = _live('DEFAULT_MODEL')
+    api_endpoint: str = _live('API_ENDPOINT')
     
-    # LLM Provider settings
-    llm_provider: str = LLM_PROVIDER
-    gemini_api_key: str = GEMINI_API_KEY
-    openai_api_key: str = OPENAI_API_KEY
-    openrouter_api_key: str = OPENROUTER_API_KEY
-    mistral_api_key: str = MISTRAL_API_KEY
-    deepseek_api_key: str = DEEPSEEK_API_KEY
-    poe_api_key: str = POE_API_KEY
-    nim_api_key: str = NIM_API_KEY
+    # LLM Provider settings (credentials live in ProviderConfig)
+    llm_provider: str = _live('LLM_PROVIDER')
 
     # LLM parameters
-    timeout: int = REQUEST_TIMEOUT
-    max_attempts: int = MAX_TRANSLATION_ATTEMPTS
+    timeout: int = _live('REQUEST_TIMEOUT')
+    max_attempts: int = _live('MAX_TRANSLATION_ATTEMPTS')
     retry_delay: int = 2  # Fixed retry delay in seconds
-    context_window: int = OLLAMA_NUM_CTX
+    context_window: int = _live('OLLAMA_NUM_CTX')
 
     # Context optimization
-    auto_adjust_context: bool = AUTO_ADJUST_CONTEXT
-    min_chunk_size: int = MIN_CHUNK_SIZE
-    max_chunk_size: int = MAX_CHUNK_SIZE
+    auto_adjust_context: bool = _live('AUTO_ADJUST_CONTEXT')
+    min_chunk_size: int = _live('MIN_CHUNK_SIZE')
+    max_chunk_size: int = _live('MAX_CHUNK_SIZE')
 
     # Token-based chunking
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK
-    soft_limit_ratio: float = SOFT_LIMIT_RATIO
+    max_tokens_per_chunk: int = _live('MAX_TOKENS_PER_CHUNK')
+    soft_limit_ratio: float = _live('SOFT_LIMIT_RATIO')
 
     # Parallel translation (concurrent chunks). Effective value is resolved at
     # run time via resolve_parallel_workers() so local providers stay at 1.
-    parallel_workers: int = PARALLEL_TRANSLATIONS
+    parallel_workers: int = _live('PARALLEL_TRANSLATIONS')
 
     # Interface-specific
     interface_type: str = "cli"  # or "web"
@@ -761,13 +763,6 @@ class TranslationConfig:
             interface_type="cli",
             enable_colors=not args.no_color,
             llm_provider=getattr(args, 'provider', LLM_PROVIDER),
-            gemini_api_key=getattr(args, 'gemini_api_key', GEMINI_API_KEY),
-            openai_api_key=getattr(args, 'openai_api_key', OPENAI_API_KEY),
-            openrouter_api_key=getattr(args, 'openrouter_api_key', OPENROUTER_API_KEY),
-            mistral_api_key=getattr(args, 'mistral_api_key', MISTRAL_API_KEY),
-            deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
-            poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
-            nim_api_key=getattr(args, 'nim_api_key', NIM_API_KEY),
             max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
             soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=getattr(args, 'parallel', PARALLEL_TRANSLATIONS)
@@ -810,13 +805,6 @@ class TranslationConfig:
             interface_type="web",
             enable_interruption=True,
             llm_provider=request_data.get('llm_provider', LLM_PROVIDER),
-            gemini_api_key=request_data.get('gemini_api_key', GEMINI_API_KEY),
-            openai_api_key=request_data.get('openai_api_key', OPENAI_API_KEY),
-            openrouter_api_key=request_data.get('openrouter_api_key', OPENROUTER_API_KEY),
-            mistral_api_key=request_data.get('mistral_api_key', MISTRAL_API_KEY),
-            deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
-            poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
-            nim_api_key=request_data.get('nim_api_key', NIM_API_KEY),
             max_tokens_per_chunk=clamped_max_tokens,
             soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO),
             parallel_workers=clamped_workers
@@ -834,13 +822,6 @@ class TranslationConfig:
             'retry_delay': self.retry_delay,
             'context_window': self.context_window,
             'llm_provider': self.llm_provider,
-            'gemini_api_key': self.gemini_api_key,
-            'openai_api_key': self.openai_api_key,
-            'openrouter_api_key': self.openrouter_api_key,
-            'mistral_api_key': self.mistral_api_key,
-            'deepseek_api_key': self.deepseek_api_key,
-            'poe_api_key': self.poe_api_key,
-            'nim_api_key': self.nim_api_key,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'soft_limit_ratio': self.soft_limit_ratio,
             'parallel_workers': self.parallel_workers

@@ -6,9 +6,6 @@ Tests RTL language detection, CSS generation, and OPF updates.
 
 import pytest
 import sys
-import os
-import tempfile
-import zipfile
 from pathlib import Path
 
 # Add project root to path
@@ -21,7 +18,6 @@ from src.core.epub.rtl_support import (
     inject_rtl_css_to_html,
     update_opf_for_rtl,
     apply_rtl_to_epub_directory,
-    RTL_LANGUAGES,
 )
 
 

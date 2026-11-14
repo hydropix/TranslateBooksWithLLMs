@@ -4,7 +4,7 @@ A job that ends `partial` because one chunk fell back to its source text used to
 be unfinishable: the resume pointer is a file index, so the file holding the bad
 chunk counted as done and Resume translated nothing. These tests pin the fix end
 to end, on a 3-chapter in-memory EPUB and with no network at all
-(`generate_translation_request` is stubbed inside the xhtml_translator module).
+(`generate_translation_request` is stubbed inside the chunk_fallback module).
 
 Three scenarios, in order:
 
@@ -32,10 +32,11 @@ from unittest.mock import MagicMock
 import pytest
 
 import src.core.epub.translator as epub_translator
-import src.core.epub.xhtml_translator as xhtml_translator
+from src.core.epub import chunk_fallback
 from src.api.completion_status import classify_completion
 from src.common.placeholder_format import PlaceholderFormat
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 
 # The sabotaged chunk is identified by this sentinel: the stub returns None for
@@ -160,9 +161,10 @@ def epub_job(tmp_path, monkeypatch):
 
     # No LLM client is ever needed: chunk requests are stubbed per pass and the
     # packaging-metadata pass (the only other LLM caller) is switched off.
-    monkeypatch.setattr(epub_translator, "_create_llm_client",
-                        lambda **kwargs: MagicMock())
-    monkeypatch.setattr(epub_translator, "EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr(epub_translator, "create_llm_client",
+                        lambda *args, **kwargs: MagicMock())
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr(epub_translator, "MAX_TRANSLATION_ATTEMPTS", 1)
 
     return {
         'input': input_path,
@@ -219,7 +221,7 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
                               PlaceholderFormat.from_config().remove_all(main_content))
         return "%s %s" % (TRANSLATED_MARKER, main_content)
 
-    monkeypatch.setattr(xhtml_translator, "generate_translation_request",
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request",
                         fake_generate_translation_request)
 
     # Which repair phase a starved chunk goes through is a property of the
@@ -248,22 +250,25 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
             return len(requests) >= interrupt_after
 
     await epub_translator.translate_epub_file(
-        input_filepath=str(job['input']),
-        output_filepath=str(job['output']),
-        source_language="English",
-        target_language="French",
-        model_name=MODEL,
-        llm_provider="ollama",
-        checkpoint_manager=job['manager'],
-        translation_id=job['translation_id'],
-        resume_from_index=resume_from_index,
-        log_callback=log_callback,
-        stats_callback=stats_callback,
-        check_interruption_callback=check_interruption,
-        max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
-        max_attempts=1,
-        prompt_options={},
-        retry_token_aligned=retry_token_aligned,
+        make_job(
+            input_path=str(job['input']),
+            output_path=str(job['output']),
+            source_language="English",
+            target_language="French",
+            model=MODEL,
+            provider="ollama",
+            max_tokens_per_chunk=MAX_TOKENS_PER_CHUNK,
+            prompt_options={},
+            retry_token_aligned=retry_token_aligned,
+        ),
+        make_ctx(
+            checkpoint_manager=job['manager'],
+            translation_id=job['translation_id'],
+            resume_from_index=resume_from_index,
+            log_callback=log_callback,
+            stats_callback=stats_callback,
+            check_interruption=check_interruption,
+        ),
     )
 
     return stats, requests, log_kinds
@@ -609,7 +614,7 @@ def test_pending_chunk_count_uses_the_partial_state_when_there_is_one(
     A file the previous pass was interrupted inside carries a partial state and
     resumes from `current_chunk_index`, so it attempts fewer chunks than the
     pre-count says. That file gets no ticket (a ticket is written by
-    `_save_checkpoint`, which only runs for files that completed), so its state
+    `save_file_checkpoint`, which only runs for files that completed), so its state
     has to be read directly.
 
     It matters when a book was interrupted *and* an earlier file left a fallback
@@ -618,7 +623,7 @@ def test_pending_chunk_count_uses_the_partial_state_when_there_is_one(
     stalled below 100%. The fixture here has one chunk per chapter, so only a
     direct test can distinguish the two values.
     """
-    from src.core.epub.translator import _pending_chunk_count
+    from src.core.epub.book_resume import pending_chunk_count
     from src.core.epub.xhtml_translation_state import (
         CHUNK_PENDING,
         CHUNK_TRANSLATED,
@@ -633,7 +638,7 @@ def test_pending_chunk_count_uses_the_partial_state_when_there_is_one(
 
     # No state at all: the file has never been entered, so the pre-count is the
     # only answer available and must be returned untouched.
-    assert _pending_chunk_count(
+    assert pending_chunk_count(
         manager, translation_id, href, precounted) == precounted
 
     # Interrupted after 4 of 6 chunks, one of which fell back to source text.
@@ -657,11 +662,11 @@ def test_pending_chunk_count_uses_the_partial_state_when_there_is_one(
     assert state.validate() is True
     assert manager.save_xhtml_partial_state(translation_id, href, state) is True
 
-    assert _pending_chunk_count(manager, translation_id, href, precounted) == 3
+    assert pending_chunk_count(manager, translation_id, href, precounted) == 3
 
     # Without a checkpoint manager there is nothing to read, so the pre-count
     # stands rather than silently collapsing to 0.
-    assert _pending_chunk_count(None, translation_id, href, precounted) == precounted
+    assert pending_chunk_count(None, translation_id, href, precounted) == precounted
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +694,7 @@ async def test_token_aligned_chunk_is_kept_and_indexed_without_moving_the_verdic
     """The payload a later repair needs survives, and the job stays completed.
 
     Two things used to make this impossible: the verdict said 'completed', so
-    handlers.py destroyed the checkpoint, and `_save_checkpoint` deleted the
+    handlers.py destroyed the checkpoint, and `save_file_checkpoint` deleted the
     per-file XHTML state of every file that owed nothing. The state is now kept
     for a degraded file too, and the job-level index records where those chunks
     are - in its OWN map, so `unfinished_chunks` stays 0 and the verdict does

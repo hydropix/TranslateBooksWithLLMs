@@ -16,11 +16,10 @@ from src.core.chunking.token_chunker import TokenChunker
 from src.core.context_optimizer import (
     estimate_tokens_with_margin,
     adjust_parameters_for_context,
-    round_to_standard_context_size,
     STANDARD_CONTEXT_SIZES
 )
 from src.config import MAX_TOKENS_PER_CHUNK, API_ENDPOINT
-from src.core.llm_client import LLMClient
+from src.core.llm.factory import create_llm_provider
 from src.prompts.prompts import generate_translation_prompt
 
 
@@ -42,8 +41,8 @@ async def analyze_token_variations(input_file: str):
     print("STEP 1: RUNTIME THINKING MODEL DETECTION")
     print("=" * 80)
 
-    llm_client = LLMClient(
-        provider_type="ollama",
+    llm_client = create_llm_provider(
+        "ollama",
         api_endpoint=API_ENDPOINT,
         model="qwen3:8b",
         context_window=2048
@@ -82,14 +81,9 @@ async def analyze_token_variations(input_file: str):
 
     for i, chunk_data in enumerate(chunks):
         main_content = chunk_data["main_content"]
-        context_before = chunk_data["context_before"]
-        context_after = chunk_data["context_after"]
-
         # Generate the prompt
         prompt_pair = generate_translation_prompt(
             main_content,
-            context_before,
-            context_after,
             last_context,
             source_language,
             target_language

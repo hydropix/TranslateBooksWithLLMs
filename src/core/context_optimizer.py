@@ -11,9 +11,8 @@ Strategy:
 - Track last N successful chunks to potentially reduce context if all fit with smaller size
 """
 
-import re
-from typing import Optional, Tuple, Dict, List
-from dataclasses import dataclass, field
+from typing import Optional, Tuple, Dict
+from dataclasses import dataclass
 from collections import deque
 
 from src.config import (
@@ -23,7 +22,7 @@ from src.config import (
 
 # Try to import tiktoken, fallback to character-based estimation
 try:
-    import tiktoken
+    import tiktoken  # noqa: F401 - availability probe
     TIKTOKEN_AVAILABLE = True
 except ImportError:
     TIKTOKEN_AVAILABLE = False

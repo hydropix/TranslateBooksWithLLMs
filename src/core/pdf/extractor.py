@@ -16,8 +16,9 @@ Text blocks are read in content-stream order. Lines inside a detected table
 are taken out of their blocks and the table is emitted as a unit in their
 place. Running headers/footers and page numbers are dropped, blocks whose
 lines change font size or colour are split (eyebrow / title / subtitle),
-hyphenated line breaks are repaired, and paragraphs broken by a page boundary
-are reassembled when their formats match. Scanned documents (no text layer)
+hyphenated line breaks are repaired (see join_lines and
+_resolve_break_hyphens), and paragraphs broken by a page boundary are
+reassembled when their formats match. Scanned documents (no text layer)
 are rejected: OCR is out of scope.
 
 The input is untrusted: every PyMuPDF call sits behind the exception
@@ -79,7 +80,9 @@ TABLE_LINE_TOLERANCE = 1.0       # pt: a line whose centre is this close to a ta
 TEXT_FLAGS = pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_LIGATURES
 PAGE_NUMBER_RE = re.compile(r"^\s*(?:page\s+)?(?:\d{1,4}|[ivxlcdm]{1,7})(?:\s*(?:/|of)\s*\d{1,4})?\s*$", re.I)
 LIST_MARKER_RE = re.compile(r"^\s*(?:[•◦▪▫‣⁃●○■□*·]|-(?=\s)|\(?\d{1,3}[.)]|\(?[A-Za-z][.)])\s+")
-TERMINAL_PUNCT_RE = re.compile(r"[.!?…:;\"»”’)\]。！？」』）]\s*$")
+# Sentence-final punctuation, Latin and others: CJK full/halfwidth stops, Arabic
+# question mark, Urdu full stop, Devanagari danda, Armenian, Ethiopic, Myanmar, Khmer.
+TERMINAL_PUNCT_RE = re.compile(r"[.!?…:;\"»”’)\]。！？」』）．｡︒؟۔।॥։።။។]\s*$")
 LIGATURES = {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"}
 
 # Scripts that wrap lines without spaces (Hangul is excluded: Korean wraps at spaces)
@@ -93,6 +96,14 @@ _CJK_RANGES = (
 )
 
 _SOFT_HYPHEN = "­"
+# Private-use stand-in for a hyphen found at a line end, written by the internal
+# joins while the document is read and resolved once the whole document is
+# known (see _resolve_break_hyphens). Never present in the returned content.
+_BREAK_HYPHEN = "\ue000"
+_LETTERS = r"[^\W\d_]+"
+_BREAK_WORD_RE = re.compile(rf"({_LETTERS})\ue000({_LETTERS})")
+_MARKED_TOKEN_RE = re.compile(r"\S*\ue000\S*")
+_WORD_RE = re.compile(rf"{_LETTERS}(?:-{_LETTERS})*")
 _BODY_STYLES = ("normal", "list")   # styles whose spans decide the document's font family
 _ENCRYPTED_MESSAGE = "This PDF is password-protected. Remove the password and try again."
 _NO_TEXT_MESSAGE = (
@@ -112,19 +123,26 @@ def _ends_with_letter_hyphen(text: str) -> bool:
     return len(text) >= 2 and text[-1] == "-" and text[-2].isalpha()
 
 
-def join_lines(prev: str, nxt: str) -> str:
+def join_lines(prev: str, nxt: str, break_hyphen: str = "-") -> str:
     """
     Join two consecutive lines (or paragraph fragments) of running text.
 
-    Rules, in order: a trailing soft hyphen is removed; a word hyphenated at
-    the line end is rejoined when the next line starts lowercase; CJK text is
-    joined without a space; anything else is joined with a single space.
+    Rules, in order: a trailing soft hyphen is removed; a letter + hyphen at
+    the line end followed by a letter is joined without a space and written
+    as break_hyphen ("well-" + "known" -> "well-known" with the default "-");
+    CJK text is joined without a space; anything else is joined with a single
+    space.
+
+    Two lines alone cannot tell a real compound from a word split by the
+    typesetter, so the extractor passes a private marker as break_hyphen and
+    decides once the whole document is known (_resolve_break_hyphens): the
+    hyphen is dropped unless the document shows the hyphenated spelling.
     """
     nxt_stripped = nxt.lstrip()
     if prev.endswith(_SOFT_HYPHEN):
         return prev[:-1] + nxt_stripped
-    if _ends_with_letter_hyphen(prev) and nxt_stripped[:1].islower():
-        return prev[:-1] + nxt_stripped
+    if _ends_with_letter_hyphen(prev) and nxt_stripped[:1].isalpha():
+        return prev[:-1] + break_hyphen + nxt_stripped
     prev_stripped = prev.rstrip()
     if prev_stripped and nxt_stripped and _is_cjk(prev_stripped[-1]) and _is_cjk(nxt_stripped[0]):
         return prev_stripped + nxt_stripped
@@ -144,8 +162,44 @@ def _join_and_normalize(lines: List[str]) -> str:
         return ""
     text = lines[0]
     for line in lines[1:]:
-        text = join_lines(text, line)
+        text = join_lines(text, line, _BREAK_HYPHEN)
     return _normalize_text(text)
+
+
+def _resolve_break_hyphens(texts: List[str]) -> List[str]:
+    """
+    Decide, for every hyphen found at a line end, whether to keep it.
+
+    Typeset PDFs hyphenate words to justify lines, so a line-end hyphen
+    followed by a lowercase letter is dropped by default ("condi-" + "tions"
+    -> "conditions"). It is kept only when the document itself shows a real
+    compound: the hyphenated spelling occurs elsewhere in the document, not at
+    a line end ("well-known", "peut-être"). A continuation starting with an
+    uppercase letter ("Jean-" + "Pierre"), a caseless script or a digit always
+    keeps the hyphen. No dictionary is consulted: the decision rests on the
+    document only. Soft hyphens (U+00AD) are handled by join_lines.
+    """
+    if not any(_BREAK_HYPHEN in text for text in texts):
+        return texts
+    hyphenated_words = set()
+    for text in texts:
+        for word in _WORD_RE.findall(_MARKED_TOKEN_RE.sub(" ", text)):
+            if "-" in word:
+                hyphenated_words.add(word.lower())
+
+    def decide(match: "re.Match") -> str:
+        left, right = match.group(1), match.group(2)
+        hyphenated = f"{left}-{right}"
+        if right[:1].islower() and hyphenated.lower() not in hyphenated_words:
+            return left + right
+        return hyphenated
+
+    resolved = []
+    for text in texts:
+        if _BREAK_HYPHEN in text:
+            text = _BREAK_WORD_RE.sub(decide, text).replace(_BREAK_HYPHEN, "-")
+        resolved.append(text)
+    return resolved
 
 
 def _line_text(line: dict) -> str:
@@ -604,11 +658,29 @@ def _split_list_items(lines: List[str]) -> List[Tuple[str, str, List[int]]]:
     return paragraphs
 
 
+# Scripts without case and without sentence-final punctuation (Thai, Lao):
+# nothing tells a continuation from a new paragraph, so they never merge.
+_NO_PUNCT_SCRIPTS = (("\u0e00", "\u0eff"),)
+
+
+def _continues_sentence(first: str) -> bool:
+    """Whether a paragraph starting with `first` may continue the previous one."""
+    if first.islower():
+        return True
+    # A letter without case (CJK, Arabic, Hebrew, Devanagari...): rely on the
+    # previous paragraph's punctuation alone.
+    return (
+        first.isalpha()
+        and not first.isupper()
+        and not any(low <= first <= high for low, high in _NO_PUNCT_SCRIPTS)
+    )
+
+
 def _should_merge(prev_text: str, prev_style: str, text: str) -> bool:
     """Whether a new normal paragraph continues the previous one (step 8)."""
     # A trailing "<letter>-" is not terminal punctuation, so hyphenated page
     # breaks are covered by the same rule. Headings and list items never merge.
-    if prev_style != "normal" or not text[:1].islower():
+    if prev_style != "normal" or not _continues_sentence(text[:1]):
         return False
     return TERMINAL_PUNCT_RE.search(prev_text) is None
 
@@ -630,7 +702,7 @@ class _ParagraphSink:
             and self.formats[-1] == fmt
             and _should_merge(self.texts[-1], self.styles[-1], text)
         ):
-            self.texts[-1] = _normalize_text(join_lines(self.texts[-1], text))
+            self.texts[-1] = _normalize_text(join_lines(self.texts[-1], text, _BREAK_HYPHEN))
             return
         self._add(text, style, fmt)
 
@@ -818,7 +890,7 @@ def _extract(doc, include_images: bool, detect_layout: bool = True) -> PdfPlainC
     first_page = doc[0].rect
     metadata = doc.metadata or {}
     return PdfPlainContent(                                                  # step 10
-        paragraphs_text=sink.texts,
+        paragraphs_text=_resolve_break_hyphens(sink.texts),
         paragraphs_style=sink.styles,
         images_by_paragraph=images_by_paragraph,
         page_size=(first_page.width, first_page.height),

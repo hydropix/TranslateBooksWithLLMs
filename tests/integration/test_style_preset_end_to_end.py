@@ -8,10 +8,10 @@ Chain exercised, with no network and no real LLM provider:
    a stubbed provider returning a canned `<STYLE_JSON>` payload of 4 rules.
 2. `POST /api/custom-instructions` with those rules, writing a YAML preset.
 3. `load_custom_instructions(filename, dir)` returns the assembled prose.
-4. `src.api.handlers.resolve_custom_instructions` — the extracted helper
-   around the branch `perform_actual_translation` uses at translation time
-   (previously handlers.py:351-373) — yields the same strings as
-   `translation_instructions` / `refinement_instructions`.
+4. `src.core.job.prepare.resolve_custom_instructions` — the helper the job
+   runner's prepare phase uses to snapshot the preset at translation time —
+   yields the same strings as `translation_instructions` /
+   `refinement_instructions`.
 5. The written YAML file, read raw and parsed, carries no `evidence` and no
    `flags` key on any rule.
 
@@ -32,7 +32,7 @@ from flask import Flask
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.api.blueprints import custom_instruction_routes as cir
-from src.api.handlers import resolve_custom_instructions
+from src.core.job.prepare import resolve_custom_instructions
 from src.core.style.assembler import assemble_instructions
 from src.utils.custom_instructions import load_custom_instructions
 
@@ -158,7 +158,7 @@ def test_generated_preset_reaches_the_translation_prompt(client, presets_dir):
     assert loaded["translation"] == expected["translation"]
     assert loaded["refinement"] == expected["refinement"]
 
-    # 4. The handlers.py branch that feeds the translation job yields the
+    # 4. The prepare-phase helper that feeds the translation job yields the
     #    same strings as translation_instructions / refinement_instructions.
     log_calls = []
 

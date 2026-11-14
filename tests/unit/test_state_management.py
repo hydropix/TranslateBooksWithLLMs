@@ -15,8 +15,7 @@ import time
 import tempfile
 import os
 import sys
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock
 
 # Mock flask_socketio before importing modules that depend on it
 sys.modules['flask_socketio'] = MagicMock()

@@ -158,10 +158,31 @@ def test_clean_run_not_degraded():
 # Validation
 # --------------------------------------------------------------------------
 
-def test_refining_without_enable_raises():
+def test_single_phase_refine_fills_the_whole_bar():
+    # A refine-only run: REFINING on a single-phase tracker spans [0, 100].
     t = ProgressTracker(refinement_enabled=False, clock=FakeClock())
+    t.begin_phase(Phase.REFINING, 4)
+    t.record_unit(count=2)
+    snap = t.snapshot()
+    assert snap.phase is Phase.REFINING
+    assert snap.percent == 50.0
+
+
+def test_set_counts_overwrites_absolutely():
+    t = ProgressTracker(clock=FakeClock())
+    t.begin_phase(Phase.TRANSLATING, 4)
+    t.set_counts(done=3, failed=1, total=6)
+    snap = t.snapshot()
+    assert (snap.units_total, snap.units_done, snap.units_failed, snap.units_succeeded) == (6, 3, 1, 2)
+    t.set_counts(done=4)
+    snap = t.snapshot()
+    assert (snap.units_total, snap.units_done, snap.units_failed) == (6, 4, 1)
+
+
+def test_set_counts_rejects_negative_values():
+    t = ProgressTracker(clock=FakeClock())
     with pytest.raises(ValueError):
-        t.begin_phase(Phase.REFINING, 1)
+        t.set_counts(done=-1)
 
 
 @pytest.mark.parametrize("bad", [0.0, 100.0, -5.0, 150.0])

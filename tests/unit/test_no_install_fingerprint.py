@@ -81,7 +81,7 @@ def attribution_on(monkeypatch):
     own patch.
     """
     monkeypatch.setattr("src.config.ATTRIBUTION_ENABLED", True)
-    monkeypatch.setattr("src.core.epub.translator.ATTRIBUTION_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", True)
     monkeypatch.setattr("src.core.epub.attribution_page.ATTRIBUTION_ENABLED", True)
     monkeypatch.setattr("src.core.epub.attribution_page.ATTRIBUTION_PAGE_ENABLED", True)
 

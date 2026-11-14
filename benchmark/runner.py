@@ -9,19 +9,16 @@ Coordinates the complete benchmark workflow:
 5. Generate results
 """
 
-import asyncio
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, Callable, Generator
 
-import yaml
 
 from benchmark.config import BenchmarkConfig
 from benchmark.data_loader import load_languages, load_reference_texts
 from benchmark.models import (
-    Language, LanguageCategory, ReferenceText, TranslationResult,
-    BenchmarkRun, EvaluationScores
+    Language, ReferenceText, TranslationResult,
+    BenchmarkRun
 )
 from benchmark.translator import (
     BenchmarkTranslator, TranslationRequest,

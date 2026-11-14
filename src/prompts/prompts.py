@@ -1,15 +1,14 @@
 from typing import Any, Dict, List, NamedTuple, Tuple, Optional
 
-from src.prompts.examples import (build_placeholder_section,
-                              get_output_format_example, get_subtitle_example,
-                              TAG0)
+from src.prompts.examples import (
+    build_placeholder_section,
+    get_output_format_example,
+    get_refinement_output_example,
+    get_subtitle_example,
+    get_subtitle_refinement_example,
+)
 from src.config import (INPUT_TAG_IN, INPUT_TAG_OUT, TRANSLATE_TAG_IN,
-                        TRANSLATE_TAG_OUT, PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX,
-                        create_placeholder)
-
-# Tags for placeholder correction responses
-CORRECTED_TAG_IN = "<CORRECTED_TAG_IN>"
-CORRECTED_TAG_OUT = "<CORRECTED_TAG_OUT>"
+                        TRANSLATE_TAG_OUT)
 
 
 class PromptPair(NamedTuple):
@@ -91,6 +90,39 @@ _PLAIN_TEXT_FORMAT_RULES = (
     "markdown formatting symbols to your output - output plain translated text only"
 )
 
+def _glossary_section(glossary_block: str) -> str:
+    """Return the per-chunk glossary block for the user prompt, or "".
+
+    The glossary lives in the user prompt: it changes per chunk, so keeping it
+    out of the system prompt lets the system prompt stay stable and cacheable.
+    """
+    return f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
+
+
+def _previous_context_section(heading: str, intro: str, text: str) -> str:
+    """Return the "# CONTEXT - <heading>" user-prompt block, or "" when text is blank."""
+    if not (text and text.strip()):
+        return ""
+    return f"""# CONTEXT - {heading}
+
+{intro}
+
+{text}
+
+"""
+
+
+def _additional_refinement_section(additional_instructions: str) -> str:
+    """Return the "# ADDITIONAL REFINEMENT INSTRUCTIONS" block, or "" when empty."""
+    if not (additional_instructions and additional_instructions.strip()):
+        return ""
+    return f"""
+
+# ADDITIONAL REFINEMENT INSTRUCTIONS
+
+{additional_instructions.strip()}"""
+
+
 # prompt_options key carrying the paragraph count of the segment being retried.
 # Set by the plain-text pipeline on the single retry it issues after a
 # paragraph-count mismatch, and never on a first attempt (issue #253).
@@ -124,15 +156,6 @@ def _plain_text_format_rules(prompt_options: Optional[Dict[str, Any]] = None) ->
 # OPTIONAL PROMPT SECTIONS
 # ============================================================================
 
-# Technical content preservation section (for technical documents)
-TECHNICAL_CONTENT_SECTION = """
-**Technical Content (DO NOT TRANSLATE):**
-- Code snippets and syntax: `function()`, `variable_name`, `class MyClass`
-- Command lines: `npm install`, `git commit -m "message"`
-- File paths: `/usr/bin/`, `C:/Users/Documents/`
-- URLs: `https://example.com`, `www.site.org`
-- Programming identifiers, API names, and technical terms"""
-
 # Text cleanup section (for OCR or poorly formatted source texts)
 TEXT_CLEANUP_SECTION = """
 # TEXT CLEANUP (Source Defects Correction)
@@ -147,9 +170,12 @@ The source text may contain OCR errors, formatting artifacts, or typographic def
 
 **DO NOT** add content, remove meaningful text, or alter the author's style."""
 
-# Plain Text Mode variant of TEXT_CLEANUP_SECTION: the downstream pipeline reassembles
-# a segment's paragraphs by position (see plain_text_pipeline.py), so it cannot absorb
-# a model that merges or splits paragraphs. Derived with .replace() rather than a second
+# Paragraph-preserving variant of TEXT_CLEANUP_SECTION. Used whenever the paragraph
+# layout is a contract the model must not break: in Plain Text Mode the downstream
+# pipeline reassembles a segment's paragraphs by position (see plain_text_pipeline.py),
+# and with placeholders the prompt demands the exact layout and the placeholders pin
+# the HTML structure. Asking the model to "merge incorrectly split paragraphs" there
+# would contradict those rules. Derived with .replace() rather than a second
 # hand-written block so the two constants can never drift apart on everything but that
 # one bullet.
 TEXT_CLEANUP_SECTION_PLAIN = TEXT_CLEANUP_SECTION.replace(
@@ -158,18 +184,19 @@ TEXT_CLEANUP_SECTION_PLAIN = TEXT_CLEANUP_SECTION.replace(
 )
 
 
-def _build_optional_prompt_sections(prompt_options: dict, *, plain_text: bool = False) -> str:
+def _build_optional_prompt_sections(
+    prompt_options: dict, *, keep_paragraph_breaks: bool = False
+) -> str:
     """
     Build optional prompt sections based on the provided options.
 
     Args:
         prompt_options: Dictionary containing prompt customization flags:
-            - preserve_technical_content: DEPRECATED - Technical content is now protected
-              via placeholder system (no prompt section needed)
             - text_cleanup: Include OCR/typographic defect correction instructions
-        plain_text: If True, use the Plain Text Mode variant of the text-cleanup section,
-            which forbids merging/splitting paragraphs instead of encouraging it. Keyword-only
-            so existing callers (e.g. generate_refinement_prompt) keep today's behavior unchanged.
+        keep_paragraph_breaks: If True, use the paragraph-preserving variant of the
+            text-cleanup section (forbids merging/splitting paragraphs). Callers set it
+            when placeholders or the Plain Text Mode paragraph contract are in force;
+            the paragraph-merging variant is only for prompts bound by neither.
 
     Returns:
         str: Concatenated optional sections to include in the system prompt
@@ -179,16 +206,11 @@ def _build_optional_prompt_sections(prompt_options: dict, *, plain_text: bool = 
 
     sections = []
 
-    # Technical content preservation is now handled by the placeholder system
-    # (TagPreserver with protect_technical=True), so no prompt instructions are needed.
-    # The LLM never sees technical content - it's hidden in placeholders like [id0], [id1].
-    # Leaving this commented for reference:
-    # if prompt_options.get('preserve_technical_content', False):
-    #     sections.append(TECHNICAL_CONTENT_SECTION)
-
     # Text cleanup for OCR or poorly formatted sources
     if prompt_options.get('text_cleanup', False):
-        sections.append(TEXT_CLEANUP_SECTION_PLAIN if plain_text else TEXT_CLEANUP_SECTION)
+        sections.append(
+            TEXT_CLEANUP_SECTION_PLAIN if keep_paragraph_breaks else TEXT_CLEANUP_SECTION
+        )
 
     # Join sections with double newline for proper separation
     return '\n\n'.join(sections)
@@ -200,8 +222,6 @@ def _build_optional_prompt_sections(prompt_options: dict, *, plain_text: bool = 
 
 def generate_translation_prompt(
     main_content: str,
-    context_before: str,
-    context_after: str,
     previous_translation_context: str,
     source_language: str = "English",
     target_language: str = "English",
@@ -217,17 +237,15 @@ def generate_translation_prompt(
 
     Args:
         main_content: The text to translate
-        context_before: Text appearing before main_content for context
-        context_after: Text appearing after main_content for context
-        previous_translation_context: Previously translated text for consistency
+        previous_translation_context: Previously translated text for consistency. This
+            tail of the previous translation is the only cross-chunk context the model sees.
         source_language: Source language name
         target_language: Target language name
         translate_tag_in: Opening tag for translation output
         translate_tag_out: Closing tag for translation output
         has_placeholders: If True, includes placeholder preservation instructions (for EPUB HTML tags)
-        prompt_options: Optional dict with prompt customization options:
-            - preserve_technical_content: If True, includes instructions to NOT translate
-              code, paths, URLs, etc. (for technical documents)
+        prompt_options: Optional dict with prompt customization options
+            (custom_instructions, text_cleanup, glossary terms, ...)
         placeholder_format: Optional tuple of (prefix, suffix) for placeholders.
             e.g., ('[', ']') for [0] format or ('[[', ']]') for [[0]] format.
             If None, uses default [[0]] format
@@ -242,23 +260,8 @@ def generate_translation_prompt(
     # Extract custom instructions if provided
     custom_instructions = prompt_options.get('custom_instructions', '')
 
-    # Get target-language-specific example text for output format
-    example_texts = {
-        "chinese": "您翻译的文本在这里" if not has_placeholders else f"您翻译的文本在这里，所有{TAG0}标记都精确保留",
-        "french": "Votre texte traduit ici" if not has_placeholders else f"Votre texte traduit ici, tous les marqueurs {TAG0} sont préservés exactement",
-        "spanish": "Su texto traducido aquí" if not has_placeholders else f"Su texto traducido aquí, todos los marcadores {TAG0} se preservan exactamente",
-        "german": "Ihr übersetzter Text hier" if not has_placeholders else f"Ihr übersetzter Text hier, alle {TAG0}-Markierungen werden genau beibehalten",
-        "japanese": "翻訳されたテキストはこちら" if not has_placeholders else f"翻訳されたテキストはこちら、すべての{TAG0}マーカーは正確に保持されます",
-        "italian": "Il tuo testo tradotto qui" if not has_placeholders else f"Il tuo testo tradotto qui, tutti i marcatori {TAG0} sono conservati esattamente",
-        "portuguese": "Seu texto traduzido aqui" if not has_placeholders else f"Seu texto traduzido aqui, todos os marcadores {TAG0} são preservados exatamente",
-        "russian": "Ваш переведенный текст здесь" if not has_placeholders else f"Ваш переведенный текст здесь, все маркеры {TAG0} сохранены точно",
-        "korean": "번역된 텍스트는 여기에" if not has_placeholders else f"번역된 텍스트는 여기에, 모든 {TAG0} 마커는 정확히 보존됩니다",
-    }
-
-    # Try to match target language to get appropriate example
-    from src.utils.lang_normalize import normalize_lang_key
-    target_lang_lower = normalize_lang_key(target_language)
-    example_format_text = example_texts.get(target_lang_lower, "Your translated text here")
+    # Target-language example line for the output format block
+    example_format_text = get_output_format_example(target_language, has_placeholders)
 
     # Build the output format section outside the f-string to avoid backslash issues in Python 3.11.
     # The paragraph-structure contract is only emitted in Plain Text Mode (has_placeholders is
@@ -278,8 +281,11 @@ def generate_translation_prompt(
     else:
         placeholder_section = ""
 
-    # Build optional prompt sections based on prompt_options
-    optional_sections = _build_optional_prompt_sections(prompt_options, plain_text=not has_placeholders)
+    # Build optional prompt sections based on prompt_options. The translation prompt
+    # always binds the paragraph layout: with placeholders through the exact-layout and
+    # placeholder rules, without them through the Plain Text Mode paragraph contract.
+    # So the text-cleanup section never asks it to merge paragraphs.
+    optional_sections = _build_optional_prompt_sections(prompt_options, keep_paragraph_breaks=True)
 
     # Build custom instructions section.
     #
@@ -339,20 +345,12 @@ Do NOT write in {source_language} or any other language - ONLY {target_language.
 {output_format_section}"""
 
     # USER PROMPT - Context and content to translate (varies per request)
-    previous_translation_block_text = ""
-    if previous_translation_context and previous_translation_context.strip():
-        previous_translation_block_text = f"""# CONTEXT - Previous Paragraph
-
-For consistency and natural flow, here's what came immediately before:
-
-{previous_translation_context}
-
-"""
-
-    # Glossary block lives in the user prompt: it changes per chunk, so
-    # keeping it out of the system prompt lets the system prompt stay
-    # stable and cacheable across chunks.
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
+    previous_translation_block_text = _previous_context_section(
+        "Previous Paragraph",
+        "For consistency and natural flow, here's what came immediately before:",
+        previous_translation_context,
+    )
+    glossary_section = _glossary_section(glossary_block)
 
     user_prompt = f"""{previous_translation_block_text}{glossary_section}# TEXT TO TRANSLATE
 
@@ -625,8 +623,6 @@ Produce the JSON now. Output it between {STYLE_TAG_IN} and {STYLE_TAG_OUT}, noth
 
 def generate_refinement_prompt(
     draft_translation: str,
-    context_before: str = "",
-    context_after: str = "",
     previous_refined_context: str = "",
     target_language: str = "English",
     translate_tag_in: str = TRANSLATE_TAG_IN,
@@ -645,14 +641,16 @@ def generate_refinement_prompt(
 
     Args:
         draft_translation: The first-pass translation to refine
-        context_before: Previously refined text for context (default: "")
-        context_after: Text appearing after for context (default: "")
-        previous_refined_context: Last refined text for consistency (default: "")
+        previous_refined_context: Last refined text for consistency (default: ""). This
+            tail of the previous refined chunk is the only cross-chunk context the model sees.
         target_language: Target language name
         translate_tag_in: Opening tag for translation output
         translate_tag_out: Closing tag for translation output
-        has_placeholders: If True, includes placeholder preservation instructions
-        prompt_options: Optional dict with prompt customization options
+        has_placeholders: If True, includes the placeholder preservation section and
+            the placeholder reminder; if False, neither is emitted
+        prompt_options: Optional dict with prompt customization options. When
+            'plain_text_mode' is True the text-cleanup section (if enabled) keeps
+            paragraph breaks instead of asking to merge split paragraphs
         placeholder_format: Optional tuple of (prefix, suffix) for placeholders.
             e.g., ('[', ']') for [0] format or ('[[', ']]') for [[0]] format.
             If None, uses default [[0]] format
@@ -664,49 +662,37 @@ def generate_refinement_prompt(
     if prompt_options is None:
         prompt_options = {}
 
-    # Get target-language-specific example text for output format
-    example_texts = {
-        "chinese": "您润色后的文本在这里",
-        "french": "Votre texte affiné ici",
-        "spanish": "Su texto refinado aquí",
-        "german": "Ihr verfeinerter Text hier",
-        "japanese": "洗練されたテキストはこちら",
-        "italian": "Il tuo testo raffinato qui",
-        "portuguese": "Seu texto refinado aqui",
-        "russian": "Ваш улучшенный текст здесь",
-        "korean": "다듬어진 텍스트는 여기에",
-    }
-
-    from src.utils.lang_normalize import normalize_lang_key
-    target_lang_lower = normalize_lang_key(target_language)
-    example_format_text = example_texts.get(target_lang_lower, "Your refined text here")
-
     output_format_section = _get_output_format_section(
         translate_tag_in,
         translate_tag_out,
         INPUT_TAG_IN,
         INPUT_TAG_OUT,
         additional_rules="",
-        example_format=example_format_text
+        example_format=get_refinement_output_example(target_language),
     )
 
-    # Build placeholder preservation section if needed
+    # Placeholder preservation section and closing reminder, only when the draft
+    # actually carries placeholders.
     if has_placeholders:
         placeholder_section = build_placeholder_section(target_language, target_language, placeholder_format)
+        placeholder_reminder = """
+
+**⚠️ PLACEHOLDER PRESERVATION IS ABSOLUTELY CRITICAL:**
+If the input contains ANY placeholders (like [id0], [id1], etc.), you MUST preserve them EXACTLY.
+Removing or corrupting placeholders will corrupt the document structure.
+Your refinement MUST maintain the exact same placeholders in the exact same positions."""
     else:
         placeholder_section = ""
+        placeholder_reminder = ""
 
-    # Build optional prompt sections
-    optional_sections = _build_optional_prompt_sections(prompt_options)
+    # The text-cleanup section may ask to merge split paragraphs only when neither
+    # placeholders nor the Plain Text Mode paragraph contract pin the layout.
+    keep_paragraph_breaks = has_placeholders or bool(prompt_options.get('plain_text_mode'))
+    optional_sections = _build_optional_prompt_sections(
+        prompt_options, keep_paragraph_breaks=keep_paragraph_breaks
+    )
 
-    # Add additional instructions section if provided
-    additional_instructions_section = ""
-    if additional_instructions and additional_instructions.strip():
-        additional_instructions_section = f"""
-
-# ADDITIONAL REFINEMENT INSTRUCTIONS
-
-{additional_instructions.strip()}"""
+    additional_instructions_section = _additional_refinement_section(additional_instructions)
 
     # SYSTEM PROMPT for refinement
     system_prompt = f"""You are an elite {target_language} literary editor and prose stylist.
@@ -753,29 +739,17 @@ Your job is to REWRITE it with perfect literary {target_language} style.
 
 You are NOT translating - you are REWRITING in {target_language.upper()}.
 The input is already in {target_language}, but poorly written.
-Your output must be polished, literary-quality {target_language}.
-
-**⚠️ PLACEHOLDER PRESERVATION IS ABSOLUTELY CRITICAL:**
-If the input contains ANY placeholders (like [id0], [id1], etc.), you MUST preserve them EXACTLY.
-Removing or corrupting placeholders will corrupt the document structure.
-Your refinement MUST maintain the exact same placeholders in the exact same positions.
+Your output must be polished, literary-quality {target_language}.{placeholder_reminder}
 
 {output_format_section}"""
 
     # USER PROMPT
-    previous_context_block = ""
-    if previous_refined_context and previous_refined_context.strip():
-        previous_context_block = f"""# CONTEXT - Previous Refined Paragraph
-
-For consistency and natural flow, here's what came immediately before:
-
-{previous_refined_context}
-
-"""
-
-    # Glossary block injected here (per-chunk dynamic) so the system prompt
-    # stays cacheable across chunks.
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
+    previous_context_block = _previous_context_section(
+        "Previous Refined Paragraph",
+        "For consistency and natural flow, here's what came immediately before:",
+        previous_refined_context,
+    )
+    glossary_section = _glossary_section(glossary_block)
 
     user_prompt = f"""{previous_context_block}{glossary_section}# DRAFT TO REFINE
 
@@ -825,24 +799,16 @@ def generate_subtitle_refinement_block_prompt(
     Returns:
         PromptPair: A named tuple with 'system' and 'user' prompts
     """
-    subtitle_additional_rules = _SUBTITLE_FORMAT_RULES
-    subtitle_example_format = "[0]Première ligne affinée\n[1]Deuxième ligne affinée"
     subtitle_output_format_section = _get_output_format_section(
         translate_tag_in,
         translate_tag_out,
         INPUT_TAG_IN,
         INPUT_TAG_OUT,
-        additional_rules=subtitle_additional_rules,
-        example_format=subtitle_example_format,
+        additional_rules=_SUBTITLE_FORMAT_RULES,
+        example_format=get_subtitle_refinement_example(target_language),
     )
 
-    additional_instructions_section = ""
-    if additional_instructions and additional_instructions.strip():
-        additional_instructions_section = f"""
-
-# ADDITIONAL REFINEMENT INSTRUCTIONS
-
-{additional_instructions.strip()}"""
+    additional_instructions_section = _additional_refinement_section(additional_instructions)
 
     system_prompt = f"""You are an elite {target_language} subtitle editor and dialogue stylist.
 
@@ -892,20 +858,16 @@ in the same order, followed by the refined text for that subtitle.
 
 {subtitle_output_format_section}"""
 
-    previous_refined_block_text = ""
-    if previous_refined_block and previous_refined_block.strip():
-        previous_refined_block_text = f"""# CONTEXT - Previous Refined Block
-
-For continuity and consistency, here's the previous refined block:
-
-{previous_refined_block}
-
-"""
+    previous_refined_block_text = _previous_context_section(
+        "Previous Refined Block",
+        "For continuity and consistency, here's the previous refined block:",
+        previous_refined_block,
+    )
 
     formatted_subtitles = [f"[{idx}]{text}" for idx, text in subtitle_blocks]
     formatted_subtitles_text = "\n".join(formatted_subtitles)
 
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
+    glossary_section = _glossary_section(glossary_block)
 
     user_prompt = f"""{previous_refined_block_text}{glossary_section}# SUBTITLES TO REFINE
 
@@ -952,15 +914,13 @@ def generate_subtitle_block_prompt(
         PromptPair: A named tuple with 'system' and 'user' prompts
     """
     # Build the output format section outside the f-string to avoid backslash issues in Python 3.11
-    subtitle_additional_rules = _SUBTITLE_FORMAT_RULES
-    subtitle_example_format = "[1]第一行翻译文本\n[2]第二行翻译文本"
     subtitle_output_format_section = _get_output_format_section(
         translate_tag_in,
         translate_tag_out,
         INPUT_TAG_IN,
         INPUT_TAG_OUT,
-        additional_rules=subtitle_additional_rules,
-        example_format=subtitle_example_format
+        additional_rules=_SUBTITLE_FORMAT_RULES,
+        example_format=get_subtitle_example(target_language),
     )
 
     # Build custom instructions section if provided
@@ -1013,15 +973,11 @@ Do NOT write in {source_language} or any other language - ONLY {target_language.
 {subtitle_output_format_section}"""
 
     # USER PROMPT - Context and subtitles to translate
-    previous_translation_block_text = ""
-    if previous_translation_block and previous_translation_block.strip():
-        previous_translation_block_text = f"""# CONTEXT - Previous Subtitle Block
-
-For continuity and consistency, here's the previous subtitle block:
-
-{previous_translation_block}
-
-"""
+    previous_translation_block_text = _previous_context_section(
+        "Previous Subtitle Block",
+        "For continuity and consistency, here's the previous subtitle block:",
+        previous_translation_block,
+    )
 
     # Format subtitle blocks with indices
     formatted_subtitles = [f"[{idx}]{text}" for idx, text in subtitle_blocks]
@@ -1029,8 +985,7 @@ For continuity and consistency, here's the previous subtitle block:
     # Join subtitles outside f-string to avoid Python 3.11 backslash issues
     formatted_subtitles_text = "\n".join(formatted_subtitles)
 
-    # Glossary block in user prompt (dynamic per chunk).
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
+    glossary_section = _glossary_section(glossary_block)
 
     user_prompt = f"""{previous_translation_block_text}{glossary_section}# SUBTITLES TO TRANSLATE
 
@@ -1052,149 +1007,12 @@ Provide your translation now:"""
 
 
 # ============================================================================
-# PLACEHOLDER CORRECTION PROMPT
-# ============================================================================
-
-def generate_placeholder_correction_prompt(
-    original_text: str,
-    translated_text: str,
-    specific_errors: str,
-    source_language: str,
-    target_language: str,
-    expected_count: int,
-    placeholder_format: Optional[Tuple[str, str]] = None
-) -> PromptPair:
-    """
-    Generate a prompt for correcting placeholder errors in a translation.
-
-    This prompt is used when a translation has placeholder issues (missing,
-    duplicated, mutated, or out of order). It asks the LLM to fix ONLY the
-    placeholder positions without modifying the translated text.
-
-    Args:
-        original_text: Source text with correct placeholders
-        translated_text: Translation with placeholder errors
-        specific_errors: Detailed error description (generated by build_specific_error_details)
-        source_language: Source language name (e.g., "English")
-        target_language: Target language name (e.g., "French")
-        expected_count: Number of placeholders expected (0 to expected_count-1)
-        placeholder_format: Optional tuple of (prefix, suffix) for placeholders.
-            e.g., ('[', ']') for [0] format or ('[[', ']]') for [[0]] format.
-            If None, uses default [[0]] format
-
-    Returns:
-        PromptPair: A named tuple with 'system' and 'user' prompts
-    """
-    # Use custom format if provided, otherwise use defaults
-    if placeholder_format:
-        prefix, suffix = placeholder_format
-    else:
-        prefix, suffix = PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX
-
-    # Generate dynamic placeholder examples using the correct format
-    def make_placeholder(idx: int) -> str:
-        return f"{prefix}{idx}{suffix}"
-
-    max_index = expected_count - 1 if expected_count > 0 else 0
-    placeholder_format_str = f"{prefix}N{suffix}"
-    example_range = f"{make_placeholder(0)} to {make_placeholder(max_index)}"
-    placeholder_list = ", ".join(make_placeholder(i) for i in range(min(3, expected_count)))
-    if expected_count > 3:
-        placeholder_list += ", etc."
-
-    # SYSTEM PROMPT
-    system_prompt = f"""You are a technical placeholder correction specialist.
-
-## YOUR TASK
-
-A {source_language} to {target_language} translation was performed, but the placeholders were corrupted.
-You must fix the placeholder positions to match the original text structure.
-
-## PLACEHOLDER FORMAT
-
-**CORRECT format:** {make_placeholder(0)}, {make_placeholder(1)}, {make_placeholder(2)}, etc.
-- Brackets: {prefix} and {suffix}
-- Sequential numbering starting from 0
-- Expected range for this text: {example_range}
-
-**FORMAT VARIATIONS:**
-The system uses different placeholder formats based on text content:
-- [id0], [id1], [id2]... (default - semantic markers, highest accuracy)
-- /0, /1, /2... (when text contains brackets)
-- $0$, $1$, $2$... (when text contains brackets and slashes)
-- [[0]], [[1]], [[2]]... (legacy format)
-
-All formats follow the same rules: preserve exact format, maintain sequential order, keep position.
-
-## HOW TO POSITION PLACEHOLDERS
-
-Placeholders represent HTML/XML tags. To position them correctly:
-
-1. **Look at the ORIGINAL text** to see what content each placeholder surrounds
-2. **Find the equivalent content** in the translation
-3. **Place the placeholder at the same logical position** around that content
-
-**Example:**
-- Original: "{make_placeholder(0)}Hello{make_placeholder(1)} world"
-- If translation is "Bonjour monde", the placeholders mark "Hello"
-- Correct: "{make_placeholder(0)}Bonjour{make_placeholder(1)} monde"
-
-## VALIDATION RULES
-
-1. **EXACT COUNT**: Must contain exactly {expected_count} placeholders
-2. **SEQUENTIAL ORDER**: Placeholders must appear in order: {placeholder_list}
-3. **NO DUPLICATES**: Each placeholder must appear exactly once
-4. **NO MUTATIONS**: Use ONLY the {placeholder_format_str} format
-5. **POSITION MATCHING**: Each placeholder must surround the translated equivalent of what it surrounded in the original
-
-## CRITICAL INSTRUCTIONS
-
-- Analyze the ORIGINAL to understand what each placeholder marks
-- Position placeholders around the SAME semantic content in the translation
-- Do NOT add or remove words from the translation
-- Keep the {target_language} text intact, only fix placeholder positions
-
-## OUTPUT FORMAT
-
-Your response MUST start with {CORRECTED_TAG_IN} and end with {CORRECTED_TAG_OUT}.
-Include NOTHING before or after these tags."""
-
-    # USER PROMPT
-    user_prompt = f"""## ORIGINAL TEXT ({source_language}) - Reference for placeholder positions:
-
-<ORIGINAL_TAG_IN>
-{original_text}
-<ORIGINAL_TAG_OUT>
-
-## TRANSLATION WITH ERRORS ({target_language}):
-
-<TRANSLATION_TAG_IN>
-{translated_text}
-<TRANSLATION_TAG_OUT>
-
-## DETECTED ERRORS:
-
-{specific_errors}
-
-## YOUR TASK:
-
-Reposition the placeholders {example_range} in the translation above.
-Keep the translated text unchanged - only fix placeholder positions.
-
-Provide your corrected version now:"""
-
-    return PromptPair(system=system_prompt.strip(), user=user_prompt.strip())
-
-
-# ============================================================================
 # ALIAS FOR BACKWARDS COMPATIBILITY
 # ============================================================================
 
 def generate_post_processing_prompt(
     translated_text: str,
     target_language: str = "English",
-    context_before: str = "",
-    context_after: str = "",
     additional_instructions: str = "",
     has_placeholders: bool = True,
     prompt_options: dict = None,
@@ -1210,10 +1028,9 @@ def generate_post_processing_prompt(
     Args:
         translated_text: The draft translation to refine (mapped to draft_translation)
         target_language: Target language name
-        context_before: Previously refined text for context
-        context_after: Text appearing after for context
         additional_instructions: Additional refinement instructions
         has_placeholders: If True, includes placeholder preservation instructions
+            (section and reminder); if False, neither is emitted
         prompt_options: Optional dict with prompt customization options
         placeholder_format: Optional tuple of (prefix, suffix) for placeholders
 
@@ -1222,8 +1039,6 @@ def generate_post_processing_prompt(
     """
     return generate_refinement_prompt(
         draft_translation=translated_text,
-        context_before=context_before,
-        context_after=context_after,
         previous_refined_context="",  # Not used in post-processing calls
         target_language=target_language,
         has_placeholders=has_placeholders,

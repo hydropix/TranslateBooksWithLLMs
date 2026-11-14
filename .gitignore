@@ -41,4 +41,6 @@ secrets.*
 credentials.*
 *_secret.*
 *_credentials.*
+# Not a secret: the provider -> env-var table and key resolver.
+!src/core/llm/credentials.py
 .wiki_repo_archive/

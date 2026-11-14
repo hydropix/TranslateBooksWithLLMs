@@ -224,8 +224,8 @@ class PgnAdapter(FormatAdapter):
             self._units = None
             return True
 
-        except Exception:
-            return False
+        except Exception as e:
+            raise RuntimeError(f"Could not read or parse the PGN file: {e}") from e
 
     def _add_piece(self, start: int, end: int, wrappable: bool):
         """Register text[start:end] as a piece of prose if it has any words."""
@@ -385,7 +385,8 @@ class PgnAdapter(FormatAdapter):
             self._store(translated_content, units[block_idx].metadata['local_to_global'])
             return True
 
-        except Exception:
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
             return False
 
     async def reconstruct_output(self, bilingual: bool = False) -> bytes:
@@ -433,10 +434,10 @@ class PgnAdapter(FormatAdapter):
 
             return pgn_content.encode('utf-8')
 
-        except Exception:
-            # Fallback: return original file
-            with open(self.input_file_path, 'rb') as f:
-                return f.read()
+        except Exception as e:
+            # Never hand back the untranslated source as if it were the
+            # output: the caller fails the job and logs this.
+            raise RuntimeError(f"Could not rebuild the translated PGN: {e}") from e
 
     async def resume_from_checkpoint(self, checkpoint_data: Dict[str, Any]) -> int:
         """Restore translations from checkpoint."""
@@ -455,8 +456,8 @@ class PgnAdapter(FormatAdapter):
 
             return checkpoint_data.get('resume_from_index', 0)
 
-        except Exception:
-            return 0
+        except Exception as e:
+            raise RuntimeError(f"Could not restore the PGN checkpoint: {e}") from e
 
     async def cleanup(self):
         """No cleanup needed for PGN files."""

@@ -74,5 +74,11 @@
   "notification_test_failed": "Notification test failed: {{error}}",
   "notifications_preset_applied": "Notifications preset applied: {{name}}",
 
-  "endpoint_reset_log": "Endpoint reset to server default"
+  "endpoint_reset_log": "Endpoint reset to server default",
+  "searchable_select_no_results": "No results found",
+  "searchable_select_use_custom_value": "Press Enter to use \"{{value}}\"",
+  "searchable_select_model_count_one": "{{count}} model",
+  "searchable_select_model_count_other": "{{count}} models",
+  "searchable_select_search_placeholder": "Search...",
+  "searchable_select_no_selection": "Select an option..."
 }

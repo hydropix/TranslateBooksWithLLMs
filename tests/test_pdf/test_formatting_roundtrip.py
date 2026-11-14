@@ -10,6 +10,7 @@ from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.pdf.builder import build_pdf
 from src.core.pdf.extractor import extract_pdf_paragraphs
 from src.core.pdf.translator import translate_pdf_file
+from tests.job_helpers import make_ctx, make_job
 
 PIPELINE = "src.core.pdf.translator.translate_paragraphs_plain"
 
@@ -106,13 +107,15 @@ async def test_translate_pdf_file_logs_table_count(formatted_pdf_path, tmp_path)
     output = str(tmp_path / "out.pdf")
     with patch(PIPELINE, AsyncMock(side_effect=_run)):
         result = await translate_pdf_file(
-            input_filepath=formatted_pdf_path,
-            output_filepath=output,
-            source_language="English",
-            target_language="French",
-            model_name="test-model",
+            make_job(
+                input_path=formatted_pdf_path,
+                output_path=output,
+                source_language="English",
+                target_language="French",
+                model="test-model",
+            ),
+            make_ctx(log_callback=log),
             llm_client=Mock(),
-            log_callback=log,
         )
 
     assert result["success"] is True

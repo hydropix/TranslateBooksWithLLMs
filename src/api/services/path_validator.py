@@ -2,8 +2,10 @@
 Path validation utilities for secure file operations
 """
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Optional, Tuple, Union
+
+from src.utils.security import is_within_directory
 
 
 class PathValidator:
@@ -11,26 +13,91 @@ class PathValidator:
 
     MAX_FILENAME_LENGTH = 255
 
+    # Extensions a translation job may write. Mirrors the document types
+    # SecureFileHandler.ALLOWED_EXTENSIONS accepts as input (an upload keeps
+    # its extension in the default output name pattern). A requested name with
+    # any other extension gets '.txt' appended, so a job can never drop an
+    # executable ('.bat', '.exe', '.hta', ...) into the output directory.
+    OUTPUT_EXTENSIONS = frozenset({
+        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf',
+        '.text', '.log', '.md', '.markdown', '.rst', '.asc',
+        '.csv', '.json', '.xml', '.html', '.htm', '.yaml', '.yml',
+    })
+
+    # Files POST /api/files/<name>/open may hand to the OS default
+    # application: translated documents and TTS audio only. Formats whose
+    # default handler can run active content (HTML in a browser, CSV
+    # formulas in a spreadsheet, ...) are excluded on purpose.
+    OPENABLE_EXTENSIONS = frozenset({
+        '.txt', '.text', '.md', '.markdown', '.rst', '.log', '.asc',
+        '.srt', '.pgn', '.epub', '.docx', '.pdf',
+        '.opus', '.mp3', '.wav', '.ogg',
+    })
+
+    @staticmethod
+    def safe_output_filename(requested: Optional[str]) -> Optional[str]:
+        """Reduce a client-supplied output filename to a safe bare name.
+
+        Any directory component (either separator, a drive prefix) is
+        dropped, so '../../x.txt' or an absolute path both become 'x.txt'. A
+        name whose extension is not in OUTPUT_EXTENSIONS gets '.txt'
+        appended. Returns None when nothing usable remains.
+        """
+        if not isinstance(requested, str):
+            return None
+        name = requested.replace('\\', '/').rsplit('/', 1)[-1]
+        # A Windows drive prefix without separator ('C:x.txt').
+        if len(name) >= 2 and name[1] == ':':
+            name = name[2:]
+        # Characters Windows refuses in a file name. ':' would otherwise
+        # write the translation into an NTFS alternate data stream
+        # ('notes:x.txt' -> a 0-byte 'notes'), the others fail the final
+        # write after the whole job ran.
+        name = ''.join('_' if (c in '<>:"|?*' or ord(c) < 32) else c for c in name)
+        name = name.strip().strip('.').strip()
+        if not name:
+            return None
+        # Device names ('CON', 'NUL.txt', 'COM1.epub', ...) open the device
+        # instead of a file on Windows 10 and older.
+        if PureWindowsPath(name).is_reserved():
+            name = f"_{name}"
+        if Path(name).suffix.lower() not in PathValidator.OUTPUT_EXTENSIONS:
+            name = f"{name}.txt"
+        if len(name) > PathValidator.MAX_FILENAME_LENGTH:
+            stem, suffix = os.path.splitext(name)
+            name = stem[:PathValidator.MAX_FILENAME_LENGTH - len(suffix)] + suffix
+        return name
+
+    @staticmethod
+    def resolve_output_file(output_dir: Union[str, Path], requested: Optional[str]) -> Path:
+        """Return the path inside `output_dir` a job may write `requested` to.
+
+        Raises ValueError when the name is unusable or would escape the
+        directory (defence in depth on top of safe_output_filename).
+        """
+        name = PathValidator.safe_output_filename(requested)
+        if name is None:
+            raise ValueError("Invalid output filename")
+        candidate = Path(output_dir) / name
+        if not PathValidator.is_within_directory(candidate, output_dir):
+            raise ValueError("Output filename resolves outside the output directory")
+        return candidate
+
+    @staticmethod
+    def is_openable(path: Union[str, Path]) -> bool:
+        """True when `path` has a document/audio extension safe to open."""
+        return Path(path).suffix.lower() in PathValidator.OPENABLE_EXTENSIONS
+
     @staticmethod
     def is_within_directory(path: Union[str, Path], directory: Union[str, Path]) -> bool:
         """
         Return True only if `path` resolves to a location inside `directory`.
 
-        Both arguments are resolved first (following symlinks and normalizing
-        '..'), then compared component-wise via Path.relative_to — never a
-        string startswith, which would treat '/uploads-evil' as inside
-        '/uploads'.
+        Delegates to src.utils.security.is_within_directory, the one
+        containment check of the code base (resolve both sides, compare with
+        Path.relative_to, never a string startswith).
         """
-        try:
-            path_resolved = Path(path).resolve()
-            dir_resolved = Path(directory).resolve()
-        except OSError:
-            return False
-        try:
-            path_resolved.relative_to(dir_resolved)
-            return True
-        except ValueError:
-            return False
+        return is_within_directory(path, directory)
 
     @staticmethod
     def validate_upload_path(
@@ -90,6 +157,10 @@ class PathValidator:
 
         # Also check if the normalized filename contains path separators
         # This catches cases like "foo/../bar" or "foo/bar"
+        # A backslash is a separator on Windows: reject it on every platform,
+        # since os.path.basename only knows the separators of the host OS.
+        if '\\' in filename:
+            return False, "Invalid filename: path separators not allowed"
         if os.path.sep in filename or ('/' in filename or '\\' in filename):
             # Exception: allow if it's just the filename itself (no actual traversal)
             # Use os.path.basename to check if it's a pure filename

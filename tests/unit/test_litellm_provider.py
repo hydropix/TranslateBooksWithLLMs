@@ -203,8 +203,10 @@ async def test_rate_limit_rotates_to_the_next_key(litellm_stub, no_sleep):
 async def test_rate_limit_does_not_consume_a_retry_attempt(litellm_stub, no_sleep):
     """Rotations have their own budget: a 3-key pool gets more than
     MAX_TRANSLATION_ATTEMPTS calls before the transient retries even start."""
-    # The provider's own binding: another test may reload src.config.
-    from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
+    # Resolved at request time from src.config (the policy is never bound at import).
+    from src.core.llm.providers.litellm import LiteLLMProvider
+    from src.core.llm.policy import current_retry_policy
+    MAX_TRANSLATION_ATTEMPTS = current_retry_policy().max_attempts
 
     litellm_stub.acompletion.side_effect = (
         [FakeLiteLLMRateLimitError("429 too many requests")] * MAX_TRANSLATION_ATTEMPTS
@@ -235,18 +237,23 @@ async def test_persistent_rate_limit_raises_for_upstream_pause(litellm_stub, no_
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_without_pool_keeps_plain_backoff(litellm_stub, no_sleep):
+async def test_rate_limit_without_pool_retries_then_pauses(litellm_stub, no_sleep):
     """With credentials in env vars there is no pool and nothing to rotate:
-    the 429 stays an ordinary transient retry that ends in None."""
-    # The provider's own binding: another test may reload src.config.
-    from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
+    the 429 is retried with plain backoff, then RateLimitError propagates so
+    the job pauses and checkpoints instead of failing the chunk."""
+    # Resolved at request time from src.config (the policy is never bound at import).
+    from src.core.llm.exceptions import RateLimitError
+    from src.core.llm.providers.litellm import LiteLLMProvider
+    from src.core.llm.policy import current_retry_policy
+    MAX_TRANSLATION_ATTEMPTS = current_retry_policy().max_attempts
 
     litellm_stub.acompletion.side_effect = FakeLiteLLMRateLimitError(
         "429 too many requests"
     )
 
     provider = LiteLLMProvider(model="openai/gpt-4o")
-    assert await provider.generate("Hello") is None
+    with pytest.raises(RateLimitError):
+        await provider.generate("Hello")
     assert litellm_stub.acompletion.call_count == MAX_TRANSLATION_ATTEMPTS
 
 
@@ -399,8 +406,10 @@ async def test_generic_api_error_with_server_status_is_retried(litellm_stub, no_
     ids=lambda e: type(e).__name__,
 )
 async def test_transient_errors_are_still_retried(litellm_stub, no_sleep, exc):
-    # The provider's own binding: another test may reload src.config.
-    from src.core.llm.providers.litellm import LiteLLMProvider, MAX_TRANSLATION_ATTEMPTS
+    # Resolved at request time from src.config (the policy is never bound at import).
+    from src.core.llm.providers.litellm import LiteLLMProvider
+    from src.core.llm.policy import current_retry_policy
+    MAX_TRANSLATION_ATTEMPTS = current_retry_policy().max_attempts
 
     litellm_stub.acompletion.side_effect = exc
 

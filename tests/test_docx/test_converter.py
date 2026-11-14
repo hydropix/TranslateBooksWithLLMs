@@ -234,11 +234,9 @@ class TestDocxHtmlConverter:
         converter.from_html(html_content, metadata, output_path)
 
         # Load original and converted
-        original_doc = Document(simple_docx_path)
         converted_doc = Document(output_path)
 
         # Compare text content
-        original_text = '\n'.join([p.text for p in original_doc.paragraphs])
         converted_text = '\n'.join([p.text for p in converted_doc.paragraphs])
 
         # Text should be preserved (formatting may differ slightly)

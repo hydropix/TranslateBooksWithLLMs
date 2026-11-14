@@ -89,7 +89,7 @@ async def _repair(model, source=SOURCE):
 
 @pytest.fixture(autouse=True)
 def _no_cleanup(monkeypatch):
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
 
 def _worst_case_bound(n):

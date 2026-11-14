@@ -22,11 +22,9 @@ import pytest
 from lxml import etree
 
 import src.core.epub.translator as translator_module
-from src.core.epub.translator import (
-    _update_epub_metadata,
-    _precount_chunks,
-    translate_epub_file,
-)
+from src.core.epub.book_loop import precount_chunks
+from src.core.epub.opf_metadata import update_epub_metadata
+from src.core.epub.translator import translate_epub_file
 from src.core.epub.plain_extractor import (
     extract_plain_paragraphs,
     replace_body_with_paragraphs,
@@ -37,6 +35,7 @@ from tests.unit.epub.conftest import (
     _echo_llm_client,
     _read,
 )
+from tests.job_helpers import make_ctx, make_job
 
 
 # === A. dc:language metadata ===
@@ -62,7 +61,7 @@ def _run_update_metadata(target_language: str) -> str:
             f.write(OPF_TEMPLATE)
 
         opf_tree = etree.parse(opf_path)
-        _update_epub_metadata(opf_tree, opf_path, target_language)
+        update_epub_metadata(opf_tree, opf_path, target_language)
 
         reparsed = etree.parse(opf_path)
         lang_el = reparsed.getroot().find(
@@ -118,7 +117,7 @@ class TestPercentEncodedHrefs:
             ) as f:
                 f.write(XHTML_DOC)
 
-            total_chunks, chunks_per_file = await _precount_chunks(
+            total_chunks, chunks_per_file, *_ = await precount_chunks(
                 content_files=["Chapter%201.xhtml"],
                 opf_dir=tmp,
                 max_tokens_per_chunk=500,
@@ -138,7 +137,7 @@ class TestPercentEncodedHrefs:
             ) as f:
                 f.write(XHTML_DOC)
 
-            total_chunks, chunks_per_file = await _precount_chunks(
+            total_chunks, chunks_per_file, *_ = await precount_chunks(
                 content_files=["chapter1.xhtml"],
                 opf_dir=tmp,
                 max_tokens_per_chunk=500,
@@ -290,7 +289,7 @@ class TestWeakLlmSafety:
             return main_content  # identity "translation"
 
         monkeypatch.setattr(plain_pipeline, "generate_translation_request", capture_llm)
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         body = _parse_body(self.BODY_INNER)
         paragraphs, _, _, _ = extract_plain_paragraphs(body)
@@ -325,7 +324,7 @@ class TestWeakLlmSafety:
             return "Traduction approximative: " + merged
 
         monkeypatch.setattr(plain_pipeline, "generate_translation_request", sloppy_llm)
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         body = _parse_body(self.BODY_INNER)
         paragraphs, tags, images, _attrib = extract_plain_paragraphs(body)
@@ -366,7 +365,7 @@ class TestWeakLlmSafety:
             )
 
         monkeypatch.setattr(plain_pipeline, "generate_translation_request", hallucinating_llm)
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         translated, _, _ = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=["Some paragraph with note 1 in it.", "Another paragraph."],
@@ -471,7 +470,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(
             plain_pipeline, "generate_translation_request", decorating_llm
         )
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=["Chapter One", "Intro paragraph.", "Closing paragraph."],
@@ -508,7 +507,7 @@ class TestWeakLlmSafety:
         monkeypatch.setattr(
             plain_pipeline, "generate_translation_request", merging_then_decorating_llm
         )
-        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+        monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
         translated, stats, interrupted = await plain_pipeline.translate_paragraphs_plain(
             paragraphs=["Chapter One", "Intro paragraph."],
@@ -548,7 +547,7 @@ def _count_p(element: etree._Element) -> int:
     return sum(1 for tag in _local_tags(element) if tag == "p")
 
 
-def _stub_create_llm_client(**kwargs):
+def _stub_create_llm_client(*args, **kwargs):
     return _echo_llm_client()
 
 
@@ -590,16 +589,19 @@ class TestPlainModeCoverPage:
         This is the assertion that proves the reported bug is dead: before the
         fix the output cover page was `<body/>`.
         """
-        monkeypatch.setattr(translator_module, "_create_llm_client", _stub_create_llm_client)
+        monkeypatch.setattr(translator_module, "create_llm_client", _stub_create_llm_client)
         _disable_attribution(monkeypatch)
         output_epub = tmp_path / "output_plain.epub"
 
         await translate_epub_file(
-            input_filepath=str(input_epub),
-            output_filepath=str(output_epub),
-            source_language="Chinese",
-            target_language="French",
-            prompt_options={"plain_text_mode": True},
+            make_job(
+                input_path=str(input_epub),
+                output_path=str(output_epub),
+                source_language="Chinese",
+                target_language="French",
+                prompt_options={"plain_text_mode": True},
+            ),
+            make_ctx(),
         )
 
         cover = _read(output_epub, "OEBPS/Text/cover.xhtml")

@@ -22,7 +22,7 @@ the LLM. The one case where the body is left alone is a page that yielded no
 block at all (everything inside a DROP_TAGS subtree, e.g. an SVG-wrapped
 cover): its source markup is kept verbatim.
 """
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from lxml import etree
 
@@ -72,7 +72,7 @@ EPUB_TYPE_ATTR = "{http://www.idpf.org/2007/ops}type"
 CARRIED_ATTRIBUTES = ("class", "id", "style", "dir", "title", EPUB_TYPE_ATTR)
 
 
-def _local_name(elem: etree._Element) -> str:
+def local_name(elem: etree._Element) -> str:
     """Return the lowercase local tag name, stripping XHTML namespace."""
     tag = elem.tag
     if isinstance(tag, str) and tag.startswith("{"):
@@ -110,7 +110,7 @@ def _extract_run_text(
             if include_tail and node.tail:
                 out.append(node.tail)
             return
-        name = _local_name(node)
+        name = local_name(node)
         if name in DROP_TAGS:
             # Skip subtree entirely. Still pick up its tail since it sits at
             # the parent's level.
@@ -182,7 +182,7 @@ def _enclosing_table(elem: etree._Element) -> etree._Element:
     """Return the nearest <table> ancestor, or None."""
     parent = elem.getparent()
     while parent is not None:
-        if _local_name(parent) == "table":
+        if local_name(parent) == "table":
             return parent
         parent = parent.getparent()
     return None
@@ -203,7 +203,7 @@ def _collect_table_blocks(
     flattened into their outer cell's text rather than emitted twice.
     """
     for elem in table.iter():
-        if _local_name(elem) not in TABLE_CELL_TAGS:
+        if local_name(elem) not in TABLE_CELL_TAGS:
             continue
         if _enclosing_table(elem) is not table:
             continue
@@ -225,7 +225,7 @@ def _is_inline(node: etree._Element) -> bool:
         # Comments and processing instructions: invisible, but their tail is
         # loose text of the enclosing container.
         return True
-    name = _local_name(node)
+    name = local_name(node)
     return name in INLINE_TAGS or name in DROP_TAGS or name == "img"
 
 
@@ -296,13 +296,51 @@ def _collect_blocks(
         idx = len(paragraphs_text)
         paragraphs_text.append(text)
         if only_inline and is_container:
-            paragraphs_tag.append(_local_name(root))
+            paragraphs_tag.append(local_name(root))
             paragraphs_attrib.append(dict(root.attrib))
         else:
             paragraphs_tag.append("p")
             paragraphs_attrib.append({})
         if images:
             images_by_paragraph[idx] = images
+
+
+def _append_paragraph(
+    paragraphs_text: List[str],
+    paragraphs_tag: List[str],
+    paragraphs_attrib: List[Dict[str, str]],
+    images_by_paragraph: Dict[int, List[etree._Element]],
+    text: str,
+    tag: str,
+    attrib: Dict[str, str],
+    images: Optional[List[etree._Element]] = None,
+) -> None:
+    """Append one paragraph entry to the parallel lists, anchoring its images."""
+    idx = len(paragraphs_text)
+    paragraphs_text.append(text)
+    paragraphs_tag.append(tag)
+    paragraphs_attrib.append(attrib)
+    if images:
+        images_by_paragraph[idx] = images
+
+
+def _anchor_standalone_image(
+    child: etree._Element,
+    paragraphs_text: List[str],
+    paragraphs_tag: List[str],
+    paragraphs_attrib: List[Dict[str, str]],
+    images_by_paragraph: Dict[int, List[etree._Element]],
+) -> None:
+    """Anchor a body-level <img> to the previous block, or to a synthetic one."""
+    img_copy = _clone_img(child)
+    if paragraphs_text:
+        anchor = len(paragraphs_text) - 1
+        images_by_paragraph.setdefault(anchor, []).append(img_copy)
+    else:
+        paragraphs_text.append("")
+        paragraphs_tag.append("p")
+        paragraphs_attrib.append({})
+        images_by_paragraph[0] = [img_copy]
 
 
 def _collect_block(
@@ -317,32 +355,26 @@ def _collect_block(
         # Comment or processing instruction: nothing to translate.
         return
 
-    name = _local_name(child)
+    name = local_name(child)
+    lists = (paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph)
 
     if name in DROP_TAGS:
         return
 
     if name in VOID_BLOCK_TAGS:
-        paragraphs_text.append("")
-        paragraphs_tag.append(name)
-        paragraphs_attrib.append(dict(child.attrib))
+        _append_paragraph(*lists, "", name, dict(child.attrib))
         return
 
     if name == "table":
-        _collect_table_blocks(
-            child, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
-        )
+        _collect_table_blocks(child, *lists)
         return
 
     if name in LIST_WRAPPER_TAGS:
-        _collect_blocks(child, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph)
+        _collect_blocks(child, *lists)
         return
 
     if name in CONTAINER_TAGS:
-        _collect_blocks(
-            child, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph,
-            is_container=True,
-        )
+        _collect_blocks(child, *lists, is_container=True)
         return
 
     if name in BLOCK_TAGS:
@@ -352,39 +384,20 @@ def _collect_block(
             text = "".join(child.itertext())
         else:
             text = _extract_text_keep_inline(child, images)
-
-        idx = len(paragraphs_text)
-        paragraphs_text.append(text)
-        paragraphs_tag.append(name)
-        paragraphs_attrib.append(dict(child.attrib))
-        if images:
-            images_by_paragraph[idx] = images
+        _append_paragraph(*lists, text, name, dict(child.attrib), images)
         return
 
     if name == "img":
         # Standalone <img> at body level — anchor to the previous block,
         # or create a synthetic anchor if it's first.
-        img_copy = _clone_img(child)
-        if paragraphs_text:
-            anchor = len(paragraphs_text) - 1
-            images_by_paragraph.setdefault(anchor, []).append(img_copy)
-        else:
-            paragraphs_text.append("")
-            paragraphs_tag.append("p")
-            paragraphs_attrib.append({})
-            images_by_paragraph[0] = [img_copy]
+        _anchor_standalone_image(child, *lists)
         return
 
     # Anything else: try to extract textual content as a generic paragraph
     images: List[etree._Element] = []
     text = _extract_text_keep_inline(child, images)
     if text.strip() or images:
-        idx = len(paragraphs_text)
-        paragraphs_text.append(text)
-        paragraphs_tag.append("p")
-        paragraphs_attrib.append(dict(child.attrib))
-        if images:
-            images_by_paragraph[idx] = images
+        _append_paragraph(*lists, text, "p", dict(child.attrib), images)
 
 
 def extract_plain_paragraphs(
@@ -418,6 +431,126 @@ def extract_plain_paragraphs(
         body_element, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
     )
     return paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib
+
+
+def _target_emission(
+    text: str,
+    source_text: str,
+    source_emitted: bool,
+    has_images: bool,
+) -> Tuple[bool, bool]:
+    """Decide whether the target block is emitted and whether it is untranslated.
+
+    Returns ``(emit_target, untranslated)``.
+    """
+    # A block is flagged untranslated whenever its output text IS its source
+    # text. Keying on text identity rather than on the empty-slot branch
+    # below is what keeps the marker working now that the plain-text
+    # pipeline substitutes source text itself when a paragraph-level repair
+    # fails (issue #253); it also finally marks whole chunks that fell back
+    # to source, which were invisible before. A paragraph whose correct
+    # translation happens to equal its source (a bare name, a numeral) is
+    # flagged too — a cosmetic class on a correct block is a cheaper price
+    # than losing the marker on the blocks that matter.
+    untranslated = bool(source_text) and text == source_text
+
+    # An empty translation must never delete the block.
+    if text:
+        emit_target = True
+    elif source_emitted:
+        # Bilingual: the plain-text-source block above already carries this
+        # text, so falling back to it here would print the source twice.
+        emit_target = False
+    elif source_text:
+        # Untranslated but not deleted: the paragraph survives carrying its
+        # source text, and the class below is what actually makes that
+        # failure findable in the output (issue #253).
+        emit_target = True
+        untranslated = True
+    else:
+        # Nothing to say at all. Keep an empty block so the source's spacer
+        # <p></p> survives and the output block count matches the input —
+        # unless images are anchored here, in which case the images wrapper
+        # below already stands in for the block (a source <p><img/></p> must
+        # come out as one <p>, not two).
+        emit_target = not has_images
+
+    return emit_target, untranslated
+
+
+def _emit_target_block(
+    body_element: etree._Element,
+    tag: str,
+    attrib: Dict[str, str],
+    text: str,
+    source_text: str,
+    source_emitted: bool,
+    untranslated: bool,
+    bilingual: bool,
+) -> None:
+    """Append the translated (or source-fallback) block with its marker class."""
+    block = etree.SubElement(body_element, tag)
+    # The bilingual source twin, when there is one, already claimed the
+    # source id: it comes first in reading order, so an anchor aimed at
+    # this block still lands at the top of the right section.
+    _set_attributes(block, attrib, with_id=not source_emitted)
+    if untranslated:
+        # One marker per block, untranslated over bilingual-target when
+        # both apply; either is appended to the source class, which the
+        # _set_attributes call above already restored.
+        _add_class(block, "plain-text-untranslated")
+    elif bilingual:
+        _add_class(block, "plain-text-target")
+    block.text = text or source_text
+
+
+def _emit_paragraph(
+    body_element: etree._Element,
+    i: int,
+    translated_paragraphs: List[str],
+    paragraphs_tag: List[str],
+    images_by_paragraph: Dict[int, List[etree._Element]],
+    bilingual: bool,
+    source_paragraphs: Optional[List[str]],
+    paragraphs_attrib: Optional[List[Dict[str, str]]],
+) -> None:
+    """Append everything paragraph `i` contributes to the rebuilt body."""
+    text = (translated_paragraphs[i] or "").strip()
+    source_text = ""
+    if source_paragraphs and i < len(source_paragraphs):
+        source_text = (source_paragraphs[i] or "").strip()
+    raw_tag = paragraphs_tag[i] if i < len(paragraphs_tag) else "p"
+    # <li> outside <ul>/<ol> is not valid XHTML — flatten to <p> in Plain Text Mode.
+    tag = "p" if raw_tag == "li" else raw_tag
+    attrib = paragraphs_attrib[i] if paragraphs_attrib and i < len(paragraphs_attrib) else {}
+
+    if raw_tag in VOID_BLOCK_TAGS:
+        block = etree.SubElement(body_element, raw_tag)
+        _set_attributes(block, attrib)
+        return
+
+    # Bilingual: emit source first when we have it
+    source_emitted = False
+    if bilingual and source_text:
+        src_block = etree.SubElement(body_element, tag)
+        _set_attributes(src_block, attrib)
+        _add_class(src_block, "plain-text-source")
+        src_block.text = source_text
+        source_emitted = True
+
+    emit_target, untranslated = _target_emission(
+        text, source_text, source_emitted, bool(images_by_paragraph.get(i)))
+
+    if emit_target:
+        _emit_target_block(body_element, tag, attrib, text, source_text,
+                           source_emitted, untranslated, bilingual)
+
+    # Emit anchored images right after
+    if i in images_by_paragraph and images_by_paragraph[i]:
+        img_wrapper = etree.SubElement(body_element, "p")
+        img_wrapper.set("class", "plain-text-images")
+        for img in images_by_paragraph[i]:
+            img_wrapper.append(img)
 
 
 def replace_body_with_paragraphs(
@@ -471,79 +604,6 @@ def replace_body_with_paragraphs(
         body_element.remove(child)
 
     for i in range(count):
-        text = (translated_paragraphs[i] or "").strip()
-        source_text = ""
-        if source_paragraphs and i < len(source_paragraphs):
-            source_text = (source_paragraphs[i] or "").strip()
-        raw_tag = paragraphs_tag[i] if i < len(paragraphs_tag) else "p"
-        # <li> outside <ul>/<ol> is not valid XHTML — flatten to <p> in Plain Text Mode.
-        tag = "p" if raw_tag == "li" else raw_tag
-        attrib = paragraphs_attrib[i] if paragraphs_attrib and i < len(paragraphs_attrib) else {}
-
-        if raw_tag in VOID_BLOCK_TAGS:
-            block = etree.SubElement(body_element, raw_tag)
-            _set_attributes(block, attrib)
-            continue
-
-        # Bilingual: emit source first when we have it
-        source_emitted = False
-        if bilingual and source_text:
-            src_block = etree.SubElement(body_element, tag)
-            _set_attributes(src_block, attrib)
-            _add_class(src_block, "plain-text-source")
-            src_block.text = source_text
-            source_emitted = True
-
-        # A block is flagged untranslated whenever its output text IS its source
-        # text. Keying on text identity rather than on the empty-slot branch
-        # below is what keeps the marker working now that the plain-text
-        # pipeline substitutes source text itself when a paragraph-level repair
-        # fails (issue #253); it also finally marks whole chunks that fell back
-        # to source, which were invisible before. A paragraph whose correct
-        # translation happens to equal its source (a bare name, a numeral) is
-        # flagged too — a cosmetic class on a correct block is a cheaper price
-        # than losing the marker on the blocks that matter.
-        untranslated = bool(source_text) and text == source_text
-
-        # An empty translation must never delete the block.
-        if text:
-            emit_target = True
-        elif source_emitted:
-            # Bilingual: the plain-text-source block above already carries this
-            # text, so falling back to it here would print the source twice.
-            emit_target = False
-        elif source_text:
-            # Untranslated but not deleted: the paragraph survives carrying its
-            # source text, and the class below is what actually makes that
-            # failure findable in the output (issue #253).
-            emit_target = True
-            untranslated = True
-        else:
-            # Nothing to say at all. Keep an empty block so the source's spacer
-            # <p></p> survives and the output block count matches the input —
-            # unless images are anchored here, in which case the images wrapper
-            # below already stands in for the block (a source <p><img/></p> must
-            # come out as one <p>, not two).
-            emit_target = not images_by_paragraph.get(i)
-
-        if emit_target:
-            block = etree.SubElement(body_element, tag)
-            # The bilingual source twin, when there is one, already claimed the
-            # source id: it comes first in reading order, so an anchor aimed at
-            # this block still lands at the top of the right section.
-            _set_attributes(block, attrib, with_id=not source_emitted)
-            if untranslated:
-                # One marker per block, untranslated over bilingual-target when
-                # both apply; either is appended to the source class, which the
-                # _set_attributes call above already restored.
-                _add_class(block, "plain-text-untranslated")
-            elif bilingual:
-                _add_class(block, "plain-text-target")
-            block.text = text or source_text
-
-        # Emit anchored images right after
-        if i in images_by_paragraph and images_by_paragraph[i]:
-            img_wrapper = etree.SubElement(body_element, "p")
-            img_wrapper.set("class", "plain-text-images")
-            for img in images_by_paragraph[i]:
-                img_wrapper.append(img)
+        _emit_paragraph(body_element, i, translated_paragraphs, paragraphs_tag,
+                        images_by_paragraph, bilingual, source_paragraphs,
+                        paragraphs_attrib)

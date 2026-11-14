@@ -6,6 +6,12 @@
 pytest>=7.0
 pytest-asyncio>=0.21
 
+# Lint (configured in pyproject.toml). Pinned so CI and pre-commit agree.
+ruff==0.8.6
+
+# Used by benchmark/cli.py and scripts/validate_submission.py.
+jsonschema>=4.0
+
 # End-to-end tests (tests/e2e, deselected by default).
 # After installing, download the browser once: python -m playwright install chromium
 playwright>=1.55

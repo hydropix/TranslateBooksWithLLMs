@@ -29,7 +29,7 @@ def build_txt(dest_dir: Path) -> Path:
 
 
 def build_srt(dest_dir: Path) -> Path:
-    # 50 subtitles at the default 20 lines/block yields 3 blocks, so the
+    # 50 subtitles at 20 lines/block (pinned in conftest.py) yield 3 blocks, so the
     # multi-chunk progression (and the "blocks, not subtitles" counting) is
     # exercised rather than collapsing to a single block.
     path = dest_dir / "sample.srt"

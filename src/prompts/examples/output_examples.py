@@ -231,3 +231,71 @@ OUTPUT_FORMAT_EXAMPLES: Dict[str, Dict[str, str]] = {
         "standard": f"በዚህ ጸጥ ባለ ምሽት፣ {TAG0}የጨረቃ ብርሃን{TAG1} መላውን ሸለቆ አጠበ።",
     },
 }
+
+
+# ============================================================
+# EXAMPLE LINE SHOWN IN THE "CORRECT format" BLOCK OF A PROMPT
+# ============================================================
+# These are the short placeholder lines the translation and refinement prompts
+# put between the output tags to show the expected shape of an answer. They are
+# deliberately generic ("your text here") rather than the moonlight sentence
+# above, which the prompts have never used: changing them changes model output.
+
+# Translation prompt: "plain" is used in Plain Text Mode (no placeholders),
+# "standard" when the input carries placeholders.
+TRANSLATION_OUTPUT_EXAMPLES: Dict[str, Dict[str, str]] = {
+    "chinese": {
+        "plain": "您翻译的文本在这里",
+        "standard": f"您翻译的文本在这里，所有{TAG0}标记都精确保留",
+    },
+    "french": {
+        "plain": "Votre texte traduit ici",
+        "standard": f"Votre texte traduit ici, tous les marqueurs {TAG0} sont préservés exactement",
+    },
+    "spanish": {
+        "plain": "Su texto traducido aquí",
+        "standard": f"Su texto traducido aquí, todos los marcadores {TAG0} se preservan exactamente",
+    },
+    "german": {
+        "plain": "Ihr übersetzter Text hier",
+        "standard": f"Ihr übersetzter Text hier, alle {TAG0}-Markierungen werden genau beibehalten",
+    },
+    "japanese": {
+        "plain": "翻訳されたテキストはこちら",
+        "standard": f"翻訳されたテキストはこちら、すべての{TAG0}マーカーは正確に保持されます",
+    },
+    "italian": {
+        "plain": "Il tuo testo tradotto qui",
+        "standard": f"Il tuo testo tradotto qui, tutti i marcatori {TAG0} sono conservati esattamente",
+    },
+    "portuguese": {
+        "plain": "Seu texto traduzido aqui",
+        "standard": f"Seu texto traduzido aqui, todos os marcadores {TAG0} são preservados exatamente",
+    },
+    "russian": {
+        "plain": "Ваш переведенный текст здесь",
+        "standard": f"Ваш переведенный текст здесь, все маркеры {TAG0} сохранены точно",
+    },
+    "korean": {
+        "plain": "번역된 텍스트는 여기에",
+        "standard": f"번역된 텍스트는 여기에, 모든 {TAG0} 마커는 정확히 보존됩니다",
+    },
+}
+
+# Fallback for a target language with no entry above (both modes).
+TRANSLATION_OUTPUT_FALLBACK = "Your translated text here"
+
+# Refinement prompt (same line whether or not placeholders are present).
+REFINEMENT_OUTPUT_EXAMPLES: Dict[str, str] = {
+    "chinese": "您润色后的文本在这里",
+    "french": "Votre texte affiné ici",
+    "spanish": "Su texto refinado aquí",
+    "german": "Ihr verfeinerter Text hier",
+    "japanese": "洗練されたテキストはこちら",
+    "italian": "Il tuo testo raffinato qui",
+    "portuguese": "Seu texto refinado aqui",
+    "russian": "Ваш улучшенный текст здесь",
+    "korean": "다듬어진 텍스트는 여기에",
+}
+
+REFINEMENT_OUTPUT_FALLBACK = "Your refined text here"

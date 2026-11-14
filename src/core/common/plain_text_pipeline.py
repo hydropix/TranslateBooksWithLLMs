@@ -16,8 +16,9 @@ import math
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from src.common.cjk_punctuation import PARAGRAPH_BREAK_PATTERN, reattach_closing_punctuation
 from src.core.chunking.token_chunker import TokenChunker
-from src.core.translator import generate_translation_request
+from src.core.translator import generate_translation_request, previous_context_tail
 from src.core.post_processor import clean_translated_text
 from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.epub.xhtml_translation_state import (
@@ -28,11 +29,14 @@ from src.core.epub.xhtml_translation_state import (
 )
 from src.core.common.parallel import aclosing, iter_ordered_concurrent
 from src.core.llm.exceptions import RateLimitError
+from src.core.progress import ProgressReporter
 from src.prompts.prompts import PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION
 
 
 PARAGRAPH_SEPARATOR = "\n\n"
 _RESPLIT_REGEX = re.compile(r"\n{2,}")
+# A blank line inside one source paragraph (code in a <pre> block).
+_INNER_BLANK_LINE_REGEX = re.compile(r"\n[ \t]*\n")
 _MARKUP_TAG_REGEX = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*?)?/?>")
 # A markdown heading marker at the START OF A PARAGRAPH: the blob is split on
 # blank lines, so \A or a blank-line separator is what anchors the match, and
@@ -77,6 +81,18 @@ def strip_hallucinated_markdown_markers(translated: str, source: str) -> str:
     return _MARKDOWN_HEADING_MARKER_REGEX.sub(r"\1", translated)
 
 
+def reattach_paragraph_closing_punctuation(translated: str, source: str) -> str:
+    """Move CJK closing punctuation that opens a paragraph back to the one before.
+
+    A model that answers "こんにちは\\n\\n。お元気ですか？" puts the "。" of the
+    first paragraph at the start of the second one once the blob is split on
+    blank lines. Full-width closing punctuation never opens a paragraph (see
+    src/common/cjk_punctuation.py), so it is moved back before the break. A
+    source with a paragraph that does start with such a mark disarms it.
+    """
+    return reattach_closing_punctuation(translated, PARAGRAPH_BREAK_PATTERN, source)
+
+
 def _split_translated_back_to_paragraphs(translated_text: str) -> List[str]:
     """Split a translated blob into paragraphs (tolerates 2+ newlines)."""
     return [p.strip() for p in _RESPLIT_REGEX.split(translated_text) if p.strip()]
@@ -102,20 +118,21 @@ def _paragraph_count_mismatch(
 def _reconcile_paragraph_counts(
     translated_paragraphs: List[str],
     expected_count: int,
-) -> List[str]:
+) -> List[Optional[str]]:
     """
     Best-effort alignment when the LLM merged or split paragraphs inside one
     segment. The blast radius is the segment, never the whole document.
 
     - translated == expected: return as-is
-    - translated < expected: pad with empty strings
+    - translated < expected: pad with None, which _reassemble resolves to the
+      source paragraph (an empty string would erase the paragraph)
     - translated > expected: merge surplus into the last slot
     """
     got = len(translated_paragraphs)
     if got == expected_count:
         return translated_paragraphs
     if got < expected_count:
-        return translated_paragraphs + [""] * (expected_count - got)
+        return translated_paragraphs + [None] * (expected_count - got)
     head = translated_paragraphs[:expected_count - 1]
     tail = " ".join(translated_paragraphs[expected_count - 1:])
     return head + [tail]
@@ -127,6 +144,7 @@ async def _retry_segment_with_paragraph_count(
     *,
     translate_segment: Callable[[str, Dict[str, Any]], Awaitable[Optional[str]]],
     prompt_options: Optional[Dict[str, Any]] = None,
+    target_language: str = "",
 ) -> Optional[str]:
     """Re-translate a mismatched segment once, as one call, with the count stated.
 
@@ -153,9 +171,10 @@ async def _retry_segment_with_paragraph_count(
     if not answer:
         return None
 
-    cleaned = clean_translated_text(answer)
+    cleaned = clean_translated_text(answer, target_language=target_language)
     cleaned = strip_hallucinated_markup(cleaned, main_content)
     cleaned = strip_hallucinated_markdown_markers(cleaned, main_content)
+    cleaned = reattach_paragraph_closing_punctuation(cleaned, main_content)
     if not cleaned.strip():
         return None
     if _paragraph_count_mismatch(cleaned, expected_count) is not None:
@@ -172,6 +191,7 @@ async def _repair_segment_by_paragraph(
     segment_index: int,
     context_before: str = "",
     context_after: str = "",
+    target_language: str = "",
 ) -> Tuple[str, int]:
     """Re-translate each paragraph of a segment individually.
 
@@ -202,9 +222,10 @@ async def _repair_segment_by_paragraph(
         translated = await translate_one(text, before, after)
         cleaned = ""
         if translated:
-            cleaned = clean_translated_text(translated)
+            cleaned = clean_translated_text(translated, target_language=target_language)
             cleaned = strip_hallucinated_markup(cleaned, text)
             cleaned = strip_hallucinated_markdown_markers(cleaned, text)
+            cleaned = reattach_paragraph_closing_punctuation(cleaned, text)
             # One paragraph in, one paragraph out, always: a model that split
             # this single paragraph would otherwise re-introduce the very
             # misalignment the repair exists to remove. Never recurse.
@@ -253,6 +274,7 @@ async def _repair_segment_by_bisection(
     segment_index: int,
     context_before: str = "",
     context_after: str = "",
+    target_language: str = "",
 ) -> Tuple[str, int, int]:
     """Repair a mismatched segment by locating the divergence (issue #259).
 
@@ -313,6 +335,7 @@ async def _repair_segment_by_bisection(
             segment_index=segment_index,
             context_before=before,
             context_after=after,
+            target_language=target_language,
         )
         failed += range_failed
         return joined.split(PARAGRAPH_SEPARATOR)
@@ -334,6 +357,7 @@ async def _repair_segment_by_bisection(
             hi - lo,
             translate_segment=_translate_segment,
             prompt_options=prompt_options,
+            target_language=target_language,
         )
         if answer is None:
             return None
@@ -419,6 +443,16 @@ def build_plain_segments(
 
         tokens = chunker.count_tokens(text)
 
+        if _INNER_BLANK_LINE_REGEX.search(text.strip()) and tokens <= chunker.max_tokens:
+            # A paragraph that itself holds blank lines (a <pre> block kept
+            # verbatim) cannot share a segment: the segment's answer is split
+            # on blank lines, so it would always break the paragraph-count
+            # contract and lose its own blank lines. Alone in a 'partial'
+            # segment, its answer goes back into its single slot untouched.
+            flush()
+            segments.append({'indices': [idx], 'text': text, 'partial': True})
+            continue
+
         if tokens > chunker.max_tokens:
             flush()
             sentences = chunker.split_paragraph_into_sentences(text)
@@ -452,7 +486,8 @@ def _reassemble(
     Write each segment's translation back to the source indices it covers.
 
     Empty source slots keep their original (empty) value; pieces of an
-    oversized paragraph are concatenated in order into its single slot.
+    oversized paragraph are concatenated in order into its single slot. A slot
+    the model's answer did not cover keeps its source paragraph.
     """
     out: List[Optional[str]] = [None] * len(source_paragraphs)
     partial_pieces: Dict[int, List[str]] = {}
@@ -507,9 +542,9 @@ async def translate_paragraphs_plain(
         model_name, llm_client: LLM config
         max_tokens_per_chunk: chunking budget
         log_callback, stats_callback: callbacks (stats_callback receives
-            file-local stats via TranslationMetrics.to_dict(); callers that
-            aggregate across files are responsible for adding their global
-            offset to completed_chunks).
+            the file-local progress payload, TranslationMetrics.report_progress;
+            callers that aggregate across files are responsible for adding
+            their global offset to completed_chunks).
         context_manager: AdaptiveContextManager (Ollama)
         check_interruption_callback: returns True to abort
         prompt_options: prompt customization (text_cleanup, glossary, etc.)
@@ -555,11 +590,11 @@ async def translate_paragraphs_plain(
         (translated_paragraphs, stats, was_interrupted)
     """
     stats = TranslationMetrics()
+    progress = ProgressReporter(stats_callback)
 
     source = list(paragraphs)
     if not source or all(not (p or "").strip() for p in source):
-        if stats_callback:
-            stats_callback(stats.to_dict())
+        stats.report_progress(progress)
         return source, stats, False
 
     # === RESUME ===
@@ -640,13 +675,11 @@ async def translate_paragraphs_plain(
             f"text in an earlier pass: {[k + 1 for k in retry_indices]}"
         )
 
-    if stats_callback:
-        stats_callback(stats.to_dict())
+    stats.report_progress(progress)
 
     def _context_tail(text):
-        """The last 25 words of a translation, as sequential context."""
-        words = (text or "").split()
-        return " ".join(words[-25:]) if len(words) > 25 else (text or "")
+        """The end of a translation, as sequential context (shared policy)."""
+        return previous_context_tail(text)
 
     def _previous_context(i):
         """previous_translation_context for segment i (sequential mode only).
@@ -677,15 +710,31 @@ async def translate_paragraphs_plain(
         else:
             stats.failed_chunks += 1
 
+    # Calls whose translation was taken from an untagged raw reply. Reported
+    # in the log (TranslationMetrics has no field for it yet).
+    raw_fallback_calls = 0
+
+    def _count_raw_fallback():
+        nonlocal raw_fallback_calls
+        raw_fallback_calls += 1
+
+    def _report_raw_fallbacks():
+        if raw_fallback_calls and log_callback:
+            log_callback(
+                "raw_fallback_summary",
+                f"⚠️ {raw_fallback_calls} request(s) came back without translation tags "
+                "and were saved from the raw response - check those passages"
+            )
+
     async def _request(main_content, context_before, context_after, previous, options=None):
         """Single Plain Text Mode LLM call, shared by the segment loop, the
         count-stating retry and the per-paragraph repair so the three can never
         drift apart. `options` overrides prompt_options for that one call only.
         """
+        # context_before / context_after are not part of the prompt; the
+        # request takes the text and the previous translation only.
         return await generate_translation_request(
             main_content=main_content,
-            context_before=context_before,
-            context_after=context_after,
             previous_translation_context=previous,
             source_language=source_language,
             target_language=target_language,
@@ -696,6 +745,7 @@ async def translate_paragraphs_plain(
             prompt_options=prompt_options if options is None else options,
             context_manager=context_manager,
             placeholder_format=None,
+            on_raw_fallback=_count_raw_fallback,
         )
 
     async def _translate_chunk(i):
@@ -710,6 +760,21 @@ async def translate_paragraphs_plain(
             chunks[i].get('context_after', ''),
             _previous_context(i),
         )
+        # Plain mode has no placeholders to validate, so a truncated answer
+        # (or a runaway one) would otherwise be written as the translation.
+        # Treat it like a failed call: the segment keeps its source text, is
+        # counted, and stays CHUNK_UNTRANSLATED for the retry pass. An empty
+        # answer is left to the paragraph-count repair below.
+        if translated is not None and translated.strip():
+            from src.core.epub.text_survival import text_survival_problem
+            problem = text_survival_problem(main_content, translated)
+            if problem:
+                if log_callback:
+                    log_callback(
+                        "plain_text_chunk_rejected",
+                        f"Chunk {i + 1}/{len(chunks)}: rejected translation, {problem}"
+                    )
+                return ('done', None)
         return ('done', translated)
 
     async def _translate_one_paragraph(text, context_before, context_after):
@@ -789,165 +854,186 @@ async def translate_paragraphs_plain(
                 translated_parts[i] = main_content
                 _record_failure(i)
             else:
-                kind, value = result
-                if kind == 'empty':
-                    translated_parts[i] = value
-                    statuses[i] = CHUNK_TRANSLATED
-                    stats.successful_first_try += 1
-                elif value is None:
-                    if log_callback:
-                        log_callback(
-                            "plain_text_chunk_failed",
-                            f"Chunk {i + 1}/{len(chunks)} failed - keeping original text"
-                        )
-                    translated_parts[i] = main_content
-                    _record_failure(i)
-                else:
-                    cleaned = clean_translated_text(value)
-                    cleaned = strip_hallucinated_markup(
-                        cleaned, chunks[i].get('main_content', ''))
-                    cleaned = strip_hallucinated_markdown_markers(
-                        cleaned, chunks[i].get('main_content', ''))
-                    translated_parts[i] = cleaned
-                    statuses[i] = CHUNK_TRANSLATED
-                    stats.successful_first_try += 1
-                    # A wrong paragraph count is reconciled silently at
-                    # reassembly time (padding with empty slots, which then fall
-                    # back to source text). Count it, report it, and repair it
-                    # here, where the segment is still identifiable.
-                    # Partial segments are pieces of one oversized paragraph:
-                    # they are joined back by design and have no count contract.
-                    if not segments[i]['partial']:
-                        expected = len(segments[i]['indices'])
-                        mismatch = _paragraph_count_mismatch(cleaned, expected)
-                        if mismatch is not None:
-                            got, _ = mismatch
-                            # Counted whether or not the repair runs, so the
-                            # metric measures model behaviour, not our reaction.
-                            stats.paragraph_count_mismatches += 1
-                            if got > expected and expected == 1:
-                                # Benign: the model split the one paragraph this
-                                # segment owns, and _reconcile_paragraph_counts
-                                # merges the surplus straight back into its
-                                # single slot - no source text can survive. The
-                                # plan asks for debug level; log_callback has no
-                                # level parameter, so the level maps to a quiet
-                                # event id instead of the mismatch warning.
-                                if log_callback:
-                                    log_callback(
-                                        "plain_text_paragraph_split_benign",
-                                        f"Chunk {i + 1}/{len(chunks)} (segment {i}): the model "
-                                        f"split the paragraph into {got} parts - merged back "
-                                        "into its single slot"
-                                    )
-                            else:
-                                if log_callback:
-                                    log_callback(
-                                        "plain_text_paragraph_mismatch",
-                                        f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the model "
-                                        f"returned {got} paragraph(s) instead of {expected} - "
-                                        "re-translating this segment"
-                                    )
-                                # One retry of the whole segment first, stating
-                                # the count the answer must have. It recovers the
-                                # common case for a single call; the exact-by-
-                                # construction repair below costs one call per
-                                # paragraph and stays as the fallback. Skipped
-                                # for a one-paragraph segment, where the repair
-                                # is already a single call and a retry would only
-                                # add one. Accepted only on an exact count match,
-                                # so the alignment guarantee is unchanged.
-                                retried = None
-                                if expected > 1:
-                                    retried = await _retry_segment_with_paragraph_count(
-                                        main_content,
-                                        expected,
-                                        translate_segment=lambda text, options: _request(
-                                            text,
-                                            chunks[i].get('context_before', ''),
-                                            chunks[i].get('context_after', ''),
-                                            _previous_context(i),
-                                            options,
-                                        ),
-                                        prompt_options=prompt_options,
-                                    )
-                                if retried is not None:
-                                    # The common tail below picks `cleaned` up
-                                    # for the sequential context chain and runs
-                                    # the checkpoint hook, exactly as it does for
-                                    # a segment that never mismatched.
-                                    cleaned = retried
-                                    translated_parts[i] = retried
-                                    stats.paragraph_retry_recovered += 1
+                # The mismatch retry and repair below call the LLM from this
+                # consumer loop, outside iter_ordered_concurrent: a rate limit
+                # there must take the same exit as one raised by a chunk
+                # request (checkpoint hook + partial result), with segment i
+                # rolled back so the resume translates it again.
+                slot_before, status_before = translated_parts[i], statuses[i]
+                try:
+                    kind, value = result
+                    if kind == 'empty':
+                        translated_parts[i] = value
+                        statuses[i] = CHUNK_TRANSLATED
+                        stats.successful_first_try += 1
+                    elif value is None:
+                        if log_callback:
+                            log_callback(
+                                "plain_text_chunk_failed",
+                                f"Chunk {i + 1}/{len(chunks)} failed - keeping original text"
+                            )
+                        translated_parts[i] = main_content
+                        _record_failure(i)
+                    else:
+                        if _INNER_BLANK_LINE_REGEX.search(main_content.strip()):
+                            # Verbatim block (see build_plain_segments): its
+                            # layout is the content, so no whitespace clean-up.
+                            cleaned = value.strip('\r\n')
+                        else:
+                            cleaned = clean_translated_text(value, target_language=target_language)
+                        cleaned = strip_hallucinated_markup(
+                            cleaned, chunks[i].get('main_content', ''))
+                        cleaned = strip_hallucinated_markdown_markers(
+                            cleaned, chunks[i].get('main_content', ''))
+                        cleaned = reattach_paragraph_closing_punctuation(
+                            cleaned, chunks[i].get('main_content', ''))
+                        translated_parts[i] = cleaned
+                        statuses[i] = CHUNK_TRANSLATED
+                        stats.successful_first_try += 1
+                        # A wrong paragraph count is reconciled silently at
+                        # reassembly time (padding with empty slots, which then fall
+                        # back to source text). Count it, report it, and repair it
+                        # here, where the segment is still identifiable.
+                        # Partial segments are pieces of one oversized paragraph:
+                        # they are joined back by design and have no count contract.
+                        if not segments[i]['partial']:
+                            expected = len(segments[i]['indices'])
+                            mismatch = _paragraph_count_mismatch(cleaned, expected)
+                            if mismatch is not None:
+                                got, _ = mismatch
+                                # Counted whether or not the repair runs, so the
+                                # metric measures model behaviour, not our reaction.
+                                stats.paragraph_count_mismatches += 1
+                                if got > expected and expected == 1:
+                                    # Benign: the model split the one paragraph this
+                                    # segment owns, and _reconcile_paragraph_counts
+                                    # merges the surplus straight back into its
+                                    # single slot - no source text can survive. The
+                                    # plan asks for debug level; log_callback has no
+                                    # level parameter, so the level maps to a quiet
+                                    # event id instead of the mismatch warning.
                                     if log_callback:
                                         log_callback(
-                                            "plain_text_paragraph_retry_recovered",
-                                            f"Chunk {i + 1}/{len(chunks)} (segment {i}): the retry "
-                                            f"returned the expected {expected} paragraph(s) - no "
-                                            "per-paragraph repair needed"
+                                            "plain_text_paragraph_split_benign",
+                                            f"Chunk {i + 1}/{len(chunks)} (segment {i}): the model "
+                                            f"split the paragraph into {got} parts - merged back "
+                                            "into its single slot"
                                         )
                                 else:
                                     if log_callback:
                                         log_callback(
-                                            "plain_text_paragraph_repair_started",
-                                            f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the "
-                                            f"retry did not return {expected} paragraph(s) - "
-                                            "locating the divergence to repair this segment"
+                                            "plain_text_paragraph_mismatch",
+                                            f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the model "
+                                            f"returned {got} paragraph(s) instead of {expected} - "
+                                            "re-translating this segment"
                                         )
-                                    # Repaired here, inside the ordered consumer
-                                    # loop and before the checkpoint hook below,
-                                    # so the persisted prefix always holds the
-                                    # repaired text. Never inside
-                                    # _translate_chunk: that runs under the
-                                    # worker semaphore and would deadlock.
-                                    repaired, repair_failed, repair_calls = await _repair_segment_by_bisection(
-                                        segments[i],
-                                        source,
-                                        translate_range=_translate_paragraph_range,
-                                        translate_one=_translate_one_paragraph,
-                                        prompt_options=prompt_options,
-                                        log_callback=log_callback,
-                                        segment_index=i,
-                                        context_before=chunks[i].get('context_before', ''),
-                                        context_after=chunks[i].get('context_after', ''),
-                                    )
-                                    repair_calls_total += repair_calls
-                                    if log_callback:
-                                        log_callback(
-                                            "plain_text_paragraph_repair_done",
-                                            f"Chunk {i + 1}/{len(chunks)} (segment {i}): repaired "
-                                            f"{expected} paragraph(s) in {repair_calls} extra "
-                                            f"call(s) ({repair_calls_total} repair call(s) so far "
-                                            "in this file)"
+                                    # One retry of the whole segment first, stating
+                                    # the count the answer must have. It recovers the
+                                    # common case for a single call; the exact-by-
+                                    # construction repair below costs one call per
+                                    # paragraph and stays as the fallback. Skipped
+                                    # for a one-paragraph segment, where the repair
+                                    # is already a single call and a retry would only
+                                    # add one. Accepted only on an exact count match,
+                                    # so the alignment guarantee is unchanged.
+                                    retried = None
+                                    if expected > 1:
+                                        retried = await _retry_segment_with_paragraph_count(
+                                            main_content,
+                                            expected,
+                                            translate_segment=lambda text, options: _request(
+                                                text,
+                                                chunks[i].get('context_before', ''),
+                                                chunks[i].get('context_after', ''),
+                                                _previous_context(i),
+                                                options,
+                                            ),
+                                            prompt_options=prompt_options,
+                                            target_language=target_language,
                                         )
-                                    if _paragraph_count_mismatch(repaired, expected) is None:
-                                        # Single joined string, as the checkpoint
-                                        # format and _reassemble both expect.
-                                        cleaned = repaired
-                                        translated_parts[i] = repaired
-                                        if repair_failed:
-                                            stats.paragraph_repair_failed += 1
-                                    else:
-                                        # Forbidden by the helper's contract;
-                                        # keep the pre-repair value and say so.
-                                        # Attempted once per segment - no second
-                                        # round.
-                                        stats.paragraph_repair_failed += 1
+                                    if retried is not None:
+                                        # The common tail below picks `cleaned` up
+                                        # for the sequential context chain and runs
+                                        # the checkpoint hook, exactly as it does for
+                                        # a segment that never mismatched.
+                                        cleaned = retried
+                                        translated_parts[i] = retried
+                                        stats.paragraph_retry_recovered += 1
                                         if log_callback:
                                             log_callback(
-                                                "plain_text_paragraph_repair_failed",
-                                                f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): "
-                                                "the repair still returned the wrong "
-                                                "count - keeping the original translation"
+                                                "plain_text_paragraph_retry_recovered",
+                                                f"Chunk {i + 1}/{len(chunks)} (segment {i}): the retry "
+                                                f"returned the expected {expected} paragraph(s) - no "
+                                                "per-paragraph repair needed"
                                             )
-                    # A retried segment sits inside the restored prefix and
-                    # must not move the running chain the new segments use.
-                    if sequential and i >= len(prefix):
-                        previous_translation_context = _context_tail(cleaned)
+                                    else:
+                                        if log_callback:
+                                            log_callback(
+                                                "plain_text_paragraph_repair_started",
+                                                f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the "
+                                                f"retry did not return {expected} paragraph(s) - "
+                                                "locating the divergence to repair this segment"
+                                            )
+                                        # Repaired here, inside the ordered consumer
+                                        # loop and before the checkpoint hook below,
+                                        # so the persisted prefix always holds the
+                                        # repaired text. Never inside
+                                        # _translate_chunk: that runs under the
+                                        # worker semaphore and would deadlock.
+                                        repaired, repair_failed, repair_calls = await _repair_segment_by_bisection(
+                                            segments[i],
+                                            source,
+                                            translate_range=_translate_paragraph_range,
+                                            translate_one=_translate_one_paragraph,
+                                            prompt_options=prompt_options,
+                                            log_callback=log_callback,
+                                            segment_index=i,
+                                            context_before=chunks[i].get('context_before', ''),
+                                            context_after=chunks[i].get('context_after', ''),
+                                            target_language=target_language,
+                                        )
+                                        repair_calls_total += repair_calls
+                                        if log_callback:
+                                            log_callback(
+                                                "plain_text_paragraph_repair_done",
+                                                f"Chunk {i + 1}/{len(chunks)} (segment {i}): repaired "
+                                                f"{expected} paragraph(s) in {repair_calls} extra "
+                                                f"call(s) ({repair_calls_total} repair call(s) so far "
+                                                "in this file)"
+                                            )
+                                        if _paragraph_count_mismatch(repaired, expected) is None:
+                                            # Single joined string, as the checkpoint
+                                            # format and _reassemble both expect.
+                                            cleaned = repaired
+                                            translated_parts[i] = repaired
+                                            if repair_failed:
+                                                stats.paragraph_repair_failed += 1
+                                        else:
+                                            # Forbidden by the helper's contract;
+                                            # keep the pre-repair value and say so.
+                                            # Attempted once per segment - no second
+                                            # round.
+                                            stats.paragraph_repair_failed += 1
+                                            if log_callback:
+                                                log_callback(
+                                                    "plain_text_paragraph_repair_failed",
+                                                    f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): "
+                                                    "the repair still returned the wrong "
+                                                    "count - keeping the original translation"
+                                                )
+                        # A retried segment sits inside the restored prefix and
+                        # must not move the running chain the new segments use.
+                        if sequential and i >= len(prefix):
+                            previous_translation_context = _context_tail(cleaned)
+
+                except RateLimitError as exc:
+                    translated_parts[i], statuses[i] = slot_before, status_before
+                    stats.successful_first_try = max(0, stats.successful_first_try - 1)
+                    rate_limit_error = exc
+                    break
 
             stats.record_processed()
-            if stats_callback:
-                stats_callback(stats.to_dict())
+            stats.report_progress(progress)
             delivered += 1
 
             # === CONTIGUITY INVARIANT ===
@@ -967,6 +1053,8 @@ async def translate_paragraphs_plain(
                 next_index = i + 1
                 if next_index % checkpoint_step == 0 or next_index == len(chunks):
                     _run_checkpoint_hook(next_index)
+
+    _report_raw_fallbacks()
 
     if rate_limit_error is not None:
         # Persist the contiguous prefix translated before the limit, then keep

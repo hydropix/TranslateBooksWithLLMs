@@ -12,12 +12,13 @@ import re
 import pytest
 
 import src.config as config_module
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters import PgnAdapter
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.pgn_adapter import _comment_spans
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 # The Opera Game (Morphy, Paris 1858, public domain) with annotations
 # written for these tests, followed by a short second game exercising
@@ -295,7 +296,7 @@ async def _run_translation(tmp_path, cm, monkeypatch, translate_by_attempt):
         calls.append(kwargs.get("prompt_options") or {})
         return _translate_lines(main_content, translate_by_attempt(len(calls) - 1))
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", FakeLLMClient)
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(FakeLLMClient))
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     adapter = PgnAdapter(str(_write(tmp_path)), str(tmp_path / "out.pgn"),
@@ -303,9 +304,8 @@ async def _run_translation(tmp_path, cm, monkeypatch, translate_by_attempt):
     translator = GenericTranslator(adapter=adapter, checkpoint_manager=cm,
                                    translation_id="job")
     success = await translator.translate(
-        source_language="English", target_language="Portuguese",
-        model_name="fake-model", llm_provider="ollama",
-        log_callback=lambda *args, **kwargs: None,
+        make_job(source_language="English", target_language="Portuguese", model="fake-model", provider="ollama"),
+        make_ctx(log_callback=lambda *args, **kwargs: None),
     )
     output = (tmp_path / "out.pgn").read_text(encoding="utf-8")
     return success, output, calls
@@ -431,3 +431,11 @@ async def test_block_size_ignores_the_subtitle_setting(tmp_path, monkeypatch):
     adapter = await _prepared(tmp_path)
     sizes = [len(u.metadata['local_to_global']) for u in adapter.get_translation_units()]
     assert sizes == [6, 2]
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
+    return build

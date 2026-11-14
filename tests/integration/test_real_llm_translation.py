@@ -14,8 +14,6 @@ Usage:
 
 import pytest
 import asyncio
-import tempfile
-from pathlib import Path
 
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
@@ -72,12 +70,9 @@ class TestBasicTranslation:
     async def test_simple_translation_en_to_fr(self, ollama_provider, sample_texts):
         """Test simple English to French translation."""
         from src.prompts.prompts import generate_translation_prompt
-        from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
 
         prompt_pair = generate_translation_prompt(
             main_content=sample_texts["short"],
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -109,8 +104,6 @@ class TestBasicTranslation:
 
         prompt_pair = generate_translation_prompt(
             main_content=sample_texts["with_names"],
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -199,8 +192,6 @@ And here is a third paragraph to test preservation of structure."""
 
         prompt_pair = generate_translation_prompt(
             main_content=text,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -233,8 +224,6 @@ class TestEPUBTranslation:
 
         prompt_pair = generate_translation_prompt(
             main_content=text_with_placeholders,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -303,8 +292,6 @@ class TestOpenAICompatibility:
 
         prompt_pair = generate_translation_prompt(
             main_content="Good morning, how are you?",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -344,8 +331,6 @@ class TestEdgeCases:
 
         prompt_pair = generate_translation_prompt(
             main_content="Yes.",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -370,8 +355,6 @@ class TestEdgeCases:
 
         prompt_pair = generate_translation_prompt(
             main_content=text,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",

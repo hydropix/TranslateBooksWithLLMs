@@ -1,30 +1,40 @@
 """
 Translation module for LLM communication
 """
-import asyncio
-import time
-import re
 from tqdm.auto import tqdm
 
 from src.config import (
-    DEFAULT_MODEL, TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT, SENTENCE_TERMINATORS,
+    DEFAULT_MODEL, SENTENCE_TERMINATORS,
     THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING
 )
-from src.prompts.prompts import generate_translation_prompt, generate_subtitle_block_prompt, generate_refinement_prompt
-from src.prompts.examples import ensure_example_ready, has_example_for_pair, PLACEHOLDER_EXAMPLES
-from .llm_client import default_client, LLMClient, create_llm_client, LLMResponse
-from .llm import ContextOverflowError, RepetitionLoopError, RateLimitError
+from src.prompts.prompts import generate_translation_prompt, generate_refinement_prompt
+from .llm import RateLimitError, LLMResponse
+from .request_core import (
+    ChunkStatus,
+    ContextBudget,
+    REFINEMENT_LABELS,
+    TRANSLATION_LABELS,
+    request_chunk,
+    # Re-exported: the raw-fallback guards used to live here.
+    RAW_FALLBACK_MAX_RATIO,  # noqa: F401
+    RAW_FALLBACK_MIN_RATIO,  # noqa: F401
+    RAW_FALLBACK_MIN_SOURCE_LENGTH,  # noqa: F401
+    _weighted_length,
+    raw_fallback_rejection_reason,  # noqa: F401
+    strip_raw_preamble,  # noqa: F401
+)
 from .post_processor import clean_translated_text
 from .context_optimizer import (
     AdaptiveContextManager,
-    validate_configuration,
     INITIAL_CONTEXT_SIZE,
     CONTEXT_STEP,
     REFINEMENT_MIN_CONTEXT,
 )
-from .progress_tracker import TokenProgressTracker
-from .chunking.token_chunker import TokenChunker
-from typing import Callable, List, Dict, Tuple, Optional
+from .progress import Phase, ProgressReporter
+from typing import Callable, List, Dict, Tuple, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .job import JobConfig, JobContext
 
 
 # Configuration for context overflow recovery
@@ -40,6 +50,7 @@ def _build_chunk_glossary_block(
     runtime_state: Optional[dict] = None,
     *,
     target_language: str = "",
+    match_target_forms: bool = False,
 ) -> str:
     """
     Filter the active glossary against the current chunk and render a prompt block.
@@ -67,6 +78,10 @@ def _build_chunk_glossary_block(
             instruction, emitted only for the languages listed in
             `INFLECTED_TARGET_LANGUAGES` (see src/core/glossary/inflection.py).
             Defaults to "" so existing callers keep the previous output.
+        match_target_forms: the chunk is a target-language draft (refinement
+            pass): match the glossary's target renderings instead of its
+            source terms, and word the block as "keep these exact forms".
+            Matching source keys against a ZH->FR draft would find nothing.
     """
     if not prompt_options:
         return ""
@@ -77,13 +92,32 @@ def _build_chunk_glossary_block(
         from src.core.glossary import (
             build_cast_block,
             build_glossary_block,
+            build_refinement_glossary_block,
             filter_glossary,
             GlossaryConfig,
+            target_language_is_inflected,
         )
     except ImportError:
         return ""
     config = prompt_options.get("glossary_config") or GlossaryConfig()
-    filtered, capped = filter_glossary(chunk_content, terms, config)
+    if match_target_forms:
+        sources_by_target: Dict[str, List[str]] = {}
+        for source, target in terms.items():
+            if target and target.strip():
+                sources_by_target.setdefault(target.strip(), []).append(source)
+        # An inflected target rarely shows its dictionary form verbatim, so
+        # an inflected ending after the rendering still counts as a match.
+        matched_targets, capped = filter_glossary(
+            chunk_content, {t: t for t in sources_by_target}, config,
+            prefix=target_language_is_inflected(target_language),
+        )
+        filtered = {
+            source: terms[source]
+            for target in matched_targets
+            for source in sources_by_target[target]
+        }
+    else:
+        filtered, capped = filter_glossary(chunk_content, terms, config)
 
     if runtime_state is None:
         runtime_state = {}
@@ -115,8 +149,9 @@ def _build_chunk_glossary_block(
                 f"reference — raise `max_cast_entries` if the whole cast must be listed."
             )
 
+    render = build_refinement_glossary_block if match_target_forms else build_glossary_block
     glossary_block = (
-        build_glossary_block(
+        render(
             filtered, target_language=target_language, term_metadata=metadata
         ) if filtered else ""
     )
@@ -130,6 +165,41 @@ def _build_chunk_glossary_block(
     return f"{cast_block}\n{glossary_block}"
 
 
+# Previous-translation context handed to the next chunk's prompt: at most
+# this many words, and at most this weighted length (CJK counts 3, Hangul 2),
+# so unspaced scripts get a bounded tail too instead of the whole chunk.
+PREVIOUS_CONTEXT_MAX_WORDS = 25
+PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS = 300
+
+
+def previous_context_tail(text: Optional[str]) -> str:
+    """The end of a translation, used as the next chunk's previous context.
+
+    The single policy for every pipeline: the last PREVIOUS_CONTEXT_MAX_WORDS
+    whitespace-separated words, further capped at
+    PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS. A Chinese or Japanese translation has
+    no spaces, so the word rule alone would pass the whole previous chunk.
+    """
+    text = text or ""
+    words = text.split()
+    tail = " ".join(words[-PREVIOUS_CONTEXT_MAX_WORDS:]) if len(words) > PREVIOUS_CONTEXT_MAX_WORDS else text
+    if _weighted_length(tail) <= PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS:
+        return tail
+    budget = PREVIOUS_CONTEXT_MAX_WEIGHTED_CHARS
+    start = len(tail)
+    while start > 0:
+        weight = _weighted_length(tail[start - 1])
+        if weight > budget:
+            break
+        budget -= weight
+        start -= 1
+    cut = tail[start:]
+    # Do not start in the middle of a word when the text has spaces.
+    if start > 0 and not tail[start - 1].isspace() and " " in cut:
+        cut = cut.split(" ", 1)[1]
+    return cut.lstrip()
+
+
 def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple[str, str]:
     """
     Split a chunk into two parts for retry after context overflow.
@@ -141,11 +211,45 @@ def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple
         target_ratio: Target position for split (0.5 = middle)
 
     Returns:
-        Tuple of (first_half, second_half)
+        Tuple of (first_half, second_half), both stripped. Use
+        split_chunk_preserving_separator to also get the whitespace between them.
     """
-    if not main_content.strip():
-        return main_content, ""
+    first, _, second = split_chunk_preserving_separator(main_content, target_ratio)
+    return first, second
 
+
+def split_chunk_preserving_separator(
+    main_content: str, target_ratio: float = 0.5
+) -> Tuple[str, str, str]:
+    """
+    Split a chunk in two for a context-overflow retry, keeping the separator.
+
+    Returns (first, separator, second) with first + separator + second equal
+    to main_content minus its outer whitespace, so the two translations can be
+    joined back with the original separator (a space inside a paragraph, a
+    blank line between paragraphs) instead of reflowing the text. Whenever the
+    content holds more than one character of text, both parts are non-empty.
+    """
+    content = main_content.strip()
+    if not content:
+        return content, "", ""
+    pos = _split_position(content, target_ratio)
+    # A split at either edge would leave one side empty and lose nothing only
+    # by luck; force a real split so the overflow loop always makes progress.
+    if pos <= 0 or pos >= len(content):
+        pos = max(1, min(len(content) - 1, len(content) // 2))
+    first = content[:pos].rstrip()
+    second = content[pos:].lstrip()
+    if not first or not second:
+        # Whitespace on one side only: split in the middle of the text instead.
+        mid = max(1, len(content) // 2)
+        first, second = content[:mid].rstrip(), content[mid:].lstrip()
+    separator = content[len(first):len(content) - len(second)]
+    return first, separator, second
+
+
+def _split_position(main_content: str, target_ratio: float) -> int:
+    """Index in main_content where split_chunk_preserving_separator cuts."""
     lines = main_content.split('\n')
     if len(lines) <= 1:
         # For single line, split at sentence boundary or middle
@@ -165,7 +269,7 @@ def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple
                 if abs(actual_pos - target_pos) < abs(best_split - target_pos):
                     best_split = actual_pos
 
-        return main_content[:best_split].strip(), main_content[best_split:].strip()
+        return best_split
 
     # For multi-line content, split at line boundaries
     target_line = int(len(lines) * target_ratio)
@@ -178,19 +282,39 @@ def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple
             best_line = i + 1
             break
 
-    first_half = '\n'.join(lines[:best_line])
-    second_half = '\n'.join(lines[best_line:])
+    # Never cut before the first or after the last non-empty line.
+    non_empty = [k for k, line in enumerate(lines) if line.strip()]
+    if len(non_empty) >= 2:
+        best_line = max(non_empty[0] + 1, min(best_line, non_empty[-1]))
+    return len('\n'.join(lines[:best_line]))
 
-    return first_half.strip(), second_half.strip()
 
 
 
+
+def _require_client(llm_client):
+    """Return llm_client, or fail clearly when none was given.
+
+    There is no module-global fallback client: a request without the job's
+    provider must fail clearly rather than reach an arbitrary endpoint.
+    """
+    if llm_client is None:
+        raise ValueError(
+            "No LLM client was provided for this request. Create one with "
+            "create_llm_provider() for the job's provider."
+        )
+    return llm_client
+
+
+def _join_split_translations(parts: List[Tuple[str, str]]) -> Optional[str]:
+    """Join (separator_before, translation) pieces back into one text."""
+    if not parts:
+        return None
+    return parts[0][1] + "".join(sep + text for sep, text in parts[1:])
 
 
 async def _make_llm_request_with_adaptive_context(
     main_content: str,
-    context_before: str,
-    context_after: str,
     previous_translation_context: str,
     source_language: str,
     target_language: str,
@@ -203,272 +327,107 @@ async def _make_llm_request_with_adaptive_context(
     placeholder_format: Optional[Tuple[str, str]] = None,
     runtime_state: Optional[dict] = None,
     raw_response_callback: Optional[Callable[[LLMResponse], None]] = None,
+    answer_check: Optional[Callable[[str, str], Optional[str]]] = None,
+    on_rejected: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Optional[str], str, Optional[LLMResponse]]:
     """
-    Make LLM request with adaptive context sizing.
+    Translate one chunk through the shared request core, splitting it on a
+    context overflow the context manager cannot absorb.
 
-    This function uses the AdaptiveContextManager to:
-    1. Start with a small context
-    2. Retry with larger context if needed
-    3. Return token usage info for the manager to learn from
+    Every response guard (empty, truncated, unclosed tag, extraction, raw
+    fallback, adaptive context growth) lives in ``request_chunk``; this
+    function only owns the overflow split: the chunk is cut at a sentence or
+    line boundary, each piece is translated in order and the translations are
+    joined back with the source separators.
 
     Args:
         main_content: Text to translate
-        context_before: Context before main content
-        context_after: Context after main content
         previous_translation_context: Previous translation for consistency
         source_language: Source language
         target_language: Target language
-        model: LLM model name
-        llm_client: LLM client instance
+        model: LLM model name (logs only; the provider carries its model)
+        llm_client: LLM provider instance
         log_callback: Logging callback function
-        has_placeholders: If True, includes placeholder preservation instructions (for EPUB HTML tags)
+        has_placeholders: If True, includes placeholder preservation
+            instructions and forbids the raw-response fallback
         prompt_options: Optional dict with prompt customization options
         context_manager: AdaptiveContextManager for context sizing
         raw_response_callback: Optional callable receiving every LLMResponse
             as it arrives, before extraction or any retry decision. Errors it
             raises are swallowed: recording must never break a translation.
+        answer_check: Optional ``(source, answer) -> reason | None`` applied
+            by the request core to every tagged answer (see
+            ``request_core.tagged_answer_problem``).
+        on_rejected: Optional callable receiving the reason when the chunk
+            failed because its answer was rejected or cut off (as opposed to
+            the provider failing), so the caller can retry with a reinforced
+            prompt.
 
     Returns:
-        Tuple of (translated_text or None, actual_content_translated, LLMResponse)
+        Tuple of (translated_text or None, main_content, last LLMResponse);
+        the response's ``was_fallback`` is True when any piece came from an
+        untagged raw answer.
     """
+    client = _require_client(llm_client)
     current_content = main_content
-    remaining_content = ""
-    all_translations = []
+    # Pieces still to translate after a context-overflow split, each with the
+    # source whitespace that separated it from the piece before it.
+    remaining: List[Tuple[str, str]] = []
+    current_sep = ""
+    # (separator_before, translation) per translated piece.
+    all_translations: List[Tuple[str, str]] = []
     reduction_attempt = 0
     last_response: Optional[LLMResponse] = None
+    used_raw_fallback = False
 
     while current_content.strip():
-        try:
-            # Build the per-chunk glossary block (empty if no glossary configured)
-            glossary_block = _build_chunk_glossary_block(
-                current_content, prompt_options, log_callback=log_callback,
-                runtime_state=runtime_state, target_language=target_language,
-            )
+        glossary_block = _build_chunk_glossary_block(
+            current_content, prompt_options, log_callback=log_callback,
+            runtime_state=runtime_state, target_language=target_language,
+        )
+        prompt_pair = generate_translation_prompt(
+            current_content,
+            previous_translation_context,
+            source_language,
+            target_language,
+            has_placeholders=has_placeholders,
+            prompt_options=prompt_options,
+            placeholder_format=placeholder_format,
+            glossary_block=glossary_block,
+        )
+        if log_callback and reduction_attempt == 0:
+            log_callback("llm_request", "Sending request to LLM", data={
+                'type': 'llm_request',
+                'system_prompt': prompt_pair.system,
+                'user_prompt': prompt_pair.user,
+                'model': model
+            })
 
-            # Generate prompts
-            prompt_pair = generate_translation_prompt(
-                current_content,
-                context_before,
-                context_after,
-                previous_translation_context,
-                source_language,
-                target_language,
-                has_placeholders=has_placeholders,
-                prompt_options=prompt_options,
-                placeholder_format=placeholder_format,
-                glossary_block=glossary_block,
-            )
+        outcome = await request_chunk(
+            client, prompt_pair,
+            source_text=current_content,
+            allow_raw_fallback=not has_placeholders,
+            context_manager=context_manager,
+            log_callback=log_callback,
+            labels=TRANSLATION_LABELS,
+            raw_response_callback=raw_response_callback,
+            answer_check=answer_check,
+        )
+        if outcome.response is not None:
+            last_response = outcome.response
 
-            # Log the request
-            if log_callback and reduction_attempt == 0:
-                log_callback("llm_request", "Sending request to LLM", data={
-                    'type': 'llm_request',
-                    'system_prompt': prompt_pair.system,
-                    'user_prompt': prompt_pair.user,
-                    'model': model
-                })
-
-            start_time = time.time()
-            client = llm_client or default_client
-
-            # Set context from manager if available
-            if context_manager and hasattr(client, 'context_window'):
-                new_ctx = context_manager.get_context_size()
-                if client.context_window != new_ctx:
-                    if log_callback:
-                        log_callback("context_update",
-                            f"📐 Updating context window: {client.context_window} → {new_ctx}")
-                    else:
-                        tqdm.write(f"\n📐 Context: {client.context_window} → {new_ctx}")
-                client.context_window = new_ctx
-
-            llm_response = await client.generate(
-                prompt_pair.user, system_prompt=prompt_pair.system
-            )
-            execution_time = time.time() - start_time
-
-            if not llm_response:
-                return None, main_content, None
-
-            last_response = llm_response
-            full_raw_response = llm_response.content
-
-            if raw_response_callback:
-                try:
-                    raw_response_callback(llm_response)
-                except Exception as record_error:
-                    if log_callback:
-                        log_callback("raw_response_record_failed",
-                            f"Could not record raw LLM response: {record_error}")
-
-            if not full_raw_response or not full_raw_response.strip():
-                # Empty/null content: the model returned nothing. This is almost
-                # always a refusal or a provider-side moderation/policy block on
-                # sensitive content (not a truncation), so retrying with a larger
-                # context would not help. Fail this unit cleanly with a clear hint
-                # instead of crashing later on None slicing.
-                if log_callback:
-                    log_callback("empty_llm_response",
-                        "⚠️ Model returned an empty response (0 tokens). This usually "
-                        "means the model refused or filtered this chunk — common with "
-                        "sensitive/policy-flagged content or provider-side moderation. "
-                        "Try a different model.")
-                return None, main_content, last_response
-
-            # Check if we should retry with larger context (adaptive strategy)
-            if context_manager and llm_response.was_truncated:
-                if context_manager.should_retry_with_larger_context(
-                    llm_response.was_truncated, llm_response.context_used
-                ):
-                    context_manager.increase_context()
-                    continue  # Retry with larger context
-
-            # Log the response
-            if log_callback:
-                log_callback("llm_response", "LLM Response received", data={
-                    'type': 'llm_response',
-                    'response': full_raw_response,
-                    'execution_time': execution_time,
-                    'model': model,
-                    'tokens': {
-                        'prompt': llm_response.prompt_tokens,
-                        'completion': llm_response.completion_tokens,
-                        'total': llm_response.context_used,
-                        'limit': llm_response.context_limit
-                    }
-                })
-
-            # The provider says the model ran out of output tokens: whatever it
-            # returned is only the beginning of the chunk. Saving it would drop
-            # the rest of the chunk from the book without any visible error.
-            if getattr(llm_response, "output_truncated", False) is True:
-                if log_callback:
-                    log_callback("output_truncated",
-                        f"⚠️ The model hit its output token limit before finishing this chunk "
-                        f"(finish_reason: {llm_response.finish_reason}). The chunk is marked "
-                        f"failed instead of being saved half-translated. If this keeps "
-                        f"happening, lower the chunk size or disable reasoning for this model.")
-                return None, main_content, last_response
-
-            # Extract translation
-            translated_text = client.extract_translation(full_raw_response)
-
-            if translated_text:
-                all_translations.append(translated_text)
-            else:
-                # Extraction failed - tags not found or malformed
-                if log_callback:
-                    log_callback("translation_extraction_failed",
-                        "⚠️ WARNING: Failed to extract translation (tags not found or malformed)")
-                    log_callback("translation_extraction_failed_preview",
-                        f"Response preview (first 300 chars): {full_raw_response[:300]}")
-
-                # Implicit truncation detection: model started <TRANSLATION> but hit EOS before </TRANSLATION>
-                stripped_response = full_raw_response.strip()
-                if (stripped_response.startswith(TRANSLATE_TAG_IN) and not stripped_response.endswith(TRANSLATE_TAG_OUT)):
-                    if context_manager and context_manager.should_retry_with_larger_context(True, llm_response.context_used):
-                        if log_callback:
-                            log_callback("implicit_truncation_retry",
-                                "🔄 Model stopped before closing tag. Retrying with larger context...")
-                        context_manager.increase_context()
-                        continue  # Retry with larger context
-
-                    # The answer was cut off mid-translation. The raw fallback
-                    # below would save it, opening tag included, as if complete.
-                    if log_callback:
-                        log_callback("unclosed_translation_tag",
-                            "⚠️ Response opened the translation tag but never closed it: "
-                            "the output was cut off. Chunk marked failed.")
-                    return None, main_content, last_response
-
-                # For EPUB with placeholders, failing to extract is CRITICAL
-                # because using the raw response would include <TRANSLATION> tags in the HTML
-                if has_placeholders:
-                    if log_callback:
-                        log_callback("epub_extraction_critical_fail",
-                            "CRITICAL: Cannot use raw response for EPUB (would corrupt HTML structure)")
-                    return None, main_content, last_response
-
-                # For plain text, try fallback to raw response (legacy behavior)
-                if current_content not in full_raw_response:
-                    if log_callback:
-                        log_callback("using_raw_response_fallback",
-                            "Using raw response as fallback (plain text mode)")
-                    all_translations.append(full_raw_response.strip())
-                    if last_response:
-                        last_response.was_fallback = True
-                else:
-                    # Response contains input - this is an error
-                    if log_callback:
-                        log_callback("llm_prompt_in_response_warning",
-                            "WARNING: LLM response seems to contain input. Discarded.")
-                    return None, main_content, last_response
-
-            # If we had remaining content from a previous split, translate it
-            if remaining_content.strip():
-                current_content = remaining_content
-                remaining_content = ""
-                # Update context for continuity
-                if all_translations:
-                    words = all_translations[-1].split()
-                    previous_translation_context = " ".join(words[-25:]) if len(words) > 25 else all_translations[-1]
-                reduction_attempt = 0  # Reset for new content
-                continue
-
-            # Success - combine all translations
-            combined = "\n".join(all_translations) if all_translations else None
-            return combined, main_content, last_response
-
-        except RepetitionLoopError as e:
-            # Repetition loop detected - this typically happens with thinking models
-            # when context window is too small. Try increasing context, but only a
-            # bounded number of times: a loop that survives larger windows is the
-            # model looping on this chunk, not a context size problem.
-            if context_manager and context_manager.should_retry_repetition_loop():
-                old_context = context_manager.get_context_size()
-                # Force a larger context increase for repetition loops
-                context_manager.increase_context()
-                context_manager.increase_context()  # Double increase for repetition loops
-                new_context = context_manager.get_context_size()
-
-                if new_context > old_context:
-                    if log_callback:
-                        log_callback("repetition_loop_retry",
-                            f"🔄 Repetition loop detected! Increasing context from {old_context} to {new_context} tokens")
-                    else:
-                        tqdm.write(f"\n🔄 Repetition loop - increasing context to {new_context}")
-                    continue  # Retry with larger context
-
-            # No context manager or can't increase further
-            if log_callback:
-                log_callback("repetition_loop_fatal",
-                    f"⚠️ Repetition loop detected and cannot recover. "
-                    f"Try manually increasing OLLAMA_NUM_CTX. Error: {e}")
-            else:
-                tqdm.write(f"\n⚠️ Repetition loop detected - increase OLLAMA_NUM_CTX")
-            return None, main_content, last_response
-
-        except ContextOverflowError as e:
-            # If we have a context manager, try increasing context
-            if context_manager and context_manager.should_retry_with_larger_context(True, 0):
-                context_manager.increase_context()
-                continue  # Retry with larger context
-
+        if outcome.status is ChunkStatus.OVERFLOW:
             reduction_attempt += 1
-
             if reduction_attempt > MAX_CHUNK_REDUCTION_ATTEMPTS:
                 if log_callback:
                     log_callback("context_overflow_fatal",
                         f"⚠️ Context overflow: Max reduction attempts ({MAX_CHUNK_REDUCTION_ATTEMPTS}) "
-                        f"exceeded. Original error: {e}")
+                        f"exceeded. Original error: {outcome.detail}")
                 else:
                     tqdm.write(f"\n⚠️ Context overflow after {MAX_CHUNK_REDUCTION_ATTEMPTS} reduction attempts")
                 return None, main_content, last_response
 
-            # Calculate new reduction factor
             reduction_factor = CHUNK_REDUCTION_FACTOR ** reduction_attempt
-
             if log_callback:
                 log_callback("context_overflow_retry",
                     f"⚠️ Context overflow detected! Reducing chunk to {reduction_factor*100:.0f}% "
@@ -476,45 +435,68 @@ async def _make_llm_request_with_adaptive_context(
             else:
                 tqdm.write(f"\n⚠️ Context overflow - reducing chunk (attempt {reduction_attempt})")
 
-            # Split the content
-            first_part, second_part = split_chunk_for_retry(current_content, reduction_factor)
-
-            if len(first_part) < MIN_CHUNK_CHARACTERS and not all_translations:
-                # Can't reduce further without losing too much content
+            first_part, separator, second_part = split_chunk_preserving_separator(
+                current_content, reduction_factor)
+            if not first_part or (len(first_part) < MIN_CHUNK_CHARACTERS and not all_translations):
                 if log_callback:
                     log_callback("context_overflow_fatal",
                         f"⚠️ Cannot reduce chunk further (min size: {MIN_CHUNK_CHARACTERS} chars)")
                 return None, main_content, last_response
 
             current_content = first_part
-            # Accumulate remaining content for later
-            if second_part.strip():
-                remaining_content = second_part + ("\n" + remaining_content if remaining_content else "")
+            # The second part goes first in the queue: it precedes every piece
+            # already waiting there. Its separator travels with it, so the
+            # translations are joined back exactly as the source was.
+            if second_part:
+                remaining.insert(0, (separator, second_part))
+            continue
 
-    # Shouldn't reach here normally
-    return "\n".join(all_translations) if all_translations else None, main_content, last_response
+        if not outcome.ok:
+            if outcome.status is ChunkStatus.REPETITION and not log_callback:
+                tqdm.write("\n⚠️ Repetition loop detected - increase OLLAMA_NUM_CTX")
+            if on_rejected and outcome.status in (ChunkStatus.REFUSED, ChunkStatus.TRUNCATED):
+                on_rejected(outcome.detail or outcome.status.value)
+            return None, main_content, last_response
+
+        all_translations.append((current_sep, outcome.text))
+        if outcome.status is ChunkStatus.FALLBACK:
+            used_raw_fallback = True
+
+        if remaining:
+            current_sep, current_content = remaining.pop(0)
+            previous_translation_context = previous_context_tail(all_translations[-1][1])
+            reduction_attempt = 0
+            continue
+        break
+
+    # was_fallback must survive a later split request overwriting
+    # last_response, so it is applied once, on the response returned.
+    if used_raw_fallback and last_response is not None:
+        last_response.was_fallback = True
+    return _join_split_translations(all_translations), main_content, last_response
 
 
 # Legacy wrapper for backward compatibility
 
-async def generate_translation_request(main_content, context_before, context_after, previous_translation_context,
+async def generate_translation_request(main_content, previous_translation_context,
                                        source_language="English", target_language="Chinese", model=DEFAULT_MODEL,
                                        llm_client=None, log_callback=None, has_placeholders=False,
                                        prompt_options=None, context_manager: AdaptiveContextManager = None,
                                        placeholder_format: Optional[Tuple[str, str]] = None,
-                                       raw_response_callback: Optional[Callable[[LLMResponse], None]] = None):
+                                       raw_response_callback: Optional[Callable[[LLMResponse], None]] = None,
+                                       on_raw_fallback: Optional[Callable[[], None]] = None,
+                                       answer_check: Optional[Callable[[str, str], Optional[str]]] = None,
+                                       on_rejected: Optional[Callable[[str], None]] = None):
     """
     Generate translation request to LLM API with automatic context overflow handling.
 
     Args:
         main_content (str): Text to translate
-        context_before (str): Context before main content
-        context_after (str): Context after main content
         previous_translation_context (str): Previous translation for consistency
         source_language (str): Source language
         target_language (str): Target language
         model (str): LLM model name
-        llm_client: LLM client instance
+        llm_client: LLM provider instance
         log_callback (callable): Logging callback function
         has_placeholders (bool): If True, includes placeholder preservation instructions
         prompt_options (dict): Optional dict with prompt customization options
@@ -523,6 +505,10 @@ async def generate_translation_request(main_content, context_before, context_aft
             e.g., ('[', ']') for [0] format or ('[[', ']]') for [[0]] format
         raw_response_callback (callable): Optional callable receiving every raw
             LLMResponse (see _make_llm_request_with_adaptive_context)
+        on_raw_fallback (callable): Optional callable invoked (no arguments)
+            when the returned translation came from an untagged raw response,
+            so callers can count it in their stats.
+        answer_check / on_rejected: See _make_llm_request_with_adaptive_context.
 
     Returns:
         str: Translated text or None if failed
@@ -533,15 +519,11 @@ async def generate_translation_request(main_content, context_before, context_aft
             log_callback("skip_translation", f"Skipping LLM for single/empty character: '{main_content}'")
         return main_content
 
-    # Use the adaptive context handler. Each chunk gets its own context growth
-    # budget, and a chunk that still fails gives back what it grew.
-    if context_manager:
-        context_manager.begin_request()
-    try:
-        translated_text, _, _ = await _make_llm_request_with_adaptive_context(
+    # Each chunk gets its own context growth budget, and a chunk that still
+    # fails gives back what it grew.
+    with ContextBudget(context_manager) as budget:
+        translated_text, _, last_response = await _make_llm_request_with_adaptive_context(
             main_content=main_content,
-            context_before=context_before,
-            context_after=context_after,
             previous_translation_context=previous_translation_context,
             source_language=source_language,
             target_language=target_language,
@@ -553,15 +535,20 @@ async def generate_translation_request(main_content, context_before, context_aft
             context_manager=context_manager,
             placeholder_format=placeholder_format,
             raw_response_callback=raw_response_callback,
+            answer_check=answer_check,
+            on_rejected=on_rejected,
         )
-    except BaseException:
-        if context_manager:
-            context_manager.abandon_request()
-        raise
-    if not translated_text and context_manager:
-        context_manager.abandon_request()
+        if translated_text:
+            budget.succeeded()
 
     if translated_text:
+        if on_raw_fallback and getattr(last_response, "was_fallback", False) is True:
+            try:
+                on_raw_fallback()
+            except Exception as count_error:
+                if log_callback:
+                    log_callback("raw_fallback_count_failed",
+                        f"Could not record the raw-response fallback: {count_error}")
         return translated_text
     else:
         err_msg = "ERROR: LLM API request failed"
@@ -588,41 +575,25 @@ async def _refinement_request_attempt(
     runtime_state: Optional[dict] = None,
 ) -> Tuple[Optional[str], Optional[LLMResponse]]:
     """
-    Make LLM request for refinement pass.
-
-    Similar to translation request but uses the refinement prompt.
-
-    Args:
-        draft_translation: First-pass translation to refine
-        context_before: Previously refined text for context
-        context_after: Text appearing after for context
-        previous_refined_context: Last refined text for consistency
-        target_language: Target language
-        model: LLM model name
-        llm_client: LLM client instance
-        log_callback: Logging callback function
-        has_placeholders: If True, includes placeholder preservation instructions
-        prompt_options: Optional dict with prompt customization options
-        context_manager: AdaptiveContextManager for context sizing
+    Refine one plain-text chunk through the shared request core.
 
     Returns:
-        Tuple of (refined_text or None, LLMResponse)
+        Tuple of (refined_text or None, last LLMResponse). None means "keep
+        the draft": every guard of ``request_chunk`` applies.
     """
-    # Extract refinement instructions from prompt_options
     refinement_instructions = prompt_options.get('refinement_instructions', '') if prompt_options else ''
 
-    # Filter the glossary against the DRAFT (target language) — terms that survived
-    # the first pass are the ones we want to keep stable through refinement.
+    # Filter the glossary against the DRAFT (target language), on the terms'
+    # target forms: the renderings that survived the first pass are the ones
+    # to keep stable through refinement.
     glossary_block = _build_chunk_glossary_block(
         draft_translation, prompt_options, log_callback=log_callback,
         runtime_state=runtime_state, target_language=target_language,
+        match_target_forms=True,
     )
 
-    # Generate refinement prompts
     prompt_pair = generate_refinement_prompt(
         draft_translation=draft_translation,
-        context_before=context_before,
-        context_after=context_after,
         previous_refined_context=previous_refined_context,
         target_language=target_language,
         has_placeholders=False,
@@ -631,117 +602,24 @@ async def _refinement_request_attempt(
         glossary_block=glossary_block,
     )
 
-    client = llm_client or default_client
-    last_response: Optional[LLMResponse] = None
+    client = _require_client(llm_client)
+    if log_callback:
+        log_callback("refinement_request", "Sending refinement request to LLM", data={
+            'type': 'refinement_request',
+            'system_prompt': prompt_pair.system,
+            'user_prompt': prompt_pair.user,
+            'model': model
+        })
 
-    # Retry loop with adaptive context (mirrors translation logic)
-    while True:
-        try:
-            # Log the request
-            if log_callback:
-                log_callback("refinement_request", "Sending refinement request to LLM", data={
-                    'type': 'refinement_request',
-                    'system_prompt': prompt_pair.system,
-                    'user_prompt': prompt_pair.user,
-                    'model': model
-                })
-
-            start_time = time.time()
-
-            # Set context from manager if available
-            if context_manager and hasattr(client, 'context_window'):
-                new_ctx = context_manager.get_context_size()
-                if client.context_window != new_ctx:
-                    if log_callback:
-                        log_callback("context_update",
-                            f"📐 Refinement context window: {client.context_window} → {new_ctx}")
-                    client.context_window = new_ctx
-
-            llm_response = await client.make_request(
-                prompt_pair.user, model, system_prompt=prompt_pair.system
-            )
-            execution_time = time.time() - start_time
-
-            if not llm_response:
-                return None, None
-
-            last_response = llm_response
-
-            # Check if we should retry with larger context (adaptive strategy)
-            if context_manager and llm_response.was_truncated:
-                if context_manager.should_retry_with_larger_context(
-                    llm_response.was_truncated, llm_response.context_used
-                ):
-                    context_manager.increase_context()
-                    continue  # Retry with larger context
-
-            full_raw_response = llm_response.content
-
-            # Log the response
-            if log_callback:
-                log_callback("refinement_response", "Refinement response received", data={
-                    'type': 'refinement_response',
-                    'response': full_raw_response,
-                    'execution_time': execution_time,
-                    'model': model,
-                    'tokens': {
-                        'prompt': llm_response.prompt_tokens,
-                        'completion': llm_response.completion_tokens,
-                        'total': llm_response.context_used,
-                        'limit': llm_response.context_limit
-                    }
-                })
-
-            # Extract refined text
-            refined_text = client.extract_translation(full_raw_response)
-
-            if refined_text:
-                return refined_text, llm_response
-            else:
-                # Fallback to raw response if no tags found
-                if draft_translation not in full_raw_response:
-                    return full_raw_response.strip(), llm_response
-                else:
-                    if log_callback:
-                        log_callback("refinement_warning",
-                            "WARNING: Refinement response contains input. Using original.")
-                    return None, llm_response
-
-        except RepetitionLoopError as e:
-            # Repetition loop detected - try increasing context (double increase),
-            # a bounded number of times per chunk
-            if context_manager and context_manager.should_retry_repetition_loop():
-                old_context = context_manager.get_context_size()
-                context_manager.increase_context()
-                context_manager.increase_context()  # Double increase for repetition loops
-                new_context = context_manager.get_context_size()
-
-                if new_context > old_context:
-                    if log_callback:
-                        log_callback("refinement_repetition_retry",
-                            f"🔄 Refinement repetition loop! Increasing context from {old_context} to {new_context} tokens")
-                    continue  # Retry with larger context
-
-            # No context manager or can't increase further
-            if log_callback:
-                log_callback("refinement_error",
-                    f"⚠️ Refinement repetition loop, cannot recover: {e}")
-            return None, last_response
-
-        except ContextOverflowError as e:
-            # Context overflow - try increasing context
-            if context_manager and context_manager.should_retry_with_larger_context(True, 0):
-                context_manager.increase_context()
-                if log_callback:
-                    log_callback("refinement_overflow_retry",
-                        f"⚠️ Refinement context overflow! Retrying with context {context_manager.get_context_size()}")
-                continue  # Retry with larger context
-
-            # Can't increase further
-            if log_callback:
-                log_callback("refinement_error",
-                    f"⚠️ Refinement context overflow, cannot recover: {e}")
-            return None, last_response
+    outcome = await request_chunk(
+        client, prompt_pair,
+        source_text=draft_translation,
+        allow_raw_fallback=True,
+        context_manager=context_manager,
+        log_callback=log_callback,
+        labels=REFINEMENT_LABELS,
+    )
+    return (outcome.text if outcome.ok else None), outcome.response
 
 
 async def _make_refinement_request(**kwargs) -> Tuple[Optional[str], Optional[LLMResponse]]:
@@ -751,40 +629,18 @@ async def _make_refinement_request(**kwargs) -> Tuple[Optional[str], Optional[LL
     fresh per-chunk budget, and a chunk that still fails gives back the
     context it grew, so one bad chunk cannot inflate every later request.
     """
-    context_manager = kwargs.get('context_manager')
-    if context_manager:
-        context_manager.begin_request()
-    try:
+    with ContextBudget(kwargs.get('context_manager')) as budget:
         refined_text, llm_response = await _refinement_request_attempt(**kwargs)
-    except BaseException:
-        if context_manager:
-            context_manager.abandon_request()
-        raise
-    if refined_text is None and context_manager:
-        context_manager.abandon_request()
+        if refined_text is not None:
+            budget.succeeded()
     return refined_text, llm_response
 
 
 async def refine_chunks(
     translated_chunks: List[str],
     original_chunks: List[Dict],
-    target_language: str,
-    model_name: str,
-    api_endpoint: str,
-    log_callback=None,
-    stats_callback=None,
-    check_interruption_callback=None,
-    llm_provider="ollama",
-    gemini_api_key=None,
-    openai_api_key=None,
-    openrouter_api_key=None,
-    mistral_api_key=None,
-    deepseek_api_key=None,
-    poe_api_key=None,
-    nim_api_key=None,
-    context_window=2048,
-    auto_adjust_context=True,
-    prompt_options=None,
+    job: "JobConfig",
+    ctx: "JobContext",
 ) -> List[str]:
     """
     Refine translated chunks with a second pass for literary quality improvement.
@@ -796,36 +652,41 @@ async def refine_chunks(
     Args:
         translated_chunks: List of translated text strings from first pass
         original_chunks: Original chunk dictionaries (for context structure)
-        target_language: Target language name
-        model_name: LLM model name
-        api_endpoint: API endpoint        log_callback: Logging callback
-        stats_callback: Statistics update callback
-        check_interruption_callback: Interruption check callback
-        llm_provider: LLM provider name
-        gemini_api_key: Gemini API key
-        openai_api_key: OpenAI API key
-        openrouter_api_key: OpenRouter API key
-        context_window: Initial context window size
-        auto_adjust_context: Enable adaptive context adjustment
-        prompt_options: Optional dict with prompt customization options
+        job: The job. Its refine provider (``job.provider_for(refine=True)``)
+            builds the client; ``target_language``, ``context_window`` (2048
+            when unset), ``auto_adjust_context`` and ``prompt_options`` are
+            read from it.
+        ctx: Log, stats and interruption hooks.
 
     Returns:
         List of refined text strings
+
+    Raises:
+        RuntimeError: the LLM client cannot be created.
+        RateLimitError: re-raised with ``partial_result`` set to the complete
+            list (chunks from the failing one on are the unrefined drafts).
     """
+    provider = job.refine_provider_config()
+    llm_provider = provider.provider or "ollama"
+    model_name = provider.model or DEFAULT_MODEL
+    target_language = job.target_language
+    context_window = job.context_window or 2048
+    auto_adjust_context = job.auto_adjust_context
+    prompt_options = job.engine_prompt_options()
+    log_callback = ctx.log_callback
+    check_interruption_callback = ctx.check_interruption
+
     total_chunks = len(translated_chunks)
     refined_parts = []
     last_refined_context = ""
     # Transient per-job state (e.g. glossary cap warning dedupe) — never persisted.
     runtime_state: dict = {}
 
-    # Single-phase refinement tracker (the workflow phase, when this runs as the
-    # second pass of a translate→refine job, is tagged at the handler seam).
-    progress_tracker = TokenProgressTracker()
-    progress_tracker.start()
-    token_counter = TokenChunker(max_tokens=800)
-    for chunk_text in translated_chunks:
-        token_count = token_counter.count_tokens(chunk_text)
-        progress_tracker.register_chunk(token_count)
+    # Chunk-counted, like every other engine. Whether this pass is the second
+    # phase of a translate→refine job is the job runner's business.
+    progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+    progress.begin(total_chunks)
+    progress.emit()
 
     if log_callback:
         log_callback("refinement_start", f"✨ Starting refinement pass ({total_chunks} chunks)...")
@@ -848,17 +709,17 @@ async def refine_chunks(
     else:
         initial_context = max(context_window, REFINEMENT_MIN_CONTEXT)
 
-    # Create LLM client
-    llm_client = create_llm_client(
-        llm_provider, gemini_api_key, api_endpoint, model_name,
-        openai_api_key=openai_api_key,
-        openrouter_api_key=openrouter_api_key,
-        mistral_api_key=mistral_api_key,
-        deepseek_api_key=deepseek_api_key,
-        poe_api_key=poe_api_key,
-        nim_api_key=nim_api_key,
-        context_window=initial_context, log_callback=log_callback
-    )
+    # Create the provider. A failure must stop the pass: there is no safe
+    # fallback client for an arbitrary provider.
+    try:
+        from .llm.factory import create_llm_provider
+        llm_client = create_llm_provider(job.provider_for(
+            context_window=initial_context, log_callback=log_callback, refine=True))
+    except Exception as e:
+        if log_callback:
+            log_callback("refinement_client_failed",
+                f"❌ Could not create the LLM client for '{llm_provider}': {e}")
+        raise RuntimeError(f"Could not create the LLM client for '{llm_provider}': {e}") from e
 
     # Create adaptive context manager for Ollama
     context_manager = None
@@ -874,7 +735,7 @@ async def refine_chunks(
             log_callback("refinement_context", f"📐 Refinement context: starting at {initial_context} tokens (min for refinement: {REFINEMENT_MIN_CONTEXT})")
 
     # Detect thinking model status
-    if llm_client and llm_provider == "ollama":
+    if llm_provider == "ollama":
         await llm_client.detect_thinking_model()
 
     try:
@@ -898,24 +759,11 @@ async def refine_chunks(
                     refined_parts.append(remaining)
                 break
 
-            # Progress update (token-based)
-            # Measure refinement time for this chunk
-            chunk_start_time = time.time()
-
-            # Skip empty chunks
-            if not draft_text.strip():
-                refined_parts.append(draft_text)
-                chunk_elapsed = time.time() - chunk_start_time
-                progress_tracker.mark_completed(i, chunk_elapsed)
-                if stats_callback:
-                    stats_callback(progress_tracker.get_stats().to_dict())
-                continue
-
-            # Skip very short content
+            # Skip empty or very short content
             if len(draft_text.strip()) <= 1:
                 refined_parts.append(draft_text)
-                chunk_elapsed = time.time() - chunk_start_time
-                progress_tracker.mark_completed(i, chunk_elapsed)
+                progress.record()
+                progress.emit()
                 continue
 
             # Get context from original chunks if available
@@ -964,40 +812,36 @@ async def refine_chunks(
                     context_limit=llm_response.context_limit
                 )
 
-            chunk_elapsed = time.time() - chunk_start_time
+            if refined_text is not None:
+                refined_text = clean_translated_text(refined_text, target_language=target_language)
+                if not refined_text.strip():
+                    # Never let an empty refinement erase the chunk.
+                    refined_text = None
 
             if refined_text is not None:
-                # Clean the refined text
-                refined_text = clean_translated_text(refined_text)
                 refined_parts.append(refined_text)
-                progress_tracker.mark_completed(i, chunk_elapsed)
+                progress.record()
 
                 # Update context for next chunk
-                words = refined_text.split()
-                if len(words) > 25:
-                    last_refined_context = " ".join(words[-25:])
-                else:
-                    last_refined_context = refined_text
+                last_refined_context = previous_context_tail(refined_text)
             else:
                 # Keep original translation if refinement fails
                 if log_callback:
                     log_callback("refinement_chunk_failed",
                         f"Refinement failed for chunk {i+1}, keeping original translation")
                 refined_parts.append(draft_text)
-                progress_tracker.mark_failed(i)
+                progress.record(succeeded=False)
                 last_refined_context = ""
 
-            if stats_callback:
-                stats_callback(progress_tracker.get_stats().to_dict())
+            progress.emit()
 
     finally:
         if llm_client:
             await llm_client.close()
 
-    stats = progress_tracker.get_stats()
     if log_callback:
         log_callback("refinement_complete",
-            f"✨ Refinement complete: {stats.completed_chunks} refined, {stats.failed_chunks} kept original")
+            f"✨ Refinement complete: {progress.succeeded} refined, {progress.failed} kept original")
 
     return refined_parts
 

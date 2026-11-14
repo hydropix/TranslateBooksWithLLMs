@@ -24,7 +24,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import src.config as config_module
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.txt_adapter import TxtAdapter
@@ -36,6 +36,7 @@ from src.core.llm.utils.extraction import TranslationExtractor
 from src.core.translator import _make_llm_request_with_adaptive_context
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.persistence.raw_response_log import raw_response_log_path
+from tests.job_helpers import make_ctx, make_job
 
 
 SENTENCE = "他看着远方的山，心里想着很多事情。“你为什么要走？”她问道。阿言没有回答，只是默默地转过身去！"
@@ -120,6 +121,9 @@ ENGLISH_PARAGRAPH = (
     "played on the wheel watched it from the bridge, arguing about whether it "
     "would ever move again, and what the miller would have said if he had seen it."
 )
+# The fake "translation": not the source with another case, which the
+# TXT acceptance rules reject as the source copied back.
+TRANSLATED_PARAGRAPH = "FR: " + ENGLISH_PARAGRAPH.upper()
 
 
 async def _prepared_adapter(tmp_path, text, max_tokens=450):
@@ -178,7 +182,7 @@ class _StubClient:
         self._response = response
         self._extractor = TranslationExtractor(TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT)
 
-    async def generate(self, prompt, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         return self._response
 
     def extract_translation(self, text):
@@ -188,8 +192,6 @@ class _StubClient:
 async def _request(response, has_placeholders=False, raw_response_callback=None):
     return await _make_llm_request_with_adaptive_context(
         main_content="Hello world, this is a test.",
-        context_before="",
-        context_after="",
         previous_translation_context="",
         source_language="English",
         target_language="French",
@@ -305,7 +307,7 @@ class _ScriptedLLMClient:
     def __init__(self, **kwargs):
         self._extractor = TranslationExtractor(TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT)
 
-    async def generate(self, prompt, system_prompt=None):
+    async def generate(self, prompt, system_prompt=None, **kwargs):
         type(self).calls.append({"prompt": prompt, "system": system_prompt})
         responder = type(self).script[min(len(type(self).calls) - 1, len(type(self).script) - 1)]
         return responder(prompt)
@@ -337,7 +339,7 @@ def cm(tmp_path):
 def scripted_llm(monkeypatch):
     _ScriptedLLMClient.script = []
     _ScriptedLLMClient.calls = []
-    monkeypatch.setattr(llm_client_module, "LLMClient", _ScriptedLLMClient)
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(_ScriptedLLMClient))
     return _ScriptedLLMClient
 
 
@@ -353,11 +355,8 @@ async def _translate(tmp_path, cm, text, logs=None):
             logs.append((msg_type, message))
 
     success = await translator.translate(
-        source_language="English",
-        target_language="French",
-        model_name="fake-model",
-        llm_provider="ollama",
-        log_callback=log_callback,
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(log_callback=log_callback),
     )
     return success, output
 
@@ -368,7 +367,7 @@ class TestGenericTranslatorIntegrity:
     async def test_skipped_passage_is_retried_then_succeeds(self, tmp_path, cm, scripted_llm):
         scripted_llm.script = [
             lambda prompt: _tagged("La rivière."),
-            lambda prompt: _tagged(ENGLISH_PARAGRAPH.upper()),
+            lambda prompt: _tagged(TRANSLATED_PARAGRAPH),
         ]
         success, output = await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
 
@@ -377,7 +376,7 @@ class TestGenericTranslatorIntegrity:
         retry_prompt = scripted_llm.calls[1]["prompt"] + (scripted_llm.calls[1]["system"] or "")
         assert "Translate the ENTIRE text" in retry_prompt
         assert "[N] index marker" not in retry_prompt
-        assert output.read_text(encoding="utf-8") == ENGLISH_PARAGRAPH.upper()
+        assert output.read_text(encoding="utf-8") == TRANSLATED_PARAGRAPH
 
     @pytest.mark.asyncio
     async def test_persistently_short_chunk_ends_the_job_partial(self, tmp_path, cm, scripted_llm):
@@ -407,7 +406,7 @@ class TestRawResponseLog:
     @pytest.mark.asyncio
     async def test_disabled_by_default_writes_nothing(self, tmp_path, cm, scripted_llm, monkeypatch):
         monkeypatch.setattr(config_module, "SAVE_RAW_LLM_RESPONSES", False)
-        scripted_llm.script = [lambda prompt: _tagged(ENGLISH_PARAGRAPH.upper())]
+        scripted_llm.script = [lambda prompt: _tagged(TRANSLATED_PARAGRAPH)]
         await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
 
         assert not raw_response_log_path(tmp_path, "job-1").exists()
@@ -417,7 +416,7 @@ class TestRawResponseLog:
         monkeypatch.setattr(config_module, "SAVE_RAW_LLM_RESPONSES", True)
         scripted_llm.script = [
             lambda prompt: _tagged("signifi- cada"),
-            lambda prompt: _tagged(ENGLISH_PARAGRAPH.upper()),
+            lambda prompt: _tagged(TRANSLATED_PARAGRAPH),
         ]
         success, _ = await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
         assert success is True
@@ -433,3 +432,47 @@ class TestRawResponseLog:
     def test_translation_id_cannot_escape_the_directory(self, tmp_path):
         path = raw_response_log_path(tmp_path, "../../etc/passwd")
         assert path.parent == tmp_path / "raw_responses"
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
+    return build
+
+
+class _ContextRecordingClient(_ScriptedLLMClient):
+    """Records the context window each request was sent with."""
+
+    built_with = []
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        type(self).built_with.append(kwargs.get("context_window"))
+
+    async def generate(self, prompt, system_prompt=None, **kwargs):
+        type(self).calls.append({"prompt": prompt, "system": system_prompt,
+                                 "context_window": kwargs.get("context_window")})
+        if len(type(self).calls) == 1:
+            from src.core.llm.exceptions import RepetitionLoopError
+            raise RepetitionLoopError("window too small")
+        return _tagged(TRANSLATED_PARAGRAPH)
+
+
+@pytest.mark.asyncio
+async def test_txt_on_ollama_uses_adaptive_context(tmp_path, cm, monkeypatch):
+    """TXT/SRT/PGN get the EPUB pipeline's adaptive context on Ollama: the
+    provider starts at the adaptive initial size and a too-small window grows."""
+    from src.core.context_optimizer import INITIAL_CONTEXT_SIZE
+
+    _ContextRecordingClient.calls = []
+    _ContextRecordingClient.built_with = []
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider",
+                        _fake_factory(_ContextRecordingClient))
+    success, _ = await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
+
+    assert success is True
+    assert _ContextRecordingClient.built_with == [INITIAL_CONTEXT_SIZE]
+    windows = [c["context_window"] for c in _ContextRecordingClient.calls]
+    assert windows[0] == INITIAL_CONTEXT_SIZE and windows[1] > windows[0]

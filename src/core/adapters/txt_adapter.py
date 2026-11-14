@@ -8,7 +8,6 @@ This adapter handles plain text files by:
 4. Reconstructing the output by joining chunks
 """
 
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from src.core.chunking.reassembly import join_translated_chunks
@@ -67,8 +66,8 @@ class TxtAdapter(FormatAdapter):
 
             return True
 
-        except Exception:
-            return False
+        except Exception as e:
+            raise RuntimeError(f"Could not read or split the text file: {e}") from e
 
     def get_translation_units(self) -> List[TranslationUnit]:
         """
@@ -160,7 +159,8 @@ class TxtAdapter(FormatAdapter):
                 return True
             return False
 
-        except Exception:
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
             return False
 
     async def reconstruct_output(self, bilingual: bool = False) -> bytes:
@@ -231,13 +231,19 @@ class TxtAdapter(FormatAdapter):
 
                     if chunk_index is not None and translated_text is not None:
                         if 0 <= chunk_index < len(self.translated_chunks):
+                            # Only restore onto the same source text: after a
+                            # re-chunking the index may point at another chunk.
+                            stored_source = chunk_data.get('original_text')
+                            if (stored_source is not None
+                                    and stored_source != self.chunks[chunk_index]['main_content']):
+                                continue
                             self.translated_chunks[chunk_index] = translated_text
 
             # Return resume index
             return checkpoint_data.get('resume_from_index', 0)
 
-        except Exception:
-            return 0
+        except Exception as e:
+            raise RuntimeError(f"Could not restore the text checkpoint: {e}") from e
 
     async def cleanup(self):
         """

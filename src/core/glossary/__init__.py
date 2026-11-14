@@ -23,7 +23,11 @@ from src.core.glossary.inflection import (
     INFLECTED_TARGET_LANGUAGES,
     target_language_is_inflected,
 )
-from src.core.glossary.injector import build_cast_block, build_glossary_block
+from src.core.glossary.injector import (
+    build_cast_block,
+    build_glossary_block,
+    build_refinement_glossary_block,
+)
 from src.core.glossary.store import GlossaryStore
 from src.core.glossary.ner import parse_ner_response, suggest_terms
 
@@ -40,6 +44,7 @@ __all__ = [
     "filter_glossary",
     "build_cast_block",
     "build_glossary_block",
+    "build_refinement_glossary_block",
     "normalize_gender",
     "parse_ner_response",
     "suggest_terms",

@@ -6,18 +6,16 @@ and encoding to Opus format via ffmpeg.
 """
 import asyncio
 import logging
-import os
 import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Callable, Tuple
+from typing import List, Optional, Tuple
 
-from .tts_config import TTSConfig, get_voice_for_language
+from .tts_config import TTSConfig
 from .providers.base import TTSProvider, TTSError, ProgressCallback
 from .providers.edge_tts import EdgeTTSProvider
-from .providers.chatterbox_tts import ChatterboxProvider, is_chatterbox_available, MAX_TEXT_LENGTH as CHATTERBOX_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +296,8 @@ class AudioProcessor:
 
         # Adjust chunk size based on provider
         # Chatterbox has strict tokenizer limits
-        if isinstance(self.provider, ChatterboxProvider):
+        if self.provider.name == "chatterbox":
+            from .providers.chatterbox_tts import MAX_TEXT_LENGTH as CHATTERBOX_MAX_LENGTH
             # Use smaller chunks for Chatterbox (with safety margin)
             self._effective_chunk_size = min(config.chunk_size, CHATTERBOX_MAX_LENGTH - 50)
             logger.info(f"Using Chatterbox-optimized chunk size: {self._effective_chunk_size}")
@@ -541,7 +540,11 @@ def create_tts_provider(provider_name: str = "edge-tts", **kwargs) -> TTSProvide
     if provider_name == "edge-tts":
         return EdgeTTSProvider()
 
-    elif provider_name == "chatterbox":
+    # Imported here so that loading this module never pulls in the Chatterbox
+    # provider (and, on first availability check, torch).
+    from .providers.chatterbox_tts import ChatterboxProvider, is_chatterbox_available
+
+    if provider_name == "chatterbox":
         if not is_chatterbox_available():
             raise ValueError(
                 "Chatterbox TTS is not available. Install with: "

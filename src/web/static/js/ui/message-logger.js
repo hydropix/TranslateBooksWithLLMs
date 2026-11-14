@@ -8,6 +8,13 @@ import { DomHelpers } from './dom-helpers.js';
 import { t } from '../i18n/i18n.js';
 
 /**
+ * Maximum number of entries kept in the activity log. A long book emits
+ * thousands of entries; past this cap the oldest ones are dropped so the DOM
+ * stays small.
+ */
+const MAX_LOG_ENTRIES = 500;
+
+/**
  * Log filters - messages containing these strings will be skipped
  */
 const LOG_FILTERS = [
@@ -217,10 +224,10 @@ export const MessageLogger = {
             // Format multi-line summary with proper line breaks and styling
             formattedMessage = DomHelpers.escapeHtml(message)
                 .replace(/\n/g, '<br>')
-                .replace(/=== (.*?) ===/g, '<strong style="color: #3b82f6;">$1</strong>')
-                .replace(/⚠️/g, '<span style="color: #f59e0b;">⚠️</span>')
-                .replace(/✓/g, '<span style="color: #22c55e;">✓</span>')
-                .replace(/✗/g, '<span style="color: #ef4444;">✗</span>')
+                .replace(/=== (.*?) ===/g, '<strong style="color: var(--primary-light);">$1</strong>')
+                .replace(/⚠️/g, '<span style="color: var(--warning-light);">⚠️</span>')
+                .replace(/✓/g, '<span style="color: var(--success-light);">✓</span>')
+                .replace(/✗/g, '<span style="color: var(--danger-light);">✗</span>')
                 .replace(/•/g, '<span style="margin-left: 10px;">•</span>');
         } else {
             formattedMessage = DomHelpers.escapeHtml(message);
@@ -232,7 +239,23 @@ export const MessageLogger = {
         });
 
         logContainer.appendChild(logEntry);
+        this._trimLog(logContainer);
         logContainer.scrollTop = logContainer.scrollHeight;
+    },
+
+    /**
+     * Drop the oldest entries once the log exceeds MAX_LOG_ENTRIES.
+     * @param {HTMLElement} logContainer
+     * @private
+     */
+    _trimLog(logContainer) {
+        while (logContainer.childElementCount > MAX_LOG_ENTRIES) {
+            const oldest = logContainer.firstElementChild;
+            if (oldest === this.lastProgressEntry) {
+                this.lastProgressEntry = null;
+            }
+            oldest.remove();
+        }
     },
 
     /**
@@ -258,6 +281,7 @@ export const MessageLogger = {
                 innerHTML: `<span class="log-timestamp">[${timestamp}]</span> <span style="opacity: 0.7;">[${DomHelpers.escapeHtml(fileName)}]</span> ${DomHelpers.escapeHtml(message)}`
             });
             logContainer.appendChild(this.lastProgressEntry);
+            this._trimLog(logContainer);
         }
 
         logContainer.scrollTop = logContainer.scrollHeight;
@@ -400,7 +424,7 @@ export const MessageLogger = {
         let summaryHtml = `<span class="log-timestamp">[${timestamp}]</span> `;
 
         if (fileName) {
-            summaryHtml += `<strong style="color: #22c55e;">✅ ${DomHelpers.escapeHtml(fileName)}</strong><br>`;
+            summaryHtml += `<strong style="color: var(--success-light);">✅ ${DomHelpers.escapeHtml(fileName)}</strong><br>`;
         }
 
         // Group messages by type
@@ -447,7 +471,7 @@ export const MessageLogger = {
         // Add cleanup message if batch complete
         const batchComplete = cleanup.find(c => c.includes('All files in the batch'));
         if (batchComplete) {
-            parts.push(`<span style="margin-left: 10px; color: #6366f1;">${DomHelpers.escapeHtml(batchComplete)}</span>`);
+            parts.push(`<span style="margin-left: 10px; color: var(--primary-light);">${DomHelpers.escapeHtml(batchComplete)}</span>`);
         }
 
         summaryHtml += parts.join('<br>');
@@ -459,6 +483,7 @@ export const MessageLogger = {
         });
 
         logContainer.appendChild(logEntry);
+        this._trimLog(logContainer);
         logContainer.scrollTop = logContainer.scrollHeight;
 
         // Clear buffer
@@ -483,7 +508,7 @@ export const MessageLogger = {
         // Remove placeholder tags for cleaner preview (UI only, not in console logs)
         // NOTE: These patterns must stay synchronized with src/config.py
         translatedText = translatedText.replace(/\[TAG\d+\]/g, ' ');  // HTML tag placeholders
-        translatedText = translatedText.replace(/\[id\d+\]/g, ' ');   // Technical content placeholders
+        translatedText = translatedText.replace(/\[id\d+\]/g, ' ');   // Tag placeholders
         // Also remove legacy Unicode format for backward compatibility
         translatedText = translatedText.replace(/⟦TAG\d+⟧/g, ' ');
 
@@ -508,7 +533,7 @@ export const MessageLogger = {
             translatedText = translatedText.trim();
         }
 
-        const previewHtml = `<div style="background: #ffffff; border-left: 3px solid #22c55e; padding: 15px; color: #000000; white-space: pre-wrap; line-height: 1.6;">${DomHelpers.escapeHtml(translatedText)}</div>`;
+        const previewHtml = `<div style="background: var(--background-light); border-left: 3px solid var(--success-light); padding: 15px; color: var(--text-dark); white-space: pre-wrap; line-height: 1.6;">${DomHelpers.escapeHtml(translatedText)}</div>`;
 
         DomHelpers.setHtml(previewElement, previewHtml);
 
@@ -523,19 +548,4 @@ export const MessageLogger = {
         }
     },
 
-    /**
-     * Reset translation preview
-     */
-    resetTranslationPreview() {
-        const previewElement = DomHelpers.getElement('lastTranslationPreview');
-        if (previewElement) {
-            const placeholderHtml = `<div style="color: #6b7280; font-style: italic; padding: 10px;">${t('translation:no_translation_yet')}</div>`;
-            DomHelpers.setHtml(previewElement, placeholderHtml);
-        }
-        // Clear language indicator
-        const languagesElement = DomHelpers.getElement('previewLanguages');
-        if (languagesElement) {
-            languagesElement.textContent = '';
-        }
-    }
 };

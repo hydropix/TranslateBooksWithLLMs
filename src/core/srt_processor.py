@@ -17,6 +17,9 @@ class SRTProcessor:
     def parse_srt(self, content: str) -> List[Dict[str, str]]:
         subtitles = []
 
+        # A UTF-8 BOM read as text would glue U+FEFF to the first cue number.
+        content = content.lstrip('\ufeff')
+
         content = content.replace('\r\n', '\n').replace('\r', '\n')
         if not content.endswith('\n'):
             content += '\n'

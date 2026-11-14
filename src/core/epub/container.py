@@ -4,13 +4,18 @@ Dependency injection container for EPUB translation pipeline.
 Provides centralized creation and configuration of translation components.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from .tag_preservation import TagPreserver
 from .html_chunker import HtmlChunker
 from .placeholder_validator import PlaceholderValidator
-from src.config import MAX_TOKENS_PER_CHUNK
+
+
+def _configured_max_tokens_per_chunk() -> int:
+    """Read MAX_TOKENS_PER_CHUNK when a config is created, not at import time."""
+    from src import config
+    return config.MAX_TOKENS_PER_CHUNK
 
 
 @dataclass
@@ -24,7 +29,7 @@ class TranslationConfig:
         placeholder_prefix: Placeholder prefix (e.g., "[id")
         placeholder_suffix: Placeholder suffix (e.g., "]")
     """
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK
+    max_tokens_per_chunk: int = field(default_factory=_configured_max_tokens_per_chunk)
     max_retries: int = 3
     enable_debug: bool = False
     placeholder_prefix: str = "[id"
@@ -69,6 +74,24 @@ class TranslationContainer:
                 max_tokens=self.config.max_tokens_per_chunk
             )
         return self._chunker
+
+    def chunker_for(self, max_tokens: Optional[int] = None) -> HtmlChunker:
+        """Get an HtmlChunker sized for ``max_tokens``.
+
+        The caller's chunk size (the user's setting for this job) always wins
+        over the container's default configuration. ``None`` means "no
+        preference" and returns the container's own chunker.
+
+        Args:
+            max_tokens: Maximum tokens per chunk requested by the caller
+
+        Returns:
+            The shared chunker when the size matches the configuration,
+            otherwise a new chunker with the requested size.
+        """
+        if max_tokens is None or max_tokens == self.config.max_tokens_per_chunk:
+            return self.chunker
+        return HtmlChunker(max_tokens=max_tokens)
 
     @property
     def validator(self) -> PlaceholderValidator:

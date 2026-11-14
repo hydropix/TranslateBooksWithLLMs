@@ -24,9 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import random
-import statistics
 import sys
 from collections import Counter
 from pathlib import Path

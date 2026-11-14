@@ -17,7 +17,7 @@ When `window_size == 1` this degrades to plain sequential iteration, byte-for-by
 identical to the legacy loops.
 """
 import asyncio
-from typing import Any, Awaitable, Callable, List, Sequence, Tuple
+from typing import Any, Awaitable, Callable, List, Sequence
 
 try:  # Python >= 3.10
     from contextlib import aclosing

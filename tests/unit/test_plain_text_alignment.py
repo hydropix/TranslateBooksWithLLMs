@@ -45,7 +45,7 @@ async def _run(paragraphs, max_tokens=1000, workers=1):
 async def test_empty_source_paragraph_keeps_alignment(monkeypatch):
     """An empty slot (image-only block) must not shift later paragraphs."""
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     source = ["Chapter One", "", "First body paragraph.", "Second body paragraph."]
     out = await _run(source)
@@ -61,7 +61,7 @@ async def test_empty_source_paragraph_keeps_alignment(monkeypatch):
 async def test_multiple_empty_slots_keep_alignment(monkeypatch):
     """Several empty slots (e.g. leading synthetic anchor) must all be preserved."""
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     source = ["", "Heading", "", "Body text here.", "Tail paragraph."]
     out = await _run(source)
@@ -78,7 +78,7 @@ async def test_multiple_empty_slots_keep_alignment(monkeypatch):
 async def test_oversized_paragraph_does_not_shift_tail(monkeypatch):
     """A paragraph split into sentence chunks must collapse back into ONE slot."""
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     big = " ".join(
         f"This is sentence number {i} of an extremely long paragraph that "
@@ -107,7 +107,7 @@ async def test_oversized_paragraph_does_not_shift_tail(monkeypatch):
 async def test_empty_and_oversized_combined(monkeypatch):
     """Both failure modes at once: empty slot + oversized paragraph."""
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     big = " ".join(
         f"Sentence {i} keeps flowing with many additional descriptive words in it."
@@ -136,7 +136,7 @@ async def test_epub_image_anchor_and_heading_stay_aligned(monkeypatch):
     )
 
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     body = etree.fromstring(
         "<body>"
@@ -166,7 +166,7 @@ async def test_epub_image_anchor_and_heading_stay_aligned(monkeypatch):
 async def test_alignment_holds_in_parallel_mode(monkeypatch):
     """Same invariants with parallel workers (out-of-order completion)."""
     monkeypatch.setattr(plain_pipeline, "generate_translation_request", _fake_perfect_llm())
-    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s: s)
+    monkeypatch.setattr(plain_pipeline, "clean_translated_text", lambda s, **kw: s)
 
     source = []
     for i in range(8):

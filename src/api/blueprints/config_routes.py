@@ -1,6 +1,7 @@
 """
 Configuration and health check routes
 """
+import errno
 import os
 import sys
 import asyncio
@@ -12,7 +13,7 @@ import tempfile
 import threading
 import time
 from urllib.parse import urlparse
-from flask import Blueprint, request, jsonify, send_from_directory, render_template, make_response
+from flask import Blueprint, request, jsonify, render_template, make_response
 from pathlib import Path
 
 from src.utils.webhook_secrets import (
@@ -65,7 +66,12 @@ from src.config import reload_config
 from src import __version__
 from src.core.llm.base import normalize_api_keys
 from src.api.api_keys import resolve_api_key as _resolve_api_key
+from src.core.llm.credentials import PROVIDER_KEY_SETTINGS
 from src.api.services.endpoint_validator import EndpointValidator
+from src.api.services.credential_guard import (
+    DROP as GUARD_DROP,
+    guard_request_credentials,
+)
 
 # Setup logger for this module
 logger = logging.getLogger('config_routes')
@@ -79,6 +85,10 @@ if _config.DEBUG_MODE:
 # is the only directory (with translated_files/) mounted as a Docker volume, so
 # it survives a container restart.
 _PREFERENCES_LOCK = threading.Lock()
+
+# Serialises read-modify-write cycles on .env (POST /api/settings): two
+# concurrent saves must not interleave and drop each other's keys.
+_ENV_FILE_LOCK = threading.Lock()
 
 # Write-path caps. They keep the document small enough to stay a preference
 # store and not become an arbitrary key/value service.
@@ -319,13 +329,17 @@ def create_config_blueprint(server_session_id=None):
             masked = "***" + last[-4:] if len(last) > 4 else "***"
             return masked, len(keys)
 
-        gemini_mask, gemini_count = mask_api_key(_config.GEMINI_API_KEY)
-        openai_mask, openai_count = mask_api_key(_config.OPENAI_API_KEY)
-        openrouter_mask, openrouter_count = mask_api_key(_config.OPENROUTER_API_KEY)
-        mistral_mask, mistral_count = mask_api_key(_config.MISTRAL_API_KEY)
-        deepseek_mask, deepseek_count = mask_api_key(_config.DEEPSEEK_API_KEY)
-        poe_mask, poe_count = mask_api_key(_config.POE_API_KEY)
-        nim_mask, nim_count = mask_api_key(_config.NIM_API_KEY)
+        key_status = {
+            provider: mask_api_key(getattr(_config, setting, ''))
+            for provider, setting in PROVIDER_KEY_SETTINGS.items()
+        }
+        key_fields = {}
+        for provider, (masked, _count) in key_status.items():
+            key_fields[f"{provider}_api_key"] = masked
+        for provider, (_masked, count) in key_status.items():
+            key_fields[f"{provider}_api_key_count"] = count
+        for provider, (_masked, count) in key_status.items():
+            key_fields[f"{provider}_api_key_configured"] = count > 0
 
         config_response = {
             "api_endpoint": _config.API_ENDPOINT,
@@ -338,29 +352,9 @@ def create_config_blueprint(server_session_id=None):
             "timeout": _config.REQUEST_TIMEOUT,
             "context_window": _config.OLLAMA_NUM_CTX,
             "max_attempts": _config.MAX_TRANSLATION_ATTEMPTS,
-            "retry_delay": 2,
+            "retry_delay": _config.RETRY_BASE_DELAY,
             "supported_formats": ["txt", "epub", "srt"],
-            "gemini_api_key": gemini_mask,
-            "openai_api_key": openai_mask,
-            "openrouter_api_key": openrouter_mask,
-            "mistral_api_key": mistral_mask,
-            "deepseek_api_key": deepseek_mask,
-            "poe_api_key": poe_mask,
-            "nim_api_key": nim_mask,
-            "gemini_api_key_count": gemini_count,
-            "openai_api_key_count": openai_count,
-            "openrouter_api_key_count": openrouter_count,
-            "mistral_api_key_count": mistral_count,
-            "deepseek_api_key_count": deepseek_count,
-            "poe_api_key_count": poe_count,
-            "nim_api_key_count": nim_count,
-            "gemini_api_key_configured": gemini_count > 0,
-            "openai_api_key_configured": openai_count > 0,
-            "openrouter_api_key_configured": openrouter_count > 0,
-            "mistral_api_key_configured": mistral_count > 0,
-            "deepseek_api_key_configured": deepseek_count > 0,
-            "poe_api_key_configured": poe_count > 0,
-            "nim_api_key_configured": nim_count > 0,
+            **key_fields,
             "output_filename_pattern": _config.OUTPUT_FILENAME_PATTERN,
             "max_tokens_per_chunk": int(_config.MAX_TOKENS_PER_CHUNK),
             "parallel_translations": int(_config.PARALLEL_TRANSLATIONS),
@@ -664,23 +658,17 @@ def create_config_blueprint(server_session_id=None):
           would cause HTTP 400 at translation time. Return an explicit error so
           the UI can surface it.
         """
-        ok, err = EndpointValidator.validate(api_endpoint)
-        if not ok:
-            logger.warning("Rejected client-supplied OpenAI endpoint: %s", err)
-            return jsonify({"error": err}), 400
-
-        # When the caller picks a host other than the configured one, the
-        # server's stored key must not follow it (see endpoint_validator).
-        requested = (api_endpoint or '').strip().rstrip('/')
-        is_override = bool(requested) and requested != (
-            _config.OPENAI_API_ENDPOINT or ''
-        ).strip().rstrip('/')
-        api_key = _first_key(_resolve_api_key(
-            provided_api_key,
-            'OPENAI_API_KEY',
-            _config.OPENAI_API_KEY,
-            allow_env_fallback=not is_override,
-        ))
+        # Shared guard (src/api/services/credential_guard.py). DROP rather
+        # than REJECT: listing models of a local OpenAI-compatible server
+        # must keep working while a cloud key sits in .env, and this path
+        # hands the key straight to requests (no provider-factory fallback),
+        # so an overridden endpoint simply gets no stored key.
+        api_key, rejection = guard_request_credentials(
+            'openai', api_endpoint, provided_api_key, on_missing_own_key=GUARD_DROP)
+        if rejection is not None:
+            logger.warning("Rejected client-supplied OpenAI endpoint: %s", rejection.message)
+            return jsonify({"error": rejection.message}), 400
+        api_key = _first_key(api_key)
 
         if api_endpoint:
             base_url = api_endpoint.replace('/chat/completions', '').rstrip('/')
@@ -844,10 +832,10 @@ def create_config_blueprint(server_session_id=None):
                     "count": len(model_names)
                 })
 
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError:
             error_msg = f"Connection refused to {tags_url}. Is Ollama running?"
             print(f"❌ {error_msg}")
-        except requests.exceptions.Timeout as e:
+        except requests.exceptions.Timeout:
             error_msg = f"Timeout connecting to {tags_url} (10s)"
             print(f"❌ {error_msg}")
         except requests.exceptions.RequestException as e:
@@ -902,7 +890,8 @@ def create_config_blueprint(server_session_id=None):
             })
 
         except Exception as e:
-            return jsonify({"warning": None, "behavior": None, "error": str(e)})
+            logger.warning(f"Model warning lookup failed for {model!r}: {e}")
+            return jsonify({"warning": None, "behavior": None, "error": str(e)}), 500
 
     def _get_env_file_path():
         """Get the path to the .env file"""
@@ -944,10 +933,59 @@ def create_config_blueprint(server_session_id=None):
             True if successful, False otherwise
         """
         env_path = _get_env_file_path()
+        with _ENV_FILE_LOCK:
+            new_lines = _render_env_lines(env_path, updates)
+            _atomic_write_lines(env_path, new_lines)
+        return True
 
+    def _atomic_write_lines(env_path: Path, lines) -> None:
+        """Replace ``env_path`` with ``lines`` atomically.
+
+        Writes a temporary file in the same directory, then os.replace()s it
+        in, so a crash or a full disk mid-write can never leave a truncated
+        .env behind (it holds every API key). The original file mode is kept.
+        """
+        parent = env_path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=parent, prefix='.env-',
+                suffix='.tmp', delete=False,
+            ) as tmp:
+                tmp_path = tmp.name
+                tmp.writelines(lines)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            if env_path.exists():
+                try:
+                    os.chmod(tmp_path, env_path.stat().st_mode & 0o777)
+                except OSError:
+                    pass
+            try:
+                os.replace(tmp_path, env_path)
+            except OSError as exc:
+                # A .env bind-mounted as a single file (Docker) cannot be
+                # replaced by rename. Fall back to rewriting it in place: the
+                # content is complete in memory and the lock still serialises
+                # writers, only the crash-atomicity is lost.
+                if exc.errno not in (errno.EBUSY, errno.EXDEV):
+                    raise
+                with open(env_path, 'w', encoding='utf-8') as f:
+                    f.writelines(lines)
+            else:
+                tmp_path = None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+    def _render_env_lines(env_path: Path, updates: dict) -> list:
+        """Return the .env lines with ``updates`` applied (no I/O beyond reading)."""
         # Read existing content or start fresh
         existing_lines = []
-        file_is_new = not env_path.exists()
 
         if env_path.exists():
             with open(env_path, 'r', encoding='utf-8') as f:
@@ -992,11 +1030,7 @@ def create_config_blueprint(server_session_id=None):
                 formatted = _format_env_value(key, value)
                 new_lines.append(f"{key}={formatted}\n")
 
-        # Write back
-        with open(env_path, 'w', encoding='utf-8') as f:
-            f.writelines(new_lines)
-
-        return True
+        return new_lines
 
     @bp.route('/api/settings', methods=['POST'])
     def save_settings():
@@ -1007,18 +1041,12 @@ def create_config_blueprint(server_session_id=None):
         for security reasons.
         """
         allowed_keys = {
-            'GEMINI_API_KEY',
+            *PROVIDER_KEY_SETTINGS.values(),
             'GEMINI_MODEL',
-            'OPENAI_API_KEY',
-            'OPENROUTER_API_KEY',
             'OPENROUTER_MODEL',
-            'MISTRAL_API_KEY',
             'MISTRAL_MODEL',
-            'DEEPSEEK_API_KEY',
             'DEEPSEEK_MODEL',
-            'POE_API_KEY',
             'POE_MODEL',
-            'NIM_API_KEY',
             'NIM_MODEL',
             'DEFAULT_MODEL',
             'LLM_PROVIDER',
@@ -1070,6 +1098,29 @@ def create_config_blueprint(server_session_id=None):
 
             if not updates:
                 return jsonify({"error": "No valid settings to save"}), 400
+
+            # A saved endpoint becomes the server default, which the stored
+            # key then follows on every later request. Apply the same guard
+            # as a per-request endpoint: it must be allowed, and moving the
+            # default to another host needs the key for that host in the same
+            # save (unless no key is stored).
+            for setting, provider in (('OLLAMA_API_ENDPOINT', 'ollama'),
+                                      ('OPENAI_API_ENDPOINT', 'openai')):
+                new_endpoint = updates.get(setting)
+                if not new_endpoint:
+                    continue
+                _key, rejection = guard_request_credentials(
+                    provider, new_endpoint,
+                    updates.get(f'{provider.upper()}_API_KEY'),
+                    default_endpoint=getattr(_config, setting, '') or '',
+                )
+                if rejection is not None:
+                    logger.warning("Rejected %s in settings: %s", setting, rejection.message)
+                    return jsonify({
+                        "error": rejection.message,
+                        "error_code": "endpoint_rejected",
+                        "fields": [setting],
+                    }), 400
 
             # The UI shows masked webhook secrets. Restore the stored value for
             # parts left masked, but only while the destination is unchanged:
@@ -1192,13 +1243,10 @@ def create_config_blueprint(server_session_id=None):
         API keys are masked for security - only indicates if configured.
         """
         return jsonify({
-            "gemini_api_key_configured": bool(_config.GEMINI_API_KEY),
-            "openai_api_key_configured": bool(_config.OPENAI_API_KEY),
-            "openrouter_api_key_configured": bool(_config.OPENROUTER_API_KEY),
-            "mistral_api_key_configured": bool(_config.MISTRAL_API_KEY),
-            "deepseek_api_key_configured": bool(_config.DEEPSEEK_API_KEY),
-            "poe_api_key_configured": bool(_config.POE_API_KEY),
-            "nim_api_key_configured": bool(_config.NIM_API_KEY),
+            **{
+                f"{provider}_api_key_configured": bool(getattr(_config, setting, ''))
+                for provider, setting in PROVIDER_KEY_SETTINGS.items()
+            },
             "default_model": _config.DEFAULT_MODEL or "",
             "llm_provider": _config.LLM_PROVIDER,
             "api_endpoint": _config.API_ENDPOINT or "",

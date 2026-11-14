@@ -20,13 +20,14 @@ from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
 from tests.characterization import fake_llm, fixtures
 from tests.characterization.recorder import fingerprint_output
+from tests.job_helpers import make_ctx, make_job
 
 _COMMON = dict(
     source_language="English",
     target_language="French",
-    model_name="fake-echo",
-    llm_provider="poe",
-    poe_api_key="UNUSED_FAKE_KEY",
+    model="fake-echo",
+    provider="poe",
+    api_key="UNUSED_FAKE_KEY",
     max_tokens_per_chunk=60,
     context_window=4096,
     auto_adjust_context=False,
@@ -56,11 +57,8 @@ def test_epub_interrupt_resume_matches_clean_run(tmp_path):
 
     def clean_factory():
         return translate_file(
-            input_filepath=str(input_path),
-            output_filepath=str(clean_out),
-            checkpoint_manager=clean_cm,
-            translation_id="clean",
-            **_COMMON,
+            make_job(str(input_path), str(clean_out), **_COMMON),
+            make_ctx(checkpoint_manager=clean_cm, translation_id="clean"),
         )
 
     _run(clean_factory, tmp_path)
@@ -82,13 +80,10 @@ def test_epub_interrupt_resume_matches_clean_run(tmp_path):
 
     def interrupted_factory():
         return translate_file(
-            input_filepath=str(input_path),
-            output_filepath=str(resume_out),
-            checkpoint_manager=cm,
-            translation_id=tid,
-            stats_callback=stats_cb,
-            check_interruption_callback=lambda: state["stop"],
-            **_COMMON,
+            make_job(str(input_path), str(resume_out), **_COMMON),
+            make_ctx(checkpoint_manager=cm, translation_id=tid,
+                     stats_callback=stats_cb,
+                     check_interruption=lambda: state["stop"]),
         )
 
     _run(interrupted_factory, tmp_path)
@@ -101,13 +96,10 @@ def test_epub_interrupt_resume_matches_clean_run(tmp_path):
     # 3) Resume to completion.
     def resume_factory():
         return translate_file(
-            input_filepath=str(input_path),
-            output_filepath=str(resume_out),
-            checkpoint_manager=cm,
-            translation_id=tid,
-            resume_from_index=resume_from_index,
-            check_interruption_callback=lambda: False,
-            **_COMMON,
+            make_job(str(input_path), str(resume_out), **_COMMON),
+            make_ctx(checkpoint_manager=cm, translation_id=tid,
+                     resume_from_index=resume_from_index,
+                     check_interruption=lambda: False),
         )
 
     _run(resume_factory, tmp_path)

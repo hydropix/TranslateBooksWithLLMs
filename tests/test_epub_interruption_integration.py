@@ -6,17 +6,36 @@ including multiple XHTML files.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from pathlib import Path
-from lxml import etree
-import tempfile
-import shutil
-import os
+from unittest.mock import MagicMock
 from datetime import datetime, UTC
 
-from src.core.epub.translator import _translate_single_xhtml_file, _process_all_content_files
+from src.core.epub.book_loop import translate_xhtml_file
+from src.core.epub.run_context import EpubRun, FileTask
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.core.llm.base import LLMResponse
+from tests.job_helpers import make_ctx, make_job
+
+
+async def _translate_single_xhtml_file(*, file_path, content_href, source_language,
+                                       target_language, model_name, llm_client,
+                                       max_tokens_per_chunk, max_attempts, context_manager,
+                                       log_callback, prompt_options, checkpoint_manager,
+                                       translation_id, check_interruption_callback):
+    """Translate one file through the book loop's per-file entry point."""
+    run = EpubRun(
+        job=make_job(model=model_name, source_language=source_language,
+                     target_language=target_language),
+        ctx=make_ctx(translation_id=translation_id, checkpoint_manager=checkpoint_manager,
+                     log_callback=log_callback,
+                     check_interruption=check_interruption_callback),
+        llm_client=llm_client,
+        context_manager=context_manager,
+        max_tokens_per_chunk=max_tokens_per_chunk,
+        prompt_options=prompt_options,
+        max_retries=max_attempts,
+    )
+    result = await translate_xhtml_file(run, FileTask(href=content_href, file_path=file_path))
+    return result.doc_root, result.success, result.stats
 
 
 def create_mock_llm_response(content: str) -> LLMResponse:
@@ -246,14 +265,8 @@ class TestMultipleFilesInterruption:
         self, temp_epub_dir, mock_llm_client, temp_checkpoint_manager
     ):
         """Test interruption between different XHTML files."""
-        translation_id = "test_multi_file_001"
 
         # Create content files list
-        content_files = [
-            "OEBPS/chapter1.xhtml",
-            "OEBPS/chapter2.xhtml",
-            "OEBPS/chapter3.xhtml",
-        ]
 
         files_processed = []
 

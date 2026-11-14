@@ -74,5 +74,11 @@
   "notification_test_failed": "La prueba de notificación falló: {{error}}",
   "notifications_preset_applied": "Preajuste de notificaciones aplicado: {{name}}",
 
-  "endpoint_reset_log": "Endpoint restablecido al valor por defecto del servidor"
+  "endpoint_reset_log": "Endpoint restablecido al valor por defecto del servidor",
+  "searchable_select_no_results": "No se encontraron resultados",
+  "searchable_select_use_custom_value": "Pulsa Intro para usar \"{{value}}\"",
+  "searchable_select_model_count_one": "{{count}} modelo",
+  "searchable_select_model_count_other": "{{count}} modelos",
+  "searchable_select_search_placeholder": "Buscar...",
+  "searchable_select_no_selection": "Selecciona una opción..."
 }

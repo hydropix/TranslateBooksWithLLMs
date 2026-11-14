@@ -10,12 +10,13 @@ every unit is genuinely translated.
 
 import pytest
 
-import src.core.llm_client as llm_client_module
+import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
 from src.core.adapters.format_adapter import FormatAdapter
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.translation_unit import TranslationUnit
 from src.persistence.checkpoint_manager import CheckpointManager
+from tests.job_helpers import make_ctx, make_job
 
 N_UNITS = 4
 FAILING_CONTENT = "content 1"
@@ -90,7 +91,7 @@ def _patch_llm(monkeypatch, fail_contents, calls):
             return None
         return f"translated {main_content}"
 
-    monkeypatch.setattr(llm_client_module, "LLMClient", FakeLLMClient)
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(FakeLLMClient))
     monkeypatch.setattr(
         translator_module, "generate_translation_request", fake_request
     )
@@ -101,10 +102,8 @@ async def _run(adapter, cm):
         adapter=adapter, checkpoint_manager=cm, translation_id="job"
     )
     return await translator.translate(
-        source_language="English",
-        target_language="French",
-        model_name="fake-model",
-        llm_provider="ollama",
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(),
     )
 
 
@@ -168,3 +167,54 @@ async def test_resume_with_persistent_failure_stays_partial(
     assert job is not None
     assert job["status"] == "partial"
     assert cm.load_checkpoint("job")["failed_chunk_indices"] == [1]
+
+
+async def _run_with_stats(adapter, cm, stats):
+    translator = GenericTranslator(
+        adapter=adapter, checkpoint_manager=cm, translation_id="job"
+    )
+    return await translator.translate(
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(stats_callback=stats.append),
+    )
+
+
+@pytest.mark.asyncio
+async def test_progress_counts_a_failed_unit_as_processed(tmp_path, cm, monkeypatch):
+    # completed_chunks counts every processed unit (the bar reaches the end);
+    # failed_chunks is the failed part of it and unfinished_chunks what the
+    # job still owes.
+    _patch_llm(monkeypatch, {FAILING_CONTENT}, [])
+    stats = []
+    await _run_with_stats(FakeAdapter(tmp_path), cm, stats)
+
+    last = stats[-1]
+    assert (last["total_chunks"], last["completed_chunks"], last["failed_chunks"]) == (N_UNITS, N_UNITS, 1)
+    assert last["unfinished_chunks"] == 1
+    assert last["run_processed_chunks"] == N_UNITS
+    assert [s["completed_chunks"] for s in stats] == list(range(N_UNITS + 1))
+
+
+@pytest.mark.asyncio
+async def test_resumed_progress_starts_from_the_restored_units(tmp_path, cm, monkeypatch):
+    _patch_llm(monkeypatch, {FAILING_CONTENT}, [])
+    await _run(FakeAdapter(tmp_path), cm)
+
+    _patch_llm(monkeypatch, set(), [])
+    stats = []
+    await _run_with_stats(FakeAdapter(tmp_path), cm, stats)
+
+    resumed = stats[1]
+    assert (resumed["completed_chunks"], resumed["failed_chunks"], resumed["unfinished_chunks"]) == (N_UNITS - 1, 0, 1)
+    assert resumed["run_processed_chunks"] == 0
+    last = stats[-1]
+    assert (last["completed_chunks"], last["failed_chunks"], last["unfinished_chunks"]) == (N_UNITS, 0, 0)
+    assert last["run_processed_chunks"] == 1
+
+
+def _fake_factory(client_cls):
+    """Stand-in for `create_llm_provider` that builds the test's fake client."""
+    def build(cfg):
+        return client_cls(provider_type=cfg.provider, model=cfg.model,
+                          context_window=cfg.context_window, log_callback=cfg.log_callback)
+    return build

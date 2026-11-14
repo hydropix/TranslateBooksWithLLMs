@@ -490,6 +490,14 @@ server {
 }
 ```
 
+The server checks the `Host` header to block DNS-rebinding attacks. The Docker setup binds to `HOST=0.0.0.0`, where no check is done by default, so the example above works as is. If the app is instead bound to a loopback address (`HOST=127.0.0.1`, the default outside Docker) behind the proxy, the forwarded `Host` (`translate.example.com` here) is rejected with HTTP 403 unless you list it:
+
+```env
+ALLOWED_HOSTS=translate.example.com
+```
+
+`ALLOWED_HOSTS` is a comma-separated list of host names with an optional port (`nas.lan:5000`). Loopback names (`localhost`, `127.0.0.1`, `[::1]`) are always accepted. Setting it with `HOST=0.0.0.0` also turns the check on, which restricts access to those names.
+
 ### Docker Swarm / Kubernetes
 
 For orchestration, consider:

@@ -98,6 +98,11 @@ class FileService:
         if filename.endswith('.tmp'):
             return False
 
+        # Exclude the refine pass's working copy of a translated output; it
+        # only lives while a refine-after pass is paused (see JobRunner).
+        if filename.endswith('.pre-refine'):
+            return False
+
         # Exclude tmpXXXXXX pattern files (from text input processing)
         # These are created by tempfile.NamedTemporaryFile()
         if filename.startswith('tmp') and len(filename) > 3:

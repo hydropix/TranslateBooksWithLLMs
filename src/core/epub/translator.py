@@ -1167,7 +1167,7 @@ async def _process_all_content_files(
         if job:
             job_progress = job.get('progress') or {}
             snapshot = job_progress.get('epub_accumulated_stats')
-            _restore_accumulated_stats(snapshot, accumulated_stats)
+            accumulated_stats.restore_accumulated(snapshot)
             # Only Plain Text Mode ever counted EPUB `failed_chunks`, and it now
             # records those segments as retryable fallbacks instead. A count
             # restored here was written before that: the segments kept their
@@ -1548,7 +1548,7 @@ async def _process_all_content_files(
                 total_chunks=total_chunks,
                 completed_chunks=completed_chunks_global,
                 failed_chunks=accumulated_stats.failed_chunks,
-                epub_accumulated_stats=_snapshot_accumulated_stats(accumulated_stats),
+                epub_accumulated_stats=accumulated_stats.snapshot_accumulated(),
                 unfinished_units=unfinished_units,
                 file_unfinished=file_unfinished,
                 degraded_units=degraded_units,
@@ -1571,37 +1571,6 @@ async def _process_all_content_files(
         'unfinished_units': unfinished_units,
         # Same shape, for the translated-but-approximately-tagged chunks.
         'degraded_units': degraded_units
-    }
-
-
-def _snapshot_accumulated_stats(metrics) -> Dict:
-    """Capture the cross-file fallback counters we want to survive a resume.
-
-    Only the cumulative cross-file counters need to round-trip; per-file
-    metrics are already rehydrated by xhtml_translator from the partial
-    state JSON. Going through dedicated fields (not TranslationMetrics.to_dict)
-    avoids the doubled-total_chunks adjustment that to_dict() does for the UI.
-    """
-    return {
-        'token_alignment_used': metrics.token_alignment_used,
-        'token_alignment_success': metrics.token_alignment_success,
-        'fallback_used': metrics.fallback_used,
-        'failed_chunks': metrics.failed_chunks,
-        'placeholder_errors': metrics.placeholder_errors,
-        'processed_chunks': metrics.processed_chunks,
-        'successful_first_try': metrics.successful_first_try,
-        'successful_after_retry': metrics.successful_after_retry,
-        'retry_attempts': metrics.retry_attempts,
-        'quality_warning_fired': metrics.quality_warning_fired,
-        'fallback_warning_fired': metrics.fallback_warning_fired,
-        'paragraph_count_mismatches': metrics.paragraph_count_mismatches,
-        'paragraph_retry_recovered': metrics.paragraph_retry_recovered,
-        'paragraph_repair_failed': metrics.paragraph_repair_failed,
-        'correction_attempts': metrics.correction_attempts,
-        'correction_success': metrics.correction_success,
-        'total_tokens_processed': metrics.total_tokens_processed,
-        'total_tokens_generated': metrics.total_tokens_generated,
-        'refinement_chunks_completed': metrics.refinement_chunks_completed,
     }
 
 
@@ -1659,31 +1628,6 @@ def _add_file_prior_counts(prior_counts: Dict, checkpoint_manager, translation_i
             prior_counts[name] = prior_counts.get(name, 0) + int(stats.get(name, 0) or 0)
         except (TypeError, ValueError):
             continue
-
-
-def _restore_accumulated_stats(snapshot: Dict, metrics) -> None:
-    """Restore counters captured by `_snapshot_accumulated_stats` into a fresh metrics object."""
-    if not snapshot:
-        return
-    metrics.token_alignment_used = snapshot.get('token_alignment_used', 0)
-    metrics.token_alignment_success = snapshot.get('token_alignment_success', 0)
-    metrics.fallback_used = snapshot.get('fallback_used', 0)
-    metrics.failed_chunks = snapshot.get('failed_chunks', 0)
-    metrics.placeholder_errors = snapshot.get('placeholder_errors', 0)
-    metrics.processed_chunks = snapshot.get('processed_chunks', 0)
-    metrics.successful_first_try = snapshot.get('successful_first_try', 0)
-    metrics.successful_after_retry = snapshot.get('successful_after_retry', 0)
-    metrics.retry_attempts = snapshot.get('retry_attempts', 0)
-    metrics.quality_warning_fired = snapshot.get('quality_warning_fired', False)
-    metrics.fallback_warning_fired = snapshot.get('fallback_warning_fired', False)
-    metrics.paragraph_count_mismatches = snapshot.get('paragraph_count_mismatches', 0)
-    metrics.paragraph_retry_recovered = snapshot.get('paragraph_retry_recovered', 0)
-    metrics.paragraph_repair_failed = snapshot.get('paragraph_repair_failed', 0)
-    metrics.correction_attempts = snapshot.get('correction_attempts', 0)
-    metrics.correction_success = snapshot.get('correction_success', 0)
-    metrics.total_tokens_processed = snapshot.get('total_tokens_processed', 0)
-    metrics.total_tokens_generated = snapshot.get('total_tokens_generated', 0)
-    metrics.refinement_chunks_completed = snapshot.get('refinement_chunks_completed', 0)
 
 
 async def _save_checkpoint(

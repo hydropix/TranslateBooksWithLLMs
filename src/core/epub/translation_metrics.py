@@ -6,7 +6,35 @@ Extracted from html_chunker.py as part of Phase 2 refactoring.
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
+
+
+# Cross-file counters of an EPUB run that survive a resume, in the order and
+# under the keys of the checkpoint's stored `epub_accumulated_stats` dict
+# (issue #180). Per-file metrics are rehydrated by xhtml_translator from the
+# partial state instead. Changing a key breaks the resume of existing jobs.
+ACCUMULATED_COUNTERS = (
+    'token_alignment_used',
+    'token_alignment_success',
+    'fallback_used',
+    'failed_chunks',
+    'placeholder_errors',
+    'processed_chunks',
+    'successful_first_try',
+    'successful_after_retry',
+    'retry_attempts',
+    'quality_warning_fired',
+    'fallback_warning_fired',
+    'paragraph_count_mismatches',
+    'paragraph_retry_recovered',
+    'paragraph_repair_failed',
+    'correction_attempts',
+    'correction_success',
+    'total_tokens_processed',
+    'total_tokens_generated',
+    'refinement_chunks_completed',
+)
+_ACCUMULATED_FLAGS = frozenset({'quality_warning_fired', 'fallback_warning_fired'})
 
 
 @dataclass
@@ -560,6 +588,27 @@ class TranslationMetrics:
             log_callback("translation_stats", summary)
 
         return summary
+
+    def snapshot_accumulated(self) -> Dict[str, Any]:
+        """The cross-file counters that must survive a resume.
+
+        Stored by the EPUB checkpoint as ``epub_accumulated_stats``. Goes
+        through dedicated fields rather than ``to_dict`` (a UI payload with
+        derived values).
+        """
+        return {name: getattr(self, name) for name in ACCUMULATED_COUNTERS}
+
+    def restore_accumulated(self, snapshot: Optional[Dict[str, Any]]) -> None:
+        """Load counters captured by :meth:`snapshot_accumulated`.
+
+        A missing snapshot (legacy checkpoint) leaves the metrics untouched; a
+        missing key resets that counter to 0 (False for the warning flags).
+        """
+        if not snapshot:
+            return
+        for name in ACCUMULATED_COUNTERS:
+            default = False if name in _ACCUMULATED_FLAGS else 0
+            setattr(self, name, snapshot.get(name, default))
 
     def merge(self, other: 'TranslationMetrics') -> None:
         """Merge statistics from another TranslationMetrics instance.

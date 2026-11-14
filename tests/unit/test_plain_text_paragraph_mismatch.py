@@ -731,8 +731,6 @@ def test_counters_reach_the_cross_file_stats_payload():
     """The counters must survive the EPUB aggregation, or nobody ever sees them."""
     from src.core.epub.translator import (
         _global_stats_payload,
-        _restore_accumulated_stats,
-        _snapshot_accumulated_stats,
     )
 
     acc = TranslationMetrics()
@@ -759,7 +757,7 @@ def test_counters_reach_the_cross_file_stats_payload():
 
     # ...and a pause in the middle of a book must not reset them to zero.
     restored = TranslationMetrics()
-    _restore_accumulated_stats(_snapshot_accumulated_stats(acc), restored)
+    restored.restore_accumulated(acc.snapshot_accumulated())
     assert restored.paragraph_count_mismatches == 5
     assert restored.paragraph_retry_recovered == 3
     assert restored.paragraph_repair_failed == 1

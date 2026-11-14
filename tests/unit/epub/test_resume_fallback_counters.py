@@ -16,10 +16,6 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from src.core.epub.translation_metrics import TranslationMetrics
-from src.core.epub.translator import (
-    _restore_accumulated_stats,
-    _snapshot_accumulated_stats,
-)
 from src.persistence.checkpoint_manager import CheckpointManager
 
 
@@ -52,10 +48,10 @@ def _make_populated_metrics() -> TranslationMetrics:
 
 def test_snapshot_round_trip_preserves_cross_file_counters():
     metrics = _make_populated_metrics()
-    snapshot = _snapshot_accumulated_stats(metrics)
+    snapshot = metrics.snapshot_accumulated()
 
     restored = TranslationMetrics()
-    _restore_accumulated_stats(snapshot, restored)
+    restored.restore_accumulated(snapshot)
 
     assert restored.token_alignment_used == 7
     assert restored.token_alignment_success == 5
@@ -75,8 +71,8 @@ def test_snapshot_round_trip_preserves_cross_file_counters():
 def test_restore_on_empty_snapshot_is_a_noop():
     """No snapshot (legacy checkpoint) must leave the fresh metrics zeroed."""
     metrics = TranslationMetrics()
-    _restore_accumulated_stats(None, metrics)
-    _restore_accumulated_stats({}, metrics)
+    metrics.restore_accumulated(None)
+    metrics.restore_accumulated({})
 
     assert metrics.token_alignment_used == 0
     assert metrics.fallback_used == 0
@@ -87,7 +83,7 @@ def test_save_checkpoint_persists_accumulated_stats(checkpoint_manager):
     translation_id = "trans_test_180"
     checkpoint_manager.start_job(translation_id, "epub", {"some": "config"})
 
-    snapshot = _snapshot_accumulated_stats(_make_populated_metrics())
+    snapshot = _make_populated_metrics().snapshot_accumulated()
     checkpoint_manager.save_checkpoint(
         translation_id=translation_id,
         chunk_index=1,
@@ -124,7 +120,7 @@ def test_subsequent_progress_update_keeps_accumulated_stats(checkpoint_manager):
         total_chunks=100,
         completed_chunks=20,
         failed_chunks=0,
-        epub_accumulated_stats=_snapshot_accumulated_stats(_make_populated_metrics()),
+        epub_accumulated_stats=_make_populated_metrics().snapshot_accumulated(),
     )
 
     # Simulate save_xhtml_partial_state's progress nudge (no stats arg).
@@ -138,3 +134,33 @@ def test_subsequent_progress_update_keeps_accumulated_stats(checkpoint_manager):
     assert persisted is not None, "Progress update wiped out the fallback snapshot"
     assert persisted["fallback_used"] == 3
     assert job["progress"]["completed_chunks"] == 25
+
+
+# The exact `epub_accumulated_stats` row shape written before the snapshot
+# moved onto TranslationMetrics. Old checkpoints carry it verbatim.
+_LEGACY_ROW = {
+    'token_alignment_used': 7, 'token_alignment_success': 5, 'fallback_used': 3,
+    'failed_chunks': 2, 'placeholder_errors': 11, 'processed_chunks': 40,
+    'successful_first_try': 30, 'successful_after_retry': 4, 'retry_attempts': 9,
+    'quality_warning_fired': True, 'fallback_warning_fired': True,
+    'paragraph_count_mismatches': 1, 'paragraph_retry_recovered': 1,
+    'paragraph_repair_failed': 0, 'correction_attempts': 6, 'correction_success': 2,
+    'total_tokens_processed': 1000, 'total_tokens_generated': 900,
+    'refinement_chunks_completed': 0,
+}
+
+
+def test_legacy_row_round_trips_with_the_same_keys():
+    metrics = TranslationMetrics()
+    metrics.restore_accumulated(dict(_LEGACY_ROW))
+    assert metrics.snapshot_accumulated() == _LEGACY_ROW
+
+
+def test_partial_legacy_row_defaults_missing_counters():
+    metrics = TranslationMetrics()
+    metrics.fallback_used = 99
+    metrics.quality_warning_fired = True
+    metrics.restore_accumulated({'token_alignment_used': 2})
+    assert metrics.token_alignment_used == 2
+    assert metrics.fallback_used == 0
+    assert metrics.quality_warning_fired is False

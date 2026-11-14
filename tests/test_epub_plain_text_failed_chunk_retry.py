@@ -79,9 +79,9 @@ def plain_job(tmp_path, monkeypatch):
         input_file_path=str(input_path),
     )
 
-    monkeypatch.setattr(epub_translator, "_create_llm_client",
+    monkeypatch.setattr(epub_translator, "create_llm_client",
                         lambda *args, **kwargs: MagicMock())
-    monkeypatch.setattr(epub_translator, "EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", False)
     monkeypatch.setattr(epub_translator, "MAX_TRANSLATION_ATTEMPTS", 1)
 
     return {

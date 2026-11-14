@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 from lxml import etree
 
-from src.core.epub.translator import (
+from src.core.epub.toc_labels import (
     _get_translated_title_for_src,
-    _update_ncx_toc_labels_from_translated_docs,
+    update_ncx_toc_labels_from_translated_docs,
 )
 
 XHTML_NS = "http://www.w3.org/1999/xhtml"
@@ -71,7 +71,7 @@ def test_ncx_keeps_original_label_when_unsure(tmp_path):
 </navMap></ncx>""",
         encoding="utf-8",
     )
-    result = _update_ncx_toc_labels_from_translated_docs(str(tmp_path), docs)
+    result = update_ncx_toc_labels_from_translated_docs(str(tmp_path), docs)
     labels = [el.text for el in etree.parse(str(tmp_path / "toc.ncx")).iter(f"{{{NCX_NS}}}text")]
     assert labels == ["Chapitre deux", "Wrapper"]
     assert result["updated"] == 1

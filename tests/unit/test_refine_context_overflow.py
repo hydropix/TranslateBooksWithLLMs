@@ -112,7 +112,7 @@ def test_refine_client_starts_at_refinement_floor(monkeypatch, auto_adjust, cont
         seen["refine"] = refine
         return object()
 
-    monkeypatch.setattr(client_setup, "_create_llm_client", fake_create_llm_client)
+    monkeypatch.setattr(client_setup, "create_llm_client", fake_create_llm_client)
 
     client_setup.build_refine_client(make_job(
         provider="ollama", model="dummy",

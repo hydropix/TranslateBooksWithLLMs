@@ -277,7 +277,7 @@ async def test_calibre_div_text_survives_the_full_plain_text_pipeline(
 ):
     """With an echo LLM, every sentence of the chapter must be in the output."""
     monkeypatch.setattr(
-        translator_module, "_create_llm_client", lambda *args, **kwargs: _echo_llm_client()
+        translator_module, "create_llm_client", lambda *args, **kwargs: _echo_llm_client()
     )
     _disable_attribution(monkeypatch)
 

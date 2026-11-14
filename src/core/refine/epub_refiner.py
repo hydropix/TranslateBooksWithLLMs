@@ -13,8 +13,8 @@ from lxml import etree
 from src.config import (
     DEFAULT_MODEL, MAX_TOKENS_PER_CHUNK,
 )
-from src.core.epub.translator import (
-    _extract_epub, _parse_epub_manifest, _repackage_epub,
+from src.core.epub.archive import (
+    extract_epub, parse_epub_manifest, repackage_epub,
 )
 from src.core.epub.xhtml_translator import (
     _setup_translation, _preserve_tags, _create_chunks,
@@ -162,8 +162,8 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
-            _extract_epub(input_filepath, temp_dir, log_callback)
-            manifest_data = _parse_epub_manifest(temp_dir, log_callback)
+            extract_epub(input_filepath, temp_dir, log_callback)
+            manifest_data = parse_epub_manifest(temp_dir, log_callback)
 
             content_files: List[str] = manifest_data['content_files']
             opf_dir: str = manifest_data['opf_dir']
@@ -276,7 +276,7 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
                 get_partial_output_path(output_filepath) if interrupted
                 else output_filepath
             )
-            _repackage_epub(temp_dir=temp_dir,
+            repackage_epub(temp_dir=temp_dir,
                             output_filepath=final_output,
                             log_callback=log_callback)
 

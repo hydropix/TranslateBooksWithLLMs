@@ -71,7 +71,7 @@ async def translate_pdf_file(
             is written on an extraction failure.
     """
     from src.config import resolve_parallel_workers
-    from src.core.epub.translator import _job_max_tokens_per_chunk
+    from src.core.epub.llm_setup import job_max_tokens_per_chunk
 
     if parallel_workers is None:
         parallel_workers = resolve_parallel_workers(job.llm_provider, job.parallel_workers)
@@ -88,7 +88,7 @@ async def translate_pdf_file(
             target_language=job.target_language,
             model_name=job.model,
             llm_client=llm_client,
-            max_tokens_per_chunk=_job_max_tokens_per_chunk(job),
+            max_tokens_per_chunk=job_max_tokens_per_chunk(job),
             log_callback=ctx.log_callback,
             stats_callback=ctx.stats_callback,
             prompt_options=job.engine_prompt_options(),

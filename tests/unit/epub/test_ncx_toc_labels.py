@@ -2,7 +2,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from src.core.epub.translator import _update_ncx_toc_labels_from_translated_docs
+from src.core.epub.toc_labels import update_ncx_toc_labels_from_translated_docs
 
 
 NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
@@ -47,7 +47,7 @@ def test_updates_ncx_nav_labels_from_translated_xhtml_without_changing_jump_targ
         )
     }
 
-    result = _update_ncx_toc_labels_from_translated_docs(
+    result = update_ncx_toc_labels_from_translated_docs(
         opf_dir=str(opf_dir),
         parsed_xhtml_docs=parsed_docs,
     )
@@ -86,7 +86,7 @@ def test_uses_first_heading_when_ncx_target_has_no_fragment(tmp_path: Path):
         )
     }
 
-    result = _update_ncx_toc_labels_from_translated_docs(
+    result = update_ncx_toc_labels_from_translated_docs(
         opf_dir=str(opf_dir),
         parsed_xhtml_docs=parsed_docs,
     )

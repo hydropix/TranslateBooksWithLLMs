@@ -91,7 +91,7 @@ def _count_p_elements(xhtml_text: str) -> int:
 
 
 async def _translate(input_epub: Path, output_epub: Path, monkeypatch, **overrides) -> None:
-    monkeypatch.setattr(translator_module, "_create_llm_client", _stub_create_llm_client)
+    monkeypatch.setattr(translator_module, "create_llm_client", _stub_create_llm_client)
     _disable_attribution(monkeypatch)
     await translate_epub_file(
         make_job(str(input_epub), str(output_epub),

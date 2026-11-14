@@ -582,10 +582,10 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, client,
     so pinning it keeps the assertions deterministic); one test turns it on to
     exercise the real `_update_epub_metadata` signature interplay.
     """
-    monkeypatch.setattr(translator_module, "_create_llm_client",
+    monkeypatch.setattr(translator_module, "create_llm_client",
                         lambda *args, **kwargs: client)
     if attribution:
-        monkeypatch.setattr(translator_module, "ATTRIBUTION_ENABLED", True)
+        monkeypatch.setattr("src.core.epub.opf_metadata.ATTRIBUTION_ENABLED", True)
         monkeypatch.setattr(
             "src.core.epub.attribution_page.ATTRIBUTION_ENABLED", False)
     else:
@@ -619,7 +619,7 @@ async def test_pipeline_writes_the_translated_title_without_undoing_step_6_6(
     translated `dc:title` (5.5) and the removed `duokan-body-font` meta (6.6).
     Running 5.5 after 6.6 would revert the meta removal.
     """
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", True)
     client = _pipeline_client()
     output_epub = tmp_path / "output.epub"
     events = await _translate(input_epub, output_epub, monkeypatch, client)
@@ -649,7 +649,7 @@ async def test_pipeline_writes_the_translated_title_without_undoing_step_6_6(
 async def test_pipeline_flag_off_makes_no_llm_call_and_keeps_the_source_title(
     tmp_path, input_epub, monkeypatch
 ):
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", False)
     client = _pipeline_client()
     output_epub = tmp_path / "output_disabled.epub"
     events = await _translate(input_epub, output_epub, monkeypatch, client)
@@ -672,7 +672,7 @@ async def test_pipeline_signature_only_description_survives_untouched(
     recognize that shape, translate the title only, and leave the signature in
     place exactly once.
     """
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", True)
     client = _pipeline_client()
     output_epub = tmp_path / "output_signed.epub"
     await _translate(input_epub, output_epub, monkeypatch, client,
@@ -689,12 +689,12 @@ async def test_pipeline_signature_only_description_survives_untouched(
 async def test_pipeline_metadata_failure_never_fails_the_job(
     tmp_path, input_epub, monkeypatch
 ):
-    monkeypatch.setattr(translator_module, "EPUB_TRANSLATE_METADATA_ENABLED", True)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_TRANSLATE_METADATA_ENABLED", True)
 
     async def _raise(**kwargs):
         raise RuntimeError("simulated failure inside the metadata pass")
 
-    monkeypatch.setattr(translator_module, "translate_opf_metadata", _raise)
+    monkeypatch.setattr("src.core.epub.book_postprocess.translate_opf_metadata", _raise)
 
     output_epub = tmp_path / "output_failure.epub"
     events = await _translate(input_epub, output_epub, monkeypatch,

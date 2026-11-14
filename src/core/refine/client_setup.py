@@ -8,9 +8,9 @@ so tweaking the context heuristic is a one-place change.
 from typing import Any, Optional, Tuple
 
 from src.core.context_optimizer import REFINEMENT_MIN_CONTEXT
-from src.core.epub.translator import (
-    _create_context_manager,
-    _create_llm_client,
+from src.core.epub.llm_setup import (
+    create_context_manager,
+    create_llm_client,
     initial_context_size,
 )
 from src.core.job import JobConfig
@@ -42,9 +42,9 @@ def build_refine_client(
     # Same floor as the TXT/SRT refine path (refine_chunks in translator.py).
     initial_context = max(initial_context, REFINEMENT_MIN_CONTEXT)
 
-    llm_client = _create_llm_client(job, initial_context, log_callback, refine=True)
+    llm_client = create_llm_client(job, initial_context, log_callback, refine=True)
 
-    context_manager = _create_context_manager(
+    context_manager = create_context_manager(
         llm_provider=llm_provider,
         auto_adjust_context=job.auto_adjust_context,
         initial_context=initial_context,

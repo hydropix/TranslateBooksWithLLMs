@@ -230,7 +230,7 @@ class GenericTranslator:
             # context manager: same sizing as the EPUB pipeline).
             from src.core.llm.factory import create_llm_provider
             from src.core.translator import generate_translation_request, previous_context_tail
-            from src.core.epub.translator import _create_context_manager, initial_context_size
+            from src.core.epub.llm_setup import create_context_manager, initial_context_size
 
             context_window = job.context_window
             auto_adjust_context = job.auto_adjust_context
@@ -238,7 +238,7 @@ class GenericTranslator:
                 model_name, auto_adjust_context, context_window)
             llm_client = create_llm_provider(job.provider_for(
                 context_window=initial_context, log_callback=log_callback))
-            context_manager = _create_context_manager(
+            context_manager = create_context_manager(
                 llm_provider=llm_provider,
                 auto_adjust_context=auto_adjust_context,
                 initial_context=initial_context,

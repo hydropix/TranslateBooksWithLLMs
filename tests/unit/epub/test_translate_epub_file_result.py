@@ -9,8 +9,11 @@ from pathlib import Path
 
 import pytest
 
+import src.core.epub.book_loop as book_loop
 import src.core.epub.translator as translator_module
-from src.core.epub.translator import _create_llm_client, translate_epub_file
+from src.core.epub.book_loop import FileResult
+from src.core.epub.llm_setup import create_llm_client
+from src.core.epub.translator import translate_epub_file
 from src.core.job import JobStatus
 from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
 
@@ -20,7 +23,7 @@ from tests.unit.epub.conftest import _disable_attribution, _echo_llm_client
 
 async def _run(input_epub: Path, tmp_path: Path, monkeypatch, client_factory=None):
     monkeypatch.setattr(
-        translator_module, "_create_llm_client",
+        translator_module, "create_llm_client",
         client_factory or (lambda *args, **kwargs: _echo_llm_client()),
     )
     _disable_attribution(monkeypatch)
@@ -60,10 +63,10 @@ async def test_client_creation_failure_fails(tmp_path, input_epub, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_unexpected_error_fails(tmp_path, input_epub, monkeypatch):
-    async def boom(**kwargs):
+    async def boom(*args, **kwargs):
         raise RuntimeError("disk on fire")
 
-    monkeypatch.setattr(translator_module, "_process_all_content_files", boom)
+    monkeypatch.setattr(translator_module, "process_content_files", boom)
     result, events = await _run(input_epub, tmp_path, monkeypatch)
     assert result.status is JobStatus.FAILED
     assert "disk on fire" in result.error
@@ -72,10 +75,10 @@ async def test_unexpected_error_fails(tmp_path, input_epub, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failed_file_is_partial(tmp_path, input_epub, monkeypatch):
-    async def failing_file(**kwargs):
-        return None, False, None
+    async def failing_file(*args, **kwargs):
+        return FileResult(None, False, None, None)
 
-    monkeypatch.setattr(translator_module, "_translate_single_xhtml_file", failing_file)
+    monkeypatch.setattr(book_loop, "translate_xhtml_file", failing_file)
     result, _ = await _run(input_epub, tmp_path, monkeypatch)
     assert not result.ok
     assert result.status is JobStatus.PARTIAL
@@ -83,10 +86,10 @@ async def test_failed_file_is_partial(tmp_path, input_epub, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_rate_limit_still_propagates(tmp_path, input_epub, monkeypatch):
-    async def limited(**kwargs):
+    async def limited(*args, **kwargs):
         raise RateLimitError("429")
 
-    monkeypatch.setattr(translator_module, "_process_all_content_files", limited)
+    monkeypatch.setattr(translator_module, "process_content_files", limited)
     with pytest.raises(RateLimitError):
         await _run(input_epub, tmp_path, monkeypatch)
 
@@ -94,7 +97,7 @@ async def test_rate_limit_still_propagates(tmp_path, input_epub, monkeypatch):
 def test_create_llm_client_reports_unknown_provider():
     events = []
     with pytest.raises(LLMClientConfigError):
-        _create_llm_client(
+        create_llm_client(
             make_job(provider="no-such-provider", model="m", endpoint="http://localhost:1"),
             2048,
             lambda event, message: events.append((event, message)),

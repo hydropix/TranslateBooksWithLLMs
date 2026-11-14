@@ -41,7 +41,7 @@ async def _translate(input_path: Path, output_path: Path, monkeypatch, **overrid
 
     Returns the list of (event, message) pairs the pipeline logged.
     """
-    monkeypatch.setattr(translator_module, "_create_llm_client", _stub_create_llm_client)
+    monkeypatch.setattr(translator_module, "create_llm_client", _stub_create_llm_client)
     _disable_attribution(monkeypatch)
 
     events = []
@@ -87,7 +87,7 @@ async def test_script_normalization_runs_by_default(tmp_path, input_epub, monkey
 async def test_script_normalization_disabled_leaves_css_and_opf_untouched(
     tmp_path, input_epub, monkeypatch
 ):
-    monkeypatch.setattr(translator_module, "EPUB_SCRIPT_NORMALIZATION_ENABLED", False)
+    monkeypatch.setattr("src.core.epub.book_postprocess.EPUB_SCRIPT_NORMALIZATION_ENABLED", False)
     output_epub = tmp_path / "output_disabled.epub"
     events = await _translate(input_epub, output_epub, monkeypatch)
 
@@ -153,7 +153,7 @@ async def test_normalization_failure_never_fails_the_job(tmp_path, input_epub, m
         raise RuntimeError("simulated failure inside the normalization pass")
 
     monkeypatch.setattr(
-        translator_module, "apply_script_normalization_to_epub_directory", _raise
+        "src.core.epub.book_postprocess.apply_script_normalization_to_epub_directory", _raise
     )
 
     output_epub = tmp_path / "output_failure.epub"

@@ -58,10 +58,10 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
     files = {"a.xhtml": 3, "b.xhtml": 2, "c.xhtml": 4}
     monkeypatch.setattr(epub_refiner, "_count_file_chunks",
                         lambda root, _m: int(root.get("n")))
-    monkeypatch.setattr(epub_refiner, "_extract_epub", lambda *a, **k: None)
-    monkeypatch.setattr(epub_refiner, "_parse_epub_manifest", lambda *a, **k: {
+    monkeypatch.setattr(epub_refiner, "extract_epub", lambda *a, **k: None)
+    monkeypatch.setattr(epub_refiner, "parse_epub_manifest", lambda *a, **k: {
         "content_files": list(files), "opf_dir": str(tmp_path)})
-    monkeypatch.setattr(epub_refiner, "_repackage_epub", lambda **k: None)
+    monkeypatch.setattr(epub_refiner, "repackage_epub", lambda **k: None)
     monkeypatch.setattr(epub_refiner, "build_refine_client",
                         lambda *a, **k: (SimpleNamespace(), None))
     for name, n in files.items():

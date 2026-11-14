@@ -217,7 +217,7 @@ async def test_hr_survives_the_full_plain_text_epub_pipeline(hr_chapter_epub, tm
     """
     requests: List[str] = []
     monkeypatch.setattr(
-        translator_module, "_create_llm_client",
+        translator_module, "create_llm_client",
         lambda *args, **kwargs: _recording_llm_client(requests),
     )
     _disable_attribution(monkeypatch)

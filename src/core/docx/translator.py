@@ -49,7 +49,7 @@ async def translate_docx_file(
         Dict with success, stats, output_path
     """
     from src.config import resolve_parallel_workers
-    from src.core.epub.translator import _job_max_tokens_per_chunk
+    from src.core.epub.llm_setup import job_max_tokens_per_chunk
 
     input_filepath = job.input_path
     output_filepath = job.output_path
@@ -68,7 +68,7 @@ async def translate_docx_file(
     try:
         return await _translate_docx(
             input_filepath, output_filepath, job.source_language, job.target_language,
-            model_name, llm_client, _job_max_tokens_per_chunk(job), log_callback,
+            model_name, llm_client, job_max_tokens_per_chunk(job), log_callback,
             ctx.stats_callback, job.engine_prompt_options(), max_retries, context_manager,
             ctx.check_interruption, checkpoint_manager, translation_id, parallel_workers,
         )

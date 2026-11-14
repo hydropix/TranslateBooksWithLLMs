@@ -729,9 +729,7 @@ def test_metrics_roundtrip_and_merge():
 
 def test_counters_reach_the_cross_file_stats_payload():
     """The counters must survive the EPUB aggregation, or nobody ever sees them."""
-    from src.core.epub.translator import (
-        _global_stats_payload,
-    )
+    from src.core.epub.book_state import global_stats_payload
 
     acc = TranslationMetrics()
     acc.paragraph_count_mismatches = 5
@@ -743,14 +741,14 @@ def test_counters_reach_the_cross_file_stats_payload():
         'paragraph_retry_recovered': 1,
         'paragraph_repair_failed': 1,
     }
-    payload = _global_stats_payload(10, 4, acc, file_stats)
+    payload = global_stats_payload(10, 4, acc, file_stats)
     assert payload['paragraph_count_mismatches'] == 7
     assert payload['paragraph_retry_recovered'] == 4
     assert payload['paragraph_repair_failed'] == 2
 
     # A run that never went through Plain Text Mode reports zeros, not absence:
     # the web UI reads these keys unconditionally.
-    empty = _global_stats_payload(1, 1, TranslationMetrics())
+    empty = global_stats_payload(1, 1, TranslationMetrics())
     assert empty['paragraph_count_mismatches'] == 0
     assert empty['paragraph_retry_recovered'] == 0
     assert empty['paragraph_repair_failed'] == 0

@@ -18,7 +18,7 @@ from src.config import DEFAULT_MODEL, MAX_TRANSLATION_ATTEMPTS, resolve_parallel
 
 from ..job import JobConfig, JobContext, JobResult
 from ..llm.exceptions import LLMClientConfigError
-from .archive import extract_epub, parse_epub_manifest
+from .archive import extract_epub, parse_epub_manifest, resolve_content_path
 from .attribution_page import add_attribution_page
 from .book_checkpoint import restore_checkpoint_files
 from .book_loop import precount_chunks, process_content_files
@@ -32,6 +32,7 @@ from .book_postprocess import (
     write_output_epub,
 )
 from .book_state import BookRunState
+from .head_titles import SourceTitles, capture_source_titles, localize_head_titles
 from .lang_support import apply_target_language_to_xhtml_directory
 from .llm_setup import (
     create_context_manager,
@@ -260,6 +261,17 @@ async def _translate_book(run: EpubRun, temp_dir: str):
     resume_from_index = run.ctx.resume_from_index
     book = BookRunState(manifest_data['content_files'], manifest_data['opf_dir'], temp_dir)
 
+    # 2.1. Read the source <title>s, first headings and TOC labels while the
+    # extracted files are still the source ones (the checkpoint restore below
+    # overwrites the finished documents with their translation). Cosmetic:
+    # a failure here only leaves every title unchanged.
+    try:
+        source_titles = capture_source_titles(
+            [resolve_content_path(book.opf_dir, href) for href in book.content_files],
+            book.opf_dir, manifest_data['opf_tree'], book_root=temp_dir)
+    except Exception:
+        source_titles = SourceTitles()
+
     # 2.5. Count the chunks, then restore the checkpoint if resuming. The
     # chunks are counted first: the restore overwrites every finished file
     # with its translation, and counting those instead of the source gave a
@@ -280,6 +292,15 @@ async def _translate_book(run: EpubRun, temp_dir: str):
 
     # 3. Translate all files
     await process_content_files(run, book)
+
+    # 3.5. Localize each document's <head><title> from its translated first
+    # heading or TOC label, when the source title is that same text (no LLM
+    # call). Cosmetic: must never fail the job.
+    try:
+        localize_head_titles(toc_source_docs(book), source_titles, run.log_callback)
+    except Exception as e_title:
+        run.log("epub_head_titles_failed",
+                f"⚠️ Document title localization failed and was skipped: {e_title}")
 
     # 4. Save translated files
     await save_translated_files(parsed_xhtml_docs=book.parsed_docs,

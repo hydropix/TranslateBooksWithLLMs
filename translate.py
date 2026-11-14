@@ -151,7 +151,9 @@ def run_cli_job(job: JobConfig, logger, *, translation_id=None, checkpoint_manag
                        sinks=CliJobSinks(logger), is_resume=is_resume,
                        temp_dir=job.output_dir or None, engines=engines)
     result = asyncio.run(runner.run())
-    if result.status in (JobStatus.RATE_LIMITED, JobStatus.INTERRUPTED, JobStatus.PARTIAL):
+    nothing_translated = bool(result.verdict and result.verdict.nothing_translated)
+    if (result.status in (JobStatus.RATE_LIMITED, JobStatus.INTERRUPTED, JobStatus.PARTIAL)
+            or nothing_translated):
         logger.info(f"Resume this job later with: python translate.py --resume {translation_id}")
     return result
 

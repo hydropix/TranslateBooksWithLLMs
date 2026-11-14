@@ -103,6 +103,7 @@
   "translation_interrupted_msg": "ℹ️ {{name}}: Traducción interrumpida.",
   "translation_rate_limited_msg": "⏸️ {{name}}: Límite de tasa alcanzado, traducción pausada automáticamente. Usa el botón Reanudar de abajo cuando estés listo.",
   "translation_error_msg": "❌ {{name}}: Error - {{error}}",
+  "translation_nothing_translated_msg": "❌ {{name}}: no se pudo traducir ninguna parte (todas las solicitudes al modelo fallaron). El trabajo se conserva y puede reanudarse desde la lista de trabajos reanudables.",
   "translation_unknown_error": "Error desconocido.",
   "translation_in_progress": "Traducción en curso para {{name}}...",
   "translation_completed_card_title": "Traducción completada",

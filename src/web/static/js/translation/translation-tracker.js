@@ -695,8 +695,14 @@ export const TranslationTracker = {
             this.updateActiveTranslationsState();
         } else if (data.status === 'error') {
             MessageLogger.resetProgressTracking();
+            // `nothing_translated`: the run finished but no unit got a
+            // translation. The job keeps its checkpoint and shows up in the
+            // resumable list, which the localized message points to.
+            const errorMessage = data.error_code === 'nothing_translated'
+                ? t('translation:translation_nothing_translated_msg', { name: currentFile.name })
+                : t('translation:translation_error_msg', { name: currentFile.name, error: data.error || t('translation:translation_unknown_error') });
             this.finishCurrentFileTranslation(
-                t('translation:translation_error_msg', { name: currentFile.name, error: data.error || t('translation:translation_unknown_error') }),
+                errorMessage,
                 'error',
                 data
             );

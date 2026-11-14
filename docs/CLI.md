@@ -95,7 +95,7 @@ python translate.py -i input_file -o output_file
 
 ### Exit Code and Resume
 
-The command exits with `0` only when every unit was translated and the output was written; a partial, failed, interrupted or rate-limited run exits with `1`. A rate limit pauses the job and keeps its checkpoint; the last line printed gives the command to continue it:
+The command exits with `0` only when every unit was translated and the output was written; a partial, failed, interrupted or rate-limited run exits with `1`. A run in which not a single unit could be translated (for example, every request to the model failed) is a failure, not a partial result, even though an output file holding the source text is written. A rate limit pauses the job and keeps its checkpoint; so do a partial run and a run that translated nothing, and the last line printed gives the command to continue it:
 
 ```bash
 python translate.py --resume cli_1a2b3c4d

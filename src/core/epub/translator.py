@@ -270,7 +270,8 @@ async def _translate_book(run: EpubRun, temp_dir: str):
         book.content_files, book.opf_dir, run.max_tokens_per_chunk, run.log_callback,
         plain_text_mode=run.plain_text_mode, keep_prepared_from=resume_from_index,
     )
-    book.total_chunks, book.chunks_per_file, book.prepared = precount
+    book.total_chunks, book.chunks_per_file, book.prepared = precount[:3]
+    book.skipped_chunks = precount.text_free_chunks
     if run.can_checkpoint and resume_from_index > 0:
         book.parsed_docs = await restore_checkpoint_files(
             run.checkpoint_manager, run.translation_id, temp_dir,

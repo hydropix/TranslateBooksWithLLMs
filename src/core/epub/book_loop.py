@@ -20,6 +20,7 @@ from .book_checkpoint import save_file_checkpoint
 from .book_resume import add_file_prior_counts, begin_pass, chunk_projections, load_partial_state
 from .book_state import BookRunState
 from .document_translation import prepare_document, translate_document
+from .html_utils import is_text_free_chunk
 from .run_context import EpubRun, FileTask, PreparedDocument
 
 
@@ -30,11 +31,16 @@ class ChunkPrecount(NamedTuple):
         total_chunks: Chunks of the whole book.
         chunks_per_file: Chunks per spine index (0 for a missing or broken file).
         prepared: Spine index -> PreparedDocument, for the files asked for.
+        text_free_chunks: Chunks with no translatable character, which the
+            chunk loop passes through without an LLM call (placeholder mode
+            only; 0 in Plain Text Mode). The job verdict needs them to tell
+            "nothing could be translated" from "some units needed no work".
     """
 
     total_chunks: int
     chunks_per_file: List[int]
     prepared: Dict[int, PreparedDocument]
+    text_free_chunks: int = 0
 
 
 class FileResult(NamedTuple):
@@ -70,6 +76,7 @@ async def precount_chunks(
     chunks_per_file: List[int] = []
     prepared: Dict[int, PreparedDocument] = {}
     total_chunks = 0
+    text_free_chunks = 0
 
     if log_callback:
         log_callback("epub_precount_start", f"📊 Analyzing {len(content_files)} files for progress tracking...")
@@ -79,6 +86,10 @@ async def precount_chunks(
         chunk_count, document = await _count_file(file_path, max_tokens_per_chunk, plain_text_mode)
         chunks_per_file.append(chunk_count)
         total_chunks += chunk_count
+        if document is not None:
+            text_free_chunks += sum(
+                1 for chunk in document.chunks
+                if is_text_free_chunk(chunk.get('text', ''), document.placeholder_format))
         if document is not None and keep_prepared_from is not None and idx >= keep_prepared_from:
             prepared[idx] = document
 
@@ -86,7 +97,7 @@ async def precount_chunks(
         log_callback("epub_precount_complete",
                      f"📊 Found {total_chunks} total chunks across {len(content_files)} files")
 
-    return ChunkPrecount(total_chunks, chunks_per_file, prepared)
+    return ChunkPrecount(total_chunks, chunks_per_file, prepared, text_free_chunks)
 
 
 async def _count_file(file_path: str, max_tokens_per_chunk: int,

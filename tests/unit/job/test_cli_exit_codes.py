@@ -115,6 +115,19 @@ def test_rate_limited_job_exits_one_and_resumes_to_zero(cli, monkeypatch):
     assert (tmp_path / "book (French).txt").exists()
 
 
+def test_nothing_translated_job_exits_one_prints_the_resume_hint_and_resumes(cli, monkeypatch, capsys):
+    tmp_path, source = cli
+    nothing = {'total_chunks': 2, 'completed_chunks': 2, 'failed_chunks': 2, 'unfinished_chunks': 2}
+    monkeypatch.setattr(adapters, "translate_file", _engine(nothing, engine_ok=False))
+    assert translate.main(_argv(source)) == 1
+
+    (job_id,) = _job_ids(tmp_path)
+    assert f"--resume {job_id}" in capsys.readouterr().out
+
+    monkeypatch.setattr(adapters, "translate_file", _engine(COMPLETE))
+    assert translate.main(["--resume", job_id, "--no-color"]) == 0
+
+
 def test_run_cli_job_engines_argument(cli):
     """`run_cli_job(..., engines=...)` drives the same runner without patching."""
     tmp_path, source = cli

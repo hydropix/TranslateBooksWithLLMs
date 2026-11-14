@@ -103,6 +103,7 @@
   "translation_interrupted_msg": "ℹ️ {{name}}：翻译已中断。",
   "translation_rate_limited_msg": "⏸️ {{name}}：速率受限，翻译已自动暂停。准备就绪后请使用下方的恢复按钮。",
   "translation_error_msg": "❌ {{name}}：错误 - {{error}}",
+  "translation_nothing_translated_msg": "❌ {{name}}：没有任何部分被翻译（对模型的所有请求均失败）。任务已保留，可在可恢复任务列表中继续。",
   "translation_unknown_error": "未知错误。",
   "translation_in_progress": "{{name}} 的翻译正在进行...",
   "translation_completed_card_title": "翻译已完成",

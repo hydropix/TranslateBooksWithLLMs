@@ -103,6 +103,7 @@
   "translation_interrupted_msg": "ℹ️ {{name}}: Translation interrupted.",
   "translation_rate_limited_msg": "⏸️ {{name}}: Rate limited, translation auto-paused. Use the Resume button below when ready.",
   "translation_error_msg": "❌ {{name}}: Error - {{error}}",
+  "translation_nothing_translated_msg": "❌ {{name}}: no part could be translated (every request to the model failed). The job is kept and can be resumed from the resumable jobs list.",
   "translation_unknown_error": "Unknown error.",
   "translation_in_progress": "Translation in progress for {{name}}...",
   "translation_completed_card_title": "Translation completed",

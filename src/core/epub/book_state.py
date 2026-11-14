@@ -41,7 +41,7 @@ def book_failed_chunks(acc, file_stats=None) -> int:
 def book_progress_fields(acc, file_stats=None, unfinished_units=None,
                          run_prior_counts=None, untranslated_units=None,
                          degraded_units=None, run_total_chunks=0,
-                         run_is_repair=False):
+                         run_is_repair=False, skipped_chunks=0):
     """The quality fields of the EPUB book-level stats payload.
 
     Single source of the cross-file payload shape, shared by the resume-initial
@@ -154,6 +154,10 @@ def book_progress_fields(acc, file_stats=None, unfinished_units=None,
         # stale True (or a stale denominator) behind on the next pass.
         'run_total_chunks': max(0, int(run_total_chunks or 0)),
         'run_is_repair': bool(run_is_repair),
+        # Chunks with nothing to translate (passed through without an LLM
+        # call). Static for a book; the job verdict subtracts them before
+        # deciding that no unit at all was translated.
+        'skipped_chunks': max(0, int(skipped_chunks or 0)),
     }
     # Per-run twins. Clamped at 0: a stale snapshot must never produce a
     # negative counter, whatever the arithmetic says.
@@ -170,6 +174,7 @@ class BookRunState:
         content_files: Spine hrefs, in reading order.
         opf_dir / temp_dir: Where the extracted book lives.
         total_chunks / chunks_per_file: The chunk precount of the source.
+        skipped_chunks: Text-free chunks of the precount (no LLM call).
         prepared: Precount output per file index, handed to the file it was
             computed for and dropped once used.
         parsed_docs: file path -> document to write back.
@@ -190,6 +195,7 @@ class BookRunState:
     opf_dir: str
     temp_dir: str
     total_chunks: int = 0
+    skipped_chunks: int = 0
     chunks_per_file: List[int] = field(default_factory=list)
     prepared: Dict[int, PreparedDocument] = field(default_factory=dict)
     parsed_docs: Dict[str, etree._Element] = field(default_factory=dict)
@@ -235,7 +241,8 @@ class BookRunState:
             untranslated_units=self.untranslated_units,
             degraded_units=self.degraded_units,
             run_total_chunks=self.run_total_chunks,
-            run_is_repair=self.run_is_repair)
+            run_is_repair=self.run_is_repair,
+            skipped_chunks=self.skipped_chunks)
 
     def payload(self, completed_chunks: Optional[int] = None,
                 file_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

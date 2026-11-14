@@ -103,6 +103,7 @@
   "translation_interrupted_msg": "ℹ️ {{name}}: 번역이 중단되었습니다.",
   "translation_rate_limited_msg": "⏸️ {{name}}: 속도 제한으로 번역이 자동 일시 중지되었습니다. 준비되면 아래 재개 버튼을 사용하세요.",
   "translation_error_msg": "❌ {{name}}: 오류 - {{error}}",
+  "translation_nothing_translated_msg": "❌ {{name}}: 어떤 부분도 번역되지 않았습니다(모델에 대한 모든 요청이 실패했습니다). 작업은 보존되며 재개 가능한 작업 목록에서 재개할 수 있습니다.",
   "translation_unknown_error": "알 수 없는 오류입니다.",
   "translation_in_progress": "{{name}} 번역 진행 중...",
   "translation_completed_card_title": "번역 완료",

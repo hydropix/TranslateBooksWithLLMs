@@ -103,6 +103,7 @@
   "translation_interrupted_msg": "ℹ️ {{name}}: Übersetzung abgebrochen.",
   "translation_rate_limited_msg": "⏸️ {{name}}: Ratenbegrenzung, Übersetzung automatisch pausiert. Nutzen Sie die Schaltfläche „Fortsetzen“ unten, wenn Sie bereit sind.",
   "translation_error_msg": "❌ {{name}}: Fehler - {{error}}",
+  "translation_nothing_translated_msg": "❌ {{name}}: Kein Teil konnte übersetzt werden (alle Anfragen an das Modell sind fehlgeschlagen). Der Auftrag bleibt erhalten und kann aus der Liste der fortsetzbaren Aufträge fortgesetzt werden.",
   "translation_unknown_error": "Unbekannter Fehler.",
   "translation_in_progress": "Übersetzung läuft für {{name}}...",
   "translation_completed_card_title": "Übersetzung abgeschlossen",

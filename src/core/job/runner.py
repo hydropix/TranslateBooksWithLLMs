@@ -440,6 +440,13 @@ class JobRunner:
             await asyncio.to_thread(self.sinks.notify, EVENT_INTERRUPTION, self._notice(elapsed))
             self._mark('mark_interrupted')
             self._cleanup_upload(interrupted=True)
+        elif result.status is JobStatus.FAILED and result.verdict and result.verdict.nothing_translated:
+            self.sinks.log("summary_nothing_translated",
+                           f"❌ Translation failed: no chunk could be translated in {elapsed:.2f}s"
+                           f"{format_stats_summary(job, stats, result)} — checkpoint kept for retry")
+            self._mark('mark_error')
+            await asyncio.to_thread(self.sinks.notify, EVENT_FAILURE,
+                                    self._notice(elapsed, error=result.error))
         elif result.status is JobStatus.FAILED:
             self.sinks.log("summary_error_no_output",
                            f"❌ Translation finished without a usable output file in {elapsed:.2f}s"

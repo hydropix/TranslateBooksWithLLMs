@@ -251,3 +251,31 @@ def test_resolve_output_path_stays_inside_the_output_dir(tmp_path):
     assert fresh != resumed and fresh.startswith(str(tmp_path))
     traversal = handlers.resolve_output_path(str(tmp_path), "../escape.txt", is_resume=True)
     assert traversal.startswith(str(tmp_path))
+
+
+@pytest.mark.asyncio
+async def test_job_with_nothing_translated_is_an_error_with_a_code_and_stays_resumable(web, monkeypatch):
+    output_dir, upload, manager, state, socketio = web
+
+    async def translate_file(job, ctx):
+        with open(job.output_path, "w", encoding="utf-8") as handle:
+            handle.write("one\n\ntwo\n\nthree\n")  # source text only
+        stats = {'total_chunks': 3, 'completed_chunks': 3, 'failed_chunks': 3,
+                 'unfinished_chunks': 3}
+        ctx.emit(stats)
+        return JobResult.from_run(stats, job.output_path, engine_ok=False)
+
+    monkeypatch.setattr(adapters, "translate_file", translate_file)
+    job = _job(output_dir, upload)
+    state.create_translation(TID, job.to_persisted())
+
+    result = await handlers.perform_actual_translation(TID, job, state, str(output_dir), socketio)
+
+    assert not result.ok
+    final = socketio.payloads()[-1]
+    assert final['status'] == 'error'
+    assert final['error_code'] == 'nothing_translated'
+    assert state.get_translation_field(TID, 'status') == 'error'
+    assert state.get_translation_field(TID, 'error_code') == 'nothing_translated'
+    assert manager.get_job(TID)['status'] == 'error'
+    assert TID in [j['translation_id'] for j in manager.get_resumable_jobs()]

@@ -241,6 +241,8 @@ class WebJobSinks(JobSinks):
         self.state.set_translation_field(tid, 'status', status)
         if result.error and status == 'error':
             self.state.set_translation_field(tid, 'error', result.error)
+            if result.verdict and result.verdict.nothing_translated:
+                self.state.set_translation_field(tid, 'error_code', 'nothing_translated')
 
         payload = {
             'result': self.state.get_translation_field(tid, 'result'),
@@ -258,6 +260,10 @@ class WebJobSinks(JobSinks):
             payload['llm_api_endpoint'] = job.endpoint
         if status == 'error':
             payload['error'] = result.error
+            if result.verdict and result.verdict.nothing_translated:
+                # The run finished but no unit got a translation: the UI
+                # shows its own localized message, and the job is resumable.
+                payload['error_code'] = 'nothing_translated'
         if result.status is JobStatus.INTERRUPTED:
             self._socket_event('checkpoint_created', {
                 'translation_id': tid,

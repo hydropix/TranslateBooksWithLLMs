@@ -154,7 +154,11 @@ class JobResult:
             status=status,
             output_paths=(output_path,) if output_path else (),
             units_total=total,
-            units_translated=max(0, completed - failed),
+            # A unit counts as translated only when it is neither failed nor
+            # left as source text (completed_chunks includes both) nor a
+            # text-free chunk that needed no translation.
+            units_translated=max(0, completed - max(failed, unfinished - max(0, total - completed))
+                                 - _as_int(stats.get('skipped_chunks'))),
             units_failed=failed,
             units_fallback=_as_int(stats.get('fallback_used')),
             units_untranslated=unfinished,

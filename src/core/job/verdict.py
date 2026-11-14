@@ -6,7 +6,8 @@ that succeeded. Chunks can fall back to their source text, and the output file
 can be missing or empty even though nothing raised. This module turns the raw
 job stats plus the state of the output file into a single verdict, so job
 finalization has exactly one place that decides between 'completed', 'partial'
-and 'error'.
+and 'error' (a missing or empty output, or a run in which no unit at all got a
+translation).
 
 The function is pure apart from two ``os.path`` lookups: no logging, no state
 manager, no socket, no checkpoint manager. It is meant to be callable with a
@@ -31,6 +32,9 @@ class CompletionVerdict:
             untranslated — as of the last stats update (>= 0). This is the
             authority for rule 4 (issue #261, D9).
         error: Human-readable reason, non-None if and only if status is 'error'.
+        nothing_translated: The job ran to the end but no unit got a
+            translation (rule 4). The output exists and the checkpoint is
+            kept, so the job is resumable.
     """
 
     status: str
@@ -38,6 +42,7 @@ class CompletionVerdict:
     fallback_chunks: int
     unfinished_chunks: int
     error: Optional[str]
+    nothing_translated: bool = False
 
 
 def _unfinished(stats: Mapping[str, Any]) -> int:
@@ -56,6 +61,23 @@ def _unfinished(stats: Mapping[str, Any]) -> int:
     return int(stats.get('fallback_used') or 0)
 
 
+def _nothing_translated(stats: Mapping[str, Any], total: int, failed: int,
+                        unfinished: int) -> bool:
+    """True when not a single unit of the job got a translation.
+
+    Every unit is either still owed (failed, fallen back to its source text,
+    or pending) or needed no translation at all (``skipped_chunks``: a
+    text-free EPUB chunk passed through without an LLM call). A job with
+    nothing owed is never "nothing translated", even when every unit was
+    skipped: an empty or text-free book is a legitimate success.
+    """
+    owed = max(failed, unfinished)
+    if total <= 0 or owed <= 0:
+        return False
+    skipped = int(stats.get('skipped_chunks') or 0)
+    return owed + skipped >= total
+
+
 def classify_completion(
     stats: Mapping[str, Any],
     output_path: Optional[str],
@@ -71,9 +93,14 @@ def classify_completion(
     3. Empty output: the file exists, is 0 bytes, and ``total_chunks`` > 0
        → 'error'. The ``total_chunks`` > 0 condition is deliberate: an empty
        source file legitimately produces an empty output and stays 'completed'.
-    4. Unfinished work: any failed chunk, or any chunk still pending/untranslated
+    4. Nothing translated: work is owed and not a single unit got a
+       translation (every unit is failed, untranslated or pending, apart from
+       the ``skipped_chunks`` that needed none) → 'error'. The output file is
+       100% source text. The checkpoint is kept, so the job stays resumable
+       exactly like a partial one.
+    5. Unfinished work: any failed chunk, or any chunk still pending/untranslated
        per ``_unfinished(stats)`` → 'partial'.
-    5. Otherwise → 'completed'.
+    6. Otherwise → 'completed'.
 
     IMPORTANT: ``token_alignment_used`` and ``placeholder_errors`` NEVER
     contribute to the verdict, and must never be added to the rules above.
@@ -125,7 +152,19 @@ def classify_completion(
             error=f"Output file is empty (0 bytes): {output_path}",
         )
 
-    # Rule 4 — the file is there, but part of the content is not translated.
+    # Rule 4 — the file is there, but it holds nothing but source text.
+    if _nothing_translated(stats, total, failed, unfinished):
+        return CompletionVerdict(
+            status='error',
+            failed_chunks=failed,
+            fallback_chunks=fallback,
+            unfinished_chunks=unfinished,
+            error=(f"No unit could be translated ({max(failed, unfinished)}/{total} failed); "
+                   f"the output holds only source text."),
+            nothing_translated=True,
+        )
+
+    # Rule 5 — the file is there, but part of the content is not translated.
     if failed > 0 or unfinished > 0:
         return CompletionVerdict(
             status='partial',
@@ -135,7 +174,7 @@ def classify_completion(
             error=None,
         )
 
-    # Rule 5 — nothing left to flag.
+    # Rule 6 — nothing left to flag.
     return CompletionVerdict(
         status='completed',
         failed_chunks=failed,

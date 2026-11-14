@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import tempfile
 import time
 import traceback
@@ -45,6 +46,9 @@ _logger = logging.getLogger(__name__)
 PHASE_TRANSLATE = 'translate'
 PHASE_REFINE = 'refine'
 PHASE_TERM_FIX = 'term_fix'
+
+# Copy of the translated output the refine-after pass reads (see _execute).
+PRE_REFINE_SUFFIX = ".pre-refine"
 
 # Consecutive auto-resume cycles without progress before the user is warned.
 _AUTO_RESUME_STUCK_WARNING = 3
@@ -349,9 +353,27 @@ class JobRunner:
 
         self.sinks.log("refine_after_start", "✨ Translation done — running refinement pass on the output.")
         refine_index = (checkpoint or {}).get('refine_resume_index', 0) if resume_refine else 0
-        refine_job = job.with_changes(input_path=job.output_path)
-        return await self._run_refine(refine_job, refine_index,
-                                      meta={'enable_refinement': True, 'current_phase': 2})
+        # A refine engine paused by a rate limit writes its partial output
+        # (attribution footer included) over job.output_path. A resumed pass
+        # that read that file back would refine the already refined chunks
+        # again and carry the footer into the text, so the pass reads a copy
+        # of the translated output: taken fresh on every first entry into the
+        # phase (never trusting a leftover), reused on resume, removed once
+        # the pass completes.
+        pre_refine = job.output_path + PRE_REFINE_SUFFIX
+        if not resume_refine:
+            shutil.copyfile(job.output_path, pre_refine)
+        elif not os.path.exists(pre_refine):
+            self.sinks.log("resume_refine_no_snapshot",
+                           "⚠️ No pre-refine copy of the translation found: "
+                           "refining the current output file.")
+            pre_refine = job.output_path
+        refine_job = job.with_changes(input_path=pre_refine)
+        result = await self._run_refine(refine_job, refine_index,
+                                        meta={'enable_refinement': True, 'current_phase': 2})
+        if result.status is JobStatus.COMPLETED and pre_refine != job.output_path:
+            self._safe(lambda: os.remove(pre_refine))
+        return result
 
     async def _run_translate(self, job: JobConfig, resume_index: int, refine_after: bool) -> JobResult:
         translate_file = self._engine('translate_file')

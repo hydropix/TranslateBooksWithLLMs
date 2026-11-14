@@ -105,13 +105,38 @@ def test_translate_then_refine_runs_refine_exactly_once(env):
     assert result.status is JobStatus.COMPLETED
     assert [c[0] for c in calls] == ['translate', 'refine']
     assert calls[0][1]['refine'] is False          # the engine never refines inline
-    assert calls[1][1] == str(tmp_path / "out.txt")  # refine reads the translated output
+    # Refine reads a snapshot of the translated output, removed once it completes.
+    assert calls[1][1] == str(tmp_path / "out.txt") + ".pre-refine"
+    assert not (tmp_path / "out.txt.pre-refine").exists()
     assert calls[1][2] == 'refine' and calls[1][3] == 0
     assert _status(manager, 'cli_1') == 'completed'
     # Phase-tagged progress: [0, 50] then [50, 100].
     assert any(s.get('current_phase') == 1 and s.get('enable_refinement') for s in sinks.stats)
     assert any(s.get('current_phase') == 2 for s in sinks.stats)
     assert sinks.finished is result
+
+
+def test_fresh_refine_pass_ignores_a_leftover_pre_refine_copy(env):
+    """A copy left by an earlier job on the same output must not be refined."""
+    tmp_path, source, manager = env
+    (tmp_path / "out.txt.pre-refine").write_text("stale text", encoding="utf-8")
+    seen = []
+
+    async def translate_file(job, ctx):
+        return _completed(job, ctx, "fresh translation")
+
+    async def refine_file(job, ctx):
+        with open(job.input_path, encoding="utf-8") as f:
+            seen.append(f.read())
+        return _completed(job, ctx, "refined")
+
+    job = _job(tmp_path, source, refine_after=True)
+    result = asyncio.run(JobRunner(job, translation_id='cli_stale', checkpoint_manager=manager,
+                                   sinks=RecordingSinks(), engines={'translate_file': translate_file,
+                                                                    'refine_file': refine_file}).run())
+
+    assert result.status is JobStatus.COMPLETED
+    assert seen == ["fresh translation"]
 
 
 def test_interrupted_refine_resumes_refine_not_translation(env):

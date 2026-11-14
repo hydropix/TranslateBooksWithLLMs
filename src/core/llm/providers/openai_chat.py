@@ -64,6 +64,9 @@ class OpenAIChatProvider(LLMProvider):
         )
         self.api_endpoint = api_endpoint or self.API_URL
         self.context_window = context_window
+        # Optional parameters a model rejected by name: never sent to that
+        # model again by this instance (one failed 400 per run, not per chunk).
+        self._rejected_optional: Dict[str, set] = {}
 
     # ------------------------------------------------------------ config
     def _context_limit_for(self, model_name: str) -> int:
@@ -118,7 +121,11 @@ class OpenAIChatProvider(LLMProvider):
         }
         payload.update(await self._fixed_params(request))
         if "optional" not in request.state:
-            request.state["optional"] = await self._optional_params(request)
+            rejected = self._rejected_optional.get(request.model, set())
+            request.state["optional"] = {
+                k: v for k, v in (await self._optional_params(request)).items()
+                if k not in rejected
+            }
         payload.update(request.state["optional"])
         return payload
 
@@ -184,6 +191,7 @@ class OpenAIChatProvider(LLMProvider):
             self._log("llm_params_rejected",
                       f"⚠️ [{self.display_name}] '{request.model}' rejected {sorted(rejected)}; "
                       f"retrying without them", level=logging.INFO)
+            self._rejected_optional.setdefault(request.model, set()).update(rejected)
             self._on_optional_params_rejected(rejected, request)
             request.state["optional"] = {k: v for k, v in optional.items() if k not in rejected}
         else:

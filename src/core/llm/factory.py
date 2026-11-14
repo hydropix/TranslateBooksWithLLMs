@@ -123,8 +123,15 @@ def create_llm_provider(
         if cfg.provider == "ollama" and (cfg.model or "").startswith("gemini"):
             cfg = cfg.with_changes(provider="gemini")
     else:
-        if provider is None:
-            provider = kwargs.pop("provider_type", "ollama")
+        # Legacy keyword spelling (the parameter used to be called
+        # ``provider_type``). It must win over the "ollama" default, otherwise
+        # create_llm_provider(provider_type="openai", ...) silently builds an
+        # Ollama client aimed at the request endpoint.
+        legacy_type = kwargs.pop("provider_type", None)
+        if legacy_type is not None:
+            provider = legacy_type
+        elif provider is None:
+            provider = "ollama"
         cfg = _config_from_kwargs(provider, kwargs)
 
     if cfg.provider not in SUPPORTED_PROVIDERS:

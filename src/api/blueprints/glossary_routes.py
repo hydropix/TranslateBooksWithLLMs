@@ -716,7 +716,7 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
 
             try:
                 provider = create_llm_provider(
-                    provider_type=provider_type,
+                    provider=provider_type,
                     model=model,
                     api_endpoint=api_endpoint,
                     api_key=api_key,

@@ -24,7 +24,6 @@ This replaces four diverging copies that lived in the translation, config,
 glossary and custom-instruction blueprints, and covers the sample routes and
 the settings writer that had no guard at all.
 """
-import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -92,11 +91,13 @@ def is_endpoint_override(provider: Optional[str], requested_endpoint: Optional[s
 def stored_key_exists(provider: Optional[str]) -> bool:
     """True when the server holds a key for ``provider``.
 
-    python-dotenv loads .env into os.environ (and reload_config() refreshes
-    it), so the environment is the single place to look.
+    Reads the key exactly where the provider factory's fallback reads it
+    (``src.core.llm.credentials.env_key``: os.environ, then src.config), so
+    the guard can never answer "no stored key" for a key the factory would
+    still fill in for a caller that passes ``api_key=None``.
     """
-    env_var = provider_env_var(normalize_provider(provider))
-    return bool(env_var and os.getenv(env_var))
+    from src.core.llm.credentials import env_key
+    return bool(env_key(normalize_provider(provider)))
 
 
 def _own_key(request_key: Optional[str]) -> str:

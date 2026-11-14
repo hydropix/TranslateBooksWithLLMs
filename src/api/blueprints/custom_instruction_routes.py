@@ -480,7 +480,7 @@ def create_custom_instruction_blueprint():
 
             try:
                 provider = create_llm_provider(
-                    provider_type=provider_type,
+                    provider=provider_type,
                     model=model,
                     api_endpoint=api_endpoint,
                     api_key=api_key,

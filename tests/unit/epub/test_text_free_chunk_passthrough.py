@@ -23,10 +23,7 @@ from src.core.epub.html_chunker import HtmlChunker
 from src.core.epub.html_utils import is_text_free_chunk
 from src.core.epub.tag_preservation import TagPreserver
 from src.core.epub.translation_metrics import TranslationMetrics
-from src.core.epub.xhtml_translator import (
-    translate_xhtml_simplified,
-    _translate_all_chunks_with_checkpoint,
-)
+from tests.epub_engine_helpers import run_chunk_loop, translate_xhtml
 from src.core.llm.base import LLMResponse
 from src.persistence.checkpoint_manager import CheckpointManager
 
@@ -124,7 +121,7 @@ def _exploding_llm_client():
 async def test_cover_page_survives_translation_without_any_llm_call():
     doc_root = _parse(COVER_XHTML)
 
-    success, stats = await translate_xhtml_simplified(
+    success, stats = await translate_xhtml(
         doc_root=doc_root,
         source_language="Chinese",
         target_language="French",
@@ -285,7 +282,7 @@ async def _run_mixed(checkpoint_manager, translation_id, file_href, call_log,
             global_tag_map=resume_state.global_tag_map,
             stats=TranslationMetrics.from_dict(resume_state.stats),
         )
-    return await _translate_all_chunks_with_checkpoint(**kwargs)
+    return await run_chunk_loop(**kwargs)
 
 
 @pytest.mark.asyncio

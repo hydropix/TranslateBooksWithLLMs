@@ -219,7 +219,7 @@ def _build_optional_prompt_sections(
     sections = []
 
     # Technical content protection is currently DISABLED (owner decision): the EPUB
-    # pipeline runs with TECHNICAL_PROTECTION_ENABLED = False (src/core/epub/xhtml_translator.py),
+    # pipeline runs with TECHNICAL_PROTECTION_ENABLED = False (src/config.py),
     # so code, formulas and the like are NOT hidden in placeholders such as [id0], [id1].
     # TECHNICAL_CONTENT_SECTION is not emitted either: the preserve_technical_content
     # option has no effect on the prompt. Re-enabling either one is a deliberate

@@ -11,7 +11,7 @@ import pytest
 from lxml import etree
 
 from src.core.epub.tag_preservation import TagPreserver
-from src.core.epub.xhtml_translator import translate_xhtml_simplified
+from tests.epub_engine_helpers import translate_xhtml
 from src.core.epub.placeholder_validator import PlaceholderValidator
 from src.core.epub.html_chunker import HtmlChunker
 from src.core.llm.base import LLMResponse
@@ -90,7 +90,7 @@ class TestBackwardCompatibilityTagPreserver:
 
 @pytest.mark.filterwarnings("ignore:TranslationStats is deprecated:DeprecationWarning")
 class TestBackwardCompatibilityXhtmlTranslator:
-    """Ensure xhtml_translator backward compatibility."""
+    """Ensure the file-level translation keeps working."""
 
     @pytest.mark.asyncio
     async def test_translate_without_prompt_options(self):
@@ -106,7 +106,7 @@ class TestBackwardCompatibilityXhtmlTranslator:
         provider = SimpleTranslationProvider()
 
         # No prompt_options provided (old API style)
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=doc_root,
             source_language="English",
             target_language="French",
@@ -130,7 +130,7 @@ class TestBackwardCompatibilityXhtmlTranslator:
         doc_root = etree.fromstring(xhtml.encode('utf-8'))
         provider = SimpleTranslationProvider()
 
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=doc_root,
             source_language="English",
             target_language="French",
@@ -154,7 +154,7 @@ class TestBackwardCompatibilityXhtmlTranslator:
         doc_root = etree.fromstring(xhtml.encode('utf-8'))
         provider = SimpleTranslationProvider()
 
-        success, stats = await translate_xhtml_simplified(
+        success, stats = await translate_xhtml(
             doc_root=doc_root,
             source_language="English",
             target_language="French",

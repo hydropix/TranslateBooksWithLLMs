@@ -280,11 +280,12 @@ def _checkpoint_manager(tmp_path):
     return manager
 
 
-async def _epub_plain_run(**overrides):
-    from src.core.epub.epub_translation_adapter import EpubTranslationAdapter
+async def _epub_plain_run(resume_state=None, **overrides):
+    from src.core.epub.body_serializer import find_body
+    from src.core.epub.plain_text_document import translate_plain_text
+    from tests.epub_engine_helpers import make_settings
 
     kwargs = dict(
-        doc_root=_epub_doc(),
         source_language="English",
         target_language="French",
         model_name="m",
@@ -294,13 +295,12 @@ async def _epub_plain_run(**overrides):
         context_manager=None,
         prompt_options={'plain_text_mode': True},
         stats_callback=None,
-        check_interruption_callback=None,
-        bilingual_flag=False,
+        bilingual=False,
         file_href="OEBPS/chapter1.xhtml",
         parallel_workers=1,
     )
     kwargs.update(overrides)
-    return await EpubTranslationAdapter()._translate_plain_text(**kwargs)
+    return await translate_plain_text(find_body(_epub_doc()), make_settings(**kwargs), resume_state)
 
 
 def _spy_on_pipeline(monkeypatch):
@@ -556,7 +556,8 @@ class TestPlainStateIsRejectedByPlaceholderPipelines:
     @pytest.mark.asyncio
     async def test_xhtml_translator_ignores_a_plain_state(self, monkeypatch):
         """The EPUB placeholder path restarts the file instead of replaying it."""
-        import src.core.epub.xhtml_translator as xhtml_translator
+        from src.core.epub import document_translation
+        from tests.epub_engine_helpers import translate_xhtml
 
         captured = {}
 
@@ -565,14 +566,14 @@ class TestPlainStateIsRejectedByPlaceholderPipelines:
             raise _StopTranslation()
 
         monkeypatch.setattr(
-            xhtml_translator,
-            "_translate_all_chunks_with_checkpoint",
+            document_translation,
+            "translate_chunks",
             _fake_chunk_loop,
         )
 
         logs = []
         with pytest.raises(_StopTranslation):
-            await xhtml_translator.translate_xhtml_simplified(
+            await translate_xhtml(
                 doc_root=_epub_doc(),
                 source_language="English",
                 target_language="French",

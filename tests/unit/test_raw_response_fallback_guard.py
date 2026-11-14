@@ -37,7 +37,7 @@ async def _request(raw, source=SOURCE, logs=None):
         if logs is not None:
             logs.append(kind)
     return await _make_llm_request_with_adaptive_context(
-        main_content=source, context_before="", context_after="",
+        main_content=source,
         previous_translation_context="", source_language="English",
         target_language="French", model="m", llm_client=_client(raw),
         log_callback=log, has_placeholders=False,
@@ -90,7 +90,7 @@ async def test_generate_translation_request_reports_the_fallback():
            "en comptant les marches comme son père le lui avait appris.")
     hits = []
     result = await generate_translation_request(
-        SOURCE, "", "", "", source_language="English", target_language="French",
+        SOURCE, "", source_language="English", target_language="French",
         model="m", llm_client=_client(raw), on_raw_fallback=lambda: hits.append(1),
     )
     assert result == raw

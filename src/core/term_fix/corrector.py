@@ -151,7 +151,7 @@ class SmartCorrector:
 
     async def _ask(self, items: Sequence[SnippetItem]) -> Dict[int, str]:
         from src.prompts.prompts import generate_term_fix_prompt
-        from src.core.epub.xhtml_translator import _request_refinement_with_adaptive_context
+        from src.core.epub.chunk_refinement import request_refinement
 
         used = sorted({r for item in items for _s, _e, r in item.spans})
         prompt = generate_term_fix_prompt(
@@ -163,7 +163,7 @@ class SmartCorrector:
             'type': 'llm_request', 'system_prompt': prompt.system,
             'user_prompt': prompt.user, 'model': self.model_name,
         })
-        response = await _request_refinement_with_adaptive_context(
+        response = await request_refinement(
             self.llm_client, self.context_manager, prompt, self.model_name, self.log_callback,
             extract=False,
         )

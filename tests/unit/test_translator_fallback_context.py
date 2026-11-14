@@ -32,8 +32,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -61,8 +59,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello world",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -90,8 +86,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello world",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",
@@ -140,8 +134,6 @@ class TestTranslatorFallbackContext:
 
         translated, _, response = await _make_llm_request_with_adaptive_context(
             main_content="Hello",
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="French",

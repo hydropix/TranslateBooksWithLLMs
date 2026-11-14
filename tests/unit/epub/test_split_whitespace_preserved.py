@@ -7,10 +7,11 @@ LLM replies are stripped, so a paragraph cut into several chunks came back as
 import pytest
 from lxml import etree
 
-import src.core.epub.xhtml_translator as xt
+from src.core.epub import chunk_fallback
+from tests.epub_engine_helpers import translate_xhtml
 from src.core.epub.html_chunker import HtmlChunker
 from src.core.epub.tag_preservation import TagPreserver
-from src.core.epub.xhtml_translator import PlaceholderManager
+from src.core.epub.placeholder_renumberer import globalize_placeholders
 
 PARAGRAPH = (
     "Alice was beginning to get very tired of sitting by her sister on the bank, "
@@ -28,7 +29,7 @@ def test_chunks_join_back_to_the_source(max_tokens):
     chunks = HtmlChunker(max_tokens=max_tokens).chunk_html_with_placeholders(text, tag_map)
     assert len(chunks) > 1
     joined = "".join(
-        PlaceholderManager.restore_to_global(c["text"], c["global_indices"]) for c in chunks
+        globalize_placeholders(c["text"], c["global_indices"]) for c in chunks
     )
     assert joined == text
 
@@ -38,12 +39,12 @@ async def test_stripped_llm_replies_keep_the_space_between_chunks(monkeypatch):
     async def stripping_echo(main_content, *args, **kwargs):
         return main_content.strip()
 
-    monkeypatch.setattr(xt, "generate_translation_request", stripping_echo)
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request", stripping_echo)
     doc = etree.fromstring(
         f'<html xmlns="{XHTML_NS}"><head><title>t</title></head>'
         f"<body><p>{PARAGRAPH}</p></body></html>".encode("utf-8")
     )
-    success, stats = await xt.translate_xhtml_simplified(
+    success, stats = await translate_xhtml(
         doc, "English", "French", "fake", llm_client=object(), max_tokens_per_chunk=15,
     )
     assert success is True

@@ -231,14 +231,15 @@ async def test_epub_resume_then_interrupt_saves_correct_index(monkeypatch):
     the absolute count of completed chunks (len(translated_chunks)), NOT
     start_chunk_index + len(...) which double-counts the restored prefix and
     makes resume skip or replay chunks."""
-    import src.core.epub.xhtml_translator as xt
+    from src.core.epub import chunk_loop
+    from tests.epub_engine_helpers import run_chunk_loop
     from src.core.epub.translation_metrics import TranslationMetrics
 
     async def fake_translate(*args, **kwargs):
         await asyncio.sleep(0)
         return "<translated/>"
 
-    monkeypatch.setattr(xt, "translate_chunk_with_fallback", fake_translate)
+    monkeypatch.setattr(chunk_loop, "translate_chunk_with_fallback", fake_translate)
 
     # Capture the index persisted by the checkpoint.
     saved = {}
@@ -268,12 +269,12 @@ async def test_epub_resume_then_interrupt_saves_correct_index(monkeypatch):
         translated_count["n"] += 1
         return "<translated/>"
 
-    monkeypatch.setattr(xt, "translate_chunk_with_fallback", fake_translate_counting)
+    monkeypatch.setattr(chunk_loop, "translate_chunk_with_fallback", fake_translate_counting)
 
     def should_interrupt():
         return translated_count["n"] >= 2
 
-    result_chunks, _, was_interrupted = await xt._translate_all_chunks_with_checkpoint(
+    result_chunks, _, was_interrupted = await run_chunk_loop(
         chunks=chunks,
         source_language="English",
         target_language="French",
@@ -306,7 +307,8 @@ async def test_epub_interrupt_resume_roundtrip_keeps_advancing(monkeypatch, tmp_
     silently discarding the state and restarting the file at chunk 0 on every
     resume — the "ça repart toujours très bas" symptom.
     """
-    import src.core.epub.xhtml_translator as xt
+    from src.core.epub import chunk_loop
+    from tests.epub_engine_helpers import run_chunk_loop
     from src.core.epub.translation_metrics import TranslationMetrics
     from src.persistence.checkpoint_manager import CheckpointManager
 
@@ -317,7 +319,7 @@ async def test_epub_interrupt_resume_roundtrip_keeps_advancing(monkeypatch, tmp_
         calls["n"] += 1
         return "<x/>"
 
-    monkeypatch.setattr(xt, "translate_chunk_with_fallback", fake_translate)
+    monkeypatch.setattr(chunk_loop, "translate_chunk_with_fallback", fake_translate)
 
     total = 30
     cm = CheckpointManager(db_path=str(tmp_path / "jobs.db"))
@@ -329,7 +331,7 @@ async def test_epub_interrupt_resume_roundtrip_keeps_advancing(monkeypatch, tmp_
                 for i in range(total)]
 
     async def run(start_idx, translated, stats, stop_at):
-        return await xt._translate_all_chunks_with_checkpoint(
+        return await run_chunk_loop(
             chunks=chunks(), source_language="E", target_language="F", model_name="m",
             llm_client=object(), max_retries=1, context_manager=None,
             placeholder_format=("[id", "]"),

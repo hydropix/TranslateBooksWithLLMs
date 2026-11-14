@@ -6,7 +6,8 @@ passed and produced "</p>Bonjour<p>" in the final XHTML.
 """
 import asyncio
 
-from src.core.epub import xhtml_translator
+from src.core.epub import chunk_fallback
+from tests.epub_engine_helpers import translate_chunk
 from src.core.epub.placeholder_validator import PlaceholderValidator, nesting_signature
 from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.epub.xhtml_translation_state import CHUNK_TRANSLATED
@@ -70,9 +71,9 @@ def test_mis_nested_translation_feeds_the_retry_phase(monkeypatch):
         calls.append(chunk_text)
         return next(replies)
 
-    monkeypatch.setattr(xhtml_translator, "generate_translation_request", fake_request)
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request", fake_request)
     stats = TranslationMetrics()
-    result = asyncio.run(xhtml_translator.translate_chunk_with_fallback(
+    result = asyncio.run(translate_chunk(
         chunk_text="[id0]Hello[id1]",
         local_tag_map={"[id0]": "<p>", "[id1]": "</p>"},
         global_indices=[4, 5],

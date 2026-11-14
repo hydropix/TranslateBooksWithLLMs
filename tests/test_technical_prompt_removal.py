@@ -4,7 +4,7 @@ Test that the technical content prompt section is never added.
 The preserve_technical_content option has no effect on the prompt: the
 TECHNICAL_CONTENT_SECTION is not emitted, and placeholder-based technical
 protection is currently disabled (TECHNICAL_PROTECTION_ENABLED = False in
-src/core/epub/xhtml_translator.py, owner decision).
+src/config.py, owner decision).
 """
 
 import pytest

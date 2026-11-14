@@ -189,8 +189,6 @@ class _StubClient:
 async def _request(response, has_placeholders=False, raw_response_callback=None):
     return await _make_llm_request_with_adaptive_context(
         main_content="Hello world, this is a test.",
-        context_before="",
-        context_after="",
         previous_translation_context="",
         source_language="English",
         target_language="French",

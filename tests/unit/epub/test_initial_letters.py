@@ -4,7 +4,8 @@ import pytest
 from src.core.epub.html_chunker import HtmlChunker
 from src.core.epub.initial_letters import close_initial_letters, merge_initial_letters
 from src.core.epub.tag_preservation import TagPreserver
-from src.core.epub.xhtml_translator import PlaceholderManager, _reconstruct_html
+from src.core.epub.body_reassembly import reconstruct_html
+from src.core.epub.placeholder_renumberer import globalize_placeholders
 
 DROPCAP_SPLIT = '<p class="noindent"><span class="dropcap">A</span>lice was beginning to get tired.</p>'
 DROPCAP_WORD = '<p><span class="dropcap">A</span> good translation, it has been said.</p>'
@@ -99,9 +100,9 @@ def test_full_pipeline_through_chunker_and_reconstruction():
         chunk_text = chunk['text']
         for source, target in translations.items():
             chunk_text = chunk_text.replace(source, target)
-        translated_chunks.append(PlaceholderManager.restore_to_global(chunk_text, chunk['global_indices']))
+        translated_chunks.append(globalize_placeholders(chunk_text, chunk['global_indices']))
 
-    html = _reconstruct_html(translated_chunks, global_tag_map, preserver)
+    html = reconstruct_html(translated_chunks, global_tag_map, preserver)
 
     assert '<span class="dropcap">A</span>lice começava' in html
     assert '<span class="dropcap">U</span>ma boa tradução' in html

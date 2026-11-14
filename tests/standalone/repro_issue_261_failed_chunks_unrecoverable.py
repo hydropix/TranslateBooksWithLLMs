@@ -69,7 +69,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from src import config  # noqa: F401  (loads .env)
-import src.core.epub.xhtml_translator as xhtml_translator_module
+import src.core.epub.chunk_fallback as chunk_fallback_module
+import src.core.epub.chunk_loop as chunk_loop_module
 from src.api.completion_status import classify_completion
 from src.core.adapters import translate_file
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -227,8 +228,8 @@ class ChunkSabotage:
 
     def __init__(self, starve):
         self.starve = starve
-        self._original_request = xhtml_translator_module.generate_translation_request
-        self._original_chunk = xhtml_translator_module.translate_chunk_with_fallback
+        self._original_request = chunk_fallback_module.generate_translation_request
+        self._original_chunk = chunk_loop_module.translate_chunk_with_fallback
         self.llm_calls = 0
         self.sabotaged_llm_calls = 0
         self.chunk_attempts = 0
@@ -255,13 +256,13 @@ class ChunkSabotage:
                 self.sabotaged_chunk_attempts += 1
             return await original_chunk(*args, **kwargs)
 
-        xhtml_translator_module.generate_translation_request = wrapped_request
-        xhtml_translator_module.translate_chunk_with_fallback = wrapped_chunk
+        chunk_fallback_module.generate_translation_request = wrapped_request
+        chunk_loop_module.translate_chunk_with_fallback = wrapped_chunk
         return self
 
     def __exit__(self, *exc):
-        xhtml_translator_module.generate_translation_request = self._original_request
-        xhtml_translator_module.translate_chunk_with_fallback = self._original_chunk
+        chunk_fallback_module.generate_translation_request = self._original_request
+        chunk_loop_module.translate_chunk_with_fallback = self._original_chunk
         return False
 
 

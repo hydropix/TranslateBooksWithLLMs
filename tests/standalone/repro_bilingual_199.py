@@ -26,7 +26,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from lxml import etree
 from src.core.epub.tag_preservation import TagPreserver
 from src.core.epub.html_chunker import HtmlChunker
-from src.core.epub.xhtml_translator import _reconstruct_html, PlaceholderManager
+from src.core.epub.body_reassembly import reconstruct_html
+from src.core.epub.placeholder_renumberer import globalize_placeholders
 from src.core.epub.body_serializer import (
     extract_body_html, replace_body_content, normalize_whitespace,
 )
@@ -94,11 +95,11 @@ def run_case(name, body_html):
     text_ph, tag_map = tp.preserve_tags(body_html)
     chunks = HtmlChunker(max_tokens=450).chunk_html_with_placeholders(text_ph, tag_map)
     translated_chunks = [
-        PlaceholderManager.restore_to_global(fake_translate(c['text']), c['global_indices'])
+        globalize_placeholders(fake_translate(c['text']), c['global_indices'])
         for c in chunks
     ]
 
-    final_html = _reconstruct_html(
+    final_html = reconstruct_html(
         translated_chunks, tag_map, tp, original_chunks=chunks, bilingual=True,
     )
     root = etree.fromstring("<body></body>")

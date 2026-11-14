@@ -1,13 +1,15 @@
 """Regression tests: the technical-protection log and state must tell the truth.
 
-translate_xhtml_simplified ran with protect_technical=False while logging
+The XHTML translation ran with protect_technical=False while logging
 "Technical content protection active" and persisting protect_technical=True
 in the partial state.
 """
 import pytest
 from lxml import etree
 
-import src.core.epub.xhtml_translator as xt
+from src.core.epub import chunk_fallback
+from src.core.epub import document_chunking
+from tests.epub_engine_helpers import translate_xhtml
 from src.persistence.checkpoint_manager import CheckpointManager
 
 XHTML_NS = "http://www.w3.org/1999/xhtml"
@@ -25,16 +27,16 @@ async def _run(monkeypatch, checkpoint_manager, enabled):
     async def echo(main_content, *args, **kwargs):
         return main_content
 
-    monkeypatch.setattr(xt, "generate_translation_request", echo)
-    monkeypatch.setattr(xt, "TECHNICAL_PROTECTION_ENABLED", enabled)
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request", echo)
+    monkeypatch.setattr("src.config.TECHNICAL_PROTECTION_ENABLED", enabled)
     seen = {}
 
     def spy_preserve(body_html, tag_preserver, log_callback=None, protect_technical=False):
         seen["protect_technical"] = protect_technical
         return original_preserve(body_html, tag_preserver, log_callback, protect_technical)
 
-    original_preserve = xt._preserve_tags
-    monkeypatch.setattr(xt, "_preserve_tags", spy_preserve)
+    original_preserve = document_chunking.preserve_tags
+    monkeypatch.setattr(document_chunking, "preserve_tags", spy_preserve)
 
     doc = etree.fromstring(
         f'<html xmlns="{XHTML_NS}"><head><title>t</title></head>'
@@ -42,7 +44,7 @@ async def _run(monkeypatch, checkpoint_manager, enabled):
     )
     events = []
     translation_id, href = f"job_a8_{enabled}", "OEBPS/ch.xhtml"
-    success, _ = await xt.translate_xhtml_simplified(
+    success, _ = await translate_xhtml(
         doc, "English", "French", "fake", llm_client=object(),
         log_callback=lambda event, message: events.append((event, message)),
         checkpoint_manager=checkpoint_manager, translation_id=translation_id,

@@ -7,7 +7,8 @@ chapter was erased while every chunk status still said "translated".
 import pytest
 from lxml import etree
 
-import src.core.epub.xhtml_translator as xt
+from src.core.epub import chunk_fallback, document_translation
+from tests.epub_engine_helpers import translate_xhtml
 from src.core.epub.body_serializer import replace_body_content
 from src.core.epub.exceptions import XmlParsingError
 from src.core.epub.xhtml_translation_state import (
@@ -72,14 +73,14 @@ async def test_failed_body_replacement_marks_file_unfinished(monkeypatch, checkp
     async def fake_request(main_content, *args, **kwargs):
         return main_content.replace("Hello", "Bonjour")
 
-    monkeypatch.setattr(xt, "generate_translation_request", fake_request)
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request", fake_request)
     # Simulate a reconstruction whose re-parse would erase the chapter.
-    monkeypatch.setattr(xt, "_reconstruct_html",
+    monkeypatch.setattr(document_translation, "reconstruct_html",
                         lambda *a, **k: "</p>Bonjour tout le monde<p>")
 
     doc = _doc("<p>Hello world, this is a chapter.</p>")
     translation_id, href = "job_a3", "OEBPS/ch1.xhtml"
-    success, stats = await xt.translate_xhtml_simplified(
+    success, stats = await translate_xhtml(
         doc, "English", "French", "fake", llm_client=object(),
         checkpoint_manager=checkpoint_manager, translation_id=translation_id,
         file_href=href,

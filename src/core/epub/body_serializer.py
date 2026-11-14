@@ -4,15 +4,17 @@ Body serialization for simplified EPUB processing
 This module handles extracting and replacing the content of <body> elements
 in XHTML documents, enabling full-document translation instead of per-element processing.
 """
+import logging
 from lxml import etree
-from typing import Tuple, Optional
+from typing import Callable, Tuple, Optional
 import html as _html
 import re
 
-from src.utils.unified_logger import info
 from .boilerplate_filter import strip_web_boilerplate
 from .exceptions import XmlParsingError, BodyExtractionError
 from .ruby_annotations import fold_ruby_annotations
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_whitespace(html: str) -> str:
@@ -185,13 +187,19 @@ def _parsed_text_length(element: etree._Element) -> int:
     return len(_WHITESPACE_RE.sub('', ''.join(parts)))
 
 
-def replace_body_content(body_element: etree._Element, new_html: str) -> None:
+def replace_body_content(
+    body_element: etree._Element,
+    new_html: str,
+    log_callback: Optional[Callable] = None,
+) -> None:
     """
     Replace the content of <body> with new translated HTML.
 
     Args:
         body_element: The <body> element to modify
         new_html: New translated HTML content
+        log_callback: The job's log callback; the reconstruction summary goes
+            there, or to this module's logger when there is none
 
     Raises:
         BodyExtractionError: if new_html is empty while the body still holds
@@ -282,4 +290,9 @@ def replace_body_content(body_element: etree._Element, new_html: str) -> None:
 
     # Single consolidated log message
     warnings_str = f" ({', '.join(parse_warnings)})" if parse_warnings else ""
-    info(f"📄 Body reconstructed: {len(new_html)} chars → {child_count} elements [{parse_method}{warnings_str}]")
+    message = (f"📄 Body reconstructed: {len(new_html)} chars → {child_count} elements "
+               f"[{parse_method}{warnings_str}]")
+    if log_callback:
+        log_callback("body_reconstructed", message)
+    else:
+        logger.info(message)

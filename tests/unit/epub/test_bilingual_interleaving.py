@@ -20,7 +20,7 @@ recursing into containers and interleaving at the leaf-paragraph level.
 """
 import re
 
-from src.core.epub.xhtml_translator import _interleave_bilingual
+from src.core.epub.body_reassembly import interleave_bilingual
 
 
 def _strip(html):
@@ -32,7 +32,7 @@ class TestInterleaveTopLevelParagraphs:
     def test_source_then_translation_per_paragraph(self):
         orig = '<p>S1</p><p>S2</p>'
         trans = '<p>T1</p><p>T2</p>'
-        out = _interleave_bilingual(orig, trans)
+        out = interleave_bilingual(orig, trans)
 
         # Each source paragraph is immediately followed by its translation,
         # and translation #1 precedes source #2 (the core layout fix).
@@ -43,7 +43,7 @@ class TestInterleaveTopLevelParagraphs:
     def test_blank_separators_emitted_once(self):
         orig = '<p> </p><p>S1</p><p class="blank"><br/></p><p>S2</p>'
         trans = '<p> </p><p>T1</p><p class="blank"><br/></p><p>T2</p>'
-        out = _interleave_bilingual(orig, trans)
+        out = interleave_bilingual(orig, trans)
 
         assert out.count('bilingual-original') == 2
         assert out.count('bilingual-translation') == 2
@@ -70,7 +70,7 @@ class TestInterleaveNestedContainer:
             '<p>Para three translated.</p>'
             '</div>'
         )
-        out = _interleave_bilingual(orig, trans)
+        out = interleave_bilingual(orig, trans)
 
         assert out is not None
         # The container is rebuilt ONCE (not duplicated per chunk).
@@ -94,7 +94,7 @@ class TestInterleaveNestedContainer:
         # the whole file).
         orig = '<section epub:type="chapter"><p>S1</p><p>S2</p></section>'
         trans = '<section epub:type="chapter"><p>T1</p><p>T2</p></section>'
-        out = _interleave_bilingual(orig, trans)
+        out = interleave_bilingual(orig, trans)
 
         assert out is not None
         assert out.count('epub:type="chapter"') == 1
@@ -104,7 +104,7 @@ class TestInterleaveNestedContainer:
     def test_deeply_nested_text_complete(self):
         orig = '<div><section><p>Deep source.</p><p>More source.</p></section></div>'
         trans = '<div><section><p>Deep translated.</p><p>More translated.</p></section></div>'
-        out = _interleave_bilingual(orig, trans)
+        out = interleave_bilingual(orig, trans)
 
         assert out is not None
         assert out.count('<section') == 1
@@ -118,14 +118,14 @@ class TestInterleaveFallback:
         # Different container child counts -> caller uses lossless fallback.
         orig = '<div><p>S1</p><p>S2</p></div>'
         trans = '<div><p>T1 merged</p></div>'
-        assert _interleave_bilingual(orig, trans) is None
+        assert interleave_bilingual(orig, trans) is None
 
     def test_matching_skeleton_with_inline_differences_ok(self):
         # Leaves may differ inside (LLM may restructure inline tags) — that is
         # fine, we don't recurse into leaf paragraphs.
         orig = '<p>Hello <b>world</b></p>'
         trans = '<p>Bonjour le monde</p>'
-        out = _interleave_bilingual(orig, trans)
+        out = interleave_bilingual(orig, trans)
         assert out is not None
         assert 'Hello' in out and 'Bonjour le monde' in out
         assert out.count('bilingual-original') == 1

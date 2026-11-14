@@ -79,8 +79,6 @@ class TestTranslationPathCarriesTargetLanguage:
 
         await _make_llm_request_with_adaptive_context(
             main_content=CHUNK,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="Russian",
@@ -102,8 +100,6 @@ class TestTranslationPathCarriesTargetLanguage:
 
         await _make_llm_request_with_adaptive_context(
             main_content=CHUNK,
-            context_before="",
-            context_after="",
             previous_translation_context="",
             source_language="English",
             target_language="Chinese",

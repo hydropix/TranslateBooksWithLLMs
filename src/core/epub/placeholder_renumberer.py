@@ -1,12 +1,91 @@
 """
-Placeholder renumbering for HTML chunking.
+Placeholder renumbering between document (global) and chunk (local) indices.
 
-This module handles the conversion of global placeholder indices to local
-indices within chunks, enabling independent translation of each chunk.
+The single home of every global <-> local placeholder conversion:
+
+- ``PlaceholderRenumberer.create_chunk_with_local_placeholders`` builds a
+  chunk: it numbers each placeholder *occurrence* of a slice of the document
+  0, 1, 2... and records the global index of each (``global_indices``).
+- ``globalize_placeholders`` maps a chunk's local placeholders back to their
+  global indices (after translation, before reassembly).
+- ``localize_placeholders`` maps global placeholders back to local ones (a
+  translated chunk sent to the refine pass).
+
+Placeholder levels:
+
+    Document (TagPreserver): "<body><p>Hello</p></body>" -> "[id0]Hello[id1]"
+    Chunk (HtmlChunker):     "[id5]Hello[id6]" -> "[id0]Hello[id1]",
+                             global_indices [5, 6]
+    Translation:             the LLM returns "[id0]Bonjour[id1]",
+                             globalized to "[id5]Bonjour[id6]"
 """
-from typing import Dict
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from src.common.placeholder_format import PlaceholderFormat
+from src.config import detect_placeholder_format_in_text
+
+
+def globalize_placeholders(
+    text: str,
+    global_indices: Sequence[int],
+    placeholder_format: Optional[Tuple[str, str]] = None,
+) -> str:
+    """Rewrite local placeholders (0, 1, 2...) as their global indices.
+
+    Local placeholder ``i`` becomes ``global_indices[i]``. Every local
+    placeholder is first swapped for a temporary marker, so a local index
+    that equals another position's global index is never renumbered twice.
+
+    Args:
+        text: Text holding local placeholders.
+        global_indices: Global index of each local placeholder, in order.
+        placeholder_format: ``(prefix, suffix)``; detected from ``text``
+            when None.
+    """
+    if not global_indices:
+        return text
+    prefix, suffix = placeholder_format or detect_placeholder_format_in_text(text)
+    result = text
+    for local_idx in range(len(global_indices)):
+        local_ph = f"{prefix}{local_idx}{suffix}"
+        if local_ph in result:
+            result = result.replace(local_ph, f"__RESTORE_{local_idx}__")
+    for local_idx, global_idx in enumerate(global_indices):
+        result = result.replace(f"__RESTORE_{local_idx}__", f"{prefix}{global_idx}{suffix}")
+    return result
+
+
+def localize_placeholders(
+    text: str,
+    global_indices: Sequence[int],
+    placeholder_format: Tuple[str, str],
+) -> str:
+    """Rewrite global placeholders as local ones, the inverse of
+    :func:`globalize_placeholders`: ``global_indices[i]`` becomes ``i``,
+    through temporary markers for the same reason."""
+    prefix, suffix = placeholder_format
+    result = text
+    for local_idx, global_idx in enumerate(global_indices):
+        result = result.replace(f"{prefix}{global_idx}{suffix}", f"__TEMP_PH_{local_idx}__")
+    for local_idx in range(len(global_indices)):
+        result = result.replace(f"__TEMP_PH_{local_idx}__", f"{prefix}{local_idx}{suffix}")
+    return result
+
+
+def globalize_chunks(
+    chunks: List[Dict],
+    placeholder_format: Optional[Tuple[str, str]] = None,
+) -> List[str]:
+    """Each chunk dict's ``text`` with its placeholders globalized.
+
+    Turns freshly chunked source (or draft) text into the globally numbered
+    form the reassembly and the refine pass work on.
+    """
+    return [
+        globalize_placeholders(chunk.get('text', ''), chunk.get('global_indices', []),
+                               placeholder_format)
+        for chunk in chunks
+    ]
 
 
 class PlaceholderRenumberer:

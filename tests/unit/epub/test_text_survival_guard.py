@@ -5,7 +5,8 @@ whole paragraph, so the paragraph vanished from the book.
 """
 import pytest
 
-import src.core.epub.xhtml_translator as xt
+from src.core.epub import chunk_fallback
+from tests.epub_engine_helpers import translate_chunk
 from src.core.epub.text_survival import text_survival_problem
 from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.epub.xhtml_translation_state import CHUNK_TRANSLATED, CHUNK_UNTRANSLATED
@@ -42,10 +43,10 @@ async def _translate(monkeypatch, replies, max_retries=2):
         calls.append(main_content)
         return replies[min(len(calls), len(replies)) - 1]
 
-    monkeypatch.setattr(xt, "generate_translation_request", fake_request)
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request", fake_request)
     monkeypatch.setattr("src.config.EPUB_TOKEN_ALIGNMENT_ENABLED", False)
     stats = TranslationMetrics()
-    result = await xt.translate_chunk_with_fallback(
+    result = await translate_chunk(
         chunk_text=EN,
         local_tag_map={"[id0]": "<p>", "[id1]": "</p>"},
         global_indices=[7, 8],

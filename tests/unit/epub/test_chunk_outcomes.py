@@ -7,11 +7,12 @@ The pipeline now records a terminal status per chunk in
 `chunk_statuses`.
 
 These tests pin the four terminal branches and the persistence, with no network:
-`generate_translation_request` is monkeypatched in the xhtml_translator module.
+`generate_translation_request` is monkeypatched in the chunk_fallback module.
 """
 import pytest
 
-import src.core.epub.xhtml_translator as xt
+from src.core.epub import chunk_fallback
+from tests.epub_engine_helpers import run_chunk_loop, translate_chunk
 from src.core.epub.translation_metrics import TranslationMetrics
 from src.core.epub.xhtml_translation_state import (
     CHUNK_PENDING,
@@ -48,13 +49,13 @@ def _stub_generate(monkeypatch, answer):
         calls.append(main_content)
         return answer(main_content)
 
-    monkeypatch.setattr(xt, "generate_translation_request",
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request",
                         fake_generate_translation_request)
     return calls
 
 
 async def _translate(chunk, stats, chunk_index=0, max_retries=1):
-    return await xt.translate_chunk_with_fallback(
+    return await translate_chunk(
         chunk_text=chunk['text'],
         local_tag_map=chunk['local_tag_map'],
         global_indices=chunk['global_indices'],
@@ -208,7 +209,7 @@ def temp_checkpoint_manager(tmp_path):
 
 async def _run_loop(chunks, checkpoint_manager=None, translation_id=None,
                     file_href=None):
-    return await xt._translate_all_chunks_with_checkpoint(
+    return await run_chunk_loop(
         chunks=chunks,
         source_language="French",
         target_language="English",
@@ -281,7 +282,7 @@ async def test_interrupted_run_persists_pending_tail(monkeypatch, temp_checkpoin
     ]
     translation_id, file_href = "outcomes_interrupt", "OEBPS/chapter2.xhtml"
 
-    translated, _stats, was_interrupted = await xt._translate_all_chunks_with_checkpoint(
+    translated, _stats, was_interrupted = await run_chunk_loop(
         chunks=chunks,
         source_language="French",
         target_language="English",

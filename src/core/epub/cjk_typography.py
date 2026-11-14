@@ -1132,6 +1132,77 @@ def _normalize_ncx(ncx_path: str, lang_code: str, result: dict,
              f"Could not update NCX language in {ncx_path}: {exc}")
 
 
+def _read_stylesheets(
+    css_paths: List[str],
+    log_callback: Optional[Callable],
+) -> Tuple[List[Tuple[str, str, str]], int, int]:
+    """Read every stylesheet for the gate.
+
+    Returns ``(stylesheets, encoding_fallbacks, errors)`` where each stylesheet
+    is ``(path, text, encoding)``. An unreadable file is logged and counted,
+    never raised.
+    """
+    stylesheets: List[Tuple[str, str, str]] = []   # (path, text, encoding)
+    encoding_fallbacks = 0
+    gate_errors = 0
+    for path in css_paths:
+        try:
+            text, encoding, guessed = _read_css_text(path)
+            stylesheets.append((path, text, encoding))
+            if guessed:
+                encoding_fallbacks += 1
+        except Exception as exc:
+            gate_errors += 1
+            _log(log_callback, "epub_script_norm_error",
+                 f"Could not read stylesheet {path}: {exc}")
+    return stylesheets, encoding_fallbacks, gate_errors
+
+
+def _normalize_stylesheets(stylesheets: List[Tuple[str, str, str]], result: dict,
+                           log_callback: Optional[Callable]) -> None:
+    """Neutralize every stylesheet read at the gate, writing back changed ones."""
+    for path, text, encoding in stylesheets:
+        try:
+            new_text, counts = neutralize_css_text(text)
+            if not counts:
+                continue
+            if _write_css_text(path, new_text, encoding):
+                result["encoding_fallbacks"] += 1
+                _log(log_callback, "epub_script_norm_encoding",
+                     f"Stylesheet {path} could not be re-encoded as "
+                     f"'{encoding}'; written as UTF-8 instead")
+            _merge_counts(result["changes_by_property"], counts)
+            result["css_files_rewritten"] += 1
+        except Exception as exc:
+            result["errors"] += 1
+            _log(log_callback, "epub_script_norm_error",
+                 f"Could not normalize stylesheet {path}: {exc}")
+
+
+def _normalize_ncx_files(temp_dir: str, opf_path: Optional[str],
+                         target_language: str, result: dict,
+                         log_callback: Optional[Callable]) -> None:
+    """Point every NCX beside the OPF at the target language."""
+    lang_code = get_language_code(target_language)
+    if lang_code:
+        # "Beside the OPF" — the content root, where
+        # `toc_labels.update_ncx_toc_labels_from_translated_docs` looks too (its tree is
+        # walked rather than globbed, so a nested toc/ folder is covered).
+        # Without an OPF at all, fall back to the whole container.
+        ncx_root = os.path.dirname(opf_path) if opf_path else temp_dir
+        for ncx_path in _iter_files(ncx_root, (".ncx",)):
+            _normalize_ncx(ncx_path, lang_code, result, log_callback)
+
+
+def _measure_embedded_fonts(temp_dir: str, result: dict) -> None:
+    """Add up the embedded font sizes; the files themselves are never deleted."""
+    for path in _iter_files(temp_dir, _FONT_SUFFIXES):
+        try:
+            result["embedded_font_bytes"] += os.path.getsize(path)
+        except OSError:
+            result["errors"] += 1
+
+
 def apply_script_normalization_to_epub_directory(
     temp_dir: str,
     source_language: Optional[str],
@@ -1191,19 +1262,8 @@ def apply_script_normalization_to_epub_directory(
     markup_paths = _iter_files(temp_dir, _XHTML_SUFFIXES)
 
     # --- Step 0: gate -----------------------------------------------------
-    stylesheets: List[Tuple[str, str, str]] = []   # (path, text, encoding)
-    encoding_fallbacks = 0
-    gate_errors = 0
-    for path in css_paths:
-        try:
-            text, encoding, guessed = _read_css_text(path)
-            stylesheets.append((path, text, encoding))
-            if guessed:
-                encoding_fallbacks += 1
-        except Exception as exc:
-            gate_errors += 1
-            _log(log_callback, "epub_script_norm_error",
-                 f"Could not read stylesheet {path}: {exc}")
+    stylesheets, encoding_fallbacks, gate_errors = _read_stylesheets(
+        css_paths, log_callback)
 
     gate_texts = [text for _path, text, _encoding in stylesheets]
     style_texts, style_errors = _collect_style_texts(markup_paths, log_callback)
@@ -1220,22 +1280,7 @@ def apply_script_normalization_to_epub_directory(
     result["errors"] = gate_errors + style_errors
 
     # --- Step 1: stylesheets ---------------------------------------------
-    for path, text, encoding in stylesheets:
-        try:
-            new_text, counts = neutralize_css_text(text)
-            if not counts:
-                continue
-            if _write_css_text(path, new_text, encoding):
-                result["encoding_fallbacks"] += 1
-                _log(log_callback, "epub_script_norm_encoding",
-                     f"Stylesheet {path} could not be re-encoded as "
-                     f"'{encoding}'; written as UTF-8 instead")
-            _merge_counts(result["changes_by_property"], counts)
-            result["css_files_rewritten"] += 1
-        except Exception as exc:
-            result["errors"] += 1
-            _log(log_callback, "epub_script_norm_error",
-                 f"Could not normalize stylesheet {path}: {exc}")
+    _normalize_stylesheets(stylesheets, result, log_callback)
 
     # --- Step 2: markup --------------------------------------------------
     for path in markup_paths:
@@ -1245,22 +1290,10 @@ def apply_script_normalization_to_epub_directory(
     opf_path = _find_opf_path(temp_dir)
     if opf_path:
         _normalize_opf(opf_path, target_language, result, log_callback)
-
-    lang_code = get_language_code(target_language)
-    if lang_code:
-        # "Beside the OPF" — the content root, where
-        # `toc_labels.update_ncx_toc_labels_from_translated_docs` looks too (its tree is
-        # walked rather than globbed, so a nested toc/ folder is covered).
-        # Without an OPF at all, fall back to the whole container.
-        ncx_root = os.path.dirname(opf_path) if opf_path else temp_dir
-        for ncx_path in _iter_files(ncx_root, (".ncx",)):
-            _normalize_ncx(ncx_path, lang_code, result, log_callback)
+    _normalize_ncx_files(temp_dir, opf_path, target_language, result,
+                         log_callback)
 
     # --- Step 5: embedded fonts, reported only ---------------------------
-    for path in _iter_files(temp_dir, _FONT_SUFFIXES):
-        try:
-            result["embedded_font_bytes"] += os.path.getsize(path)
-        except OSError:
-            result["errors"] += 1
+    _measure_embedded_fonts(temp_dir, result)
 
     return result

@@ -1,5 +1,4 @@
-
-https://github.com/user-attachments/assets/94f33462-2240-465c-8b66-48a1dda291a7
+https://github.com/user-attachments/assets/d13dd95f-10ec-4873-96d4-0828ed54238f
 
 <div align="center">
   <h1>TBL - Translate Books with LLMs</h1>

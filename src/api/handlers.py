@@ -166,6 +166,18 @@ class WebJobSinks(JobSinks):
         if total > 0:
             self.logger.update_progress(merged.get('completed_chunks', 0), total)
 
+    def record_elapsed(self, elapsed):
+        """Fold the final elapsed time into the stored stats without an emit:
+        the terminal payload (job_finished) carries the merged stats, so a
+        separate progress payload would repeat the same 100% tick."""
+        if not self._exists():
+            return
+
+        def finalize(current):
+            current['elapsed_time'] = time.time() - current.get('start_time', time.time())
+
+        self._merge_stats({}, finalize)
+
     def _merge_stats(self, stats, finalize):
         merge = getattr(self.state, 'merge_stats', None)
         if merge is not None:

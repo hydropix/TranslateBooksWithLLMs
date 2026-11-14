@@ -104,6 +104,15 @@ class JobSinks:
     def emit_stats(self, stats: Dict[str, Any]) -> None:
         """A stats update, already tagged with the workflow phase."""
 
+    def record_elapsed(self, elapsed: float) -> None:
+        """The run's final elapsed time, just before the terminal callback.
+
+        The default emits it as a stats update. A sink whose terminal payload
+        already carries the merged stats (the web adapter) records it without
+        an emit of its own, so the end of a run is not announced twice.
+        """
+        self.emit_stats({'elapsed_time': elapsed})
+
     def is_interrupted(self) -> bool:
         return False
 
@@ -431,7 +440,7 @@ class JobRunner:
         result = result.with_changes(output_path=output_path)
 
         elapsed = time.time() - self._started_at
-        self.sinks.emit_stats({'elapsed_time': elapsed})
+        self.sinks.record_elapsed(elapsed)
         stats = {**dict(result.stats or {}), **self.sinks.current_stats()}
 
         if result.status is JobStatus.INTERRUPTED:

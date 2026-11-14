@@ -279,3 +279,18 @@ async def test_job_with_nothing_translated_is_an_error_with_a_code_and_stays_res
     assert state.get_translation_field(TID, 'error_code') == 'nothing_translated'
     assert manager.get_job(TID)['status'] == 'error'
     assert TID in [j['translation_id'] for j in manager.get_resumable_jobs()]
+
+
+@pytest.mark.asyncio
+async def test_end_of_run_sends_a_single_100_percent_progress_payload(web, monkeypatch):
+    output_dir, upload, _manager, state, socketio = web
+    monkeypatch.setattr(adapters, "translate_file", _completing_engine({}))
+    job = _job(output_dir, upload)
+    state.create_translation(TID, job.to_persisted())
+
+    await handlers.perform_actual_translation(TID, job, state, str(output_dir), socketio)
+
+    # Progress-only payloads (the final status payload carries its own stats).
+    full = [p for p in socketio.payloads()
+            if set(p) == {'stats', 'translation_id'} and p['stats'].get('percent') == 100.0]
+    assert len(full) == 1, len(full)

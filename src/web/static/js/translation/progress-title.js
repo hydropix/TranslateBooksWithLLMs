@@ -13,43 +13,11 @@
 
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { t } from '../i18n/i18n.js';
+import { getFileIcon, createGenericEPUBIcon } from '../files/file-icons.js';
 
-/**
- * Generic EPUB cover icon (used when no real thumbnail is available).
- * @returns {string} SVG HTML string
- */
-export function createGenericEPUBIcon() {
-    return `
-            <svg style="width: 48px; height: 72px;" viewBox="0 0 48 72" xmlns="http://www.w3.org/2000/svg">
-                <!-- Book cover -->
-                <rect x="6" y="3" width="36" height="66" rx="2.5"
-                      fill="#5a8ee8" stroke="#3676d8" stroke-width="2"/>
-                <!-- Book spine line -->
-                <path d="M6 13 L42 13" stroke="#3676d8" stroke-width="1.8"/>
-                <!-- Text lines -->
-                <path d="M10 22 L38 22 M10 32 L38 32 M10 42 L32 42"
-                      stroke="white" stroke-width="2.2" stroke-linecap="round" opacity="0.8"/>
-                <!-- EPUB badge -->
-                <circle cx="24" cy="56" r="5" fill="white" opacity="0.9"/>
-                <text x="24" y="60" text-anchor="middle" font-size="6"
-                      fill="#3676d8" font-weight="bold">E</text>
-            </svg>
-        `;
-}
-
-/**
- * Generic icon for a file type.
- * @param {string} fileType - File type ('txt', 'epub', 'srt')
- * @returns {string} HTML string for the icon
- */
-export function getFileIcon(fileType) {
-    if (fileType === 'epub') {
-        return createGenericEPUBIcon();
-    } else if (fileType === 'srt') {
-        return '🎬';
-    }
-    return '📄';
-}
+// Re-exported for existing importers (history-manager.js); the canonical
+// implementation lives in files/file-icons.js.
+export { getFileIcon, createGenericEPUBIcon };
 
 /**
  * Render the progress title for the file currently being processed.

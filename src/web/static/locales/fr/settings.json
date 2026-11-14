@@ -226,5 +226,16 @@
   "cost_override_note": "Un prix personnalisé est actuellement enregistré pour ce modèle.",
   "cost_reset_default": "Réinitialiser à la valeur par défaut",
   "cost_format_free": "Gratuit",
-  "cost_format_lt_001": "<$0.01"
+  "cost_format_lt_001": "<$0.01",
+  "model_context_tooltip": "Contexte : {{tokens}} tokens",
+  "provider_desc_local": "Local",
+  "provider_desc_multi": "Multi-fournisseur",
+  "provider_desc_cloud_api": "API cloud",
+  "provider_desc_cloud": "Cloud",
+  "provider_desc_compatible": "Compatible",
+  "provider_desc_many_models": "200+ modèles",
+  "model_limit_na": "N/D",
+  "model_token_limits_tooltip": "Entrée : {{input}} tokens, sortie : {{output}} tokens",
+  "model_label_price_per_request": "{{name}} ({{price}}/requête)",
+  "model_label_price_per_million": "{{name}} (Entrée : {{input}}/M, Sortie : {{output}}/M)"
 }

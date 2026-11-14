@@ -1,16 +1,23 @@
 /* ========================================
-   Neumorphic Design System
-   Light Mode - Inspired by reference design
+   Design tokens (light theme)
    ======================================== */
 
 :root {
-    /* Light mode colors from reference */
-    --primary-light: #3676d8;
-    --background-light: #f0f2f5;
-    --background-outer: #ffffff;
-    --text-dark: #1f2a3a;
-    --text-muted-light: #6b7a90;
-    --border-light: #e0e4e9;
+    /* Calm palette: warm paper page, white card surface, slate-ink accent.
+       The accent is the only saturated colour and is reserved for tier-1
+       surfaces (see "Design note — importance tiers" before the Layout section). */
+    --primary-light: #3e5a78;
+    --primary-light-hover: #2c405a;
+    --background-light: #fffdf9;
+    --background-outer: #f4efe8;
+    --background-inset: #faf7f2;
+    --text-dark: #1f2a33;
+    --text-muted-light: #6a6760;
+    --text-faint: #8c877e;
+    --border-light: #e4dcd0;
+    --border-strong: #d6cdbf;
+    --primary-tint: rgba(62, 90, 120, 0.06);
+    --primary-tint-border: rgba(62, 90, 120, 0.45);
     --success-light: #28a745;
     --success-light-bg: #e6faed;
     --info-light: #0d6efd;
@@ -35,9 +42,7 @@
     --warning-light-border: #f59e0b;
     --warning-light-text: #92400e;
 
-    /* Neumorphic shadows */
-    --shadow-dark: #d8dbdf;
-    --shadow-light: #ffffff;
+    --shadow-soft: 0 10px 24px -20px rgba(40, 50, 60, 0.35);
 
     /* Active-option chips in the pre-flight summary (settings-summary.js).
        A single treatment for all of them: every chip says "this run uses X",
@@ -46,17 +51,17 @@
        .btn-primary's clothes (white on solid primary), at chip size.
        Written against --primary-light rather than a literal, so the dark
        theme's lighter blue applies with no separate override. */
-    --option-chip-bg: var(--primary-light);
-    --option-chip-fg: #ffffff;
-    --option-chip-border: var(--primary-light);
+    --option-chip-bg: transparent;
+    --option-chip-fg: var(--text-muted-light);
+    --option-chip-border: var(--border-strong);
 
     /* Provider / model / languages chips, same row. Ink instead of blue so
        what the run *is* stays ahead of what the run *uses*. A slate charcoal
        rather than a flat black: it carries the same blue cast as --text-dark
        (#1f2a3a), so the row belongs to the palette instead of punching a hole
        in it. */
-    --llm-chip-bg: #2e353f;
-    --llm-chip-fg: #ffffff;
+    --llm-chip-bg: #ece6dc;
+    --llm-chip-fg: var(--text-dark);
 
     /* Typography.
        --font-text  reading face, inherited by the whole page.
@@ -66,8 +71,21 @@
        read, Inter for what is operated. */
     --font-sans: "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-serif: "Spectral", Georgia, 'Times New Roman', serif;
-    --font-text: var(--font-serif);
-    --font-ui: var(--font-serif);
+    --font-text: var(--font-sans);
+    --font-ui: var(--font-sans);
+    /* Book content only (translation preview, completion excerpts). */
+    --font-reading: var(--font-serif);
+
+    /* Vertical density. One knob: every vertical padding and margin that
+       reads var(--ui-density-y) is its original measurement multiplied by
+       this factor (1 = original roomy spacing, 0.7 = current). Only the
+       vertical axis uses it; horizontal padding keeps its breathing room. */
+    --ui-density-y: 0.7;
+    /* Height of a single-line control, derived from the knob and floored so
+       a field never drops below a usable height. Exposed as a token because
+       the box height and the line-height that centres its text must never
+       drift apart. */
+    --ui-control-h: max(1.9rem, calc(2.75rem * var(--ui-density-y)));
 
     /* Translation preview height (based on MAX_TOKENS_PER_CHUNK) */
     /* Default: 300px for 450 tokens. Formula: (tokens / 450) * 300 */
@@ -80,13 +98,20 @@
    ======================================== */
 
 html.dark {
-    /* Dark mode colors - neutral grays */
-    --primary-light: #5a8ee8;
-    --background-light: #2a2a2a;
-    --background-outer: #121212;
-    --text-dark: #e8e8e8;
-    --text-muted-light: #999999;
-    --border-light: #444444;
+    /* Dark calm palette: warm charcoal page, slightly lifted card, a lighter
+       slate accent that still carries white button text. */
+    --primary-light: #557599;
+    --primary-light-hover: #6a8bb0;
+    --background-light: #1f2328;
+    --background-outer: #16191d;
+    --background-inset: #1a1d21;
+    --text-dark: #e7e3dc;
+    --text-muted-light: #a39e95;
+    --text-faint: #7d786f;
+    --border-light: #343a42;
+    --border-strong: #454c55;
+    --primary-tint: rgba(120, 155, 195, 0.08);
+    --primary-tint-border: rgba(140, 170, 205, 0.5);
     --success-light: #34d399;
     --success-light-bg: #1a2a1a;
     --info-light: #60a5fa;
@@ -109,54 +134,31 @@ html.dark {
     --warning-light-border: #f59e0b;
     --warning-light-text: #fbbf24;
 
-    /* Neumorphic shadows for dark mode */
-    --shadow-dark: #1a1a1a;
-    --shadow-light: #3a3a3a;
+    --shadow-soft: 0 10px 24px -20px rgba(0, 0, 0, 0.6);
 
     /* No --option-chip-* override here on purpose: the chips are defined in
        terms of --primary-light, which this block already re-points.
        The LLM chip does need one: the light-theme charcoal is a hair darker
        than the #2a2a2a card it would sit on, so it would read as a hole
        rather than as a chip. Lifted just above the card instead. */
-    --llm-chip-bg: #3b434f;
-}
-
-html.dark .neu-inset-light {
-    background: #222222;
-    border: 2px solid rgba(136, 136, 136, 0.15);
-}
-
-html.dark .neu-inset-light:hover {
-    border-color: rgba(136, 136, 136, 0.35);
-}
-
-html.dark .neu-inset-light:focus-within {
-    border-color: var(--primary-light);
+    --llm-chip-bg: #2b3037;
 }
 
 html.dark .form-control {
-    background: #222222;
+    background: var(--background-inset);
     color: #e8e8e8;
 }
 
 html.dark .neu-inset-light .form-control {
-    background: #222222;
+    background: var(--background-inset);
 }
 
 html.dark .form-control:focus {
-    background: #222222;
+    background: var(--background-inset);
 }
 
 html.dark .form-control::placeholder {
     color: #777777;
-}
-
-html.dark .header {
-    background: rgba(42, 42, 42, 0.9);
-}
-
-html.dark .file-upload {
-    background: var(--background-light);
 }
 
 html.dark .file-table thead tr {
@@ -191,7 +193,7 @@ html.dark #ttsOptions {
 }
 
 html.dark .log-entry.log-summary-detailed {
-    background: #222222;
+    background: var(--background-inset);
     border-color: rgba(136, 136, 136, 0.3);
     border-left-color: var(--primary-light);
 }
@@ -200,6 +202,10 @@ html.dark .log-entry.log-summary-detailed {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    /* Scrollbars are hidden app-wide (Firefox, then IE/Edge Legacy); the
+       few scrolling panels that need one opt back in. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 body {
@@ -209,97 +215,137 @@ body {
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    padding: 20px;
+    padding: calc(20px * var(--ui-density-y)) 20px;
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ========================================
-   Neumorphic Card Styles
+   Surfaces
+   The neu-* class names are historical (the app used to draw neumorphic
+   relief); they now only paint a flat surface and a hairline border.
    ======================================== */
 
+/* Raised card surface (JS: sample column cards). */
 .neu-card-light {
     background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
     border: 1px solid var(--border-light);
-    border-radius: 2rem;
 }
 
+/* Field frame: the hairline box around every form control. */
 .neu-inset-light {
-    background: #ffffff;
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 2px solid rgba(54, 118, 216, 0.15);
-    border-radius: 1rem;
+    background: var(--background-light);
+    box-shadow: none;
+    border: 1px solid var(--border-strong);
     transition: all 0.3s ease;
 }
 
+html.dark .neu-inset-light {
+    background: var(--background-inset);
+}
+
 .neu-inset-light:hover {
-    border-color: rgba(54, 118, 216, 0.35);
-    box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+    border-color: var(--text-faint);
+    box-shadow: none;
 }
 
 .neu-inset-light:focus-within {
     border-color: var(--primary-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light), 0 0 0 3px rgba(54, 118, 216, 0.1);
+    box-shadow: 0 0 0 3px var(--primary-tint);
 }
+
+/* T1: the target language is the choice the user actually makes; the
+   source is usually auto-detected. */
+.neu-inset-light:has(#targetLang) {
+    border-color: var(--primary-light);
+}
+
+/* ========================================
+   Design note — importance tiers
+
+   Every element of the Translate flow is ranked, and its visual weight
+   follows its rank rather than its position in the markup:
+
+   T1  Act      language pickers, drop zone, Start, progress bar.
+                White card surface, 15-17px type, the only place the
+                accent colour is used as a fill.
+   T2  Check    file list, run figures, Pause/Interrupt, card titles.
+                13-14px ink, hairline controls.
+   T3  Tune     per-run options, the "already translated" zone, the
+                activity log. 12-13px muted text, no elevation.
+   T4  Chrome   tab nav, LLM status, UI language, theme, version.
+                11-13px, ghost controls, faint grey.
+
+   Escalation: a T3/T4 item moves up only while it needs attention
+   (LLM disconnected, fallback chunks), through state classes that
+   already exist (.status-dot.disconnected, .stat-card-critical).
+   ======================================== */
 
 /* ========================================
    Layout
    ======================================== */
 
 .container {
-    max-width: 900px;
+    max-width: 960px;
     margin: 0 auto;
 }
 
 /* ========================================
-   Header
+   Header (tier-4 chrome: LLM status, UI language, theme, version)
    ======================================== */
 
 .header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    padding: 1.5rem 3rem;
-    margin-bottom: 3rem;
-    background: rgba(240, 242, 245, 0.9);
-    backdrop-filter: blur(30px);
+    justify-content: flex-start;
+    gap: 0.25rem 1.5rem;
+    padding: 0.35rem 0.25rem 0;
+    margin-bottom: 0.75rem;
+    background: var(--background-outer);
     position: sticky;
     top: 0;
     z-index: 50;
     border-bottom: 1px solid var(--border-light);
-    border-radius: 2rem;
 }
 
 .header #themeToggleBtn {
-    min-width: 2.25rem;
-    width: 2.25rem;
-    height: 2.25rem;
+    min-width: 1.75rem;
+    width: 1.75rem;
+    height: 1.75rem;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: var(--text-faint);
     transition: all 0.3s ease;
 }
 
 .header #themeToggleBtn:hover {
-    transform: scale(1.08) rotate(15deg);
+    transform: none;
+    color: var(--text-dark);
+    background: var(--primary-tint);
 }
 
 .header #themeToggleBtn .material-symbols-outlined {
-    font-size: 1.125rem;
+    font-size: 1rem;
     transition: transform 0.3s ease;
 }
 
 .header .logo-section {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
 }
 
 .header .logo-icon {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
 }
 
 .header .logo-icon .material-symbols-outlined {
@@ -314,23 +360,20 @@ body {
 
 .header .logo-text h2 {
     color: var(--text-dark);
-    font-size: 1.5rem;
-    font-weight: 900;
-    letter-spacing: -0.025em;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     line-height: 1;
 }
 
 .header .logo-text p {
-    color: var(--text-muted-light);
-    font-size: 0.75rem;
-    font-weight: 500;
-    margin-top: 0.25rem;
+    display: none;
 }
 
 .header .logo-text .app-version {
-    color: var(--text-muted-light);
-    font-size: 0.7rem;
-    font-weight: 600;
+    color: var(--text-faint);
+    font-size: 0.6875rem;
+    font-weight: 400;
     letter-spacing: 0;
     margin-left: 0.35rem;
     vertical-align: middle;
@@ -339,32 +382,27 @@ body {
 .header .status-section {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.125rem;
+    margin-left: auto;
 }
 
 .header .status-indicator {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 0.9rem;
-    height: 2.25rem;
-    background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 1px solid var(--border-light);
-    border-radius: 9999px;
+    gap: 0.4rem;
+    padding: 0 0.5rem 0 0;
 }
 
 .header .header-lang-wrapper {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0 0.55rem 0 0.7rem;
-    height: 2.25rem;
+    gap: 0.25rem;
+    padding: 0 0.4rem;
+    height: 1.75rem;
     background: transparent;
-    border: 1px solid var(--border-light);
-    border-radius: 9999px;
-    color: var(--text-muted-light);
+    border: 0;
+    color: var(--text-faint);
     transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
     cursor: pointer;
 }
@@ -372,19 +410,18 @@ body {
 .header .header-lang-wrapper:hover,
 .header .header-lang-wrapper:focus-within {
     color: var(--text-dark);
-    border-color: var(--primary-light);
-    background: rgba(54, 118, 216, 0.04);
+    background: var(--primary-tint);
 }
 
 .header .header-lang-icon {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     line-height: 1;
     pointer-events: none;
 }
 
 .header .header-lang-display {
-    font-size: 0.72rem;
-    font-weight: 600;
+    font-size: 0.6875rem;
+    font-weight: 500;
     letter-spacing: 0.04em;
     line-height: 1;
     pointer-events: none;
@@ -393,10 +430,17 @@ body {
 }
 
 .header .header-lang-caret {
-    font-size: 0.95rem;
-    line-height: 1;
-    pointer-events: none;
-    opacity: 0.7;
+    display: none;
+}
+
+/* Top tabs. Their look lives in the template's inline <style> block,
+   which loads after this file; only the typeface and the compact vertical
+   padding are set here, and the padding needs !important to win over the
+   template's own `padding` shorthand. */
+.tab-nav .tab-btn {
+    font-family: var(--font-ui);
+    padding-top: calc(0.6rem * var(--ui-density-y)) !important;
+    padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
 }
 
 .header .header-lang-select {
@@ -432,22 +476,22 @@ body {
 }
 
 .header .status-indicator .status-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 9999px;
+    width: 0.4rem;
+    height: 0.4rem;
     background-color: #6b7280;
     transition: background-color 0.3s ease;
 }
 
-/* Status dot states */
+/* Status dot states. Only the two failure states pulse; the generic
+   .status-dot.checking animation must stay switched off here. */
 .header .status-indicator .status-dot.checking {
     background-color: #6b7280;
-    animation: pulse-gray 2s infinite;
+    animation: none;
 }
 
 .header .status-indicator .status-dot.connected {
     background-color: #22c55e;
-    animation: pulse-green 2s infinite;
+    animation: none;
 }
 
 .header .status-indicator .status-dot.disconnected {
@@ -462,19 +506,30 @@ body {
 
 .header .status-indicator .status-dot.waiting {
     background-color: #6b7280;
-    animation: pulse-gray 2s infinite;
+    animation: none;
 }
 
 .header .status-indicator span {
     font-size: 0.75rem;
-    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
-    color: #16a34a;
+    font-family: var(--font-ui);
+    color: var(--text-muted-light);
     transition: color 0.3s ease;
     min-width: 0;
-    max-width: 22rem;
+    max-width: 16rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Escalation: a broken connection is the one header fact worth reading. */
+.header .status-indicator:has(.status-dot.disconnected) span {
+    color: var(--danger-light-text);
+    font-weight: 600;
+}
+
+.header .status-indicator:has(.status-dot.error) span {
+    color: var(--warning-light-text);
+    font-weight: 600;
 }
 
 /* ========================================
@@ -483,36 +538,35 @@ body {
 
 .main-card {
     background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    box-shadow: var(--shadow-soft);
     border: 1px solid var(--border-light);
-    border-radius: 2.5rem;
     overflow: hidden;
-    margin-bottom: 2rem;
+    margin-bottom: calc(2rem * var(--ui-density-y));
 }
 
 .card-header {
     background: var(--background-light);
-    padding: 2rem;
+    padding: calc(2rem * var(--ui-density-y)) 1.25rem;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.6rem;
     border-bottom: 1px solid var(--border-light);
 }
 
 .card-header .material-symbols-outlined {
-    color: var(--primary-light);
-    font-size: 1.5rem;
+    color: var(--text-muted-light);
+    font-size: 1.15rem;
 }
 
 .card-header h2 {
     color: var(--text-dark);
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0;
 }
 
 .card-body {
-    padding: 2rem;
+    padding: calc(2rem * var(--ui-density-y)) 1.25rem;
     color: var(--text-dark);
 }
 
@@ -523,26 +577,23 @@ body {
 .form-group {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: calc(0.5rem * var(--ui-density-y));
 }
 
 .form-group label {
     color: var(--text-muted-light);
+    font-family: var(--font-ui);
     font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding-left: 0.25rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    padding-left: 0.125rem;
 }
 
 /* Prompt-options checkbox rows: shared layout for all toggles
    (Polish, Bilingual, Plain Text Mode, Text Cleanup, Disable Auto-Pause). */
 .option-item {
-    margin-bottom: 15px;
-}
-
-.option-item:last-child {
-    margin-bottom: 0;
+    margin-bottom: calc(15px * var(--ui-density-y));
 }
 
 .option-item__label {
@@ -563,7 +614,7 @@ body {
 .option-item__title {
     display: block;
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-dark);
     text-transform: none;
     letter-spacing: normal;
@@ -586,20 +637,21 @@ body {
     width: 100%;
     box-sizing: border-box;
     display: block;
-    height: 2.75rem;
-    min-height: 2.75rem;
-    max-height: 2.75rem;
+    /* Single-line controls fake their vertical centring with
+       line-height = height, so both read the same token. Textareas get
+       their multi-line geometry back below. */
+    height: var(--ui-control-h);
+    min-height: var(--ui-control-h);
+    max-height: var(--ui-control-h);
     padding: 0 1.25rem;
     margin: 0;
     background: #ffffff;
     border: none;
-    border-radius: 1rem;
     color: #1a1a1a;
     font-size: 1rem;
     font-family: var(--font-text);
-    line-height: 2.75rem;
+    line-height: var(--ui-control-h);
     transition: all 0.3s;
-    font-weight: 600;
     vertical-align: middle;
 }
 
@@ -607,16 +659,27 @@ body {
    Explicit rules force <input> and <select> to identical box geometry. */
 input.form-control,
 select.form-control {
+    height: var(--ui-control-h);
+    min-height: var(--ui-control-h);
+    max-height: var(--ui-control-h);
+    line-height: var(--ui-control-h);
+    padding: 0 1.25rem;
+}
+
+/* Tier 1: the two language pickers are the first decision of a run, so
+   they get a taller box and larger type than ordinary fields (their
+   weight lives with the other field weights, in the input-weight layer). */
+#sourceLang,
+#targetLang {
     height: 2.75rem;
     min-height: 2.75rem;
     max-height: 2.75rem;
     line-height: 2.75rem;
-    padding: 0 1.25rem;
+    font-size: 1.0625rem;
 }
 
 .neu-inset-light .form-control {
     background: #ffffff;
-    border-radius: 1rem;
 }
 
 /* The single-line geometry of .form-control (fixed 2.75rem height and
@@ -659,31 +722,35 @@ select.form-control {
 .btn {
     padding: 0.75rem 1.25rem;
     border: none;
-    border-radius: 0.75rem;
-    font-size: 1rem;
-    font-weight: 700;
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    letter-spacing: 0.025em;
+    letter-spacing: 0;
+}
+
+/* Compact vertical rhythm for regular buttons. Kept !important on purpose:
+   many buttons in the template and in the JS modules carry an inline
+   padding that this must override. .btn-sm, the glossary toolbar buttons
+   and the theme toggle size themselves. */
+.btn:not(.btn-sm):not(.glossary-toolbar-btn):not(#themeToggleBtn) {
+    padding-top: calc(0.75rem * var(--ui-density-y)) !important;
+    padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
 }
 
 .btn-primary {
     background: var(--primary-light);
     color: white;
-    box-shadow: 0 8px 20px rgba(54, 118, 216, 0.25);
+    box-shadow: none;
 }
 
-.btn-primary:hover {
-    box-shadow: 0 12px 30px rgba(54, 118, 216, 0.35);
-    transform: scale(1.02);
-}
-
-.btn-primary:active {
-    transform: scale(0.98);
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-light-hover);
 }
 
 .btn-primary:disabled {
@@ -695,24 +762,37 @@ select.form-control {
 .btn-secondary {
     background: var(--background-light);
     color: var(--text-dark);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
-    border: 1px solid var(--border-light);
+    box-shadow: none;
+    border: 1px solid var(--border-strong);
 }
 
 .btn-secondary:hover {
-    transform: translateY(-1px);
-    box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+    border-color: var(--text-faint);
 }
 
+/* T2 destructive: outlined, findable without competing with Start. */
 .btn-danger {
-    background: var(--danger-light);
-    color: white;
-    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
+    background: transparent;
+    color: var(--danger-light-text);
+    border: 1px solid var(--danger-light);
+    box-shadow: none;
 }
 
 .btn-danger:hover {
-    background: var(--danger-light-hover);
-    box-shadow: 0 12px 30px rgba(239, 68, 68, 0.35);
+    background: var(--danger-light-bg);
+}
+
+/* T1: the one filled, raised button of the screen. */
+#translateBtn {
+    min-height: 2.75rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    font-size: 0.9375rem;
+    box-shadow: 0 6px 14px -8px rgba(40, 58, 82, 0.6);
+}
+
+#translateBtn:disabled {
+    box-shadow: none;
 }
 
 /* Compact variant, for buttons that sit inside a row of text rather than in a
@@ -721,10 +801,6 @@ select.form-control {
    values still win here, this only gives the class a sane default. */
 .btn-sm {
     padding: 0.35rem 0.7rem;
-    border-radius: 0.5rem;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0;
 }
 
 /* ========================================
@@ -732,12 +808,10 @@ select.form-control {
    ======================================== */
 
 .file-upload {
-    margin: 2rem 0;
-    padding: 4rem;
-    border: 2px dashed rgba(54, 118, 216, 0.3);
-    border-radius: 3rem;
-    background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    margin: 1rem 0 0.5rem;
+    padding: 1.75rem 1.25rem;
+    border: 1.5px dashed var(--primary-tint-border);
+    background: var(--primary-tint);
     text-align: center;
     cursor: pointer;
     transition: all 0.3s;
@@ -745,29 +819,23 @@ select.form-control {
 }
 
 .file-upload:hover {
-    border-color: rgba(54, 118, 216, 0.6);
-    transform: scale(1.01);
+    border-color: var(--primary-light);
 }
 
 .file-upload.dragging {
     border-color: var(--primary-light);
-    background: linear-gradient(135deg, rgba(54, 118, 216, 0.05), rgba(54, 118, 216, 0.1));
+    background: rgba(62, 90, 120, 0.12);
 }
 
 .file-upload .upload-icon {
-    background: rgba(54, 118, 216, 0.1);
-    width: 5rem;
-    height: 5rem;
-    border-radius: 9999px;
+    background: var(--primary-light);
+    width: 2.5rem;
+    height: 2.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 1.5rem;
+    margin: 0 auto 0.6rem;
     transition: transform 0.3s;
-}
-
-.file-upload:hover .upload-icon {
-    transform: scale(1.1);
 }
 
 .file-upload .material-symbols-outlined {
@@ -775,81 +843,89 @@ select.form-control {
     color: var(--primary-light);
 }
 
+.file-upload .upload-icon .material-symbols-outlined {
+    font-size: 1.35rem;
+    color: #ffffff;
+}
+
 .file-upload h3 {
     color: var(--text-dark);
-    font-size: 1.5rem;
-    font-weight: 900;
-    margin-bottom: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
 }
 
 .file-upload p {
     color: var(--text-muted-light);
-    font-size: 1rem;
+    font-size: 0.8125rem;
 }
 
 .file-upload .browse-btn {
-    margin-top: 1rem;
-    padding: 0.75rem 2rem;
-    background: var(--primary-light);
-    color: white;
-    border-radius: 9999px;
-    font-weight: 700;
-    font-size: 0.875rem;
-    letter-spacing: 0.05em;
+    margin-top: 0.35rem;
+    padding: 0;
+    background: transparent;
+    color: var(--primary-light);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0;
     display: inline-block;
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
-/* Secondary (refinement) drop zone — same elevated rendering as the primary, just more compact */
-.file-upload-secondary {
-    margin: 0.75rem 0 1rem;
-    padding: 2rem;
-    border-radius: 2rem;
+/* T3: the "already translated" zone is an alternative path, so it is a
+   compact single row instead of a second hero drop zone. */
+.file-upload.file-upload-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem 0.75rem;
+    margin: 0 0 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px dashed var(--border-strong);
+    background: transparent;
+}
+
+.file-upload.file-upload-secondary:hover {
+    border-color: var(--text-faint);
 }
 
 .file-upload-secondary .upload-icon {
-    width: 3.5rem;
-    height: 3.5rem;
-    margin: 0 auto 1rem;
-}
-
-.file-upload-secondary .upload-icon .material-symbols-outlined {
-    font-size: 2rem;
+    display: none;
 }
 
 .file-upload-secondary h4 {
-    color: var(--text-dark);
-    font-size: 1.125rem;
-    font-weight: 900;
-    margin-bottom: 0.25rem;
+    margin: 0;
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
+    font-weight: 500;
 }
 
 .file-upload-secondary p {
+    flex-basis: 100%;
     color: var(--text-muted-light);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
 }
 
 /* Mode switch of the "already translated" zone (refine / fix a term) */
 .post-mode-switch {
     display: inline-flex;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    margin: 0.5rem 0 0.75rem;
-    border-radius: 9999px;
-    background: var(--background-light);
-    box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+    gap: 0.2rem;
+    padding: 0;
+    margin: 0;
 }
 
 .post-mode-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.4rem 1rem;
+    padding: 0.2rem 0.55rem;
     border: none;
-    border-radius: 9999px;
     background: transparent;
     color: var(--text-muted-light);
-    font-size: 0.8125rem;
-    font-weight: 700;
+    font-size: 0.75rem;
+    font-weight: 500;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
 }
@@ -864,8 +940,8 @@ select.form-control {
 }
 
 .post-mode-btn.active {
-    background: var(--primary-light);
-    color: white;
+    background: var(--llm-chip-bg);
+    color: var(--text-dark);
 }
 
 .post-mode-btn:disabled {
@@ -903,7 +979,6 @@ select.form-control {
     font-size: 0.8125rem;
     padding: 0.25rem 0.5rem;
     border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
     background: var(--background-light);
     color: var(--text-dark);
 }
@@ -914,11 +989,10 @@ select.form-control {
     letter-spacing: 0.05em;
     text-transform: uppercase;
     padding: 0.15rem 0.5rem;
-    border-radius: 0.5rem;
 }
 
 .file-item-controls .file-op-badge.op-translate {
-    background: rgba(54, 118, 216, 0.12);
+    background: rgba(62, 90, 120, 0.12);
     color: #2c5fb0;
 }
 
@@ -937,7 +1011,6 @@ select.form-control {
     margin: 0 0 1rem;
     padding: 1.25rem 1.5rem;
     border: 1px solid var(--border-light);
-    border-radius: 1.25rem;
 }
 
 .term-fix-panel h4 {
@@ -1023,44 +1096,48 @@ select.form-control {
    ======================================== */
 
 .progress-section {
-    margin-top: 2rem;
-    padding: 2rem;
+    margin-top: calc(2rem * var(--ui-density-y));
+    padding: calc(2rem * var(--ui-density-y)) 2rem;
     background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    box-shadow: var(--shadow-soft);
     border: 1px solid var(--border-light);
-    border-radius: 2rem;
 }
 
 .progress-section h3 {
     color: var(--text-dark);
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin-bottom: 1.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
 
+.progress-section h3 .material-symbols-outlined {
+    color: var(--text-muted-light);
+    font-size: 1.1rem;
+}
+
 .progress-bar-container {
-    height: 2.5rem;
-    background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 1px solid var(--border-light);
-    border-radius: 1.25rem;
+    height: 1.25rem;
+    background: var(--border-light);
+    border: 0;
     overflow: hidden;
-    margin: 1.5rem 0;
+    /* !important: a container in the template still carries an inline
+       margin-bottom that this vertical rhythm overrides. */
+    margin: calc(1.5rem * var(--ui-density-y)) 0 !important;
 }
 
 .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, var(--primary-light), #5a8ee8);
+    background: var(--primary-light);
     transition: width 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-weight: 700;
-    font-size: 0.875rem;
+    font-weight: 600;
+    font-size: 0.75rem;
 }
 
 /* ========================================
@@ -1070,16 +1147,17 @@ select.form-control {
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-    gap: 0.5rem;
-    margin: 1.5rem 0;
+    gap: 0.375rem;
+    /* !important: #openrouterCostGrid still carries an inline margin-top
+       that this vertical rhythm overrides. */
+    margin: calc(1.5rem * var(--ui-density-y)) 0 !important;
 }
 
 .stat-card {
+    position: relative;
     padding: 0.5rem 0.25rem;
-    background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+    background: transparent;
     border: 1px solid var(--border-light);
-    border-radius: 1rem;
     text-align: center;
     transition: transform 0.3s;
     display: flex;
@@ -1088,38 +1166,34 @@ select.form-control {
     align-items: center;
 }
 
-.stat-card:hover {
-    transform: translateY(-1px);
-}
-
+/* Also matched by .progress-section h3 above (display, alignment, gap). */
 .stat-card h3 {
-    font-size: 1.25rem;
-    color: var(--primary-light);
-    font-weight: 900;
-    margin-bottom: 0.15rem;
+    font-size: 1.0625rem;
+    color: var(--text-dark);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
 }
 
 .stat-card p {
     color: var(--text-muted-light);
-    font-size: 0.65rem;
-    font-weight: 600;
+    font-size: 0.625rem;
+    font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
-/* Alert state for a quality-signal counter (e.g. Fallbacks): solid blue fill
-   + white text, pulling from --primary-light (the same blue as the primary
-   action buttons). Red is reserved for actually destructive surfaces like
-   .btn-danger (Interrupt / Stop). */
+/* Alert state for a quality-signal counter (e.g. Fallbacks): fallbacks are a
+   quality warning, so amber rather than accent; red stays reserved for
+   destructive surfaces like .btn-danger (Interrupt / Stop). */
 .stat-card-critical {
-    background: var(--primary-light);
-    border-color: var(--primary-light);
-    color: white;
+    background: var(--warning-light-bg);
+    border-color: var(--warning-light-border);
+    color: var(--warning-light-text);
     cursor: pointer;
 }
-.stat-card-critical h3 { color: white; }
-.stat-card-critical p  { color: rgba(255, 255, 255, 0.92); }
-.stat-card-critical .stat-card-chevron { display: inline-block; color: white; }
+.stat-card-critical h3 { color: var(--warning-light-text); }
+.stat-card-critical p  { color: var(--warning-light-text); }
+.stat-card-critical .stat-card-chevron { display: inline-block; color: var(--warning-light-text); }
 .stat-card-critical[aria-expanded="true"] .stat-card-chevron {
     transform: rotate(180deg);
 }
@@ -1137,19 +1211,16 @@ select.form-control {
     color: white;
     transition: transform 0.2s ease;
 }
-.stat-card { position: relative; }
 
 /* Inline recommendation panel toggled by the Fallbacks card.
-   Spans the full progress section width and pulls from --primary-light to
-   stay visually paired with the .stat-card-critical above. Informational —
-   keeps the destructive red palette free for actually destructive actions. */
+   Spans the full progress section width and uses the same amber as the
+   .stat-card-critical above it. */
 .recommendation-panel {
     margin: 0.75rem 0 1rem;
     padding: 0.875rem 1rem;
-    background: var(--primary-light);
-    border: 1px solid var(--primary-light);
-    border-radius: 8px;
-    color: white;
+    background: var(--warning-light-bg);
+    border: 1px solid var(--warning-light-border);
+    color: var(--text-dark);
     font-size: 0.85rem;
     line-height: 1.5;
     white-space: pre-wrap;
@@ -1158,7 +1229,7 @@ select.form-control {
 .recommendation-panel strong {
     display: block;
     margin-bottom: 0.5rem;
-    color: white;
+    color: var(--warning-light-text);
 }
 .recommendation-list {
     margin: 0;
@@ -1168,13 +1239,13 @@ select.form-control {
     margin-top: 0.25rem;
 }
 .recommendation-link {
-    color: white;
+    color: var(--warning-light-text);
     text-decoration: underline;
     text-underline-offset: 2px;
     font-weight: 600;
     cursor: pointer;
 }
-.recommendation-link:hover { color: rgba(255, 255, 255, 0.85); }
+.recommendation-link:hover { color: var(--warning-light-text); }
 
 /* ========================================
    Pre-flight Zone
@@ -1205,11 +1276,6 @@ select.form-control {
 .preflight-zone--locked .preflight-dismissed-link,
 .preflight-zone--locked .preflight-panel * {
     pointer-events: none;
-}
-.preflight-zone--locked .preflight-panel {
-    /* Flatten the inset shadow so the panel reads as an inert plate instead
-       of a still-raised, still-inviting surface. */
-    box-shadow: none;
 }
 
 /* Advised-options row */
@@ -1243,11 +1309,10 @@ select.form-control {
     align-items: center;
     gap: 4px;
     padding: 2px 10px;
-    border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.6;
-    font-family: inherit;
+    font-family: var(--font-ui);
     background: color-mix(in srgb, var(--text-muted-light) 6%, transparent);
     color: var(--text-muted-light);
     border: 1px dashed color-mix(in srgb, var(--text-muted-light) 55%, transparent);
@@ -1291,7 +1356,6 @@ select.form-control {
     height: 14px;
     padding: 0;
     border: none;
-    border-radius: 999px;
     background: transparent;
     color: inherit;
     font-size: 0.7rem;
@@ -1337,7 +1401,6 @@ select.form-control {
     text-align: left;
     background: var(--warning-light-bg);
     border-left: 3px solid var(--warning-light-border);
-    border-radius: 0.5rem;
     color: var(--warning-light-text);
     font-size: 0.8125rem;
     line-height: 1.5;
@@ -1374,8 +1437,7 @@ select.form-control {
 /* Adjust/Collapse toggle. Rotation is keyed off aria-expanded rather than an
    inline style.transform set from JS, so the state survives a re-render of the
    toggle's own markup and stays in one place instead of being split between the
-   stylesheet and a JS assignment. .is-open is an equivalent hook for JS that
-   prefers toggling a class over an ARIA attribute. */
+   stylesheet and a JS assignment. */
 .preflight-toggle {
     display: flex;
     align-items: center;
@@ -1402,26 +1464,27 @@ select.form-control {
     font-size: 1.05rem;
     transition: transform 0.2s ease;
 }
-.preflight-toggle[aria-expanded="true"] .material-symbols-outlined,
-.preflight-toggle.is-open .material-symbols-outlined {
+.preflight-toggle[aria-expanded="true"] .material-symbols-outlined {
     transform: rotate(180deg);
 }
 /* display: flex above beats the UA [hidden] rule, so the attribute needs an
    explicit companion — same pattern as the other containers in this block. */
 .preflight-toggle[hidden] { display: none; }
 
-/* Expandable panel. Mirrors .neu-inset-light's shadow recipe (the recessed
-   surface used inside .main-card) via --background-outer rather than that
-   rule's literal #ffffff / #222222, so it reads as one more inner surface of
-   the same card rather than a new floating card. */
+/* Expandable panel: an inset surface inside .main-card, so it reads as one
+   more inner surface of the same card rather than a new floating card. */
 .preflight-panel {
     margin-top: 10px;
     padding: 1.25rem 1.5rem;
     text-align: left;
-    background: var(--background-outer);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    border: 2px solid color-mix(in srgb, var(--primary-light) 15%, transparent);
-    border-radius: 1rem;
+    background: var(--background-inset);
+    box-shadow: none;
+    border: 1px solid var(--border-light);
+}
+
+.preflight-panel h4 {
+    font-size: 0.8125rem;
+    font-weight: 600;
 }
 .preflight-panel[hidden] { display: none; }
 
@@ -1503,7 +1566,6 @@ select.form-control {
     text-align: left;
     background: var(--background-outer);
     border-left: 3px solid var(--primary-light);
-    border-radius: 0.75rem;
 }
 
 /* Escalated variant for the one rule that is a genuine risk rather than a
@@ -1552,21 +1614,23 @@ select.form-control {
     min-height: 200px;
     overflow-y: auto;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     border: 1px solid var(--border-light);
-    border-radius: 2rem;
     padding: 2rem;
     padding-right: 1.5rem; /* Réduit pour faire de la place à la scrollbar */
     font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
     font-size: 0.875rem;
     margin-top: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
 }
 
-/* Last Translation Preview - Dynamic height based on MAX_TOKENS_PER_CHUNK */
+/* Last Translation Preview - Dynamic height based on MAX_TOKENS_PER_CHUNK.
+   Book text is read, not operated: it keeps the serif. */
 #lastTranslationPreview {
-    height: var(--preview-height) !important;
-    min-height: var(--preview-height) !important;
-    max-height: var(--preview-height) !important;
+    height: var(--preview-height);
+    min-height: var(--preview-height);
+    max-height: var(--preview-height);
+    font-family: var(--font-reading);
 }
 
 /* Scrollbar visible uniquement pour log-container */
@@ -1580,19 +1644,13 @@ select.form-control {
 }
 
 .log-container::-webkit-scrollbar-thumb {
-    background: var(--shadow-dark);
+    background: transparent;
     border-radius: 4px;
     transition: background 0.3s ease;
 }
 
 .log-container::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted-light);
-}
-
-/* Scrollbar pour Firefox */
-.log-container {
-    scrollbar-width: thin;
-    scrollbar-color: var(--shadow-dark) transparent;
 }
 
 .log-entry {
@@ -1618,7 +1676,6 @@ select.form-control {
     background: var(--success-light-bg);
     border-left: 3px solid var(--success-light);
     padding: 0.75rem;
-    border-radius: 6px;
     display: block;
     margin: 1rem 0;
     line-height: 1.6;
@@ -1630,31 +1687,11 @@ select.form-control {
     border: 1px solid var(--border-color);
     border-left: 4px solid var(--primary);
     padding: 1rem;
-    border-radius: 6px;
     display: block;
     margin: 1rem 0;
     line-height: 1.8;
     font-family: 'Courier New', monospace;
     font-size: 0.9rem;
-}
-
-.log-content {
-    color: var(--text-dark);
-}
-
-.log-content.success {
-    color: var(--success-light);
-    font-weight: 700;
-}
-
-.log-content.info {
-    color: var(--primary-light);
-    font-weight: 500;
-}
-
-.log-content.error {
-    color: #ef4444;
-    font-weight: 700;
 }
 
 /* ========================================
@@ -1678,37 +1715,28 @@ select.form-control {
     background: transparent;
 }
 
-/* Hide scrollbars for Firefox */
-* {
-    scrollbar-width: none;
-}
-
-/* Hide scrollbars for IE and Edge Legacy */
-* {
-    -ms-overflow-style: none;
-}
-
 /* ========================================
    Toggle Sections
    ======================================== */
 
 .prompt-options-toggle {
     cursor: pointer;
-    padding: 1rem 1.5rem;
-    background: var(--background-light);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
-    border: 1px solid var(--border-light);
-    border-radius: 1rem;
+    padding: 0.5rem 0.25rem;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--border-light);
+    box-shadow: none;
     margin-bottom: 1rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    color: var(--text-dark);
+    color: var(--text-muted-light);
+    font-size: 0.8125rem;
     transition: background 0.2s, border-radius 0.2s, margin 0.2s, box-shadow 0.2s;
 }
 
 .prompt-options-toggle:hover {
-    box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+    color: var(--text-dark);
 }
 
 .prompt-options-toggle span {
@@ -1725,25 +1753,16 @@ select.form-control {
    fuse header + body into a single cartouche. */
 .prompt-options-toggle:has(+ div:not(.hidden)) {
     margin-bottom: 0;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
     border-bottom: 1px solid var(--border-light);
-    box-shadow: -5px -5px 10px var(--shadow-light), 5px 0 10px var(--shadow-dark);
 }
 
-.prompt-options-toggle:has(+ div:not(.hidden)):hover {
-    box-shadow: -5px -5px 10px var(--shadow-light), 5px 0 10px var(--shadow-dark);
-}
 
 .prompt-options-toggle + div:not(.hidden) {
     padding: 1.5rem;
     background: var(--background-light);
     border: 1px solid var(--border-light);
     border-top: none;
-    border-bottom-left-radius: 1rem;
-    border-bottom-right-radius: 1rem;
     margin-bottom: 1rem;
-    box-shadow: -5px 0 10px var(--shadow-light), 5px 5px 10px var(--shadow-dark);
 }
 
 /* ========================================
@@ -1751,10 +1770,10 @@ select.form-control {
    ======================================== */
 
 input[type="checkbox"] {
-    width: 1.25rem;
-    height: 1.25rem;
-    min-width: 1.25rem;
-    min-height: 1.25rem;
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    min-height: 1rem;
     cursor: pointer;
     accent-color: var(--primary-light);
     flex-shrink: 0;
@@ -1768,7 +1787,6 @@ input[type="checkbox"] {
     width: 100%;
     border-collapse: collapse;
     background: var(--background-light);
-    border-radius: 1.5rem;
     overflow: hidden;
 }
 
@@ -1778,7 +1796,7 @@ input[type="checkbox"] {
     max-height: calc(6 * 3rem); /* 6 rows * ~3rem height per row (compact) */
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: var(--shadow-dark) transparent;
+    scrollbar-color: transparent transparent;
 }
 
 .file-table thead,
@@ -1790,6 +1808,7 @@ input[type="checkbox"] {
 
 /* Compact table header */
 .file-table thead th {
+    font-family: var(--font-ui);
     padding: 0.75rem 0.5rem;
 }
 
@@ -1802,7 +1821,7 @@ input[type="checkbox"] {
 }
 
 .file-table tbody::-webkit-scrollbar-thumb {
-    background: var(--shadow-dark);
+    background: transparent;
     border-radius: 3px;
 }
 
@@ -1811,7 +1830,7 @@ input[type="checkbox"] {
 }
 
 .file-table thead tr {
-    background: rgba(54, 118, 216, 0.05);
+    background: rgba(62, 90, 120, 0.05);
 }
 
 .file-table th {
@@ -1830,7 +1849,7 @@ input[type="checkbox"] {
 }
 
 .file-table tbody tr:hover {
-    background: rgba(54, 118, 216, 0.03);
+    background: rgba(62, 90, 120, 0.03);
 }
 
 .file-table td {
@@ -1874,10 +1893,8 @@ input[type="checkbox"] {
 .file-action-btn {
     padding: 0;
     background: var(--background-light);
-    box-shadow: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
     border: 1px solid var(--border-light);
     color: var(--text-dark);
-    border-radius: 0.375rem;
     cursor: pointer;
     font-size: 1rem;
     font-weight: 600;
@@ -1892,7 +1909,6 @@ input[type="checkbox"] {
 
 .file-action-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 .file-action-btn.download {
@@ -1946,10 +1962,8 @@ input[type="checkbox"] {
 .message {
     position: relative;
     padding: 1rem 2.75rem 1rem 1.5rem;
-    border-radius: 1rem;
     margin: 1rem 0;
     font-weight: 600;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 .message .message-dismiss {
@@ -1961,7 +1975,6 @@ input[type="checkbox"] {
     color: inherit;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
-    border-radius: 0.5rem;
     font-size: 1.25rem;
     line-height: 1;
     font-weight: 700;
@@ -1999,7 +2012,6 @@ input[type="checkbox"] {
     padding: 1.5rem 2rem;
     margin-top: 3rem;
     border-top: 1px solid var(--border-light);
-    border-radius: 2rem;
 }
 
 .footer-links {
@@ -2049,7 +2061,6 @@ input[type="checkbox"] {
     padding: 1.5rem;
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
     border: 1px solid rgba(34, 197, 94, 0.3);
-    border-radius: 1.5rem;
 }
 
 .gpu-status {
@@ -2057,7 +2068,6 @@ input[type="checkbox"] {
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    border-radius: 1rem;
     font-size: 0.875rem;
     transition: all 0.3s ease;
 }
@@ -2074,16 +2084,9 @@ input[type="checkbox"] {
     color: #dc2626;
 }
 
-.gpu-status.gpu-checking {
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.15) 100%);
-    border: 1px solid rgba(251, 191, 36, 0.4);
-    color: #f59e0b;
-}
-
 .status-dot {
     width: 10px;
     height: 10px;
-    border-radius: 50%;
     flex-shrink: 0;
 }
 
@@ -2175,9 +2178,7 @@ input[type="checkbox"] {
     appearance: none;
     width: 100%;
     height: 8px;
-    border-radius: 4px;
     background: var(--background-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
     outline: none;
     cursor: pointer;
     margin-top: 0.5rem;
@@ -2191,7 +2192,6 @@ input[type="checkbox"] {
     border-radius: 50%;
     background: var(--primary-light);
     cursor: pointer;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
     transition: all 0.2s;
 }
 
@@ -2206,7 +2206,6 @@ input[type="checkbox"] {
     background: var(--primary-light);
     cursor: pointer;
     border: none;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
     transition: all 0.2s;
 }
 
@@ -2223,7 +2222,6 @@ input[type="checkbox"] {
     font-weight: 600;
     margin-left: 0.5rem;
     padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
     vertical-align: middle;
 }
 
@@ -2260,7 +2258,6 @@ input[type="checkbox"] {
 .modal-content {
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 2rem;
     width: 90%;
     max-width: 600px;
     max-height: 90vh;
@@ -2325,8 +2322,6 @@ input[type="checkbox"] {
     background: var(--background-light);
     border: 1px solid var(--success-light);
     border-left: 4px solid var(--success-light);
-    border-radius: 1rem;
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
@@ -2356,7 +2351,6 @@ input[type="checkbox"] {
     width: 48px;
     height: 72px;
     object-fit: cover;
-    border-radius: 3px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     display: block;
 }
@@ -2399,7 +2393,6 @@ input[type="checkbox"] {
     color: var(--text-muted-light);
     cursor: pointer;
     padding: 0.25rem;
-    border-radius: 0.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2459,7 +2452,6 @@ input[type="checkbox"] {
    advice surfaces stay visually paired. */
 .completion-card__warning {
     background: var(--primary-light);
-    border-radius: 8px;
     padding: 0.75rem 1rem;
     color: white;
     font-size: 0.85rem;
@@ -2521,7 +2513,6 @@ input[type="checkbox"] {
     gap: 0.3rem;
     background: rgba(255, 255, 255, 0.15);
     border: 1px solid rgba(255, 255, 255, 0.45);
-    border-radius: 6px;
     padding: 0.3rem 0.6rem;
     color: white;
     font-family: inherit;
@@ -2572,14 +2563,13 @@ input[type="checkbox"] {
     margin-top: 10px;
     padding: 8px;
     border: 1px solid var(--warning-light-border);
-    border-radius: 6px;
     background: var(--warning-light-bg);
     color: var(--warning-light-text);
     font-size: 12px;
 }
 
 /* Inside the completion card the panel sits on the blue warning block, and the
-   neumorphic .form-control / .btn styles are built against the light surface:
+   .form-control / .btn styles are built against the light surface:
    on blue a <select> loses its box entirely and .btn-primary loses its fill, so
    the panel read as a paragraph with a bold heading instead of a form with a
    submit button.
@@ -2591,7 +2581,6 @@ input[type="checkbox"] {
     margin-top: 0.85rem;
     padding: 0.9rem 1rem 1rem;
     border-top: none;
-    border-radius: 10px;
     background: var(--background-light);
     color: var(--text-dark);
 }
@@ -2622,9 +2611,7 @@ input[type="range"] {
     width: 100%;
     height: 6px;
     background: var(--background-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
     outline: none;
-    border-radius: 3px;
     cursor: pointer;
 }
 
@@ -2636,7 +2623,6 @@ input[type="range"]::-webkit-slider-thumb {
     background: var(--primary-light);
     cursor: pointer;
     border-radius: 50%;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -2646,7 +2632,6 @@ input[type="range"]::-moz-range-thumb {
     cursor: pointer;
     border-radius: 50%;
     border: none;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
 
 /* ========================================
@@ -2664,9 +2649,7 @@ input[type="range"]::-moz-range-thumb {
     padding: 1rem;
     margin: 0;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     border: 1px solid var(--border-light);
-    border-radius: 1.5rem;
 }
 
 .file-item {
@@ -2678,7 +2661,6 @@ input[type="range"]::-moz-range-thumb {
     margin-bottom: 8px;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.75rem;
     transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
@@ -2697,13 +2679,13 @@ input[type="range"]::-moz-range-thumb {
 
 /* Clickable file items (Queued status) */
 .file-item[style*="cursor: pointer"]:hover {
-    box-shadow: 0 2px 8px rgba(54, 118, 216, 0.15);
+    box-shadow: 0 2px 8px rgba(62, 90, 120, 0.15);
     transform: translateY(-1px);
     border-color: var(--primary-light);
 }
 
 .file-item[style*="cursor: pointer"]:hover:not(.file-active) {
-    background: rgba(54, 118, 216, 0.03);
+    background: rgba(62, 90, 120, 0.03);
 }
 
 /* Non-clickable file items (Processing/Completed) */
@@ -2715,7 +2697,7 @@ input[type="range"]::-moz-range-thumb {
 .file-item.file-active {
     border-color: var(--primary-light);
     border-width: 2px;
-    background: linear-gradient(135deg, rgba(54, 118, 216, 0.05) 0%, rgba(54, 118, 216, 0.02) 100%);
+    background: linear-gradient(135deg, rgba(62, 90, 120, 0.05) 0%, rgba(62, 90, 120, 0.02) 100%);
 }
 
 .file-item.file-active::before {
@@ -2726,10 +2708,10 @@ input[type="range"]::-moz-range-thumb {
     bottom: 0;
     width: 4px;
     background: var(--primary-light);
-    border-radius: 0.75rem 0 0 0.75rem;
 }
 
 .file-active-badge {
+    font-family: var(--font-ui);
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -2739,8 +2721,7 @@ input[type="range"]::-moz-range-thumb {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--primary-light);
-    background: rgba(54, 118, 216, 0.1);
-    border-radius: 4px;
+    background: rgba(62, 90, 120, 0.1);
     margin-left: 8px;
 }
 
@@ -2752,8 +2733,7 @@ input[type="range"]::-moz-range-thumb {
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    border-radius: 4px;
-    background: rgba(54, 118, 216, 0.05);
+    background: rgba(62, 90, 120, 0.05);
     font-size: 2rem;
 }
 
@@ -2761,7 +2741,6 @@ input[type="range"]::-moz-range-thumb {
     width: 48px;
     height: 64px;
     object-fit: cover;
-    border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
@@ -2789,7 +2768,6 @@ input[type="range"]::-moz-range-thumb {
     background: transparent;
     color: var(--text-muted-light);
     cursor: pointer;
-    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2840,47 +2818,18 @@ html.dark .file-info {
     border: 1px solid var(--border-light) !important;
     padding: 20px;
     margin-bottom: 15px;
-    border-radius: 1rem !important;
     background: var(--background-light) !important;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .resumable-job-card:hover {
     transform: translateY(-2px);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
 }
 
 #resumableJobsList {
     padding: 1rem;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     border: 1px solid var(--border-light);
-    border-radius: 1.5rem;
-}
-
-/* ========================================
-   Responsive Design
-   ======================================== */
-
-@media (max-width: 768px) {
-    body {
-        padding: 1rem;
-    }
-
-    .header {
-        flex-direction: column;
-        gap: 1rem;
-        padding: 1rem;
-    }
-
-    .card-body {
-        padding: 1.5rem;
-    }
-
-    .file-upload {
-        padding: 2rem;
-    }
 }
 
 /* ========================================
@@ -2897,23 +2846,25 @@ html.dark .file-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
+    padding: calc(0.75rem * var(--ui-density-y)) 1rem;
     background: transparent;
     border: none;
     cursor: pointer;
     width: 100%;
     min-width: 0;
     overflow: hidden;
-    min-height: 44px;
+    /* Same token as the native controls: the custom dropdown and a
+       <select> sitting side by side must line up. */
+    min-height: var(--ui-control-h);
     transition: background 0.2s;
 }
 
 .searchable-select-display:hover {
-    background: rgba(54, 118, 216, 0.05);
+    background: rgba(62, 90, 120, 0.05);
 }
 
 .searchable-select.open .searchable-select-display {
-    background: rgba(54, 118, 216, 0.08);
+    background: rgba(62, 90, 120, 0.08);
 }
 
 .searchable-select-value {
@@ -2931,12 +2882,12 @@ html.dark .file-info {
 }
 
 .searchable-select-badge {
+    font-family: var(--font-ui);
     font-size: 0.7rem;
     font-weight: 600;
     padding: 0.2rem 0.5rem;
-    background: rgba(54, 118, 216, 0.12);
+    background: rgba(62, 90, 120, 0.12);
     color: var(--primary-light);
-    border-radius: 9999px;
     white-space: nowrap;
 }
 
@@ -2959,7 +2910,6 @@ html.dark .file-info {
     z-index: 12000;
     background: var(--background-light);
     border: 2px solid var(--primary-light);
-    border-radius: 1rem;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
     max-height: 0;
     overflow: hidden;
@@ -2983,9 +2933,9 @@ html.dark .file-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
+    padding: calc(0.75rem * var(--ui-density-y)) 1rem;
     border-bottom: 1px solid var(--border-light);
-    background: rgba(54, 118, 216, 0.03);
+    background: rgba(62, 90, 120, 0.03);
     flex: 0 0 auto; /* never shrink when dropdown height is tight */
 }
 
@@ -3017,7 +2967,6 @@ html.dark .file-info {
     padding: 0.25rem;
     cursor: pointer;
     color: var(--text-muted-light);
-    border-radius: 50%;
     transition: all 0.2s;
 }
 
@@ -3034,7 +2983,7 @@ html.dark .file-info {
 .searchable-select-options {
     list-style: none;
     margin: 0;
-    padding: 0.5rem 0;
+    padding: calc(0.5rem * var(--ui-density-y)) 0;
     /* Fill the remaining dropdown height (after the search header) and scroll.
        min-height:0 lets the flex item shrink below its content size. */
     flex: 1 1 auto;
@@ -3043,7 +2992,8 @@ html.dark .file-info {
 }
 
 .searchable-select-option {
-    padding: 0.625rem 1rem;
+    /* Floored so a dropdown row stays a usable click target. */
+    padding: max(0.3rem, calc(0.625rem * var(--ui-density-y))) 1rem;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -3053,11 +3003,11 @@ html.dark .file-info {
 
 .searchable-select-option:hover,
 .searchable-select-option.highlighted {
-    background: rgba(54, 118, 216, 0.08);
+    background: rgba(62, 90, 120, 0.08);
 }
 
 .searchable-select-option.selected {
-    background: rgba(54, 118, 216, 0.12);
+    background: rgba(62, 90, 120, 0.12);
 }
 
 .searchable-select-option .option-check {
@@ -3101,7 +3051,8 @@ html.dark .file-info {
 
 /* Group headers - sticky with opaque background */
 .searchable-select-group {
-    padding: 0.625rem 1rem 0.375rem;
+    font-family: var(--font-ui);
+    padding: calc(0.625rem * var(--ui-density-y)) 1rem calc(0.375rem * var(--ui-density-y));
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -3120,7 +3071,7 @@ html.dark .file-info {
 
 /* No results */
 .searchable-select-no-results {
-    padding: 1.5rem 1rem;
+    padding: calc(1.5rem * var(--ui-density-y)) 1rem;
     text-align: center;
     color: var(--text-muted-light);
     font-size: 0.875rem;
@@ -3209,7 +3160,6 @@ html.dark .searchable-select-group {
     width: 20px;
     height: 20px;
     flex-shrink: 0;
-    border-radius: 4px;
     object-fit: contain;
 }
 
@@ -3244,7 +3194,6 @@ html.dark .searchable-select-group {
     align-items: flex-start;
     gap: 0.55rem;
     padding: 0.7rem 0.9rem 0.7rem 0.85rem;
-    border-radius: 0.65rem;
     background: var(--background-outer);
     color: var(--text-dark);
     border: 1px solid var(--border-light);
@@ -3284,7 +3233,6 @@ html.dark .searchable-select-group {
     color: var(--text-muted-light);
     display: flex;
     align-items: center;
-    border-radius: 4px;
 }
 .app-toast .app-toast-close:hover {
     color: var(--text-dark);
@@ -3358,14 +3306,13 @@ html.dark .searchable-select-group {
     padding: 0.45rem 0.7rem;
     background: var(--background-outer);
     border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
     color: var(--text-dark);
     font-size: 0.875rem;
 }
 .glossary-search-row input:focus {
     outline: none;
     border-color: var(--primary-light);
-    box-shadow: 0 0 0 3px rgba(54, 118, 216, 0.15);
+    box-shadow: 0 0 0 3px rgba(62, 90, 120, 0.15);
 }
 .glossary-search-count {
     color: var(--text-muted-light);
@@ -3380,7 +3327,6 @@ html.dark .searchable-select-group {
     gap: 0.5rem;
     margin: 0.75rem 0 0.75rem;
     padding: 0.55rem 0.75rem;
-    border-radius: 6px;
     background: var(--background-light);
     border: 1px solid var(--border-light);
     color: var(--text-dark);
@@ -3395,7 +3341,6 @@ html.dark .searchable-select-group {
 }
 .glossary-hint code {
     padding: 1px 5px;
-    border-radius: 3px;
     background: rgba(0, 0, 0, 0.05);
     font-size: 0.85em;
 }
@@ -3431,7 +3376,6 @@ html.dark .glossary-hint code {
     margin-bottom: 0.6rem;
     background: var(--info-light-bg);
     border: 1px solid var(--info-light);
-    border-radius: 0.55rem;
     font-size: 0.85rem;
 }
 .glossary-bulk-bar .glossary-bulk-count {
@@ -3442,7 +3386,6 @@ html.dark .glossary-hint code {
     padding: 0.3rem 0.5rem;
     background: var(--background-outer);
     border: 1px solid var(--border-light);
-    border-radius: 0.35rem;
     color: var(--text-dark);
     font-size: 0.85rem;
 }
@@ -3456,7 +3399,6 @@ html.dark .glossary-hint code {
     padding: 0.6rem 0.8rem;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.55rem;
     font-size: 0.85rem;
     color: var(--text-dark);
     display: flex;
@@ -3510,7 +3452,7 @@ html.dark .glossary-info-card .glossary-info-warn {
 .glossary-drop-target.is-drag-over {
     outline: 2px dashed var(--primary-light);
     outline-offset: -6px;
-    background: rgba(54, 118, 216, 0.06);
+    background: rgba(62, 90, 120, 0.06);
 }
 
 /* NER status dots animation */
@@ -3523,7 +3465,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     width: 6px;
     height: 6px;
     background: var(--primary-light);
-    border-radius: 50%;
     animation: glossary-ner-bounce 1.2s infinite ease-in-out both;
 }
 .glossary-ner-loading .dot:nth-child(2) { animation-delay: 0.15s; }
@@ -3542,14 +3483,13 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 1.4rem 1rem;
     background: var(--background-light);
     border: 1px dashed var(--border-light);
-    border-radius: 0.6rem;
     color: var(--text-muted-light);
     transition: background 0.15s, border-color 0.15s;
     text-align: center;
 }
 .glossary-ner-dropzone.is-drag-over {
     border-color: var(--primary-light);
-    background: rgba(54, 118, 216, 0.08);
+    background: rgba(62, 90, 120, 0.08);
 }
 .glossary-ner-dropzone .ner-dropzone-primary {
     display: flex;
@@ -3599,7 +3539,6 @@ html.dark .glossary-info-card .glossary-info-warn {
    live in their own row below. */
 .style-editor-header {
     flex-wrap: wrap;
-    padding: 1.25rem 2rem;
     /* The toolbar row right below shares the same background and carries the
        separator, so the header must not draw a second rule between them. */
     border-bottom: none;
@@ -3618,10 +3557,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     flex: 1 1 10rem;
     width: auto;
     min-width: 8rem;
-    height: 2.25rem;
-    min-height: 2.25rem;
-    max-height: 2.25rem;
-    line-height: 2.25rem;
     padding: 0 0.75rem;
     font-size: 0.95rem;
     border: 1px solid var(--border-light);
@@ -3665,7 +3600,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 0.75rem 0.85rem;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.6rem;
     transition: opacity 0.15s, border-color 0.15s;
 }
 
@@ -3680,7 +3614,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 0.15rem 0.55rem;
     background: var(--background-outer);
     border: 1px solid var(--border-light);
-    border-radius: 999px;
     color: var(--text-muted-light);
     font-size: 0.72rem;
     letter-spacing: 0.03em;
@@ -3753,7 +3686,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 0.5rem 0.65rem;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
     font-size: 0.85rem;
 }
 .glossary-ner-file-pill .ner-file-pill-name {
@@ -3774,7 +3706,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     color: var(--text-muted-light);
     cursor: pointer;
     padding: 0.15rem;
-    border-radius: 0.3rem;
     line-height: 0;
 }
 .glossary-ner-file-pill .ner-file-clear-btn:hover {
@@ -3806,7 +3737,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     white-space: pre-wrap;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
     padding: 0.7rem 0.9rem;
     font-family: 'Courier New', monospace;
     font-size: 0.8rem;
@@ -3869,7 +3799,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 0.5rem 0.75rem;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
     color: var(--text-dark);
     font-size: 0.9rem;
     font-variant-numeric: tabular-nums;
@@ -3885,7 +3814,7 @@ html.dark .glossary-info-card .glossary-info-warn {
 .ner-settings-input:focus {
     outline: none;
     border-color: var(--primary-light);
-    box-shadow: 0 0 0 3px rgba(54, 118, 216, 0.12);
+    box-shadow: 0 0 0 3px rgba(62, 90, 120, 0.12);
 }
 .ner-status {
     margin-left: auto;
@@ -3905,7 +3834,6 @@ html.dark .glossary-info-card .glossary-info-warn {
     padding: 0.7rem 1rem;
     background: rgba(245, 158, 11, 0.12);
     border: 1px solid rgba(245, 158, 11, 0.35);
-    border-radius: 0.55rem;
     color: var(--text-dark);
     font-size: 0.85rem;
     line-height: 1.4;
@@ -3954,7 +3882,6 @@ html.dark .ner-warnings {
     max-height: 380px;
     overflow-y: auto;
     border: 1px solid var(--border-light);
-    border-radius: 0.6rem;
     background: var(--background-light);
 }
 .ner-results-table-wrap #ner-candidates-table {
@@ -3977,14 +3904,11 @@ html.dark .ner-warnings {
     gap: 0.5rem;
     margin-top: 0.6rem;
     padding: 0.45rem 0.75rem;
-    border-radius: 0.6rem;
     background: var(--background-light);
     color: var(--text-dark);
     font-size: 0.85rem;
     line-height: 1.2;
     border: 1px solid var(--border-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark),
-                inset -2px -2px 4px var(--shadow-light);
     user-select: none;
     transition: background 0.15s ease, color 0.15s ease;
 }
@@ -4004,7 +3928,6 @@ html.dark .ner-warnings {
     border: 1px solid var(--border-light);
     color: var(--primary-light);
     padding: 0.15rem 0.55rem;
-    border-radius: 0.4rem;
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
@@ -4074,7 +3997,6 @@ html.dark .cost-badge.cost-error {
     padding: 0.5rem 0.75rem;
     background: var(--info-light-bg);
     color: var(--info-light);
-    border-radius: 0.5rem;
     font-size: 0.8125rem;
 }
 
@@ -4090,10 +4012,8 @@ html.dark .cost-badge.cost-error {
     padding: 0.75rem 1rem;
     background: var(--info-light-bg);
     border: 1px solid var(--info-light);
-    border-radius: 0.75rem;
     color: var(--text-dark);
     font-size: 0.9rem;
-    box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
 }
 .update-banner.hidden { display: none; }
 .update-banner__text { flex: 1 1 auto; }
@@ -4108,7 +4028,6 @@ html.dark .cost-badge.cost-error {
     padding: 0.45rem 0.85rem;
     font-size: 0.85rem;
     font-weight: 600;
-    border-radius: 0.5rem;
 }
 .update-banner__close {
     background: transparent;
@@ -4116,7 +4035,6 @@ html.dark .cost-badge.cost-error {
     color: var(--text-muted-light);
     cursor: pointer;
     padding: 0.25rem;
-    border-radius: 0.4rem;
     display: inline-flex;
     align-items: center;
     line-height: 1;
@@ -4145,7 +4063,6 @@ html.dark .update-banner__close:hover {
 .update-overlay__panel {
     background: var(--background-outer);
     color: var(--text-dark);
-    border-radius: 1rem;
     padding: 1.5rem 1.75rem;
     max-width: 640px;
     width: 100%;
@@ -4167,7 +4084,6 @@ html.dark .update-banner__close:hover {
     overflow-y: auto;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
     padding: 0.75rem;
     font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
     font-size: 0.78rem;
@@ -4187,7 +4103,6 @@ html.dark .update-banner__close:hover {
     padding: 0.5rem 0.75rem;
     background: rgba(220, 38, 38, 0.12);
     color: #dc2626;
-    border-radius: 0.5rem;
     font-size: 0.85rem;
 }
 html.dark .update-overlay__error { color: #fca5a5; }
@@ -4206,10 +4121,8 @@ html.dark .update-overlay__error { color: #fca5a5; }
 }
 
 .sample-column-card {
-    /* Use the recessed surface tone (not pure white) so the white input wells
-       inside the card stand out. The neumorphic shadow keeps it raised. */
+    /* Card surface tone, so the input wells inside the card stand out. */
     background: var(--background-light);
-    box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
 }
 
 /* While a Run is in flight, lock the column editor: editing a provider/model
@@ -4217,10 +4130,6 @@ html.dark .update-overlay__error { color: #fca5a5; }
 #sampleColumns.is-running {
     pointer-events: none;
     opacity: 0.6;
-}
-html.dark .sample-column-card {
-    background: var(--background-light);
-    border-color: var(--border-light) !important;
 }
 
 /* Give the provider/model searchable-selects and the endpoint input a clear
@@ -4231,7 +4140,6 @@ html.dark .sample-column-card {
 .sample-column-card .sample-glossary-select {
     background: var(--background-outer);
     border: 1px solid var(--border-light);
-    border-radius: 0.75rem;
 }
 .sample-column-card .sample-endpoint-input,
 .sample-column-card .sample-instructions-select,
@@ -4242,7 +4150,7 @@ html.dark .sample-column-card .searchable-select,
 html.dark .sample-column-card .sample-endpoint-input,
 html.dark .sample-column-card .sample-instructions-select,
 html.dark .sample-column-card .sample-glossary-select {
-    background: #222222;
+    background: var(--background-inset);
     border-color: #444444;
 }
 
@@ -4252,7 +4160,6 @@ html.dark .sample-column-card .sample-glossary-select {
     background: rgba(245, 158, 11, 0.12);
     color: #92400e;
     border-left: 3px solid #f59e0b;
-    border-radius: 0.5rem;
     font-size: 0.875rem;
 }
 html.dark .sample-warning {
@@ -4294,9 +4201,7 @@ html.dark .sample-warning-info {
 }
 .sample-card {
     background: var(--background-outer);
-    border-radius: 0.9rem;
     padding: 16px;
-    box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -4310,9 +4215,7 @@ html.dark .sample-card {
 .sample-card-source {
     padding: 12px 14px;
     padding-right: 42px;
-    border-radius: 0.6rem;
     background: var(--background-light);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
     position: relative;
 }
 .sample-file-card {
@@ -4323,8 +4226,6 @@ html.dark .sample-card {
     margin: 12px 0;
     background: var(--background-light);
     border: 1px solid var(--border-light);
-    border-radius: 0.85rem;
-    box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
     position: relative;
 }
 .sample-file-cover {
@@ -4334,9 +4235,7 @@ html.dark .sample-card {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
     background: var(--background-outer);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
     color: var(--primary-light);
     overflow: hidden;
 }
@@ -4379,7 +4278,6 @@ html.dark .sample-card {
     width: 32px;
     height: 32px;
     padding: 0;
-    border-radius: 50%;
     border: none;
     background: transparent;
     color: var(--text-muted-light);
@@ -4405,7 +4303,6 @@ html.dark .sample-card {
     width: 28px;
     height: 28px;
     padding: 0;
-    border-radius: 50%;
     border: none;
     background: transparent;
     color: var(--text-muted-light);
@@ -4468,7 +4365,6 @@ html.dark .sample-card {
 }
 .sample-llm-block {
     padding: 12px 14px;
-    border-radius: 0.6rem;
     border: 1px solid var(--border-light);
     background: var(--background-outer);
     display: flex;
@@ -4499,11 +4395,6 @@ html.dark .sample-card {
     font-weight: 700;
     color: var(--text-dark);
 }
-.sample-llm-meta {
-    margin-left: auto;
-    font-size: 0.75rem;
-    color: var(--text-muted-light);
-}
 .sample-llm-content {
     display: flex;
     flex-direction: column;
@@ -4532,7 +4423,6 @@ html.dark .sample-card {
     background: rgba(34, 197, 94, 0.18);
     text-decoration: none;
     padding: 0 2px;
-    border-radius: 2px;
 }
 .sample-output-diff del {
     display: none;
@@ -4542,7 +4432,6 @@ html.dark .sample-card {
     background: rgba(239, 68, 68, 0.18);
     text-decoration: line-through;
     padding: 0 2px;
-    border-radius: 2px;
 }
 html.dark .sample-output-diff ins {
     background: rgba(34, 197, 94, 0.26);
@@ -4555,7 +4444,6 @@ html.dark .sample-output-diff:hover del {
     border-left: 3px solid var(--danger-light);
     padding-left: 8px;
     background: rgba(239, 68, 68, 0.06);
-    border-radius: 0.25rem;
 }
 .sample-error-text {
     color: var(--danger-light);
@@ -4575,9 +4463,9 @@ html.dark .sample-output-diff:hover del {
 }
 
 .sample-badge {
+    font-family: var(--font-ui);
     display: inline-block;
     padding: 2px 8px;
-    border-radius: 999px;
     font-size: 0.6875rem;
     font-weight: 600;
 }
@@ -4597,14 +4485,9 @@ html.dark .sample-badge-fallback {
     background: rgba(168, 85, 247, 0.22);
     color: #c084fc;
 }
-.sample-badge-error {
-    background: rgba(239, 68, 68, 0.18);
-    color: var(--danger-light);
-}
 
 .sample-cell-skeleton {
     height: 56px;
-    border-radius: 0.5rem;
     background: linear-gradient(
         90deg,
         var(--border-light) 0%,
@@ -4616,7 +4499,6 @@ html.dark .sample-badge-fallback {
 }
 .sample-cell-pending {
     min-height: 56px;
-    border-radius: 0.5rem;
     padding: 14px 16px;
     background: var(--background-light);
     color: var(--text-muted-light);
@@ -4662,7 +4544,6 @@ html.dark .sample-badge-fallback {
     background: rgba(99, 102, 241, 0.10);
     color: #4f46e5;
     cursor: pointer;
-    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -4718,7 +4599,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
     margin-bottom: 1rem;
     padding: 0.75rem 1rem;
     border: 1px solid var(--border-light);
-    border-radius: 0.75rem;
     background: var(--background-outer);
 }
 .quick-test-summary-llm {
@@ -4737,10 +4617,10 @@ html.dark .file-test-btn { color: #a5b4fc; }
     gap: 6px;
 }
 .quick-test-chip {
+    font-family: var(--font-ui);
     display: inline-flex;
     align-items: center;
     padding: 2px 10px;
-    border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 600;
     background: rgba(99, 102, 241, 0.18);
@@ -4755,7 +4635,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 .quick-test-card {
     border: 1px solid var(--border-light);
-    border-radius: 0.75rem;
     padding: 12px 14px;
     background: var(--background-light);
 }
@@ -4791,7 +4670,6 @@ html.dark .file-test-btn { color: #a5b4fc; }
     margin-left: 6px;
     border: 2px solid var(--border-light);
     border-top-color: #4f46e5;
-    border-radius: 50%;
     vertical-align: middle;
     animation: spin 0.8s linear infinite;
 }
@@ -4806,205 +4684,96 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 
 /* ========================================
-   Square UI — global corner reset
+   Shape scale — global corner radii
 
-   Single source of truth for corner shape: every rounded corner in
-   the app is flattened here instead of being edited at ~180 call
-   sites. The rules live in a cascade layer on purpose — for
-   `!important` declarations the layer order is inverted, so a
-   layered `!important` beats every unlayered one whatever its
-   specificity. That covers the `!important` radii in this file, the
-   inline <style> block in translation_interface.html, and the
-   `style="border-radius: …"` strings injected by the JS modules,
-   without touching any of them.
+   Single source of truth for corner shape: every element corner in
+   the app is set here from a three-step scale, so no other rule in
+   this file declares border-radius (except the scrollbar and range
+   thumbs, which live in pseudo-elements `*` does not reach).
+   The rules live in a cascade layer on purpose: for `!important`
+   declarations the layer order is inverted, so a layered
+   `!important` beats every unlayered one whatever its specificity.
+   That covers the inline <style> block in translation_interface.html
+   and the `style="border-radius: …"` strings injected by the JS
+   modules.
 
-   To bring the rounded look back, delete this block — nothing else
-   depends on it.
+   Scale:  --r-sm  chips, badges, small controls
+           --r-md  buttons, fields, dropdowns, inner panels
+           --r-lg  outer cards and modals
+   Full circles are kept only where roundness carries meaning:
+   status dots, spinners, range thumbs.
    ======================================== */
 @layer square-ui {
+    :root {
+        --r-sm: 5px;
+        --r-md: 8px;
+        --r-lg: 14px;
+    }
+
     *,
     *::before,
     *::after {
+        border-radius: var(--r-sm) !important;
+    }
+
+    /* Structural elements that only draw a single edge or sit inside a
+       table: a radius there bends the line ends instead of rounding a box. */
+    .header,
+    table, thead, tbody, tr, th, td,
+    hr,
+    .tab-nav .tab-btn,
+    .tab-nav .tab-btn::before,
+    .card-header,
+    .card-body {
         border-radius: 0 !important;
     }
 
-    /* SVG rects carry their radius as a geometry attribute, which the
-       rule above cannot reach. */
+    .btn,
+    .form-control,
+    .neu-inset-light,
+    .searchable-select-display,
+    .searchable-select-dropdown,
+    .file-upload,
+    .progress-section,
+    .progress-bar-container,
+    .stat-card,
+    .log-container,
+    .preflight-panel,
+    .recommendation-panel,
+    .term-fix-panel,
+    .message,
+    .toast {
+        border-radius: var(--r-md) !important;
+    }
+
+    .main-card,
+    .modal-content,
+    .update-overlay__panel {
+        border-radius: var(--r-lg) !important;
+    }
+
+    .status-dot,
+    .key-status,
+    .glossary-ner-loading .dot,
+    .quick-test-spinner,
+    .inline-spinner {
+        border-radius: 50% !important;
+    }
+
     svg rect {
         rx: 0 !important;
         ry: 0 !important;
     }
 
     /* Range thumbs live in the native shadow tree, which `*` does not
-       reach either. Kept in separate rules: an unknown vendor
-       pseudo-element invalidates a whole selector list. */
+       reach. Kept in separate rules: an unknown vendor pseudo-element
+       invalidates a whole selector list. */
     input[type="range"]::-webkit-slider-thumb {
-        border-radius: 0 !important;
+        border-radius: 50% !important;
     }
 
     input[type="range"]::-moz-range-thumb {
-        border-radius: 0 !important;
-    }
-
-    /* Only exception: a rotating square ring reads as a rendering bug,
-       not as a design choice. */
-    .quick-test-spinner,
-    .inline-spinner {
         border-radius: 50% !important;
-    }
-}
-
-/* ========================================
-   Compact density — global vertical rhythm
-
-   One knob: --ui-density-y. Every value below is the element's
-   original vertical measurement multiplied by that factor, so the
-   proportions of the design are preserved and re-tuning the whole
-   UI is a single number (1 = original spacing, 0.7 = current).
-
-   Only the vertical axis is touched — horizontal padding is left
-   alone so labels and buttons keep their breathing room.
-
-   Click targets are floored with max(): turning the knob further
-   down keeps shrinking the paddings but never takes an input,
-   a dropdown row or the progress bar below a usable height.
-
-   Same cascade-layer trick as the block above: for `!important`
-   declarations the layer order is inverted, so these win over the
-   inline <style> block of translation_interface.html (which loads
-   after this file) without having to edit it.
-
-   To restore the roomy layout, set --ui-density-y to 1 — or delete
-   the block, nothing else depends on it.
-   ======================================== */
-@layer compact-ui {
-    :root {
-        --ui-density-y: 0.7;
-        /* Height of a single-line control, derived from the knob. Exposed as
-           a token because the box height and the line-height that centres
-           its text must never drift apart. */
-        --ui-control-h: max(1.9rem, calc(2.75rem * var(--ui-density-y)));
-    }
-
-    /* --- Page shell --- */
-    body {
-        padding-top: calc(20px * var(--ui-density-y)) !important;
-        padding-bottom: calc(20px * var(--ui-density-y)) !important;
-    }
-
-    .header {
-        padding-top: calc(1.5rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(3rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Tabs --- */
-    .tab-nav .tab-btn {
-        padding-top: calc(0.6rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.6rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Cards --- */
-    .main-card {
-        margin-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    .card-header {
-        padding-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    .card-body {
-        padding-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Form rows --- */
-    .form-group {
-        gap: calc(0.5rem * var(--ui-density-y)) !important;
-    }
-
-    .option-item {
-        margin-bottom: calc(15px * var(--ui-density-y)) !important;
-    }
-
-    /* Single-line controls fake their vertical centring with
-       `line-height: <height>` (see .form-control above), so the two must
-       be resized together — shrinking the box alone drops the text to the
-       bottom. Both read the same token. Textareas are excluded: they are
-       multi-line and keep their original geometry. */
-    .form-control:not(textarea) {
-        height: var(--ui-control-h) !important;
-        min-height: var(--ui-control-h) !important;
-        max-height: var(--ui-control-h) !important;
-        line-height: var(--ui-control-h) !important;
-    }
-
-    /* .btn-sm and the glossary toolbar buttons are already compact and
-       carry their own padding; leave them where they are. */
-    .btn:not(.btn-sm):not(.glossary-toolbar-btn) {
-        padding-top: calc(0.75rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Dropdowns (searchable-select) --- */
-    .searchable-select-display {
-        padding-top: calc(0.75rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
-        /* Same token as the native controls: the custom dropdown and a
-           <select> sitting side by side must line up. */
-        min-height: var(--ui-control-h) !important;
-    }
-
-    .searchable-select-search {
-        padding-top: calc(0.75rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.75rem * var(--ui-density-y)) !important;
-    }
-
-    .searchable-select-options {
-        padding-top: calc(0.5rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.5rem * var(--ui-density-y)) !important;
-    }
-
-    .searchable-select-option {
-        padding-top: max(0.3rem, calc(0.625rem * var(--ui-density-y))) !important;
-        padding-bottom: max(0.3rem, calc(0.625rem * var(--ui-density-y))) !important;
-    }
-
-    .searchable-select-group {
-        padding-top: calc(0.625rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(0.375rem * var(--ui-density-y)) !important;
-    }
-
-    .searchable-select-no-results {
-        padding-top: calc(1.5rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Progress block --- */
-    .progress-section {
-        margin-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-top: calc(2rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(2rem * var(--ui-density-y)) !important;
-    }
-
-    .progress-bar-container {
-        height: max(1.5rem, calc(2.5rem * var(--ui-density-y))) !important;
-        margin-top: calc(1.5rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-    }
-
-    .stats-grid {
-        margin-top: calc(1.5rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(1.5rem * var(--ui-density-y)) !important;
-    }
-
-    /* --- Drop zone: the biggest single block of empty space --- */
-    .file-upload {
-        padding-top: calc(4rem * var(--ui-density-y)) !important;
-        padding-bottom: calc(4rem * var(--ui-density-y)) !important;
-        margin-top: calc(2rem * var(--ui-density-y)) !important;
-        margin-bottom: calc(2rem * var(--ui-density-y)) !important;
     }
 }
 
@@ -5014,19 +4783,18 @@ html.dark .file-test-btn { color: #a5b4fc; }
    Bold is the affordance marker for "this is clickable". Fields and
    dropdowns display data, so they run at normal weight.
 
-   Written as a subtree reset rather than as edits to the dozen
-   scattered `font-weight` declarations that feed these widgets
-   (.form-control, .searchable-select-group, the selected option
-   label, the trigger badge, …): one rule per widget family, and any
-   markup added later inherits the rule for free.
+   Written as a subtree reset: one rule per widget family is the
+   single source of field weight (no other rule in this file sets
+   font-weight on .form-control or inside a searchable-select), and
+   any markup added later inherits the rule for free.
 
    Buttons are simply not in the selector list, so .btn, .btn-sm and
    .glossary-toolbar-btn keep their own weights — nothing is
    re-asserted here, which means their styling stays the single
    source of truth for button weight.
 
-   Layered for the usual reason: `!important` in a layer outranks
-   every unlayered declaration, including the inline
+   Layered for the same reason as the shape scale: `!important` in a
+   layer outranks every unlayered declaration, including the inline
    `style="font-weight: 600"` strings the JS modules inject.
    ======================================== */
 @layer input-weight {
@@ -5038,6 +4806,12 @@ html.dark .file-test-btn { color: #a5b4fc; }
     select option,
     .form-control {
         font-weight: 400 !important;
+    }
+
+    /* Tier-1 exception: the language pickers carry a little more weight. */
+    #sourceLang,
+    #targetLang {
+        font-weight: 500 !important;
     }
 
     /* Custom dropdowns: the trigger, and the panel — which is portalled
@@ -5052,58 +4826,116 @@ html.dark .file-test-btn { color: #a5b4fc; }
 }
 
 /* ========================================
-   Flat outer frames
+   Phone and small tablet layout
 
-   The neumorphic elevation is one declaration holding two halves —
-   a dark drop shadow plus a light halo on the opposite side:
-
-       5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light)
-
-   Both halves come from the same property, so `none` removes shadow
-   and halo at once. In dark mode the halo was the visible offender
-   (--shadow-light is #3a3a3a against a #2a2a2a card); in light mode
-   the drop shadow goes too, so the frame reads the same way in both
-   themes.
-
-   Scoped to .main-card only — the outer frames. Every card sits at
-   `.container > [id^=tab-] > .main-card`, none is nested, so inner
-   surfaces (stat cards, progress section, drop zone, buttons,
-   insets, job cards) are untouched and keep their relief. The frames
-   stay separated from the background by their 1px border.
-
-   No !important and no cascade layer here, unlike the blocks above:
-   nothing else styles the shadow of .main-card, so specificity alone
-   already wins. Minimum force, so a future hover state can still
-   override it normally.
+   Same tiers, re-flowed for a narrow screen:
+   - Header: logo and display controls share the first row; the tab nav
+     takes a full second row and scrolls sideways instead of wrapping,
+     so the sticky header never grows past two short rows.
+   - Touch: chrome controls and tabs get at least a 40px hit area.
+   - Fields render at 16px so iOS Safari does not zoom on focus.
+   - Start spans the full width: it is the tier-1 action of the screen.
    ======================================== */
-.main-card {
-    box-shadow: none;
+@media (max-width: 768px) {
+    body {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .header {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .header .logo-section {
+        order: 1;
+    }
+
+    .header .status-section {
+        order: 2;
+        margin-left: auto;
+        min-width: 0;
+    }
+
+    /* .header prefix: the template's inline <style> also targets
+       #topTabNav and loads after this file. */
+    .header #topTabNav {
+        order: 3;
+        flex: 0 0 100%;
+        flex-wrap: nowrap;
+        gap: 0 1.25rem;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .header #topTabNav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tab-nav .tab-btn {
+        flex: 0 0 auto;
+        min-height: 2.5rem;
+        white-space: nowrap;
+    }
+
+    .header .status-indicator span {
+        max-width: 7rem;
+    }
+
+    .header .header-lang-wrapper,
+    .header #themeToggleBtn {
+        height: 2.5rem;
+        min-width: 2.5rem;
+        justify-content: center;
+    }
+
+    .card-header,
+    .card-body {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* Card titles and toolbars wrap instead of being clipped by the
+       card's overflow: hidden (Files, Glossaries, Styles headers). */
+    .card-header,
+    .file-actions {
+        flex-wrap: wrap;
+    }
+
+    .file-actions .btn {
+        flex: 1 1 9rem;
+    }
+
+    .form-control {
+        font-size: 16px;
+    }
+
+    .file-upload {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    #translateBtn {
+        width: 100%;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    /* Wide data tables scroll inside their own box rather than pushing
+       the page sideways. */
+    #glossaryListTable,
+    #glossaryTermsTable,
+    #styleListTable,
+    .file-table {
+        display: block !important;
+        overflow-x: auto;
+        max-width: 100%;
+    }
 }
-
-/* ========================================
-   Interface chrome typeface
-
-   Everything on the page inherits --font-text from <body>. The
-   selectors below are the exception surface: the parts you operate
-   rather than read. They all point at --font-ui, which currently
-   resolves to the same serif, so this block changes nothing today.
-
-   Its purpose is the switch. Set --font-ui to var(--font-sans) in
-   :root and the app becomes hybrid in one edit — Spectral for the
-   content, Inter for the labels, buttons, tabs and badges, which is
-   what keeps a dense interface legible at 0.75rem. Reverting is the
-   same single line.
-   ======================================== */
-.btn,
-.tab-nav .tab-btn,
-.form-group label,
-.file-table thead th,
-.searchable-select-badge,
-.searchable-select-group,
-.sample-badge,
-.file-active-badge,
-.preflight-chip,
-.quick-test-chip {
-    font-family: var(--font-ui);
-}
-

@@ -22,15 +22,17 @@ export const PROVIDER_LOGOS = {
     nim: '/static/img/providers/nvidia.png',
 };
 
+// Provider names are brand names and stay untranslated; the short tag shown
+// next to them is an i18n key resolved at render time.
 export const PROVIDER_META = {
-    ollama: { name: 'Ollama', description: 'Local' },
-    poe: { name: 'Poe', description: 'Multi-Provider' },
-    deepseek: { name: 'DeepSeek', description: 'Cloud API' },
-    mistral: { name: 'Mistral', description: 'Cloud API' },
-    gemini: { name: 'Gemini', description: 'Cloud' },
-    openai: { name: 'OpenAI', description: 'Compatible' },
-    openrouter: { name: 'OpenRouter', description: '200+ models' },
-    nim: { name: 'NVIDIA NIM', description: 'Cloud API' },
+    ollama: { name: 'Ollama', descriptionKey: 'settings:provider_desc_local' },
+    poe: { name: 'Poe', descriptionKey: 'settings:provider_desc_multi' },
+    deepseek: { name: 'DeepSeek', descriptionKey: 'settings:provider_desc_cloud_api' },
+    mistral: { name: 'Mistral', descriptionKey: 'settings:provider_desc_cloud_api' },
+    gemini: { name: 'Gemini', descriptionKey: 'settings:provider_desc_cloud' },
+    openai: { name: 'OpenAI', descriptionKey: 'settings:provider_desc_compatible' },
+    openrouter: { name: 'OpenRouter', descriptionKey: 'settings:provider_desc_many_models' },
+    nim: { name: 'NVIDIA NIM', descriptionKey: 'settings:provider_desc_cloud_api' },
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
@@ -52,6 +54,80 @@ function formatPrice(price) {
     if (price < 1) return `$${price.toFixed(2)}`;
     return `$${price.toFixed(2)}`;
 }
+
+/**
+ * Build the "Context: N tokens | description" tooltip of a model option.
+ * The raw values are kept in data attributes so refreshModelTooltips() can
+ * rebuild the localized text when the UI language changes.
+ */
+function buildModelTooltip(contextLength, description) {
+    const parts = [];
+    if (contextLength) parts.push(t('settings:model_context_tooltip', { tokens: contextLength }));
+    if (description) parts.push(description);
+    return parts.join(' | ');
+}
+
+function setModelTooltip(opt, contextLength, description) {
+    if (!contextLength) {
+        // Description-only tooltip: no localized part, nothing to refresh.
+        if (description) opt.title = description;
+        return;
+    }
+    opt.dataset.contextLength = contextLength;
+    if (description) opt.dataset.tooltipDescription = description;
+    opt.title = buildModelTooltip(contextLength, description);
+}
+
+/**
+ * Re-localize every model option tooltip carrying a context length. Model
+ * lists are only rebuilt on (re)load, so without this the tooltip would keep
+ * the language active when the list was fetched. Covers the Settings
+ * dropdown and the Sample tab columns alike.
+ */
+function refreshModelTooltips() {
+    document.querySelectorAll('option[data-context-length]').forEach((opt) => {
+        opt.title = buildModelTooltip(opt.dataset.contextLength, opt.dataset.tooltipDescription);
+    });
+    document.querySelectorAll('option[data-input-token-limit]').forEach((opt) => {
+        opt.title = buildGeminiTooltip(opt);
+    });
+    document.querySelectorAll('option[data-model-name]').forEach((opt) => {
+        opt.textContent = buildPricedLabel(opt);
+    });
+}
+
+/**
+ * Gemini tooltip: optional description + input/output token limits, read
+ * from the option's data attributes so it can be rebuilt on a locale switch.
+ */
+function buildGeminiTooltip(opt) {
+    const na = t('settings:model_limit_na');
+    const parts = [];
+    if (opt.dataset.tooltipDescription) parts.push(opt.dataset.tooltipDescription);
+    parts.push(t('settings:model_token_limits_tooltip', {
+        input: opt.dataset.inputTokenLimit || na,
+        output: opt.dataset.outputTokenLimit || na,
+    }));
+    return parts.join(' | ');
+}
+
+/**
+ * OpenRouter / Poe option label with pricing, rebuilt from data attributes.
+ */
+function buildPricedLabel(opt) {
+    const name = opt.dataset.modelName;
+    const perRequest = parseFloat(opt.dataset.pricingRequest);
+    if (perRequest > 0) {
+        return t('settings:model_label_price_per_request', { name, price: `$${perRequest.toFixed(4)}` });
+    }
+    return t('settings:model_label_price_per_million', {
+        name,
+        input: formatPrice(parseFloat(opt.dataset.pricingInput)),
+        output: formatPrice(parseFloat(opt.dataset.pricingOutput)),
+    });
+}
+
+window.addEventListener('localeChanged', refreshModelTooltips);
 
 /**
  * Populate any <select> element with the right per-provider format:
@@ -77,10 +153,10 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             const opt = document.createElement('option');
             opt.value = m.name;
             opt.textContent = m.displayName || m.name;
-            const parts = [];
-            if (m.description) parts.push(m.description);
-            parts.push(`Input: ${m.inputTokenLimit || 'N/A'} tokens, Output: ${m.outputTokenLimit || 'N/A'} tokens`);
-            opt.title = parts.join(' | ');
+            opt.dataset.inputTokenLimit = m.inputTokenLimit || '';
+            opt.dataset.outputTokenLimit = m.outputTokenLimit || '';
+            if (m.description) opt.dataset.tooltipDescription = m.description;
+            opt.title = buildGeminiTooltip(opt);
             if (m.name === defaultModel) { opt.selected = true; defaultFound = true; }
             selectEl.appendChild(opt);
         });
@@ -115,12 +191,9 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             const modelId = m.id || m.value;
             opt.value = modelId;
             if (m.pricing && (m.pricing.prompt_per_million !== undefined || m.pricing.request)) {
+                opt.dataset.modelName = m.name || modelId;
                 if (m.pricing.request && m.pricing.request > 0) {
-                    opt.textContent = `${m.name || modelId} ($${m.pricing.request.toFixed(4)}/req)`;
-                } else {
-                    const inputPrice = formatPrice(m.pricing.prompt_per_million);
-                    const outputPrice = formatPrice(m.pricing.completion_per_million);
-                    opt.textContent = `${m.name || modelId} (In: ${inputPrice}/M, Out: ${outputPrice}/M)`;
+                    opt.dataset.pricingRequest = m.pricing.request;
                 }
                 if (m.pricing.prompt_per_million !== undefined) {
                     opt.dataset.pricingInput = m.pricing.prompt_per_million;
@@ -128,13 +201,11 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
                 if (m.pricing.completion_per_million !== undefined) {
                     opt.dataset.pricingOutput = m.pricing.completion_per_million;
                 }
+                opt.textContent = buildPricedLabel(opt);
             } else {
                 opt.textContent = m.label || m.name || modelId;
             }
-            const tip = [];
-            if (m.context_length) tip.push(`Context: ${m.context_length} tokens`);
-            if (m.description) tip.push(m.description);
-            if (tip.length) opt.title = tip.join(' | ');
+            setModelTooltip(opt, m.context_length, m.description);
             if (modelId === defaultModel) { opt.selected = true; defaultFound = true; }
             (optgroup || selectEl).appendChild(opt);
         });
@@ -147,7 +218,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             const opt = document.createElement('option');
             opt.value = value;
             opt.textContent = label;
-            if (m.context_length) opt.title = `Context: ${m.context_length} tokens`;
+            setModelTooltip(opt, m.context_length);
             if (value === defaultModel) { opt.selected = true; defaultFound = true; }
             selectEl.appendChild(opt);
         });
@@ -171,7 +242,8 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
  */
 export function renderProviderOption(opt) {
     const logo = PROVIDER_LOGOS[opt.value] || '';
-    const meta = PROVIDER_META[opt.value] || { name: opt.label, description: '' };
+    const meta = PROVIDER_META[opt.value] || { name: opt.label };
+    const description = meta.descriptionKey ? t(meta.descriptionKey) : '';
     const checkmark = opt.selected
         ? '<span class="option-check material-symbols-outlined">check</span>'
         : '<span class="option-check"></span>';
@@ -180,7 +252,7 @@ export function renderProviderOption(opt) {
         <span class="provider-option">
             <img src="${logo}" alt="" class="provider-logo" onerror="this.style.display='none'">
             <span class="provider-name">${DomHelpers.escapeHtml(meta.name)}</span>
-            <span class="provider-description">${DomHelpers.escapeHtml(meta.description)}</span>
+            <span class="provider-description">${DomHelpers.escapeHtml(description)}</span>
         </span>
     `;
 }
@@ -190,7 +262,7 @@ export function renderProviderOption(opt) {
  */
 export function providerDisplayHtml(providerValue) {
     const logo = PROVIDER_LOGOS[providerValue] || '';
-    const meta = PROVIDER_META[providerValue] || { name: providerValue, description: '' };
+    const meta = PROVIDER_META[providerValue] || { name: providerValue };
     return `
         <span class="provider-option">
             <img src="${logo}" alt="" class="provider-logo" onerror="this.style.display='none'">
@@ -209,7 +281,8 @@ export function attachProviderSearchable(selectEl, { placeholder, onChange } = {
     if (!selectEl) return null;
     const id = selectEl.id;
     const instance = SearchableSelectFactory.create(selectEl, {
-        placeholder: placeholder || t('settings:search_providers_placeholder'),
+        placeholder,
+        placeholderKey: placeholder ? null : 'settings:search_providers_placeholder',
         showBadge: false,
         renderOption: renderProviderOption,
         onSelect: (option) => {
@@ -234,7 +307,8 @@ export function attachProviderSearchable(selectEl, { placeholder, onChange } = {
 export function attachModelSearchable(selectEl, { placeholder, onChange, allowCustomValue = true } = {}) {
     if (!selectEl) return null;
     return SearchableSelectFactory.create(selectEl, {
-        placeholder: placeholder || t('settings:search_models_placeholder'),
+        placeholder,
+        placeholderKey: placeholder ? null : 'settings:search_models_placeholder',
         allowCustomValue,
         onSelect: (option) => {
             if (typeof onChange === 'function') onChange(option.value);

@@ -8,7 +8,6 @@
 import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { MessageLogger } from '../ui/message-logger.js';
-import { StateManager } from '../core/state-manager.js';
 import { t } from '../i18n/i18n.js';
 
 /**
@@ -419,39 +418,7 @@ export const TTSManager = {
         }
     },
 
-    /**
-     * Get current TTS configuration from form
-     * @returns {Object} TTS configuration
-     */
-    getTTSConfig() {
-        const provider = DomHelpers.getValue('ttsProvider') || 'edge-tts';
 
-        const config = {
-            tts_provider: provider,
-            tts_voice: DomHelpers.getValue('ttsVoice') || '',
-            tts_rate: DomHelpers.getValue('ttsRate') || '+0%',
-            tts_format: DomHelpers.getValue('ttsFormat') || 'opus',
-            tts_bitrate: DomHelpers.getValue('ttsBitrate') || '64k',
-        };
-
-        // Add Chatterbox-specific options
-        if (provider === 'chatterbox') {
-            config.tts_voice_prompt_path = DomHelpers.getValue('voicePromptSelect') || '';
-            config.tts_exaggeration = parseFloat(DomHelpers.getValue('ttsExaggeration') || '0.5');
-            config.tts_cfg_weight = parseFloat(DomHelpers.getValue('ttsCfgWeight') || '0.5');
-        }
-
-        return config;
-    },
-
-    /**
-     * Check if TTS is enabled
-     * @returns {boolean} True if TTS is enabled
-     */
-    isTTSEnabled() {
-        const checkbox = DomHelpers.getElement('ttsEnabled');
-        return checkbox ? checkbox.checked : false;
-    },
 
     /**
      * Get current provider
@@ -461,21 +428,7 @@ export const TTSManager = {
         return TTSState.currentProvider;
     },
 
-    /**
-     * Get providers info
-     * @returns {Object} Providers information
-     */
-    getProvidersInfo() {
-        return TTSState.providers;
-    },
 
-    /**
-     * Get GPU status
-     * @returns {Object} GPU status
-     */
-    getGPUStatus() {
-        return TTSState.gpuStatus;
-    },
 
     /**
      * Refresh GPU status (call periodically or on demand)

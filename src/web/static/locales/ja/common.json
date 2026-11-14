@@ -74,5 +74,11 @@
   "notification_test_failed": "通知テストに失敗しました: {{error}}",
   "notifications_preset_applied": "通知プリセットを適用しました: {{name}}",
 
-  "endpoint_reset_log": "エンドポイントをサーバーのデフォルトにリセットしました"
+  "endpoint_reset_log": "エンドポイントをサーバーのデフォルトにリセットしました",
+  "searchable_select_no_results": "結果が見つかりません",
+  "searchable_select_use_custom_value": "Enter キーで「{{value}}」を使用",
+  "searchable_select_model_count_one": "{{count}} 個のモデル",
+  "searchable_select_model_count_other": "{{count}} 個のモデル",
+  "searchable_select_search_placeholder": "検索...",
+  "searchable_select_no_selection": "オプションを選択..."
 }

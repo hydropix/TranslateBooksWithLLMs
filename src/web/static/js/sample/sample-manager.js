@@ -14,6 +14,7 @@
  * (translate+refine) lives in sample-diff.js.
  */
 
+import { describeApiError } from '../core/api-errors.js';
 import { ApiClient } from '../core/api-client.js';
 import { WebSocketManager } from '../core/websocket-manager.js';
 import { SettingsManager } from '../core/settings-manager.js';
@@ -228,7 +229,7 @@ function renderWarnings(box, warnings) {
             const key = `sample:${w.code}`;
             const params = w.params || {};
             const paramsAttr = DomHelpers.escapeHtml(JSON.stringify(params));
-            return `<div class="sample-warning">⚠ <span data-i18n="${key}" data-i18n-params='${paramsAttr}'>${DomHelpers.escapeHtml(t(key, params))}</span></div>`;
+            return `<div class="sample-warning">⚠ <span data-i18n="${DomHelpers.escapeHtml(key)}" data-i18n-params='${paramsAttr}'>${DomHelpers.escapeHtml(t(key, params))}</span></div>`;
         }
         return `<div class="sample-warning">⚠ ${DomHelpers.escapeHtml(String(w))}</div>`;
     }).join('');
@@ -336,14 +337,14 @@ function buildColumnCard(idx, col) {
         return `<option value="${value}" ${selected}>${meta.name}</option>`;
     }).join('');
 
-    const ciOptions = [`<option value="">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
+    const ciOptions = [`<option value="" data-i18n="settings:select_none">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
         .concat(customInstructionFiles.map((f) => {
             const sel = col.custom_instruction_file === f.filename ? 'selected' : '';
             return `<option value="${DomHelpers.escapeHtml(f.filename)}" ${sel}>${DomHelpers.escapeHtml(f.display_name || f.filename)}</option>`;
         }))
         .join('');
 
-    const glossaryOptions = [`<option value="">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
+    const glossaryOptions = [`<option value="" data-i18n="settings:select_none">${DomHelpers.escapeHtml(t('settings:select_none'))}</option>`]
         .concat(glossaryList.map((g) => {
             const sel = String(col.glossary_id) === String(g.id) ? 'selected' : '';
             return `<option value="${DomHelpers.escapeHtml(String(g.id))}" ${sel}>${DomHelpers.escapeHtml(g.name || `#${g.id}`)}</option>`;
@@ -784,7 +785,7 @@ async function initializeSamples() {
         await uploadFileIfNeeded();
     } catch (err) {
         console.error('[sample] upload failed', err);
-        showSampleMessage(err.message || String(err), 'error');
+        showSampleMessage(describeApiError(err), 'error');
         return;
     }
     // Reflect the detected source language in the picker right away; runs in
@@ -814,18 +815,12 @@ async function _runInitialize({ preserveContext }) {
     const maxChars = parseInt($('sampleMaxChars')?.value, 10) || SAMPLE_DEFAULT_MAX_CHARS;
 
     try {
-        const r = await fetch('/api/sample/initialize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_path: state.uploadedPath,
-                file_type: state.fileType,
-                n_samples: nSamples,
-                max_chars: maxChars,
-            }),
+        const body = await ApiClient.initializeSamples({
+            file_path: state.uploadedPath,
+            file_type: state.fileType,
+            n_samples: nSamples,
+            max_chars: maxChars,
         });
-        const body = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
         state.lastItems = body.items || [];
         state.appliedNSamples = nSamples;
         state.appliedMaxChars = maxChars;
@@ -837,7 +832,7 @@ async function _runInitialize({ preserveContext }) {
         syncUpdateButton();
     } catch (err) {
         console.error('[sample] initialize failed', err);
-        showSampleMessage(t('sample:initialize_failed', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:initialize_failed', { error: describeApiError(err) }), 'error');
         if (!preserveContext) {
             state.lastItems = null;
             refreshResultsFromCache();
@@ -885,29 +880,24 @@ async function addSample() {
     if (addBtn) addBtn.disabled = true;
 
     try {
-        const r = await fetch('/api/sample/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_path: state.uploadedPath,
-                file_type: state.fileType,
-                max_chars: maxChars,
-                exclude_indices: excludeIndices,
-            }),
+        const body = await ApiClient.extractSample({
+            file_path: state.uploadedPath,
+            file_type: state.fileType,
+            max_chars: maxChars,
+            exclude_indices: excludeIndices,
         });
-        const body = await r.json().catch(() => ({}));
-        if (r.status === 409) {
-            showSampleMessage(t('sample:no_more_indices'), 'info');
-            return;
-        }
-        if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
 
         if (!Array.isArray(state.lastItems)) state.lastItems = [];
         state.lastItems.push(body.item);
         refreshResultsFromCache();
     } catch (err) {
+        if (err.status === 409) {
+            // Every index of the document is already in the sample set.
+            showSampleMessage(t('sample:no_more_indices'), 'info');
+            return;
+        }
         console.error('[sample] extract failed', err);
-        showSampleMessage(t('sample:add_sample_failed', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:add_sample_failed', { error: describeApiError(err) }), 'error');
     } finally {
         const btn = $('sampleAddSampleBtn');
         if (btn) btn.disabled = false;
@@ -1016,7 +1006,7 @@ async function runSample(opts = {}) {
         await uploadFileIfNeeded();
     } catch (err) {
         console.error('[sample] upload failed', err);
-        showSampleMessage(err.message || String(err), 'error');
+        showSampleMessage(describeApiError(err), 'error');
         setButtonsRunningState(false);
         return;
     }
@@ -1028,18 +1018,10 @@ async function runSample(opts = {}) {
 
     let resp;
     try {
-        const r = await fetch('/api/sample/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        resp = await r.json().catch(() => ({}));
-        if (!r.ok) {
-            throw new Error(resp.error || `HTTP ${r.status}`);
-        }
+        resp = await ApiClient.runSample(payload);
     } catch (err) {
         console.error('[sample] /api/sample/run failed', err);
-        showSampleMessage(t('sample:error_run', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:error_run', { error: describeApiError(err) }), 'error');
         setButtonsRunningState(false);
         return;
     }
@@ -1106,18 +1088,10 @@ async function runSample(opts = {}) {
     // Phase 3 — kick off the LLM work for non-cached cells. Server will emit
     // sample_done once finished (including when every cell is skipped).
     try {
-        const r = await fetch(`/api/sample/${encodeURIComponent(resp.sample_id)}/dispatch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ skip_cells: skipCells }),
-        });
-        if (!r.ok) {
-            const errBody = await r.json().catch(() => ({}));
-            throw new Error(errBody.error || `HTTP ${r.status}`);
-        }
+        await ApiClient.dispatchSampleRun(resp.sample_id, skipCells);
     } catch (err) {
         console.error('[sample] /dispatch failed', err);
-        showSampleMessage(t('sample:error_run', { error: err.message || String(err) }), 'error');
+        showSampleMessage(t('sample:error_run', { error: describeApiError(err) }), 'error');
         setButtonsRunningState(false);
     }
 }
@@ -1125,9 +1099,10 @@ async function runSample(opts = {}) {
 async function stopSample() {
     if (!state.currentSampleId) return;
     try {
-        await fetch(`/api/sample/${encodeURIComponent(state.currentSampleId)}/stop`, { method: 'POST' });
+        await ApiClient.stopSampleRun(state.currentSampleId);
     } catch (err) {
-        console.warn('stop sample failed', err);
+        // A 404 means the run already ended; stopping is best-effort either way.
+        if (!err.status) console.warn('stop sample failed', err);
     }
 }
 

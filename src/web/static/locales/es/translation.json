@@ -298,5 +298,18 @@
   "quicktest_error_no_model": "Ningún modelo seleccionado. Elige primero un proveedor y un modelo.",
   "quicktest_error_no_target": "Define un idioma de destino para este archivo antes de probar.",
   "quicktest_error_empty": "Este archivo es demasiado pequeño para muestrear.",
-  "quicktest_error_run": "La prueba rápida falló: {{error}}"
+  "quicktest_error_run": "La prueba rápida falló: {{error}}",
+  "file_status_queued": "En cola",
+  "file_status_preparing": "Preparando...",
+  "file_status_submitted": "Enviado",
+  "file_status_processing": "Procesando",
+  "file_status_completed": "Completado",
+  "file_status_partial": "Parcial",
+  "file_status_interrupted": "Interrumpido",
+  "file_status_rate_limited": "Límite de tasa alcanzado",
+  "file_status_error": "Error",
+  "file_status_missing_api_key": "Error: falta la clave API",
+  "file_status_path_error": "Error de ruta",
+  "file_status_initiation_error": "Error al iniciar",
+  "completion_cost_tokens": "{{cost}} · {{tokens}} tokens"
 }

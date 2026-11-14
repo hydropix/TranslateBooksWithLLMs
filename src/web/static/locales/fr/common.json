@@ -74,5 +74,11 @@
   "notification_test_failed": "Échec du test de notification : {{error}}",
   "notifications_preset_applied": "Préréglage de notifications appliqué : {{name}}",
 
-  "endpoint_reset_log": "Point d'accès réinitialisé à la valeur par défaut du serveur"
+  "endpoint_reset_log": "Point d'accès réinitialisé à la valeur par défaut du serveur",
+  "searchable_select_no_results": "Aucun résultat",
+  "searchable_select_use_custom_value": "Appuyez sur Entrée pour utiliser « {{value}} »",
+  "searchable_select_model_count_one": "{{count}} modèle",
+  "searchable_select_model_count_other": "{{count}} modèles",
+  "searchable_select_search_placeholder": "Rechercher...",
+  "searchable_select_no_selection": "Sélectionnez une option..."
 }

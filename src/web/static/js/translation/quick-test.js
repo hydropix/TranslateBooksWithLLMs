@@ -13,6 +13,8 @@
  * filters incoming events by the id it owns, so the two never collide.
  */
 
+import { describeApiError } from '../core/api-errors.js';
+import { ModalStack } from '../ui/modal-stack.js';
 import { ApiClient } from '../core/api-client.js';
 import { WebSocketManager } from '../core/websocket-manager.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
@@ -198,9 +200,13 @@ function handleSampleUpdate(payload) {
     }
 }
 
+// Release callback from ModalStack while the overlay is open.
+let releaseEscape = null;
+
 function openOverlay() {
     const overlay = $('quickTestModal');
     if (overlay) overlay.classList.remove('hidden');
+    if (!releaseEscape) releaseEscape = ModalStack.push(closeOverlay);
 }
 
 function closeOverlay() {
@@ -208,14 +214,19 @@ function closeOverlay() {
     const overlay = $('quickTestModal');
     if (overlay) overlay.classList.add('hidden');
     state.sampleId = null;
+    if (releaseEscape) {
+        releaseEscape();
+        releaseEscape = null;
+    }
 }
 
 async function stopRun() {
     if (!state.sampleId) return;
     try {
-        await fetch(`/api/sample/${encodeURIComponent(state.sampleId)}/stop`, { method: 'POST' });
+        await ApiClient.stopSampleRun(state.sampleId);
     } catch (err) {
-        console.warn('[quick-test] stop failed', err);
+        // A 404 means the run already ended; stopping is best-effort either way.
+        if (!err.status) console.warn('[quick-test] stop failed', err);
     }
     setRunningUi(false);
 }
@@ -279,13 +290,7 @@ async function open(file) {
     };
 
     try {
-        const r = await fetch('/api/sample/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        const resp = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(resp.error || `HTTP ${r.status}`);
+        const resp = await ApiClient.runSample(payload);
 
         state.sampleId = resp.sample_id;
         renderSkeletons(resp.items || []);
@@ -295,7 +300,7 @@ async function open(file) {
         }
     } catch (err) {
         console.error('[quick-test] run failed', err);
-        showError(t('translation:quicktest_error_run', { error: err.message || String(err) }));
+        showError(t('translation:quicktest_error_run', { error: describeApiError(err) }));
         setRunningUi(false);
     }
 }
@@ -329,9 +334,6 @@ function wire() {
     // Click the dimmed backdrop (but not the panel) to dismiss.
     $('quickTestModal')?.addEventListener('click', (e) => {
         if (e.target === $('quickTestModal')) closeOverlay();
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !$('quickTestModal')?.classList.contains('hidden')) closeOverlay();
     });
 }
 

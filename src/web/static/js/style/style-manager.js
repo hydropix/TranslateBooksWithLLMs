@@ -15,6 +15,7 @@
  * #glossarySelect.
  */
 
+import { knownApiErrorMessage } from '../core/api-errors.js';
 import { ApiClient } from '../core/api-client.js';
 import { toast } from '../ui/toast.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
@@ -1110,7 +1111,7 @@ async function handleExtractRun() {
         resp = await ApiClient.extractStyle(formData);
     } catch (err) {
         console.error('Style extraction failed:', err);
-        toast.error(t('style:extract_failed', { error: err.message || t('glossary:unknown_error') }));
+        toast.error(t('style:extract_failed', { error: knownApiErrorMessage(err) || err.message || t('glossary:unknown_error') }));
         if (runBtn) runBtn.disabled = false;
         if (loading) loading.classList.add('hidden');
         return;

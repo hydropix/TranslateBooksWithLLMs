@@ -31,13 +31,19 @@ function withToken(url) {
  * Keeping only the label left users with an unactionable one-liner and nothing
  * in the logs (issue #263), so both parts are surfaced.
  *
+ * The thrown Error carries `status` (HTTP status), `code` (the body's
+ * `error_code`) and `body` (the parsed JSON body, or null when the body was
+ * not JSON) so callers can special-case statuses or read extra fields.
+ *
  * @param {Response} response - Fetch response
- * @returns {Promise<Object>} Parsed error data
+ * @returns {Promise<never>} Always throws
  */
 async function handleApiError(response) {
     let errorData;
+    let body = null;
     try {
-        errorData = await response.json();
+        body = await response.json();
+        errorData = body && typeof body === 'object' ? body : {};
     } catch {
         errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
     }
@@ -46,6 +52,8 @@ async function handleApiError(response) {
     const parts = [label, detail !== label ? detail : ''].filter(Boolean);
     const err = new Error(parts.join(' — ') || `Request failed with status ${response.status}`);
     err.code = errorData.error_code;
+    err.status = response.status;
+    err.body = body;
     throw err;
 }
 
@@ -57,12 +65,14 @@ async function handleApiError(response) {
  */
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
+    // Spread options first so a caller-supplied `headers` object is merged
+    // with the JSON default instead of replacing it.
     const response = await fetch(url, {
+        ...options,
         headers: {
             'Content-Type': 'application/json',
             ...options.headers
-        },
-        ...options
+        }
     });
 
     if (!response.ok) {
@@ -82,13 +92,6 @@ async function apiRequest(endpoint, options = {}) {
  * API Client interface
  */
 export const ApiClient = {
-    /**
-     * Set the base URL for API requests
-     * @param {string} url - Base URL
-     */
-    setBaseUrl(url) {
-        API_BASE_URL = url;
-    },
 
     /**
      * Get current base URL
@@ -104,10 +107,13 @@ export const ApiClient = {
 
     /**
      * Check server health
+     * @param {Object} [options]
+     * @param {boolean} [options.noCache=false] - Bypass the HTTP cache (used
+     *   while polling for a restarted server)
      * @returns {Promise<Object>} Health status
      */
-    async healthCheck() {
-        return await apiRequest('/api/health');
+    async healthCheck({ noCache = false } = {}) {
+        return await apiRequest('/api/health', noCache ? { cache: 'no-store' } : {});
     },
 
     /**
@@ -116,6 +122,66 @@ export const ApiClient = {
      */
     async getConfig() {
         return await apiRequest('/api/config');
+    },
+
+    /**
+     * Get the MAX_TOKENS_PER_CHUNK setting
+     * @returns {Promise<Object>} { max_tokens_per_chunk }
+     */
+    async getMaxTokensConfig() {
+        return await apiRequest('/api/config/max-tokens');
+    },
+
+    // ========================================
+    // Version & Self-Update
+    // ========================================
+
+    /**
+     * Check GitHub for a newer release
+     * @returns {Promise<Object>} { current, latest, update_available, release_url, git_repo, install_kind }
+     */
+    async checkForUpdate() {
+        return await apiRequest('/api/version/check');
+    },
+
+    /**
+     * Start the in-place self-update (git pull + optional pip install + restart)
+     * @param {Object} [options]
+     * @param {boolean} [options.installDeps=true] - Reinstall Python dependencies
+     * @param {boolean} [options.restart=true] - Restart the server afterwards
+     * @returns {Promise<Object>} { success, message, status }. A refusal (400/409)
+     *   throws with a short code in `err.body.error` and the reason in `err.body.message`
+     */
+    async startUpdate({ installDeps = true, restart = true } = {}) {
+        return await apiRequest('/api/version/update', {
+            method: 'POST',
+            body: JSON.stringify({ install_deps: installDeps, restart })
+        });
+    },
+
+    /**
+     * Get progress of the in-flight (or last) self-update job
+     * @returns {Promise<Object>} { state, step, output, error, requires_restart }
+     */
+    async getUpdateStatus() {
+        return await apiRequest('/api/version/update/status');
+    },
+
+    // ========================================
+    // Notifications
+    // ========================================
+
+    /**
+     * Send a test webhook using the saved notification configuration
+     * @param {string} event - Event name ('success', 'failure', 'interruption')
+     * @returns {Promise<Object>} { success, message }. A failure (400/500/502)
+     *   throws with the reason in `err.body.error`
+     */
+    async testNotification(event) {
+        return await apiRequest('/api/notifications/test', {
+            method: 'POST',
+            body: JSON.stringify({ event })
+        });
     },
 
     // ========================================
@@ -218,7 +284,8 @@ export const ApiClient = {
     /**
      * Batch download files as zip
      * @param {string[]} filenames - Array of filenames
-     * @returns {Promise<Blob>} Zip file blob
+     * @returns {Promise<Blob>} Zip file blob. A failure throws with the reason
+     *   in `err.body.error`
      */
     async batchDownloadFiles(filenames) {
         const response = await apiRequest('/api/files/batch/download', {
@@ -232,7 +299,8 @@ export const ApiClient = {
     /**
      * Batch delete files
      * @param {string[]} filenames - Array of filenames
-     * @returns {Promise<Object>} Delete result
+     * @returns {Promise<Object>} { total_deleted, failed }. A failure throws
+     *   with the reason in `err.body.error`
      */
     async batchDeleteFiles(filenames) {
         return await apiRequest('/api/files/batch/delete', {
@@ -273,17 +341,6 @@ export const ApiClient = {
         });
     },
 
-    /**
-     * Clear uploaded files
-     * @param {string[]} filePaths - Array of file paths to delete
-     * @returns {Promise<Object>} Clear result
-     */
-    async clearUploadedFiles(filePaths) {
-        return await apiRequest('/api/uploads/clear', {
-            method: 'POST',
-            body: JSON.stringify({ file_paths: filePaths })
-        });
-    },
 
     /**
      * Verify which uploaded files still exist on the server
@@ -359,6 +416,83 @@ export const ApiClient = {
         });
     },
 
+    /**
+     * Get the thinking-model warning for a model (instant server-side lookup)
+     * @param {string} model - Model name
+     * @param {string} [endpoint] - API endpoint (cache differentiation)
+     * @returns {Promise<Object>} { warning, behavior, is_uncontrollable, is_thinking_model }
+     */
+    async getModelWarning(model, endpoint = '') {
+        const params = new URLSearchParams({ model, endpoint });
+        return await apiRequest(`/api/model/warning?${params.toString()}`);
+    },
+
+    // ========================================
+    // Sample & Compare / Quick Test
+    // ========================================
+
+    /**
+     * Draw the initial sample set from an uploaded file (no LLM call)
+     * @param {Object} payload - { file_path, file_type, n_samples, max_chars }
+     * @returns {Promise<Object>} { items, total, warnings }
+     */
+    async initializeSamples(payload) {
+        return await apiRequest('/api/sample/initialize', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    /**
+     * Extract one extra sample, avoiding the indices already in use
+     * @param {Object} payload - { file_path, file_type, max_chars, exclude_indices }
+     * @returns {Promise<Object>} { item, total }. Throws with `err.status === 409`
+     *   when the document has no unused index left
+     */
+    async extractSample(payload) {
+        return await apiRequest('/api/sample/extract', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    /**
+     * Start a sample run (with `defer_dispatch: true`, only prepares it)
+     * @param {Object} payload - Run configuration (file, languages, mode, columns, items, ...)
+     * @returns {Promise<Object>} { sample_id, items, columns, mode, warnings }
+     */
+    async runSample(payload) {
+        return await apiRequest('/api/sample/run', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    /**
+     * Dispatch the LLM work of a deferred sample run
+     * @param {string} sampleId - Sample run ID
+     * @param {Array<Array<number>>} skipCells - [row, col] pairs already cached client-side
+     * @returns {Promise<Object>} { message, skipped }
+     */
+    async dispatchSampleRun(sampleId, skipCells) {
+        return await apiRequest(`/api/sample/${encodeURIComponent(sampleId)}/dispatch`, {
+            method: 'POST',
+            body: JSON.stringify({ skip_cells: skipCells })
+        });
+    },
+
+    /**
+     * Stop a running sample run
+     * @param {string} sampleId - Sample run ID
+     * @returns {Promise<Object>} { message }. Throws with `err.status === 404`
+     *   when the run is unknown
+     */
+    async stopSampleRun(sampleId) {
+        return await apiRequest(`/api/sample/${encodeURIComponent(sampleId)}/stop`, {
+            method: 'POST'
+        });
+    },
+
     // ========================================
     // Resumable Jobs
     // ========================================
@@ -415,13 +549,6 @@ export const ApiClient = {
     // Settings Management
     // ========================================
 
-    /**
-     * Get current user settings
-     * @returns {Promise<Object>} Current settings
-     */
-    async getSettings() {
-        return await apiRequest('/api/settings');
-    },
 
     /**
      * Save user settings to .env file
@@ -598,22 +725,7 @@ export const ApiClient = {
         });
     },
 
-    /**
-     * Get TTS job status
-     * @param {string} jobId - TTS job ID
-     * @returns {Promise<Object>} Job status
-     */
-    async getTTSStatus(jobId) {
-        return await apiRequest(`/api/tts/status/${jobId}`);
-    },
 
-    /**
-     * Get available TTS voices
-     * @returns {Promise<Object>} Available voices by language
-     */
-    async getTTSVoices() {
-        return await apiRequest('/api/tts/voices');
-    },
 
     /**
      * Get available TTS providers and their status
@@ -623,13 +735,6 @@ export const ApiClient = {
         return await apiRequest('/api/tts/providers');
     },
 
-    /**
-     * Get available Chatterbox voices/languages
-     * @returns {Promise<Object>} Chatterbox languages and availability
-     */
-    async getChatterboxVoices() {
-        return await apiRequest('/api/tts/voices/chatterbox');
-    },
 
     /**
      * Get GPU status for TTS
@@ -637,6 +742,15 @@ export const ApiClient = {
      */
     async getTTSGPUStatus() {
         return await apiRequest('/api/tts/gpu-status');
+    },
+
+    /**
+     * Install FFmpeg through winget (Windows only)
+     * @returns {Promise<Object>} { success, message } — a failed install throws
+     *   an error carrying the server's message and HTTP status
+     */
+    async installFFmpeg() {
+        return await apiRequest('/api/tts/ffmpeg/install', { method: 'POST' });
     },
 
     /**

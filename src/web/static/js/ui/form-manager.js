@@ -114,12 +114,12 @@ export const FormManager = {
 
         // Custom instructions manage button — jumps to the Styles tab, which owns
         // the Custom_Instructions CRUD flows. Mirrors #glossaryManageBtn, which
-        // does the same for the Glossaries tab (glossary-manager.js).
+        // does the same for the Glossaries tab (glossary/glossary-dropdown.js).
         const customInstructionsManageBtn = DomHelpers.getElement('customInstructionsManageBtn');
         if (customInstructionsManageBtn) {
             customInstructionsManageBtn.addEventListener('click', () => {
-                // Global rather than imported: switchTopTab lives in
-                // glossary-manager.js and importing it here would close a cycle.
+                // Global rather than imported, like the template's tab
+                // buttons: switchTopTab lives in ui/tab-router.js.
                 if (typeof window.switchTopTab === 'function') {
                     window.switchTopTab('styles');
                 }
@@ -261,75 +261,6 @@ export const FormManager = {
         window.dispatchEvent(new CustomEvent('ttsChanged', { detail: { enabled: isChecked } }));
     },
 
-    /**
-     * Detect browser language and map to full language name
-     * @returns {string} Full language name (e.g., "French", "English")
-     */
-    detectBrowserLanguage() {
-        // Get browser language (e.g., "fr-FR", "en-US", "zh-CN")
-        const browserLang = navigator.language || navigator.userLanguage || 'en';
-        const fullLangCode = browserLang.toLowerCase();
-        const langCode = fullLangCode.split('-')[0];
-
-        // Map language codes to full names used in the UI
-        const languageMap = {
-            'en': 'English',
-            'zh': 'Chinese',
-            'es': 'Spanish',
-            'fr': 'French',
-            'de': 'German',
-            'ja': 'Japanese',
-            'ko': 'Korean',
-            'pt': 'Portuguese (Brazil)',
-            'ru': 'Russian',
-            'ar': 'Arabic',
-            'it': 'Italian',
-            'nl': 'Dutch',
-            'pl': 'Polish',
-            'sv': 'Swedish',
-            'no': 'Norwegian',
-            'da': 'Danish',
-            'fi': 'Finnish',
-            'el': 'Greek',
-            'hu': 'Hungarian',
-            'cs': 'Czech',
-            'sk': 'Slovak',
-            'ro': 'Romanian',
-            'bg': 'Bulgarian',
-            'hr': 'Croatian',
-            'sr': 'Serbian',
-            'uk': 'Ukrainian',
-            'ca': 'Catalan',
-            'hi': 'Hindi',
-            'bn': 'Bengali',
-            'ur': 'Urdu',
-            'pa': 'Punjabi',
-            'ta': 'Tamil',
-            'te': 'Telugu',
-            'mr': 'Marathi',
-            'gu': 'Gujarati',
-            'vi': 'Vietnamese',
-            'th': 'Thai',
-            'id': 'Indonesian',
-            'ms': 'Malay',
-            'tl': 'Tagalog',
-            'my': 'Burmese',
-            'fa': 'Persian',
-            'tr': 'Turkish',
-            'he': 'Hebrew',
-            'sw': 'Swahili',
-            'am': 'Amharic'
-        };
-
-        // Regional variant overrides: check full locale before base code.
-        // Any pt-* locale other than pt-BR is closer to European Portuguese,
-        // and a bare "pt" keeps the Brazilian default set in languageMap.
-        if (langCode === 'pt' && fullLangCode !== 'pt' && !fullLangCode.startsWith('pt-br')) {
-            return 'Portuguese (Portugal)';
-        }
-
-        return languageMap[langCode] || 'English'; // Default to English if not found
-    },
 
     /**
      * Load default configuration from server
@@ -707,35 +638,4 @@ export const FormManager = {
         };
     },
 
-    /**
-     * Validate form configuration
-     * @returns {Object} { valid: boolean, message: string }
-     */
-    validateConfig() {
-        const config = this.getTranslationConfig();
-
-        if (!config.source_language) {
-            return { valid: false, message: t('translation:validation_source_required') };
-        }
-
-        if (!config.target_language) {
-            return { valid: false, message: t('translation:validation_target_required') };
-        }
-
-        if (!config.model) {
-            return { valid: false, message: t('translation:validation_model_required') };
-        }
-
-        if (!config.llm_api_endpoint) {
-            return { valid: false, message: t('translation:validation_endpoint_empty') };
-        }
-
-        // Validate API keys for cloud providers using shared utility
-        const apiKeyValidation = ApiKeyUtils.validateForProvider(config.llm_provider, config.llm_api_endpoint);
-        if (!apiKeyValidation.valid) {
-            return apiKeyValidation;
-        }
-
-        return { valid: true, message: '' };
-    }
 };

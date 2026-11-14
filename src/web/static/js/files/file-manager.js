@@ -158,7 +158,7 @@ export const FileManager = {
                 <input type="checkbox" class="file-checkbox" data-filename="${safeFilename}">
             </td>
             <td style="max-width: 0;">
-                <span class="clickable-filename" data-filename="${safeFilename}" data-action="open" title="${tooltipInfo}">
+                <span class="clickable-filename" data-filename="${safeFilename}" data-action="open" title="${DomHelpers.escapeHtml(tooltipInfo)}">
                     <span class="material-symbols-outlined file-icon-cell">${fileIconClass}</span>
                     <span class="filename-text">${safeFilename}</span>
                 </span>
@@ -314,36 +314,25 @@ export const FileManager = {
         }
 
         try {
-            const response = await fetch(`${ApiClient.getBaseUrl()}/api/files/batch/download`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    filenames: Array.from(selectedFiles)
-                })
-            });
+            const blob = await ApiClient.batchDownloadFiles(Array.from(selectedFiles));
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `translated_files_${new Date().getTime()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
 
-            if (response.ok) {
-                // Download the zip file
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `translated_files_${new Date().getTime()}.zip`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
-                MessageLogger.showMessage(t('files:downloaded_as_zip', { count: selectedFiles.size }), 'success');
-            } else {
-                const data = await response.json();
-                MessageLogger.showMessage(data.error || t('files:download_failed_default'), 'error');
-            }
+            MessageLogger.showMessage(t('files:downloaded_as_zip', { count: selectedFiles.size }), 'success');
         } catch (error) {
-            MessageLogger.showMessage(t('files:download_error', { error: error.message }), 'error');
+            if (error.status) {
+                // The server answered with an error status: show its label only.
+                MessageLogger.showMessage(error.body?.error || t('files:download_failed_default'), 'error');
+            } else {
+                MessageLogger.showMessage(t('files:download_error', { error: error.message }), 'error');
+            }
         }
     },
 
@@ -363,29 +352,19 @@ export const FileManager = {
         }
 
         try {
-            const response = await fetch(`${ApiClient.getBaseUrl()}/api/files/batch/delete`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    filenames: Array.from(selectedFiles)
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                const message = data.failed.length > 0
-                    ? t('files:deleted_summary_with_failed', { count: data.total_deleted, failed: data.failed.length })
-                    : t('files:deleted_summary', { count: data.total_deleted });
-                MessageLogger.showMessage(message, data.failed.length > 0 ? 'info' : 'success');
-                this.refreshFileList();
-            } else {
-                MessageLogger.showMessage(data.error || t('files:delete_failed_default'), 'error');
-            }
+            const data = await ApiClient.batchDeleteFiles(Array.from(selectedFiles));
+            const message = data.failed.length > 0
+                ? t('files:deleted_summary_with_failed', { count: data.total_deleted, failed: data.failed.length })
+                : t('files:deleted_summary', { count: data.total_deleted });
+            MessageLogger.showMessage(message, data.failed.length > 0 ? 'info' : 'success');
+            this.refreshFileList();
         } catch (error) {
-            MessageLogger.showMessage(t('files:delete_error', { error: error.message }), 'error');
+            if (error.status) {
+                // The server answered with an error status: show its label only.
+                MessageLogger.showMessage(error.body?.error || t('files:delete_failed_default'), 'error');
+            } else {
+                MessageLogger.showMessage(t('files:delete_error', { error: error.message }), 'error');
+            }
         }
     },
 

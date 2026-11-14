@@ -21,5 +21,11 @@
   "api_key_required_mistral": "La clé API Mistral est requise pour utiliser le fournisseur Mistral.",
   "api_key_required_deepseek": "La clé API DeepSeek est requise pour utiliser le fournisseur DeepSeek.",
   "api_key_required_poe": "La clé API Poe est requise. Obtenez votre clé sur poe.com/api_key",
-  "api_key_required_nim": "La clé API NVIDIA NIM est requise pour utiliser le fournisseur NIM."
+  "api_key_required_nim": "La clé API NVIDIA NIM est requise pour utiliser le fournisseur NIM.",
+  "request_too_large": "Le fichier est trop volumineux pour le serveur. La limite est fixée par MAX_REQUEST_SIZE_MB (200 Mo par défaut).",
+  "endpoint_rejected": "Le serveur a refusé ce point d'accès : {{detail}}",
+  "endpoint_override_needs_key": "Un point d'accès personnalisé nécessite sa propre clé API : la clé enregistrée sur le serveur n'est jamais envoyée vers un point d'accès que vous avez choisi. Saisissez la clé ou rétablissez le point d'accès par défaut.",
+  "resume_already_running": "Cette traduction est déjà en cours (elle attend peut-être de reprendre automatiquement après une limite de débit).",
+  "resume_active_conflict": "Une autre traduction est en cours. Attendez qu'elle se termine ou interrompez-la avant de reprendre.",
+  "file_type_not_allowed": "Ce type de fichier ne peut pas être ouvert depuis l'application."
 }

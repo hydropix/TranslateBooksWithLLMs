@@ -169,3 +169,33 @@ def test_merged_cells_and_nested_tables_survive_round_trip(tmp_path):
     assert rebuilt.cell(1, 0).text == "Tall cell"
     assert rebuilt.cell(1, 1).text == "Right 1"
     assert "Nested text" in rebuilt.cell(2, 1).text
+
+
+def test_every_table_cell_keeps_a_single_paragraph(tmp_path):
+    """Each rebuilt cell must reuse its initial empty paragraph.
+
+    Used cells were once tracked by ``id()`` of transient lxml proxies; a
+    recycled id made a fresh cell look already used, so it got a stray empty
+    leading paragraph. A large grid makes id reuse near-certain.
+    """
+    rows, cols = 40, 5
+    source = tmp_path / "grid.docx"
+    doc = Document()
+    table = doc.add_table(rows=rows, cols=cols)
+    for r in range(rows):
+        for c in range(cols):
+            table.cell(r, c).text = f"R{r}C{c}"
+    doc.save(source)
+
+    content = extract_plain_paragraphs(str(source))
+    output = tmp_path / "out.docx"
+    build_minimal_docx(list(content.paragraphs_text), content, str(output))
+    rebuilt = Document(str(output)).tables[0]
+
+    wrong = [
+        (r, c, rebuilt.cell(r, c).text)
+        for r in range(rows)
+        for c in range(cols)
+        if rebuilt.cell(r, c).text != f"R{r}C{c}"
+    ]
+    assert wrong == []

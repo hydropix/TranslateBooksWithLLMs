@@ -323,9 +323,12 @@ def _new_paragraph(container, used_cells: set):
     A newly created cell already holds one empty paragraph: reuse it for the
     first content written to that cell instead of leaving a blank line.
     """
+    # Keep the cell element itself in the set, not its id(): holding the
+    # proxy keeps it alive, so lxml returns that same proxy for the cell, and
+    # a freed proxy's recycled id can no longer mark a fresh cell as used.
     tc = getattr(container, "_tc", None)
-    if tc is not None and id(tc) not in used_cells:
-        used_cells.add(id(tc))
+    if tc is not None and tc not in used_cells:
+        used_cells.add(tc)
         paragraphs = container.paragraphs
         if len(paragraphs) == 1 and not paragraphs[0].text:
             return paragraphs[0]

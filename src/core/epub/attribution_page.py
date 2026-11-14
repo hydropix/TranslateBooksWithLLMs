@@ -22,7 +22,7 @@ to fail a translation.
 from __future__ import annotations
 
 import os
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
 from lxml import etree
 
@@ -100,6 +100,51 @@ def build_attribution_xhtml(epub_version: str) -> bytes:
     return xhtml.encode("utf-8")
 
 
+def _already_added(manifest_items: List[etree._Element]) -> bool:
+    """True when this tool's attribution page is already in the manifest."""
+    # Idempotence: a page this tool already added has both our id and
+    # our filename on the *same* item. A foreign item can own one
+    # without the other (see the suffix search below), so this must be
+    # an AND on a single item, not an OR across the manifest.
+    for item in manifest_items:
+        href = item.get("href") or ""
+        if item.get("id") == ATTRIBUTION_ID and os.path.basename(href) == ATTRIBUTION_FILENAME:
+            return True
+    return False
+
+
+def _find_free_slot(
+    manifest_items: List[etree._Element],
+    opf_dir: str,
+) -> Optional[Tuple[str, str]]:
+    """Return a free ``(item_id, filename)`` pair, or None when none is left."""
+    # A foreign item may own our id or our filename without owning both,
+    # so probe for a free suffix that clears both checks at once.
+    used_ids = {item.get("id") for item in manifest_items}
+    for i in range(_MAX_SUFFIX_ATTEMPTS):
+        suffix = "" if i == 0 else f"-{i}"
+        candidate_id = f"{ATTRIBUTION_ID}{suffix}"
+        candidate_filename = f"{_FILENAME_STEM}{suffix}{_FILENAME_EXT}"
+        if candidate_id in used_ids:
+            continue
+        if os.path.exists(os.path.join(opf_dir, candidate_filename)):
+            continue
+        return candidate_id, candidate_filename
+    return None
+
+
+def _register_page(manifest: etree._Element, spine: etree._Element,
+                   item_id: str, filename: str) -> None:
+    """Add the page to the manifest and as the last spine item."""
+    item_el = etree.SubElement(manifest, '{%s}item' % NAMESPACES['opf'])
+    item_el.set('id', item_id)
+    item_el.set('href', filename)
+    item_el.set('media-type', XHTML_MEDIA_TYPE)
+
+    itemref_el = etree.SubElement(spine, '{%s}itemref' % NAMESPACES['opf'])
+    itemref_el.set('idref', item_id)
+
+
 def add_attribution_page(
     opf_tree: etree._ElementTree,
     opf_dir: str,
@@ -131,40 +176,18 @@ def add_attribution_page(
             return None
 
         manifest_items = manifest.findall('.//opf:item', namespaces=NAMESPACES)
+        if _already_added(manifest_items):
+            return None
 
-        # Idempotence: a page this tool already added has both our id and
-        # our filename on the *same* item. A foreign item can own one
-        # without the other (see the suffix search below), so this must be
-        # an AND on a single item, not an OR across the manifest.
-        for item in manifest_items:
-            href = item.get("href") or ""
-            if item.get("id") == ATTRIBUTION_ID and os.path.basename(href) == ATTRIBUTION_FILENAME:
-                return None
-
-        # A foreign item may own our id or our filename without owning both,
-        # so probe for a free suffix that clears both checks at once.
-        used_ids = {item.get("id") for item in manifest_items}
-        item_id = None
-        filename = None
-        for i in range(_MAX_SUFFIX_ATTEMPTS):
-            suffix = "" if i == 0 else f"-{i}"
-            candidate_id = f"{ATTRIBUTION_ID}{suffix}"
-            candidate_filename = f"{_FILENAME_STEM}{suffix}{_FILENAME_EXT}"
-            if candidate_id in used_ids:
-                continue
-            if os.path.exists(os.path.join(opf_dir, candidate_filename)):
-                continue
-            item_id = candidate_id
-            filename = candidate_filename
-            break
-
-        if item_id is None:
+        slot = _find_free_slot(manifest_items, opf_dir)
+        if slot is None:
             if log_callback:
                 log_callback(
                     "epub_attribution_page_skipped",
                     "⚠️ no free filename for attribution page",
                 )
             return None
+        item_id, filename = slot
 
         epub_version = opf_root.get('version') or ""
         xhtml_bytes = build_attribution_xhtml(epub_version)
@@ -176,13 +199,7 @@ def add_attribution_page(
         with open(path, 'wb') as f:
             f.write(xhtml_bytes)
 
-        item_el = etree.SubElement(manifest, '{%s}item' % NAMESPACES['opf'])
-        item_el.set('id', item_id)
-        item_el.set('href', filename)
-        item_el.set('media-type', XHTML_MEDIA_TYPE)
-
-        itemref_el = etree.SubElement(spine, '{%s}itemref' % NAMESPACES['opf'])
-        itemref_el.set('idref', item_id)
+        _register_page(manifest, spine, item_id, filename)
 
         if log_callback:
             log_callback(

@@ -1,8 +1,9 @@
 """EPUB refine-only mode.
 
 Walks each XHTML content file of an already-translated EPUB, refines its
-body in place, and repackages. Interruption stops cleanly between chunks
-but does not persist partial state (no resume support in v1).
+body in place, and repackages. An interruption or a rate limit writes the
+book as refined so far to a ``[partial ...]`` output; there is no chunk-level
+resume.
 """
 
 import os
@@ -22,7 +23,7 @@ from src.core.epub.document_chunking import chunk_document, tag_preserver_for
 from src.core.epub.placeholder_renumberer import globalize_chunks
 from src.core.epub.container import TranslationContainer
 from src.core.job import JobConfig, JobContext
-from src.core.llm.exceptions import LLMClientConfigError
+from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
 from .client_setup import build_refine_client
 
 
@@ -98,6 +99,23 @@ async def _refine_one_xhtml(
     final_html = tag_preserver_for(placeholder_format, container).restore_tags(full_text, global_tag_map)
 
     return replace_body(body_element, final_html, log_callback)
+
+
+def _save_partial_epub(temp_dir: str, output_filepath: str,
+                       log_callback: Optional[Callable]) -> None:
+    """Package the book as refined so far into the ``[partial ...]`` output."""
+    from src.utils.file_utils import get_partial_output_path
+    partial_path = get_partial_output_path(output_filepath)
+    try:
+        repackage_epub(temp_dir=temp_dir, output_filepath=partial_path, log_callback=log_callback)
+    except Exception as e:
+        if log_callback:
+            log_callback("refine_partial_save_failed",
+                         f"⚠️ Could not save the partial refined EPUB: {e}")
+        return
+    if log_callback:
+        log_callback("refine_partial_saved",
+                     f"💾 Partial refined output saved before rate-limit pause: '{partial_path}'")
 
 
 async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
@@ -206,19 +224,26 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
                     failed += 1
                     continue
 
-                ok = await _refine_one_xhtml(
-                    doc_root=doc_root,
-                    target_language=target_language,
-                    model_name=model_name,
-                    llm_client=llm_client,
-                    max_tokens_per_chunk=max_tokens_per_chunk,
-                    log_callback=log_callback,
-                    context_manager=context_manager,
-                    prompt_options=prompt_options,
-                    check_interruption_callback=check_interruption_callback,
-                    stats_callback=lambda st, base=chunks_done: _emit(
-                        base + st.get('completed_chunks', 0), failed_chunks),
-                )
+                try:
+                    ok = await _refine_one_xhtml(
+                        doc_root=doc_root,
+                        target_language=target_language,
+                        model_name=model_name,
+                        llm_client=llm_client,
+                        max_tokens_per_chunk=max_tokens_per_chunk,
+                        log_callback=log_callback,
+                        context_manager=context_manager,
+                        prompt_options=prompt_options,
+                        check_interruption_callback=check_interruption_callback,
+                        stats_callback=lambda st, base=chunks_done: _emit(
+                            base + st.get('completed_chunks', 0), failed_chunks),
+                    )
+                except RateLimitError:
+                    # Keep the files refined so far, exactly as an interruption
+                    # does (the file in flight keeps its draft), then let the
+                    # error propagate: the job runner drives the pause.
+                    _save_partial_epub(temp_dir, output_filepath, log_callback)
+                    raise
 
                 if ok:
                     try:

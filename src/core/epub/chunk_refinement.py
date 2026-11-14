@@ -274,6 +274,11 @@ async def refine_chunks(
     Returns:
         Refined chunk texts (GLOBAL placeholders); a chunk that could not be
         refined keeps its draft.
+
+    Raises:
+        RateLimitError: with ``partial_result`` set to a complete chunk list
+            (the chunks refined before the limit, then the remaining drafts),
+            so the caller can save partial output before pausing.
     """
     if max_refine_retries is None:
         max_refine_retries = MAX_REFINE_RETRIES
@@ -290,9 +295,14 @@ async def refine_chunks(
                             placeholder_format, log_callback, prompt_options,
                             max_refine_retries, total_chunks)
     refined_chunks: List[str] = []
-    for idx, (translated_text, chunk_dict) in enumerate(zip(translated_chunks, chunks)):
-        refined_chunks.append(await refiner.refine(idx, translated_text, chunk_dict))
-        _report_refine_progress(stats_callback, stats, total_chunks, len(refined_chunks))
+    from src.core.llm.exceptions import RateLimitError
+    try:
+        for idx, (translated_text, chunk_dict) in enumerate(zip(translated_chunks, chunks)):
+            refined_chunks.append(await refiner.refine(idx, translated_text, chunk_dict))
+            _report_refine_progress(stats_callback, stats, total_chunks, len(refined_chunks))
+    except RateLimitError as e:
+        e.partial_result = refined_chunks + list(translated_chunks[len(refined_chunks):])
+        raise
 
     if log_callback:
         successful_refinements = sum(1 for orig, ref in zip(translated_chunks, refined_chunks) if orig != ref)

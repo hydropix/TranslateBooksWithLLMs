@@ -19,7 +19,7 @@ mammoth>=1.0.0
 python-docx>=1.1.0
 
 # PDF support (AGPL-3.0, same licence as this project)
-pymupdf>=1.26.0
+pymupdf>=1.26.0,<2  # 2.x changes table and box detection (tests/test_pdf fail)
 
 # LiteLLM gateway (100+ providers, CLI-only) - OPTIONAL
 # Enables --provider litellm. Lazy-imported, so not required unless used.

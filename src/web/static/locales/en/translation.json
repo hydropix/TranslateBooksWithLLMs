@@ -60,6 +60,7 @@
   "preparing_auto": "Preparing (auto glossary/style)",
   "translating_step": "Translating ({{step}}/{{total}})",
   "refining_step": "Refining ({{step}}/{{total}})",
+  "refine_step_chunk_count_hint": "The refinement pass splits the translated text into its own chunks, so its chunk total can differ slightly from the translation pass.",
   "validation_failed_log": "❌ Validation failed: {{message}}",
   "validation_custom_source": "Please specify the custom source language for the batch.",
   "validation_custom_target": "Please specify the custom target language for the batch.",

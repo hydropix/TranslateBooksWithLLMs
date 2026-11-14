@@ -60,6 +60,7 @@
   "preparing_auto": "Preparando (glosario/estilo automáticos)",
   "translating_step": "Traduciendo ({{step}}/{{total}})",
   "refining_step": "Refinando ({{step}}/{{total}})",
+  "refine_step_chunk_count_hint": "La pasada de refinamiento divide el texto traducido en sus propios fragmentos, por lo que su total de fragmentos puede diferir ligeramente del de la pasada de traducción.",
   "validation_failed_log": "❌ Validación fallida: {{message}}",
   "validation_custom_source": "Especifica el idioma de origen personalizado para el lote.",
   "validation_custom_target": "Especifica el idioma de destino personalizado para el lote.",

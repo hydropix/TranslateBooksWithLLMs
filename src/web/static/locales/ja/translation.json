@@ -60,6 +60,7 @@
   "preparing_auto": "準備中（自動用語集・文体）",
   "translating_step": "翻訳中 ({{step}}/{{total}})",
   "refining_step": "推敲中 ({{step}}/{{total}})",
+  "refine_step_chunk_count_hint": "推敲パスは翻訳済みテキストを独自のチャンクに分割するため、チャンクの総数が翻訳パスとわずかに異なる場合があります。",
   "validation_failed_log": "❌ 検証に失敗しました: {{message}}",
   "validation_custom_source": "バッチ用のカスタム翻訳元の言語を指定してください。",
   "validation_custom_target": "バッチ用のカスタム翻訳先の言語を指定してください。",

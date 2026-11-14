@@ -60,6 +60,7 @@
   "preparing_auto": "준비 중 (자동 용어집/문체)",
   "translating_step": "번역 중 ({{step}}/{{total}})",
   "refining_step": "다듬는 중 ({{step}}/{{total}})",
+  "refine_step_chunk_count_hint": "다듬기 단계는 번역된 텍스트를 자체 청크로 다시 나누므로, 청크 총수가 번역 단계와 약간 다를 수 있습니다.",
   "validation_failed_log": "❌ 검증 실패: {{message}}",
   "validation_custom_source": "배치에 대한 사용자 지정 원본 언어를 지정하세요.",
   "validation_custom_target": "배치에 대한 사용자 지정 대상 언어를 지정하세요.",

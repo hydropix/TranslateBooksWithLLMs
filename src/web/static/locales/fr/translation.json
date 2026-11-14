@@ -60,6 +60,7 @@
   "preparing_auto": "Préparation (glossaire/style auto)",
   "translating_step": "Traduction ({{step}}/{{total}})",
   "refining_step": "Raffinement ({{step}}/{{total}})",
+  "refine_step_chunk_count_hint": "La passe de raffinement découpe le texte traduit en ses propres segments : son nombre total de segments peut donc différer légèrement de celui de la passe de traduction.",
   "validation_failed_log": "❌ Échec de la validation : {{message}}",
   "validation_custom_source": "Veuillez préciser la langue source personnalisée pour le lot.",
   "validation_custom_target": "Veuillez préciser la langue cible personnalisée pour le lot.",

@@ -155,6 +155,27 @@ function resolveOperationLabel(stats) {
 }
 
 /**
+ * Explain, on the refine step of a translate + refine job, why its chunk total
+ * differs from the translation step's: the refinement pass splits the
+ * translated text into its own chunks (an EPUB of 65 translation chunks can
+ * have 66 refine chunks). Rendered as the label's tooltip through
+ * data-i18n-attr, so applyToDOM re-translates it on a language switch.
+ *
+ * @param {HTMLElement} labelEl - The operation label element
+ * @param {Object} stats - Server stats
+ */
+function syncRefineCountHint(labelEl, stats) {
+    const isRefineStep = !!(stats && stats.enable_refinement && stats.current_phase === 2);
+    if (isRefineStep) {
+        labelEl.setAttribute('data-i18n-attr', 'title:translation:refine_step_chunk_count_hint');
+        labelEl.title = t('translation:refine_step_chunk_count_hint');
+    } else if (labelEl.hasAttribute('data-i18n-attr')) {
+        labelEl.removeAttribute('data-i18n-attr');
+        labelEl.removeAttribute('title');
+    }
+}
+
+/**
  * Update the operation label inside the current-file title without rebuilding
  * the surrounding DOM (icon, filename, languages). The element is created by
  * `updateTranslationTitle` in the file controllers and tagged with id
@@ -167,6 +188,7 @@ function updateOperationLabel(stats) {
     if (!labelEl) return;
 
     const text = resolveOperationLabel(stats);
+    syncRefineCountHint(labelEl, stats);
     // While auto prep runs, the bar has no chunk to advance: the spinner is the
     // only moving thing telling the user the job is alive rather than hung.
     const wantSpinner = !!(stats && stats.auto_prep_active);

@@ -60,6 +60,7 @@
   "preparing_auto": "Vorbereitung (Auto-Glossar/-Stil)",
   "translating_step": "Übersetzung ({{step}}/{{total}})",
   "refining_step": "Verfeinerung ({{step}}/{{total}})",
+  "refine_step_chunk_count_hint": "Der Verfeinerungsdurchlauf teilt den übersetzten Text in eigene Abschnitte auf, daher kann seine Gesamtzahl an Abschnitten leicht von der des Übersetzungsdurchlaufs abweichen.",
   "validation_failed_log": "❌ Validierung fehlgeschlagen: {{message}}",
   "validation_custom_source": "Bitte geben Sie die benutzerdefinierte Quellsprache für den Stapel an.",
   "validation_custom_target": "Bitte geben Sie die benutzerdefinierte Zielsprache für den Stapel an.",

@@ -1,7 +1,6 @@
 """
 Translation module for LLM communication
 """
-import time
 from tqdm.auto import tqdm
 
 from src.config import (
@@ -31,8 +30,7 @@ from .context_optimizer import (
     CONTEXT_STEP,
     REFINEMENT_MIN_CONTEXT,
 )
-from .progress_tracker import TokenProgressTracker
-from .chunking.token_chunker import TokenChunker
+from .progress import Phase, ProgressReporter
 from typing import Callable, List, Dict, Tuple, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -659,7 +657,6 @@ async def refine_chunks(
     auto_adjust_context = job.auto_adjust_context
     prompt_options = job.engine_prompt_options()
     log_callback = ctx.log_callback
-    stats_callback = ctx.stats_callback
     check_interruption_callback = ctx.check_interruption
 
     total_chunks = len(translated_chunks)
@@ -668,14 +665,11 @@ async def refine_chunks(
     # Transient per-job state (e.g. glossary cap warning dedupe) — never persisted.
     runtime_state: dict = {}
 
-    # Single-phase refinement tracker (the workflow phase, when this runs as the
-    # second pass of a translate→refine job, is tagged at the handler seam).
-    progress_tracker = TokenProgressTracker()
-    progress_tracker.start()
-    token_counter = TokenChunker(max_tokens=800)
-    for chunk_text in translated_chunks:
-        token_count = token_counter.count_tokens(chunk_text)
-        progress_tracker.register_chunk(token_count)
+    # Chunk-counted, like every other engine. Whether this pass is the second
+    # phase of a translate→refine job is the job runner's business.
+    progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+    progress.begin(total_chunks)
+    progress.emit()
 
     if log_callback:
         log_callback("refinement_start", f"✨ Starting refinement pass ({total_chunks} chunks)...")
@@ -748,24 +742,11 @@ async def refine_chunks(
                     refined_parts.append(remaining)
                 break
 
-            # Progress update (token-based)
-            # Measure refinement time for this chunk
-            chunk_start_time = time.time()
-
-            # Skip empty chunks
-            if not draft_text.strip():
-                refined_parts.append(draft_text)
-                chunk_elapsed = time.time() - chunk_start_time
-                progress_tracker.mark_completed(i, chunk_elapsed)
-                if stats_callback:
-                    stats_callback(progress_tracker.get_stats().to_dict())
-                continue
-
-            # Skip very short content
+            # Skip empty or very short content
             if len(draft_text.strip()) <= 1:
                 refined_parts.append(draft_text)
-                chunk_elapsed = time.time() - chunk_start_time
-                progress_tracker.mark_completed(i, chunk_elapsed)
+                progress.record()
+                progress.emit()
                 continue
 
             # Get context from original chunks if available
@@ -814,8 +795,6 @@ async def refine_chunks(
                     context_limit=llm_response.context_limit
                 )
 
-            chunk_elapsed = time.time() - chunk_start_time
-
             if refined_text is not None:
                 refined_text = clean_translated_text(refined_text, target_language=target_language)
                 if not refined_text.strip():
@@ -824,7 +803,7 @@ async def refine_chunks(
 
             if refined_text is not None:
                 refined_parts.append(refined_text)
-                progress_tracker.mark_completed(i, chunk_elapsed)
+                progress.record()
 
                 # Update context for next chunk
                 last_refined_context = previous_context_tail(refined_text)
@@ -834,20 +813,18 @@ async def refine_chunks(
                     log_callback("refinement_chunk_failed",
                         f"Refinement failed for chunk {i+1}, keeping original translation")
                 refined_parts.append(draft_text)
-                progress_tracker.mark_failed(i)
+                progress.record(succeeded=False)
                 last_refined_context = ""
 
-            if stats_callback:
-                stats_callback(progress_tracker.get_stats().to_dict())
+            progress.emit()
 
     finally:
         if llm_client:
             await llm_client.close()
 
-    stats = progress_tracker.get_stats()
     if log_callback:
         log_callback("refinement_complete",
-            f"✨ Refinement complete: {stats.completed_chunks} refined, {stats.failed_chunks} kept original")
+            f"✨ Refinement complete: {progress.succeeded} refined, {progress.failed} kept original")
 
     return refined_parts
 

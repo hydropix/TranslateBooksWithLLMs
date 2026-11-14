@@ -169,6 +169,49 @@ async def test_resume_with_persistent_failure_stays_partial(
     assert cm.load_checkpoint("job")["failed_chunk_indices"] == [1]
 
 
+async def _run_with_stats(adapter, cm, stats):
+    translator = GenericTranslator(
+        adapter=adapter, checkpoint_manager=cm, translation_id="job"
+    )
+    return await translator.translate(
+        make_job(source_language="English", target_language="French", model="fake-model", provider="ollama"),
+        make_ctx(stats_callback=stats.append),
+    )
+
+
+@pytest.mark.asyncio
+async def test_progress_counts_a_failed_unit_as_processed(tmp_path, cm, monkeypatch):
+    # completed_chunks counts every processed unit (the bar reaches the end);
+    # failed_chunks is the failed part of it and unfinished_chunks what the
+    # job still owes.
+    _patch_llm(monkeypatch, {FAILING_CONTENT}, [])
+    stats = []
+    await _run_with_stats(FakeAdapter(tmp_path), cm, stats)
+
+    last = stats[-1]
+    assert (last["total_chunks"], last["completed_chunks"], last["failed_chunks"]) == (N_UNITS, N_UNITS, 1)
+    assert last["unfinished_chunks"] == 1
+    assert last["run_processed_chunks"] == N_UNITS
+    assert [s["completed_chunks"] for s in stats] == list(range(N_UNITS + 1))
+
+
+@pytest.mark.asyncio
+async def test_resumed_progress_starts_from_the_restored_units(tmp_path, cm, monkeypatch):
+    _patch_llm(monkeypatch, {FAILING_CONTENT}, [])
+    await _run(FakeAdapter(tmp_path), cm)
+
+    _patch_llm(monkeypatch, set(), [])
+    stats = []
+    await _run_with_stats(FakeAdapter(tmp_path), cm, stats)
+
+    resumed = stats[1]
+    assert (resumed["completed_chunks"], resumed["failed_chunks"], resumed["unfinished_chunks"]) == (N_UNITS - 1, 0, 1)
+    assert resumed["run_processed_chunks"] == 0
+    last = stats[-1]
+    assert (last["completed_chunks"], last["failed_chunks"], last["unfinished_chunks"]) == (N_UNITS, 0, 0)
+    assert last["run_processed_chunks"] == 1
+
+
 def _fake_factory(client_cls):
     """Stand-in for `create_llm_provider` that builds the test's fake client."""
     def build(cfg):

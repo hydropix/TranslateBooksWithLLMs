@@ -67,10 +67,10 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
     for name, n in files.items():
         (tmp_path / name).write_text(f'<html xmlns="http://www.w3.org/1999/xhtml" n="{n}"><body/></html>')
 
-    async def fake_refine_one(doc_root, stats_callback=None, **kw):
-        n = int(doc_root.get("n"))
-        for i in range(1, n + 1):
-            stats_callback({"total_chunks": n, "completed_chunks": i, "failed_chunks": 0})
+    async def fake_refine_one(doc_root, progress=None, **kw):
+        for _ in range(int(doc_root.get("n"))):
+            progress.record()
+            progress.emit()
         return True
 
     monkeypatch.setattr(epub_refiner, "_refine_one_xhtml", fake_refine_one)

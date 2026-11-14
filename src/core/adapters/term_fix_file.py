@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from .exceptions import UnsupportedFormatError
 from src.core.job import JobConfig, JobContext, JobResult, JobStatus
+from src.core.progress import Phase, ProgressReporter
 from src.core.term_fix import (
     MODE_LITERAL,
     MODE_SMART,
@@ -275,9 +276,11 @@ async def term_fix_file(
                 check_interruption_callback=ctx.check_interruption,
             )
         result = await fix_units(document.units, rules, document.locate, corrector=corrector)
-        if corrector is None and stats_callback:
+        if corrector is None:
             # Literal mode is a single instant step; report it as done.
-            stats_callback({'total_chunks': 1, 'completed_chunks': 1, 'failed_chunks': 0})
+            progress = ProgressReporter(stats_callback, phase=Phase.REFINING)
+            progress.begin(1, done=1)
+            progress.emit()
     finally:
         if llm_client is not None and hasattr(llm_client, "close"):
             try:

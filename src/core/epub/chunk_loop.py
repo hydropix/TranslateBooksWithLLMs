@@ -17,6 +17,8 @@ The two authoritative views of a pass live in :class:`ChunkSlots`.
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
+from src.core.progress import ProgressReporter
+
 from .chunk_fallback import translate_chunk_with_fallback
 from .chunk_settings import ChunkLoopSettings
 from .html_utils import is_text_free_chunk
@@ -160,7 +162,7 @@ class _ChunkPass:
     def __init__(self, chunks: List[Dict], settings: ChunkLoopSettings,
                  placeholder_format: Tuple[str, str], global_tag_map: Optional[Dict[str, str]],
                  slots: ChunkSlots, stats: TranslationMetrics,
-                 original_chunks: Optional[List[Dict]]):
+                 original_chunks: Optional[List[Dict]], progress: ProgressReporter):
         self.chunks = chunks
         self.settings = settings
         self.placeholder_format = placeholder_format
@@ -168,6 +170,7 @@ class _ChunkPass:
         self.slots = slots
         self.stats = stats
         self.original_chunks = original_chunks
+        self.progress = progress
 
     def save_state(self) -> None:
         """Persist the resume state for this file from the slots and statuses.
@@ -280,8 +283,7 @@ class _ChunkPass:
                 f"💾 Checkpoint saved: chunk {i + 1}/{len(self.chunks)}")
 
         # Report progress after completing each chunk
-        if settings.stats_callback:
-            settings.stats_callback(stats.to_dict())
+        stats.report_progress(self.progress)
 
     async def run(self, pending: List[int]) -> int:
         """Translate the `pending` chunks; the number delivered.
@@ -372,11 +374,11 @@ async def translate_chunks(
     slots = ChunkSlots(len(chunks), start_chunk_index, translated_chunks, chunk_statuses)
 
     # Report initial stats
-    if settings.stats_callback:
-        settings.stats_callback(stats.to_dict())
+    progress = ProgressReporter(settings.stats_callback)
+    stats.report_progress(progress)
 
     chunk_pass = _ChunkPass(chunks, settings, placeholder_format, global_tag_map,
-                            slots, stats, original_chunks)
+                            slots, stats, original_chunks, progress)
     pending = slots.work_set(start_chunk_index, settings.retry_token_aligned)
     delivered = await chunk_pass.run(pending)
 

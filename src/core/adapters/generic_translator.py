@@ -9,6 +9,7 @@ from typing import Callable, Optional, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 
 from .format_adapter import FormatAdapter
+from src.core.progress import ProgressReporter
 
 if TYPE_CHECKING:
     from src.core.job import JobConfig, JobContext
@@ -31,7 +32,27 @@ def _join_instructions(*parts: str) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def _run_counters(completed_count: int, restored_count: int) -> Dict[str, int]:
+def _progress_fields(progress: ProgressReporter, restored_count: int,
+                     raw_fallback_count: Optional[int] = None) -> Dict[str, Any]:
+    """The quality fields of a stats emit (the counts come from the reporter).
+
+    ``unfinished_chunks`` is what the job still owes: every unit without a
+    committed translation, failed ones included. It is emitted from the first
+    stats update so the key is never absent while the job runs (issue #261,
+    D9): a checkpoint resumed with nothing left pending never reaches the
+    per-unit emit, and classify_completion must not fall back to the
+    historical fallback_used counter in that case.
+    """
+    fields: Dict[str, Any] = {
+        'unfinished_chunks': max(0, progress.total - progress.succeeded),
+    }
+    if raw_fallback_count is not None:
+        fields['raw_fallback_used'] = raw_fallback_count
+    fields.update(_run_counters(progress.done, restored_count))
+    return fields
+
+
+def _run_counters(processed_count: int, restored_count: int) -> Dict[str, int]:
     """Per-run twins of the counters the UI's rate context reads.
 
     The progress payload's `completed_chunks` includes the units restored from
@@ -46,7 +67,7 @@ def _run_counters(completed_count: int, restored_count: int) -> Dict[str, int]:
     them appear or vanish mid-job.
     """
     return {
-        'run_processed_chunks': max(0, completed_count - restored_count),
+        'run_processed_chunks': max(0, processed_count - restored_count),
         'run_successful_after_retry': 0,
         'run_token_alignment_used': 0,
         'run_fallback_used': 0,
@@ -104,9 +125,9 @@ class GenericTranslator:
                 (resolved against the provider; local providers are forced
                 back to 1. When 1, behavior is the sequential loop, including
                 cross-chunk translation context chaining).
-            ctx: Log callback, stats callback (receives dicts with
-                total_chunks, completed_chunks, failed_chunks,
-                unfinished_chunks) and interruption check. The checkpoint
+            ctx: Log callback, stats callback (receives ProgressReporter
+                payloads: the chunk counts plus unfinished_chunks and the
+                run_* twins) and interruption check. The checkpoint
                 manager and job id are the ones given to the constructor.
 
         Returns:
@@ -120,7 +141,7 @@ class GenericTranslator:
         model_name = job.model
         llm_provider = job.llm_provider
         log_callback = ctx.log_callback
-        stats_callback = ctx.stats_callback
+        progress = ProgressReporter(ctx.stats_callback)
         check_interruption_callback = ctx.check_interruption
         bilingual_output = job.bilingual_output
         parallel_workers = job.parallel_workers
@@ -149,20 +170,8 @@ class GenericTranslator:
                 log_callback("units_found", f"Found {total_units} translation units")
 
             # Send initial stats with total_chunks
-            if stats_callback:
-                stats_callback({
-                    'total_chunks': total_units,
-                    'completed_chunks': 0,
-                    'failed_chunks': 0,
-                    # Emitted from the first stats update so the key is never
-                    # absent while the job runs (issue #261, D9): a checkpoint
-                    # resumed with nothing left pending never reaches the
-                    # per-unit callback below, and classify_completion must not
-                    # fall back to the historical fallback_used counter in that
-                    # case.
-                    'unfinished_chunks': total_units,
-                    **_run_counters(0, 0),
-                })
+            progress.begin(total_units)
+            progress.emit(_progress_fields(progress, 0))
 
             # 3. Check for checkpoint and resume
             restored_completed = set()
@@ -201,14 +210,8 @@ class GenericTranslator:
                     log_callback("checkpoint_resumed",
                         f"Resuming: {len(restored_completed)}/{total_units} units already translated")
                 # Update stats with resumed progress
-                if stats_callback:
-                    stats_callback({
-                        'total_chunks': total_units,
-                        'completed_chunks': len(restored_completed),
-                        'failed_chunks': 0,
-                        'unfinished_chunks': max(0, total_units - len(restored_completed)),
-                        **_run_counters(len(restored_completed), len(restored_completed)),
-                    })
+                progress.begin(total_units, done=len(restored_completed))
+                progress.emit(_progress_fields(progress, len(restored_completed)))
             else:
                 # 4. Create new translation job
                 self.checkpoint_manager.start_job(
@@ -261,8 +264,6 @@ class GenericTranslator:
             raw_log = self._open_raw_response_log(log_callback) if SAVE_RAW_LLM_RESPONSES else None
 
             last_context = ""
-            failed_count = 0
-            completed_count = len(restored_completed)
             # Units whose translation was taken from an untagged raw reply:
             # saved, but worth a look, so they are counted and reported.
             raw_fallback_units = set()
@@ -359,11 +360,14 @@ class GenericTranslator:
                                 f"Could not save partial output: {str(e)}")
                 self.checkpoint_manager.mark_paused(self.translation_id)
 
+            def _emit_unit_progress():
+                progress.emit(_progress_fields(
+                    progress, len(restored_completed), len(raw_fallback_units)))
+
             def _record_failure(i, unit):
-                nonlocal failed_count
                 if log_callback:
                     log_callback("unit_failed", f"Failed to translate unit {i+1}/{total_units}")
-                failed_count += 1
+                progress.record(succeeded=False)
                 self.checkpoint_manager.save_checkpoint(
                     translation_id=self.translation_id,
                     chunk_index=i,
@@ -371,17 +375,9 @@ class GenericTranslator:
                     translated_text=None,
                     chunk_data=unit.metadata,
                     total_chunks=total_units,
-                    failed_chunks=failed_count
+                    failed_chunks=progress.failed
                 )
-                if stats_callback:
-                    stats_callback({
-                        'total_chunks': total_units,
-                        'completed_chunks': completed_count,
-                        'failed_chunks': failed_count,
-                        'unfinished_chunks': max(0, total_units - completed_count),
-                        'raw_fallback_used': len(raw_fallback_units),
-                        **_run_counters(completed_count, len(restored_completed)),
-                    })
+                _emit_unit_progress()
 
             # Everything without a committed translation is (re)translated:
             # never-attempted units AND previously failed ones.
@@ -441,11 +437,12 @@ class GenericTranslator:
                                 log_callback("save_failed",
                                     f"Failed to save translation for unit {unit.unit_id}"
                                     + (f": {cause}" if cause else ""))
-                            failed_count += 1
+                            progress.record(succeeded=False)
+                            _emit_unit_progress()
                             next_index = i + 1
                             continue
 
-                        completed_count += 1
+                        progress.record()
                         self.checkpoint_manager.save_checkpoint(
                             translation_id=self.translation_id,
                             chunk_index=i,
@@ -453,17 +450,9 @@ class GenericTranslator:
                             translated_text=translated_content,
                             chunk_data=unit.metadata,
                             total_chunks=total_units,
-                            completed_chunks=completed_count
+                            completed_chunks=progress.succeeded
                         )
-                        if stats_callback:
-                            stats_callback({
-                                'total_chunks': total_units,
-                                'completed_chunks': completed_count,
-                                'failed_chunks': failed_count,
-                                'unfinished_chunks': max(0, total_units - completed_count),
-                                'raw_fallback_used': len(raw_fallback_units),
-                                **_run_counters(completed_count, len(restored_completed)),
-                            })
+                        _emit_unit_progress()
 
                         if sequential:
                             last_context = previous_context_tail(translated_content)
@@ -520,7 +509,8 @@ class GenericTranslator:
             # 9. Mark job as completed only when every unit is genuinely
             # translated; otherwise keep the checkpoint resumable so the
             # failed units can be retried (issue #204).
-            if failed_count == 0 and completed_count == total_units:
+            failed_count = progress.failed
+            if failed_count == 0 and progress.succeeded == total_units:
                 self.checkpoint_manager.mark_completed(self.translation_id)
                 if log_callback:
                     log_callback("translation_complete",

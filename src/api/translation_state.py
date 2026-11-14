@@ -293,7 +293,6 @@ class TranslationStateManager:
                     # Include stats for UI restoration
                     "total_chunks": stats.get('total_chunks', 0),
                     "completed_chunks": stats.get('completed_chunks', 0),
-                    "progress_percent": stats.get('progress_percent'),
                     "current_phase": stats.get('current_phase'),
                     "enable_refinement": stats.get('enable_refinement', False),
                     # Canonical progress contract (Step 2 seam), alongside the

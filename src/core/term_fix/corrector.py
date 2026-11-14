@@ -11,6 +11,7 @@ import asyncio
 import re
 from typing import Callable, Dict, List, Optional, Sequence
 
+from src.core.progress import Phase, ProgressReporter
 from src.core.term_fix.diffing import changes_outside
 from src.core.term_fix.matcher import find_spans
 from src.core.term_fix.models import (
@@ -218,23 +219,19 @@ class SmartCorrector:
         batches = [list(items[i:i + self.batch_size])
                    for i in range(0, len(items), self.batch_size)]
         results: List[Optional[List[Correction]]] = [None] * len(batches)
-        done = 0
         semaphore = asyncio.Semaphore(self.parallel)
 
         async def run(index: int) -> None:
-            nonlocal done
             async with semaphore:
                 if self._interrupted():
                     return
                 results[index] = await self._correct_batch(batches[index])
-                done += 1
-                if self.stats_callback:
-                    self.stats_callback({'total_chunks': len(batches),
-                                         'completed_chunks': done, 'failed_chunks': 0})
+                progress.record()
+                progress.emit()
 
-        if self.stats_callback:
-            self.stats_callback({'total_chunks': len(batches),
-                                 'completed_chunks': 0, 'failed_chunks': 0})
+        progress = ProgressReporter(self.stats_callback, phase=Phase.REFINING)
+        progress.begin(len(batches))
+        progress.emit()
         self._log("term_fix_smart_start",
                   f"Term fix: {len(items)} snippet(s) in {len(batches)} LLM request(s)")
         await asyncio.gather(*(run(i) for i in range(len(batches))))

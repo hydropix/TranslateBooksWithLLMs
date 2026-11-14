@@ -67,7 +67,6 @@ async def refine_txt_file(
     output_filepath = job.output_path
     target_language = job.target_language
     log_callback = ctx.log_callback
-    stats_callback = ctx.stats_callback
     max_tokens_per_chunk = job.max_tokens_per_chunk
 
     if not os.path.exists(input_filepath):
@@ -119,9 +118,6 @@ async def refine_txt_file(
             "context_after": "",
         }]
         total_chunks = 1
-
-    if stats_callback:
-        stats_callback({'total_chunks': total_chunks, 'completed_chunks': 0, 'failed_chunks': 0})
 
     if log_callback:
         log_callback("refine_info_chunks",

@@ -3,7 +3,7 @@
 The handlers orchestration runs translate_file then refine_file, injecting
 `_workflow_meta = {enable_refinement: True, current_phase: 2}` into every
 stats emit and resetting the counters at the phase boundary. This test
-reproduces that exact merge + the Step 2 bridge over a *multi-chunk* refine
+reproduces that exact merge + snapshot_from_job_stats over a *multi-chunk* refine
 and asserts the bar climbs 50 -> 100 with per-chunk feedback.
 
 This pins the behavior probed during the Step 3 smoke test: a single-chunk
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from src.core.adapters import refine_file
-from src.core.progress import snapshot_from_legacy_stats
+from src.core.progress import snapshot_from_job_stats
 from src.persistence.checkpoint_manager import CheckpointManager
 from tests.characterization import fake_llm, fixtures
 from tests.job_helpers import make_ctx, make_job
@@ -33,7 +33,7 @@ def _run_refine_after(work_dir: Path, input_path: Path, output_path: Path):
 
     def emit(stats):
         merged = {**stats, **workflow_meta}
-        percents.append(snapshot_from_legacy_stats(merged).percent)
+        percents.append(snapshot_from_job_stats(merged).percent)
 
     # handlers emits a counter reset at the phase-1 -> phase-2 boundary.
     emit({"completed_chunks": 0, "failed_chunks": 0})

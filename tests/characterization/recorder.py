@@ -34,18 +34,12 @@ STABLE_KEYS = (
     "completed_chunks",
     "failed_chunks",
     "processed_chunks",
-    "refinement_chunks_completed",
-    "refinement_phase",
-    "enable_refinement",
-    "current_phase",
     "successful_first_try",
     "successful_after_retry",
     "fallback_used",
     "token_alignment_used",
     "placeholder_errors",
     "total_tokens",
-    "completed_tokens",
-    "progress_percent",
 )
 
 

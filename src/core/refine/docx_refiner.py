@@ -17,6 +17,7 @@ from src.core.epub.html_chunker import HtmlChunker
 from src.core.docx.converter import DocxHtmlConverter
 from src.core.job import JobConfig, JobContext
 from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
+from src.core.progress import Phase, ProgressReporter
 from .client_setup import build_refine_client
 
 
@@ -53,7 +54,6 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
     prompt_options = job.engine_prompt_options()
     max_tokens_per_chunk = job.max_tokens_per_chunk
     log_callback = ctx.log_callback
-    stats_callback = ctx.stats_callback
     check_interruption_callback = ctx.check_interruption
 
     if max_tokens_per_chunk is None:
@@ -107,8 +107,9 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
         if log_callback:
             log_callback("docx_chunks_created", f"Created {len(chunks)} chunks")
 
-        if stats_callback:
-            stats_callback({'total_chunks': len(chunks), 'completed_chunks': 0, 'failed_chunks': 0})
+        progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+        progress.begin(len(chunks))
+        progress.emit()
 
         draft_globalized = globalize_chunks(chunks, placeholder_format)
 
@@ -123,7 +124,7 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
                 placeholder_format=placeholder_format,
                 log_callback=log_callback,
                 prompt_options=prompt_options,
-                stats_callback=stats_callback,
+                progress=progress,
             )
         except RateLimitError as e:
             # Save what was refined before pausing (the rest keeps its draft),

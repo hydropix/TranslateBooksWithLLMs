@@ -17,7 +17,7 @@ from pathlib import Path
 
 from src.core.job import JobConfig, JobResult, JobStatus
 from src.core.job.runner import JobRunner, JobSinks
-from src.core.progress import snapshot_from_legacy_stats
+from src.core.progress import snapshot_from_job_stats
 from src.utils.file_utils import generate_tts_for_translation, get_unique_output_path
 from src.utils.unified_logger import LogType, create_job_logger
 from .services.path_validator import PathValidator
@@ -144,14 +144,14 @@ class WebJobSinks(JobSinks):
         return self.state.exists(self.translation_id)
 
     def emit_stats(self, stats):
-        """Merge, derive the canonical progress fields (the one place the
-        legacy stats and the unified snapshot meet), emit."""
+        """Merge, derive the canonical ``percent`` / ``phase`` from the merged
+        job stats (the one place they are derived), emit."""
         if not self._exists():
             return
 
         def finalize(current):
             current['elapsed_time'] = time.time() - current.get('start_time', time.time())
-            snapshot = snapshot_from_legacy_stats(current).to_dict()
+            snapshot = snapshot_from_job_stats(current).to_dict()
             if snapshot['percent'] < self._progress_floor:
                 snapshot['percent'] = self._progress_floor
             else:

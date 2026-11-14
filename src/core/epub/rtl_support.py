@@ -11,6 +11,8 @@ while protecting technical content (code, URLs) from direction reversal.
 from typing import Set, Optional
 import os
 
+from .archive import find_opf_file
+
 
 # RTL Languages supported with their ISO 639-1 codes
 RTL_LANGUAGES: Set[str] = {
@@ -631,14 +633,7 @@ def _apply_rtl_styles(temp_dir: str, target_language: str, result: dict) -> dict
     result['is_rtl'] = True
     
     # Find and update OPF file
-    opf_path = None
-    for root_dir, _, files in os.walk(temp_dir):
-        for file in files:
-            if file.endswith('.opf'):
-                opf_path = os.path.join(root_dir, file)
-                break
-        if opf_path:
-            break
+    opf_path = find_opf_file(temp_dir)
     
     if opf_path:
         result['opf_updated'] = update_opf_for_rtl(opf_path, target_language)
@@ -671,14 +666,7 @@ def _apply_ltr_reset(temp_dir: str, result: dict) -> dict:
     result['was_transition'] = True
     
     # Find and update OPF file
-    opf_path = None
-    for root_dir, _, files in os.walk(temp_dir):
-        for file in files:
-            if file.endswith('.opf'):
-                opf_path = os.path.join(root_dir, file)
-                break
-        if opf_path:
-            break
+    opf_path = find_opf_file(temp_dir)
     
     if opf_path:
         result['opf_updated'] = update_opf_for_ltr(opf_path)

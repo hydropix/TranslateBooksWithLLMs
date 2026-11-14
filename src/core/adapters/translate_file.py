@@ -205,7 +205,7 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
 
     adapter_class = adapter_map.get(detected_type)
     if not adapter_class:
-        supported = ', '.join(['txt', 'srt', 'pgn', 'epub', 'docx', 'pdf'])
+        supported = ', '.join(FILE_TYPE_BY_EXTENSION.values())
         raise UnsupportedFormatError(
             f"Unsupported file format: {detected_type}. Supported formats: {supported}"
         )
@@ -236,6 +236,17 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
                               interrupted=ctx.interrupted())
 
 
+#: Extension -> file type of every format the translate engine accepts.
+FILE_TYPE_BY_EXTENSION = {
+    '.txt': 'txt',
+    '.srt': 'srt',
+    '.pgn': 'pgn',
+    '.epub': 'epub',
+    '.docx': 'docx',
+    '.pdf': 'pdf',
+}
+
+
 def get_file_type_from_path(filepath: str) -> str:
     """
     Get the file type identifier from a file path.
@@ -247,14 +258,4 @@ def get_file_type_from_path(filepath: str) -> str:
         File type string: 'txt', 'srt', 'pgn', 'epub', 'docx', 'pdf', or 'unknown'
     """
     _, ext = os.path.splitext(filepath.lower())
-
-    type_map = {
-        '.txt': 'txt',
-        '.srt': 'srt',
-        '.pgn': 'pgn',
-        '.epub': 'epub',
-        '.docx': 'docx',
-        '.pdf': 'pdf',
-    }
-
-    return type_map.get(ext, 'unknown')
+    return FILE_TYPE_BY_EXTENSION.get(ext, 'unknown')

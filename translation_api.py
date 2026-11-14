@@ -318,7 +318,8 @@ def start_server():
         logger.info(f"  LLM Provider: {provider}")
         if provider == 'ollama':
             logger.info(f"  Ollama Endpoint: {DEFAULT_OLLAMA_API_ENDPOINT}")
-        logger.info(f"  Supported formats: .txt, .epub, .srt")
+        from src.core.adapters.translate_file import FILE_TYPE_BY_EXTENSION
+        logger.info(f"  Supported formats: {', '.join(FILE_TYPE_BY_EXTENSION)}")
         logger.info("")
 
         # Only probe Ollama when it is the configured provider: with another

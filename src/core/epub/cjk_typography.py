@@ -1249,7 +1249,7 @@ def apply_script_normalization_to_epub_directory(
     lang_code = get_language_code(target_language)
     if lang_code:
         # "Beside the OPF" — the content root, where
-        # `_update_ncx_toc_labels_from_translated_docs` looks too (its tree is
+        # `toc_labels.update_ncx_toc_labels_from_translated_docs` looks too (its tree is
         # walked rather than globbed, so a nested toc/ folder is covered).
         # Without an OPF at all, fall back to the whole container.
         ncx_root = os.path.dirname(opf_path) if opf_path else temp_dir

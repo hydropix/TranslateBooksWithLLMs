@@ -306,8 +306,12 @@ def _record_outcome(run: EpubRun, book: BookRunState, file_idx: int, content_hre
         if not already_translated:
             book.completed_files += 1
     elif not result.success and result.doc_root is not None:
-        # Save original document if translation failed
-        book.parsed_docs[file_path] = result.doc_root
+        # A failed (or interrupted) file is written back exactly as it was
+        # read: the translated tree went through boilerplate removal and ruby
+        # folding, so writing it would drop content the source still has. For
+        # a re-entered file the text read is the restored translated copy,
+        # which is what has to be kept.
+        book.parsed_docs[file_path] = parse_xhtml(result.source_text)
         book.failed_doc_paths.add(file_path)
         book.failed_files += 1
         run.log("epub_file_translate_failed",

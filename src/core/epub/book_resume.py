@@ -82,8 +82,8 @@ def begin_pass(run: EpubRun, book: BookRunState) -> None:
     # Send initial stats if resuming (to update UI immediately). Forward the
     # restored fallback counters so the UI hydrates the Fallbacks card with
     # the work already done before the pause, instead of showing 0.
-    if run.ctx.stats_callback and resume_from_index > 0:
-        run.ctx.emit(book.payload())
+    if resume_from_index > 0:
+        book.emit()
 
 
 def _rehydrate_accumulated_stats(run: EpubRun, book: BookRunState) -> Dict[str, Any]:

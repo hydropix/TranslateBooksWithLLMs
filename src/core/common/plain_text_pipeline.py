@@ -16,6 +16,7 @@ import math
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from src.common.cjk_punctuation import PARAGRAPH_BREAK_PATTERN, reattach_closing_punctuation
 from src.core.chunking.token_chunker import TokenChunker
 from src.core.translator import generate_translation_request, previous_context_tail
 from src.core.post_processor import clean_translated_text
@@ -78,6 +79,18 @@ def strip_hallucinated_markdown_markers(translated: str, source: str) -> str:
     if _MARKDOWN_HEADING_MARKER_REGEX.search(source or ""):
         return translated
     return _MARKDOWN_HEADING_MARKER_REGEX.sub(r"\1", translated)
+
+
+def reattach_paragraph_closing_punctuation(translated: str, source: str) -> str:
+    """Move CJK closing punctuation that opens a paragraph back to the one before.
+
+    A model that answers "こんにちは\\n\\n。お元気ですか？" puts the "。" of the
+    first paragraph at the start of the second one once the blob is split on
+    blank lines. Full-width closing punctuation never opens a paragraph (see
+    src/common/cjk_punctuation.py), so it is moved back before the break. A
+    source with a paragraph that does start with such a mark disarms it.
+    """
+    return reattach_closing_punctuation(translated, PARAGRAPH_BREAK_PATTERN, source)
 
 
 def _split_translated_back_to_paragraphs(translated_text: str) -> List[str]:
@@ -161,6 +174,7 @@ async def _retry_segment_with_paragraph_count(
     cleaned = clean_translated_text(answer, target_language=target_language)
     cleaned = strip_hallucinated_markup(cleaned, main_content)
     cleaned = strip_hallucinated_markdown_markers(cleaned, main_content)
+    cleaned = reattach_paragraph_closing_punctuation(cleaned, main_content)
     if not cleaned.strip():
         return None
     if _paragraph_count_mismatch(cleaned, expected_count) is not None:
@@ -211,6 +225,7 @@ async def _repair_segment_by_paragraph(
             cleaned = clean_translated_text(translated, target_language=target_language)
             cleaned = strip_hallucinated_markup(cleaned, text)
             cleaned = strip_hallucinated_markdown_markers(cleaned, text)
+            cleaned = reattach_paragraph_closing_punctuation(cleaned, text)
             # One paragraph in, one paragraph out, always: a model that split
             # this single paragraph would otherwise re-introduce the very
             # misalignment the repair exists to remove. Never recurse.
@@ -869,6 +884,8 @@ async def translate_paragraphs_plain(
                         cleaned = strip_hallucinated_markup(
                             cleaned, chunks[i].get('main_content', ''))
                         cleaned = strip_hallucinated_markdown_markers(
+                            cleaned, chunks[i].get('main_content', ''))
+                        cleaned = reattach_paragraph_closing_punctuation(
                             cleaned, chunks[i].get('main_content', ''))
                         translated_parts[i] = cleaned
                         statuses[i] = CHUNK_TRANSLATED

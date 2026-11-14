@@ -13,12 +13,17 @@ Whatever the phase, the chunk's terminal outcome is recorded in
 CHUNK_UNTRANSLATED) and the result comes back with global placeholders.
 """
 
+import re
 from typing import Dict, List, Optional, Tuple
+
+from src.common.cjk_punctuation import reattach_closing_punctuation
+from src.common.placeholder_format import PlaceholderFormat
 
 from .chunk_settings import ChunkLoopSettings
 from .engine_log import report_error
 from .placeholder_renumberer import globalize_placeholders
 from .placeholder_validator import PlaceholderValidator
+from .tag_preservation import _is_block_boundary_tag
 from .text_survival import text_survival_problem
 from .translation_metrics import TranslationMetrics
 from .xhtml_translation_state import (
@@ -42,6 +47,40 @@ def keep_edge_whitespace(source: str, translated: str) -> str:
     leading = source[:len(source) - len(source.lstrip())]
     trailing = source[len(source.rstrip()):]
     return leading + translated.strip() + trailing
+
+
+_TAG_RE = re.compile(r"<[^<>]+>")
+
+
+def _ends_block(markup: str) -> bool:
+    """True when ``markup`` closes a block or breaks a line (</p>, </li>, <br/>)."""
+    for tag in _TAG_RE.findall(markup):
+        if not (tag.startswith("</") or tag.endswith("/>")):
+            continue
+        if _is_block_boundary_tag(tag):
+            return True
+    return False
+
+
+def reattach_block_closing_punctuation(source: str, translated: str,
+                                       local_tag_map: Dict[str, str]) -> str:
+    """Pull full-width closing punctuation back inside the block it ends.
+
+    A reply such as "[id0]こんにちは[id1]。[id2]" (``[id1]`` = ``</p><p>``) renders the
+    "。" at the start of the next paragraph. Any run of placeholders holding a
+    block end that is directly followed by CJK closing punctuation gets that
+    punctuation moved before it. A chunk whose source itself starts a block
+    with such punctuation is left alone (see ``reattach_closing_punctuation``).
+    """
+    block_placeholders = [ph for ph, markup in local_tag_map.items() if _ends_block(markup)]
+    if not block_placeholders:
+        return translated
+    fmt = PlaceholderFormat.from_config()
+    any_placeholder = rf"{re.escape(fmt.prefix)}\d+{re.escape(fmt.suffix)}"
+    block = "|".join(re.escape(ph) for ph in block_placeholders)
+    # The whole run of adjacent placeholders around the block end ("</em></p><p>").
+    boundary = rf"(?:{any_placeholder})*?(?:{block})(?:{any_placeholder})*"
+    return reattach_closing_punctuation(translated, boundary, source)
 
 
 def validate_placeholders(translated_text: str, local_tag_map: Dict[str, str]) -> bool:
@@ -222,6 +261,9 @@ async def translate_chunk_with_fallback(
         outcome = CHUNK_UNTRANSLATED
         result = chunk_text
         _phase3_keep_source(settings, stats)
+
+    if outcome != CHUNK_UNTRANSLATED:
+        result = reattach_block_closing_punctuation(chunk_text, result, local_tag_map)
 
     stats.record_chunk_outcome(chunk_index, outcome)
     restored = globalize_placeholders(result, global_indices)

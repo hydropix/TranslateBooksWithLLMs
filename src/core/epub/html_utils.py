@@ -7,6 +7,7 @@ in EPUB translation workflows.
 
 import re
 from typing import Dict, Optional, Tuple, Union
+from src.common.cjk_punctuation import skip_closing_punctuation
 from src.common.placeholder_format import PlaceholderFormat
 
 # A Unicode letter: any word character that is neither a digit nor an
@@ -179,7 +180,7 @@ def find_nearest_word_boundary(text: str, pos: int) -> int:
 
     # If we're already on a boundary, perfect
     if is_boundary(text[pos]):
-        return pos
+        return skip_closing_punctuation(text, pos)
 
     # Find the nearest boundary (before or after)
     left = pos
@@ -190,7 +191,9 @@ def find_nearest_word_boundary(text: str, pos: int) -> int:
     while right < len(text) and not is_boundary(text[right]):
         right += 1
 
-    # Return the closest one
-    if pos - left <= right - pos:
-        return left
-    return right
+    # Return the closest one, after any full-width closing mark ("。", "」"):
+    # such a mark ends the text before it and must not open the next block.
+    nearest = left if pos - left <= right - pos else right
+    if nearest > 0:
+        nearest = skip_closing_punctuation(text, nearest)
+    return nearest

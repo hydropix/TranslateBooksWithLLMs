@@ -305,25 +305,25 @@ async def _request_metadata_translation(
     the pipeline's main translation path (`src/core/translator.py`), the client
     was built for `model_name` already, which is why that argument is only used
     for logging.
-    """
-    previous_context: Optional[int] = None
-    try:
-        current = getattr(llm_client, 'context_window', None)
-        if isinstance(current, int):
-            # One CJK character is worth roughly one token, so character count
-            # is a safe upper bound for what this prompt needs.
-            needed = min(
-                len(system_prompt) + len(user_prompt) + _CONTEXT_HEADROOM_TOKENS,
-                _MAX_CONTEXT_TOKENS,
-            )
-            if needed > current:
-                previous_context = current
-                llm_client.context_window = needed
 
-        response = await llm_client.generate(user_prompt, system_prompt=system_prompt)
-    finally:
-        if previous_context is not None:
-            llm_client.context_window = previous_context
+    When the prompt needs a larger window than the client's own, the larger
+    window is passed for this request only (``generate(context_window=...)``,
+    the same per-request path the chunk requests use); the shared client is
+    never mutated.
+    """
+    kwargs = {'system_prompt': system_prompt}
+    current = getattr(llm_client, 'context_window', None)
+    if isinstance(current, int):
+        # One CJK character is worth roughly one token, so character count
+        # is a safe upper bound for what this prompt needs.
+        needed = min(
+            len(system_prompt) + len(user_prompt) + _CONTEXT_HEADROOM_TOKENS,
+            _MAX_CONTEXT_TOKENS,
+        )
+        if needed > current:
+            kwargs['context_window'] = needed
+
+    response = await llm_client.generate(user_prompt, **kwargs)
 
     if response is None or not getattr(response, 'content', None):
         return None

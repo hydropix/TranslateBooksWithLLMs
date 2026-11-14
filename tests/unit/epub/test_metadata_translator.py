@@ -107,10 +107,12 @@ class StubClient:
         self._response = response
         self.context_window = 2048
         self.calls = []
+        self.call_kwargs = []
         self._extractor = TranslationExtractor(TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT)
 
     async def generate(self, prompt, system_prompt=None, **kwargs):
         self.calls.append((prompt, system_prompt, self.context_window))
+        self.call_kwargs.append(dict(kwargs))
         if self._exception is not None:
             raise self._exception
         if self._response is not None:
@@ -221,6 +223,31 @@ async def test_good_answer_translates_both_fields_and_the_ncx_title(book):
     assert SOURCE_TITLE not in book.written_opf()
     assert SOURCE_TITLE not in book.written_ncx()
     assert "epub_metadata_translated" in book.event_names()
+
+
+@pytest.mark.asyncio
+async def test_large_prompt_sizes_its_window_per_request_without_mutating_the_client(book):
+    """A prompt larger than the client's window is sent with a per-request
+    ``context_window``; the shared client keeps its own window throughout."""
+    client = StubClient(_tagged_answer(FRENCH_TITLE, FRENCH_DESCRIPTION))
+    client.context_window = 16
+    await book.run(client)
+
+    assert len(client.calls) == 1
+    # The client was never mutated, not even during the call.
+    assert client.calls[0][2] == 16
+    assert client.context_window == 16
+    sent = client.call_kwargs[0].get('context_window')
+    assert isinstance(sent, int) and sent > 16
+
+
+@pytest.mark.asyncio
+async def test_small_prompt_uses_the_client_window(book):
+    client = StubClient(_tagged_answer(FRENCH_TITLE, FRENCH_DESCRIPTION))
+    client.context_window = 32768
+    await book.run(client)
+
+    assert 'context_window' not in client.call_kwargs[0]
 
 
 # ---------------------------------------------------------------------------

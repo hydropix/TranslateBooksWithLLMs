@@ -11,63 +11,33 @@
     },
     {
       "completed_chunks": 1,
-      "completed_tokens": 51,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 16.67,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 2,
-      "completed_tokens": 102,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 33.33,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 3,
-      "completed_tokens": 153,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 50.0,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 4,
-      "completed_tokens": 204,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 66.67,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 5,
-      "completed_tokens": 255,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 83.33,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     },
     {
       "completed_chunks": 6,
-      "completed_tokens": 306,
-      "current_phase": 1,
-      "enable_refinement": false,
       "failed_chunks": 0,
-      "progress_percent": 100.0,
-      "total_chunks": 6,
-      "total_tokens": 306
+      "total_chunks": 6
     }
   ]
 }

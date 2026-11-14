@@ -736,6 +736,7 @@ import os
 
 from lxml import etree
 
+from .archive import opf_from_container
 from .rtl_support import is_rtl_language
 
 
@@ -906,12 +907,16 @@ def _iter_files(directory: str, suffixes: Tuple[str, ...]) -> List[str]:
 
 
 def _find_opf_path(temp_dir: str) -> Optional[str]:
-    """First `*.opf` found while walking `temp_dir`.
+    """The package `META-INF/container.xml` names, else the first `*.opf`
+    found while walking `temp_dir`.
 
-    Same approach as `rtl_support._apply_rtl_styles` / `_apply_ltr_reset`, which
-    inline this walk twice; it is not importable from there, so it is spelled out
-    once here.
+    The container lookup is the one the translator and the RTL pass use
+    (`archive.find_opf_file`), so every pass edits the same package; the walk
+    fallback keeps this module's case-insensitive suffix match.
     """
+    from_container = opf_from_container(temp_dir)
+    if from_container:
+        return from_container
     for root_dir, _dirs, files in os.walk(temp_dir):
         for name in files:
             if name.lower().endswith(".opf"):

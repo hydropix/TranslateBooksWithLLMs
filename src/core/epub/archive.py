@@ -40,10 +40,11 @@ def find_opf_file(temp_dir: str) -> Optional[str]:
     the container is missing, unreadable, names no package or names a file
     that does not exist inside the book.
     """
-    return _opf_from_container(temp_dir) or _first_opf_in_tree(temp_dir)
+    return opf_from_container(temp_dir) or _first_opf_in_tree(temp_dir)
 
 
-def _opf_from_container(temp_dir: str) -> Optional[str]:
+def opf_from_container(temp_dir: str) -> Optional[str]:
+    """The package ``META-INF/container.xml`` names, if it exists in the book."""
     container_path = os.path.join(temp_dir, 'META-INF', 'container.xml')
     if not os.path.isfile(container_path):
         return None

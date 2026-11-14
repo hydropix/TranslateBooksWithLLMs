@@ -2,7 +2,7 @@
 Path validation utilities for secure file operations
 """
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Optional, Tuple, Union
 
 from src.utils.security import is_within_directory
@@ -49,9 +49,18 @@ class PathValidator:
         # A Windows drive prefix without separator ('C:x.txt').
         if len(name) >= 2 and name[1] == ':':
             name = name[2:]
+        # Characters Windows refuses in a file name. ':' would otherwise
+        # write the translation into an NTFS alternate data stream
+        # ('notes:x.txt' -> a 0-byte 'notes'), the others fail the final
+        # write after the whole job ran.
+        name = ''.join('_' if (c in '<>:"|?*' or ord(c) < 32) else c for c in name)
         name = name.strip().strip('.').strip()
         if not name:
             return None
+        # Device names ('CON', 'NUL.txt', 'COM1.epub', ...) open the device
+        # instead of a file on Windows 10 and older.
+        if PureWindowsPath(name).is_reserved():
+            name = f"_{name}"
         if Path(name).suffix.lower() not in PathValidator.OUTPUT_EXTENSIONS:
             name = f"{name}.txt"
         if len(name) > PathValidator.MAX_FILENAME_LENGTH:

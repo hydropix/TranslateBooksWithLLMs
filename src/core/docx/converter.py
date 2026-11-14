@@ -23,6 +23,13 @@ _W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 _M_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/math'
 _XML_NS = 'http://www.w3.org/XML/1998/namespace'
 
+# Inline HTML formatting tags and the python-docx run property each sets.
+_INLINE_FORMAT_TAGS = {
+    'strong': 'bold', 'b': 'bold',
+    'em': 'italic', 'i': 'italic',
+    'u': 'underline',
+}
+
 # Marker injected in place of OMML equations before mammoth runs.
 # Mammoth drops <m:oMath> entirely; we replace each with this text marker so
 # it survives DOCX -> HTML -> DOCX, then we re-inject the original OMML.
@@ -615,18 +622,10 @@ class DocxHtmlConverter:
                     paragraph.add_run(child.tail)
                 continue
 
-            if child.tag == 'strong' or child.tag == 'b':
-                text = self._get_text_content(child)
-                run = paragraph.add_run(text)
-                run.bold = True
-            elif child.tag == 'em' or child.tag == 'i':
-                text = self._get_text_content(child)
-                run = paragraph.add_run(text)
-                run.italic = True
-            elif child.tag == 'u':
-                text = self._get_text_content(child)
-                run = paragraph.add_run(text)
-                run.underline = True
+            if child.tag in _INLINE_FORMAT_TAGS:
+                # Nested inline formatting (<strong><em>…</em></strong>) is
+                # accumulated so a bold + italic run keeps both properties.
+                self._add_formatted_runs(paragraph, child, frozenset())
             elif child.tag == 'img':
                 self._add_image_run(paragraph, child)
             else:
@@ -637,6 +636,28 @@ class DocxHtmlConverter:
             # Handle tail text (text after closing tag)
             if child.tail:
                 paragraph.add_run(child.tail)
+
+    def _add_formatted_runs(self, paragraph, element: etree._Element, inherited: frozenset):
+        """Emit the runs of an inline-formatting subtree, accumulating
+        bold/italic/underline down nested <strong>/<em>/<u> elements."""
+        formats = inherited | {_INLINE_FORMAT_TAGS[element.tag]}
+
+        def emit(text):
+            if not text:
+                return
+            run = paragraph.add_run(text)
+            for attr in formats:
+                setattr(run, attr, True)
+
+        emit(element.text)
+        for child in element:
+            if child.tag in _INLINE_FORMAT_TAGS:
+                self._add_formatted_runs(paragraph, child, formats)
+            elif child.tag == 'img':
+                self._add_image_run(paragraph, child)
+            else:
+                emit(self._get_text_content(child))
+            emit(child.tail)
 
     def _add_image_run(self, paragraph, img_element: etree._Element) -> None:
         """

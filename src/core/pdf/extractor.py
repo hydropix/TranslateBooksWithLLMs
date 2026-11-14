@@ -16,7 +16,7 @@ Text blocks are read in content-stream order. Lines inside a detected table
 are taken out of their blocks and the table is emitted as a unit in their
 place. Running headers/footers and page numbers are dropped, blocks whose
 lines change font size or colour are split (eyebrow / title / subtitle),
-hyphenated line breaks are repaired (conservatively: see join_lines and
+hyphenated line breaks are repaired (see join_lines and
 _resolve_break_hyphens), and paragraphs broken by a page boundary are
 reassembled when their formats match. Scanned documents (no text layer)
 are rejected: OCR is out of scope.
@@ -128,15 +128,15 @@ def join_lines(prev: str, nxt: str, break_hyphen: str = "-") -> str:
     Join two consecutive lines (or paragraph fragments) of running text.
 
     Rules, in order: a trailing soft hyphen is removed; a letter + hyphen at
-    the line end followed by a letter is kept as a hyphen and joined without a
-    space ("well-" + "known" -> "well-known", "peut-" + "être" -> "peut-être"),
-    because a line-end hyphen alone cannot tell a real compound from a word
-    split by the typesetter; CJK text is joined without a space; anything else
-    is joined with a single space.
+    the line end followed by a letter is joined without a space and written
+    as break_hyphen ("well-" + "known" -> "well-known" with the default "-");
+    CJK text is joined without a space; anything else is joined with a single
+    space.
 
-    The extractor passes a private marker as break_hyphen and decides later,
-    with whole-document evidence, which of those hyphens to drop
-    (_resolve_break_hyphens).
+    Two lines alone cannot tell a real compound from a word split by the
+    typesetter, so the extractor passes a private marker as break_hyphen and
+    decides once the whole document is known (_resolve_break_hyphens): the
+    hyphen is dropped unless the document shows the hyphenated spelling.
     """
     nxt_stripped = nxt.lstrip()
     if prev.endswith(_SOFT_HYPHEN):
@@ -170,30 +170,29 @@ def _resolve_break_hyphens(texts: List[str]) -> List[str]:
     """
     Decide, for every hyphen found at a line end, whether to keep it.
 
-    The hyphen is dropped ("conti-" + "nuation" -> "continuation") only with
-    clear evidence: the next fragment starts lowercase, the joined word occurs
-    elsewhere in the document without a hyphen, and the hyphenated spelling
-    does not occur elsewhere. Otherwise the hyphen is kept ("well-known",
-    "peut-être"): a spurious hyphen is harmless to a translator, a wrongly
-    glued compound is not. Soft hyphens (U+00AD) are handled by join_lines.
+    Typeset PDFs hyphenate words to justify lines, so a line-end hyphen
+    followed by a lowercase letter is dropped by default ("condi-" + "tions"
+    -> "conditions"). It is kept only when the document itself shows a real
+    compound: the hyphenated spelling occurs elsewhere in the document, not at
+    a line end ("well-known", "peut-être"). A continuation starting with an
+    uppercase letter ("Jean-" + "Pierre"), a caseless script or a digit always
+    keeps the hyphen. No dictionary is consulted: the decision rests on the
+    document only. Soft hyphens (U+00AD) are handled by join_lines.
     """
     if not any(_BREAK_HYPHEN in text for text in texts):
         return texts
-    plain_words, hyphenated_words = set(), set()
+    hyphenated_words = set()
     for text in texts:
         for word in _WORD_RE.findall(_MARKED_TOKEN_RE.sub(" ", text)):
-            (hyphenated_words if "-" in word else plain_words).add(word.lower())
+            if "-" in word:
+                hyphenated_words.add(word.lower())
 
     def decide(match: "re.Match") -> str:
         left, right = match.group(1), match.group(2)
-        joined = (left + right).lower()
-        if (
-            right[:1].islower()
-            and joined in plain_words
-            and f"{left}-{right}".lower() not in hyphenated_words
-        ):
+        hyphenated = f"{left}-{right}"
+        if right[:1].islower() and hyphenated.lower() not in hyphenated_words:
             return left + right
-        return f"{left}-{right}"
+        return hyphenated
 
     resolved = []
     for text in texts:

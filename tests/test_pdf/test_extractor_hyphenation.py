@@ -33,6 +33,10 @@ def _two_page_pdf(tmp_path, first: str, second: str, fontname: str) -> str:
     return str(path)
 
 
+def _extracted_text(tmp_path, body: str) -> str:
+    return " ".join(extract_pdf_paragraphs(_single_page_pdf(tmp_path, body)).paragraphs_text)
+
+
 # --- join_lines without document evidence -------------------------------------
 
 
@@ -52,44 +56,68 @@ def test_join_lines_keeps_real_compound_hyphens(prev, nxt, expected):
 # --- Whole-document evidence ----------------------------------------------------
 
 
-def test_compound_hyphen_kept_without_evidence(tmp_path):
-    path = _single_page_pdf(
+def test_compound_hyphen_kept_when_the_document_shows_it(tmp_path):
+    text = _extracted_text(
         tmp_path,
+        "A well-known saying opens this short page of text.\n"
         "It is a well-\nknown fact that the river runs north.\n"
+        "Il viendra peut-être, dit-elle, avec tous ses amis.\n"
         "Il viendra peut-\nêtre demain matin avec ses amis.",
     )
 
-    text = " ".join(extract_pdf_paragraphs(path).paragraphs_text)
-
-    assert "well-known" in text
+    assert "a well-known fact" in text
     assert "wellknown" not in text
-    assert "peut-être" in text
+    assert "peut-être demain" in text
     assert "peutêtre" not in text
 
 
+@pytest.mark.parametrize(
+    "body, joined, broken",
+    [
+        ("Under these condi-\ntions the river runs north.", "these conditions the", "condi-tions"),
+        ("The transla-\ntion of the book was slow.", "The translation of", "transla-tion"),
+        # Without the hyphenated spelling elsewhere, a split compound is joined too
+        ("Il viendra peut-\nêtre demain matin avec ses amis.", "peutêtre demain", "peut-être"),
+    ],
+)
+def test_word_split_at_line_end_is_joined_by_default(tmp_path, body, joined, broken):
+    text = _extracted_text(tmp_path, body)
+
+    assert joined in text
+    assert broken not in text
+
+
 def test_word_split_at_line_end_rejoined_when_document_confirms_it(tmp_path):
-    path = _single_page_pdf(
+    text = _extracted_text(
         tmp_path,
         "The continuation of the story was long awaited by all.\n"
         "Everyone hoped the conti-\nnuation would arrive soon enough.",
     )
-
-    text = " ".join(extract_pdf_paragraphs(path).paragraphs_text)
 
     assert "hoped the continuation would" in text
     assert "conti-nuation" not in text
 
 
 def test_hyphenated_spelling_elsewhere_wins_over_joined_spelling(tmp_path):
-    path = _single_page_pdf(
+    text = _extracted_text(
         tmp_path,
         "A well-known saying and a wellknown typo appear here once.\n"
         "Then it is a well-\nknown saying again in this line.",
     )
 
-    text = " ".join(extract_pdf_paragraphs(path).paragraphs_text)
-
     assert text.count("well-known saying") == 2
+
+
+@pytest.mark.parametrize(
+    "body, kept",
+    [
+        ("They met Jean-\nPierre at the station that night.", "Jean-Pierre at"),
+        ("The pre-\nWar years were quiet in the valley.", "pre-War years"),
+        ("Read the pages ten-\n42 slowly and carefully.", "ten- 42"),
+    ],
+)
+def test_hyphen_kept_before_uppercase_or_digit_continuation(tmp_path, body, kept):
+    assert kept in _extracted_text(tmp_path, body)
 
 
 def test_no_break_marker_leaks_into_output(tmp_path):

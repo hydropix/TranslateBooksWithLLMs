@@ -74,10 +74,10 @@ def test_multipage_drops_headers_and_page_numbers(multipage_pdf_path):
 def test_multipage_rejoins_hyphenated_page_break(multipage_pdf_path):
     content = extract_pdf_paragraphs(multipage_pdf_path)
 
-    # The page break is mended (one paragraph, no stray space). The hyphen is
-    # kept: nothing else in the document spells "continuation", so a line-end
-    # hyphen cannot be told apart from a real compound (see test_extractor_hyphenation).
-    merged = [text for text in content.paragraphs_text if "the conti-nuation of the sentence." in text]
+    # The page break is mended (one paragraph, no stray space) and the
+    # line-end hyphen is dropped: the document never spells "conti-nuation"
+    # with a hyphen elsewhere (see test_extractor_hyphenation).
+    merged = [text for text in content.paragraphs_text if "the continuation of the sentence." in text]
     assert len(merged) == 1
     # Pages 1 and 2 form one paragraph; pages 3 and 4 start with a capital
     assert len(content.paragraphs_text) == 3

@@ -12,6 +12,8 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 from lxml import etree
 
+from src.core.progress import ProgressReporter
+
 from .archive import parse_xhtml, read_text, resolve_content_path
 from .body_serializer import find_body
 from .book_checkpoint import save_file_checkpoint
@@ -165,6 +167,7 @@ async def process_content_files(run: EpubRun, book: BookRunState) -> BookRunStat
     with the outcome of the pass (documents to write, counters, the chunk
     maps, ``was_interrupted``).
     """
+    book.progress = ProgressReporter(run.ctx.stats_callback)
     begin_pass(run, book)
     resume_from_index = run.ctx.resume_from_index
 
@@ -240,8 +243,8 @@ async def _process_file(run: EpubRun, book: BookRunState, file_idx: int,
     file_unfinished, file_untranslated, file_degraded = chunk_projections(state_after)
     book.record_file_units(content_href, file_unfinished, file_untranslated, file_degraded)
 
-    if run.ctx.stats_callback and result.stats:
-        run.ctx.emit(book.payload())
+    if result.stats:
+        book.emit()
 
     _record_outcome(run, book, file_idx, content_href, file_path, result, already_translated)
 
@@ -266,9 +269,8 @@ def _file_stats_hook(run: EpubRun, book: BookRunState) -> Callable[[Dict], None]
     def file_stats_wrapper(file_stats_dict: Dict) -> None:
         if not run.ctx.stats_callback:
             return
-        # The current file's completed chunks (TranslationMetrics.to_dict
-        # reports the file as fully complete once its translation finishes, so
-        # refinement does not advance this). `book.completed_chunks` still
+        # The current file's completed chunks (its progress payload, see
+        # TranslationMetrics.report_progress). `book.completed_chunks` still
         # excludes this file: it is only advanced once the file returns.
         current_file_completed = file_stats_dict.get('completed_chunks', 0)
         # The fallback counters are included so the Fallbacks stat card
@@ -276,8 +278,7 @@ def _file_stats_hook(run: EpubRun, book: BookRunState) -> Callable[[Dict], None]
         # *previous* file at this point (the current file's own outcome is only
         # known once it returns) - an accepted one-file lag for this live
         # mid-file callback; the post-file emit is exact.
-        run.ctx.emit(book.payload(book.completed_chunks + current_file_completed,
-                                  file_stats_dict))
+        book.emit(book.completed_chunks + current_file_completed, file_stats_dict)
     return file_stats_wrapper
 
 

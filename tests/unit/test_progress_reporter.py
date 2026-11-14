@@ -64,6 +64,25 @@ def test_extra_may_not_set_count_fields(key):
         reporter.emit({key: 1})
 
 
+def test_metrics_report_counts_and_quality_fields():
+    from src.core.epub.translation_metrics import PROGRESS_FIELDS, TranslationMetrics
+
+    seen = []
+    metrics = TranslationMetrics(total_chunks=5)
+    metrics.record_processed()
+    metrics.record_processed()
+    metrics.failed_chunks = 1
+    metrics.fallback_used = 1
+    metrics.report_progress(ProgressReporter(seen.append))
+
+    payload = seen[-1]
+    assert (payload["total_chunks"], payload["completed_chunks"], payload["failed_chunks"]) == (5, 2, 1)
+    assert set(payload) == set(COUNT_FIELDS) | set(PROGRESS_FIELDS)
+    assert payload["fallback_used"] == 1
+    # The persisted form keeps its historical shape for old checkpoints.
+    assert metrics.to_dict()["completed_chunks"] == 2
+
+
 def test_progress_payload_is_the_one_builder():
     reporter = ProgressReporter()
     reporter.begin(5, done=2, failed=1)

@@ -8,6 +8,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+from src.core.progress import ProgressReporter
+
 
 # Cross-file counters of an EPUB run that survive a resume, in the order and
 # under the keys of the checkpoint's stored `epub_accumulated_stats` dict
@@ -35,6 +37,25 @@ ACCUMULATED_COUNTERS = (
     'refinement_chunks_completed',
 )
 _ACCUMULATED_FLAGS = frozenset({'quality_warning_fired', 'fallback_warning_fired'})
+
+# Quality counters a metrics-driven progress emit carries next to the chunk
+# counts (see TranslationMetrics.report_progress). The web UI reads them live
+# (quality warning, fallback and paragraph-alignment cards), and the EPUB book
+# loop folds the current file's values into the book-level payload.
+PROGRESS_FIELDS = (
+    'processed_chunks',
+    'successful_first_try',
+    'successful_after_retry',
+    'fallback_used',
+    'placeholder_errors',
+    'quality_warning_fired',
+    'token_alignment_used',
+    'paragraph_count_mismatches',
+    'paragraph_retry_recovered',
+    'paragraph_repair_failed',
+    'total_tokens_processed',
+    'total_tokens_generated',
+)
 
 
 @dataclass
@@ -119,9 +140,9 @@ class TranslationMetrics:
     of the file's partial state.
 
     Deliberately NOT part of to_dict()/from_dict() and NOT merged by merge():
-      - to_dict() is a UI/aggregation payload; the authoritative statuses live
-        in XHTMLTranslationState.chunk_statuses. Shipping them twice would
-        create two truths that can disagree.
+      - to_dict() is the serialized form of the metrics; the authoritative
+        statuses live in XHTMLTranslationState.chunk_statuses. Shipping them
+        twice would create two truths that can disagree.
       - merge() combines per-file metrics into job-wide totals, where these
         file-local indices would collide across files.
 
@@ -339,18 +360,34 @@ class TranslationMetrics:
         ])
         return "\n".join(lines)
 
+    def progress_counts(self) -> "tuple[int, int, int]":
+        """``(done, failed, total)`` chunk counts of this document.
+
+        processed_chunks (not the success count) is the done count, so the
+        bar does not fluctuate during retries. A document in its refinement
+        phase reports its translation as complete.
+        """
+        done = self.total_chunks if self.refinement_phase else self.processed_chunks
+        return done, self.failed_chunks, self.total_chunks
+
+    def progress_fields(self) -> Dict[str, Any]:
+        """The quality counters of a progress emit (see PROGRESS_FIELDS)."""
+        return {name: getattr(self, name) for name in PROGRESS_FIELDS}
+
+    def report_progress(self, progress: ProgressReporter) -> Dict[str, Any]:
+        """Emit the current picture through ``progress``; returns the payload."""
+        done, failed, total = self.progress_counts()
+        progress.set_counts(done, failed=failed, total=total)
+        return progress.emit(self.progress_fields())
+
     def to_dict(self) -> Dict:
         """Convert metrics to dictionary for serialization.
 
-        The chunk denominator is always the translation chunk count (no
-        doubling). In-translation refinement is a per-file polish pass that is
-        reported via logs and its own counter (refinement_chunks_completed),
-        but it does not inflate the progress denominator: once a file's
-        translation completes, the bar holds at that file's completion while
-        refinement runs.
-
-        processed_chunks (not success count) is used for translation progress
-        so the bar does not fluctuate during retries.
+        This is the persisted form (the per-file partial state stores it and
+        ``from_dict`` reads it back, so its keys must stay readable by old
+        checkpoints), not the progress payload: progress goes through
+        :meth:`report_progress`. ``completed_chunks`` mirrors
+        :meth:`progress_counts`.
         """
         effective_total_chunks = self.total_chunks
         if self.refinement_phase:
@@ -417,7 +454,7 @@ class TranslationMetrics:
         metrics.successful_after_retry = data.get("successful_after_retry", 0)
         metrics.fallback_used = data.get("fallback_used", 0)
         metrics.failed_chunks = data.get("failed_chunks", 0)
-        # Progress counter. to_dict() reports completed_chunks = processed_chunks,
+        # Progress counter. progress_counts() reports done = processed_chunks,
         # so this MUST round-trip or the progress bar restarts near zero on
         # resume (it would then count only the chunks done in the new session,
         # not the restored prefix).

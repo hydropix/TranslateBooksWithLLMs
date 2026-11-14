@@ -3,14 +3,17 @@
 ``BookRunState`` holds what the file loop accumulates: counters, the
 unfinished/untranslated/degraded chunk maps, the merged metrics, the per-run
 baseline, the monotonic checkpoint pointer and the parsed documents to write
-back. ``global_stats_payload`` is the single source of the cross-file stats
-dict, emitted per chunk and per file.
+back. Its :class:`ProgressReporter` builds the book-level stats payload,
+emitted per chunk and per file: the chunk counts from the book counters,
+the quality fields from ``book_progress_fields``.
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from lxml import etree
+
+from src.core.progress import ProgressReporter
 
 from .run_context import PreparedDocument
 from .translation_metrics import TranslationMetrics
@@ -30,18 +33,22 @@ RUN_RATE_COUNTERS = (
 )
 
 
-def global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
-                         unfinished_units=None, run_prior_counts=None,
-                         untranslated_units=None, degraded_units=None,
-                         run_total_chunks=None, run_is_repair=False):
-    """Build the EPUB global-stats dict emitted to the progress callback.
+def book_failed_chunks(acc, file_stats=None) -> int:
+    """Failed chunks of the book: accumulated plus the current file's."""
+    return acc.failed_chunks + (file_stats or {}).get('failed_chunks', 0)
+
+
+def book_progress_fields(acc, file_stats=None, unfinished_units=None,
+                         run_prior_counts=None, untranslated_units=None,
+                         degraded_units=None, run_total_chunks=0,
+                         run_is_repair=False):
+    """The quality fields of the EPUB book-level stats payload.
 
     Single source of the cross-file payload shape, shared by the resume-initial
-    emit, the per-chunk wrapper, and the post-file emit (which previously each
-    rebuilt this ~10-key dict by hand). ``completed_chunks`` / ``total_chunks``
-    are computed by the caller (they differ per site); the cumulative counters
-    come from ``acc`` (a TranslationMetrics) plus, when given, the current
-    file's not-yet-merged ``file_stats`` dict.
+    emit, the per-chunk wrapper, and the post-file emit. The chunk counts are
+    not here: ``BookRunState``'s ProgressReporter adds them. The cumulative
+    counters come from ``acc`` (a TranslationMetrics) plus, when given, the
+    current file's not-yet-merged ``file_stats`` (its progress payload).
 
     ``unfinished_units`` (issue #261, design decisions D8/D9) is the job-level
     ``{file_href: [chunk_index, ...]}`` map of chunks still owed. It is emitted
@@ -104,9 +111,6 @@ def global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
         for name in RUN_RATE_COUNTERS
     }
     payload = {
-        'total_chunks': total_chunks,
-        'completed_chunks': completed_chunks,
-        'failed_chunks': acc.failed_chunks + fs.get('failed_chunks', 0),
         'token_alignment_used': combined['token_alignment_used'],
         'fallback_used': combined['fallback_used'],
         'placeholder_errors': combined['placeholder_errors'],
@@ -148,8 +152,7 @@ def global_stats_payload(total_chunks, completed_chunks, acc, file_stats=None,
         # Emitted unconditionally for the same key-by-key merge reason as the
         # keys above: a key that appears only on repair passes would leave a
         # stale True (or a stale denominator) behind on the next pass.
-        'run_total_chunks': (total_chunks if run_total_chunks is None
-                             else max(0, int(run_total_chunks))),
+        'run_total_chunks': max(0, int(run_total_chunks or 0)),
         'run_is_repair': bool(run_is_repair),
     }
     # Per-run twins. Clamped at 0: a stale snapshot must never produce a
@@ -179,6 +182,8 @@ class BookRunState:
         completed_chunks: Chunks done in files before the current one.
         run_total_chunks / run_is_repair: Scope of this pass.
         last_completed_file_idx: Monotonic checkpoint pointer.
+        progress: Builds (and, once the file loop binds the job's stats
+            callback, emits) the book-level payload.
     """
 
     content_files: List[str]
@@ -203,6 +208,7 @@ class BookRunState:
     run_total_chunks: int = 0
     run_is_repair: bool = False
     last_completed_file_idx: int = -1
+    progress: ProgressReporter = field(default_factory=ProgressReporter)
 
     @property
     def total_files(self) -> int:
@@ -215,12 +221,14 @@ class BookRunState:
         """The file's precount output, released so it is not held any longer."""
         return self.prepared.pop(file_idx, None)
 
-    def payload(self, completed_chunks: Optional[int] = None,
-                file_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """The global stats payload for the current picture."""
-        return global_stats_payload(
-            self.total_chunks,
+    def _sync_progress(self, completed_chunks: Optional[int],
+                       file_stats: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Set the reporter's counts; return the payload's quality fields."""
+        self.progress.set_counts(
             self.completed_chunks if completed_chunks is None else completed_chunks,
+            failed=book_failed_chunks(self.accumulated, file_stats),
+            total=self.total_chunks)
+        return book_progress_fields(
             self.accumulated, file_stats,
             unfinished_units=self.unfinished_units,
             run_prior_counts=self.run_prior_counts,
@@ -228,6 +236,21 @@ class BookRunState:
             degraded_units=self.degraded_units,
             run_total_chunks=self.run_total_chunks,
             run_is_repair=self.run_is_repair)
+
+    def payload(self, completed_chunks: Optional[int] = None,
+                file_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """The book-level stats payload for the current picture (not emitted).
+
+        ``completed_chunks`` defaults to the chunks of the finished files;
+        ``file_stats`` is the current file's progress payload, folded in
+        before the file is merged into ``accumulated``.
+        """
+        return self.progress.payload(self._sync_progress(completed_chunks, file_stats))
+
+    def emit(self, completed_chunks: Optional[int] = None,
+             file_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Emit :meth:`payload` through the bound reporter (unless unchanged)."""
+        return self.progress.emit(self._sync_progress(completed_chunks, file_stats))
 
     def record_file_units(self, href: str, unfinished: List[int],
                           untranslated: List[int], degraded: List[int]) -> None:

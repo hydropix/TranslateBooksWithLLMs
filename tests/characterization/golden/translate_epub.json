@@ -47,55 +47,11 @@
       "total_tokens": 0
     },
     {
-      "completed_chunks": 1,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 1,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 1,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 1,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
       "completed_chunks": 2,
       "failed_chunks": 0,
       "fallback_used": 0,
       "placeholder_errors": 0,
       "processed_chunks": 2,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 3,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 3,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 3,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 3,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
       "total_chunks": 65,
@@ -140,28 +96,6 @@
       "fallback_used": 0,
       "placeholder_errors": 0,
       "processed_chunks": 6,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 7,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 7,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 7,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 7,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
       "total_chunks": 65,
@@ -366,28 +300,6 @@
       "total_tokens": 0
     },
     {
-      "completed_chunks": 24,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 24,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 24,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 24,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
       "completed_chunks": 25,
       "failed_chunks": 0,
       "fallback_used": 0,
@@ -437,28 +349,6 @@
       "fallback_used": 0,
       "placeholder_errors": 0,
       "processed_chunks": 29,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 30,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 30,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 30,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 30,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
       "total_chunks": 65,
@@ -536,28 +426,6 @@
       "fallback_used": 0,
       "placeholder_errors": 0,
       "processed_chunks": 36,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 37,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 37,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 37,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 37,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
       "total_chunks": 65,
@@ -729,28 +597,6 @@
       "total_tokens": 0
     },
     {
-      "completed_chunks": 51,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 51,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 51,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 51,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
       "completed_chunks": 52,
       "failed_chunks": 0,
       "fallback_used": 0,
@@ -795,28 +641,6 @@
       "total_tokens": 0
     },
     {
-      "completed_chunks": 55,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 55,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 55,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 55,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
       "completed_chunks": 56,
       "failed_chunks": 0,
       "fallback_used": 0,
@@ -833,28 +657,6 @@
       "fallback_used": 0,
       "placeholder_errors": 0,
       "processed_chunks": 57,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 58,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 58,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 58,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 58,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
       "total_chunks": 65,
@@ -932,17 +734,6 @@
       "fallback_used": 0,
       "placeholder_errors": 0,
       "processed_chunks": 64,
-      "successful_after_retry": 0,
-      "token_alignment_used": 0,
-      "total_chunks": 65,
-      "total_tokens": 0
-    },
-    {
-      "completed_chunks": 65,
-      "failed_chunks": 0,
-      "fallback_used": 0,
-      "placeholder_errors": 0,
-      "processed_chunks": 65,
       "successful_after_retry": 0,
       "token_alignment_used": 0,
       "total_chunks": 65,

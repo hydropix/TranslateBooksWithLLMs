@@ -28,6 +28,7 @@ from src.core.epub.xhtml_translation_state import (
 )
 from src.core.common.parallel import aclosing, iter_ordered_concurrent
 from src.core.llm.exceptions import RateLimitError
+from src.core.progress import ProgressReporter
 from src.prompts.prompts import PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION
 
 
@@ -526,9 +527,9 @@ async def translate_paragraphs_plain(
         model_name, llm_client: LLM config
         max_tokens_per_chunk: chunking budget
         log_callback, stats_callback: callbacks (stats_callback receives
-            file-local stats via TranslationMetrics.to_dict(); callers that
-            aggregate across files are responsible for adding their global
-            offset to completed_chunks).
+            the file-local progress payload, TranslationMetrics.report_progress;
+            callers that aggregate across files are responsible for adding
+            their global offset to completed_chunks).
         context_manager: AdaptiveContextManager (Ollama)
         check_interruption_callback: returns True to abort
         prompt_options: prompt customization (text_cleanup, glossary, etc.)
@@ -574,11 +575,11 @@ async def translate_paragraphs_plain(
         (translated_paragraphs, stats, was_interrupted)
     """
     stats = TranslationMetrics()
+    progress = ProgressReporter(stats_callback)
 
     source = list(paragraphs)
     if not source or all(not (p or "").strip() for p in source):
-        if stats_callback:
-            stats_callback(stats.to_dict())
+        stats.report_progress(progress)
         return source, stats, False
 
     # === RESUME ===
@@ -659,8 +660,7 @@ async def translate_paragraphs_plain(
             f"text in an earlier pass: {[k + 1 for k in retry_indices]}"
         )
 
-    if stats_callback:
-        stats_callback(stats.to_dict())
+    stats.report_progress(progress)
 
     def _context_tail(text):
         """The end of a translation, as sequential context (shared policy)."""
@@ -1001,8 +1001,7 @@ async def translate_paragraphs_plain(
                     break
 
             stats.record_processed()
-            if stats_callback:
-                stats_callback(stats.to_dict())
+            stats.report_progress(progress)
             delivered += 1
 
             # === CONTIGUITY INVARIANT ===

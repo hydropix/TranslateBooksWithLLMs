@@ -121,6 +121,9 @@ ENGLISH_PARAGRAPH = (
     "played on the wheel watched it from the bridge, arguing about whether it "
     "would ever move again, and what the miller would have said if he had seen it."
 )
+# The fake "translation": not the source with another case, which the
+# TXT acceptance rules reject as the source copied back.
+TRANSLATED_PARAGRAPH = "FR: " + ENGLISH_PARAGRAPH.upper()
 
 
 async def _prepared_adapter(tmp_path, text, max_tokens=450):
@@ -364,7 +367,7 @@ class TestGenericTranslatorIntegrity:
     async def test_skipped_passage_is_retried_then_succeeds(self, tmp_path, cm, scripted_llm):
         scripted_llm.script = [
             lambda prompt: _tagged("La rivière."),
-            lambda prompt: _tagged(ENGLISH_PARAGRAPH.upper()),
+            lambda prompt: _tagged(TRANSLATED_PARAGRAPH),
         ]
         success, output = await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
 
@@ -373,7 +376,7 @@ class TestGenericTranslatorIntegrity:
         retry_prompt = scripted_llm.calls[1]["prompt"] + (scripted_llm.calls[1]["system"] or "")
         assert "Translate the ENTIRE text" in retry_prompt
         assert "[N] index marker" not in retry_prompt
-        assert output.read_text(encoding="utf-8") == ENGLISH_PARAGRAPH.upper()
+        assert output.read_text(encoding="utf-8") == TRANSLATED_PARAGRAPH
 
     @pytest.mark.asyncio
     async def test_persistently_short_chunk_ends_the_job_partial(self, tmp_path, cm, scripted_llm):
@@ -403,7 +406,7 @@ class TestRawResponseLog:
     @pytest.mark.asyncio
     async def test_disabled_by_default_writes_nothing(self, tmp_path, cm, scripted_llm, monkeypatch):
         monkeypatch.setattr(config_module, "SAVE_RAW_LLM_RESPONSES", False)
-        scripted_llm.script = [lambda prompt: _tagged(ENGLISH_PARAGRAPH.upper())]
+        scripted_llm.script = [lambda prompt: _tagged(TRANSLATED_PARAGRAPH)]
         await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
 
         assert not raw_response_log_path(tmp_path, "job-1").exists()
@@ -413,7 +416,7 @@ class TestRawResponseLog:
         monkeypatch.setattr(config_module, "SAVE_RAW_LLM_RESPONSES", True)
         scripted_llm.script = [
             lambda prompt: _tagged("signifi- cada"),
-            lambda prompt: _tagged(ENGLISH_PARAGRAPH.upper()),
+            lambda prompt: _tagged(TRANSLATED_PARAGRAPH),
         ]
         success, _ = await _translate(tmp_path, cm, ENGLISH_PARAGRAPH)
         assert success is True
@@ -454,7 +457,7 @@ class _ContextRecordingClient(_ScriptedLLMClient):
         if len(type(self).calls) == 1:
             from src.core.llm.exceptions import RepetitionLoopError
             raise RepetitionLoopError("window too small")
-        return _tagged(ENGLISH_PARAGRAPH.upper())
+        return _tagged(TRANSLATED_PARAGRAPH)
 
 
 @pytest.mark.asyncio

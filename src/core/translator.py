@@ -327,6 +327,8 @@ async def _make_llm_request_with_adaptive_context(
     placeholder_format: Optional[Tuple[str, str]] = None,
     runtime_state: Optional[dict] = None,
     raw_response_callback: Optional[Callable[[LLMResponse], None]] = None,
+    answer_check: Optional[Callable[[str, str], Optional[str]]] = None,
+    on_rejected: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Optional[str], str, Optional[LLMResponse]]:
     """
     Translate one chunk through the shared request core, splitting it on a
@@ -353,6 +355,13 @@ async def _make_llm_request_with_adaptive_context(
         raw_response_callback: Optional callable receiving every LLMResponse
             as it arrives, before extraction or any retry decision. Errors it
             raises are swallowed: recording must never break a translation.
+        answer_check: Optional ``(source, answer) -> reason | None`` applied
+            by the request core to every tagged answer (see
+            ``request_core.tagged_answer_problem``).
+        on_rejected: Optional callable receiving the reason when the chunk
+            failed because its answer was rejected or cut off (as opposed to
+            the provider failing), so the caller can retry with a reinforced
+            prompt.
 
     Returns:
         Tuple of (translated_text or None, main_content, last LLMResponse);
@@ -402,6 +411,7 @@ async def _make_llm_request_with_adaptive_context(
             log_callback=log_callback,
             labels=TRANSLATION_LABELS,
             raw_response_callback=raw_response_callback,
+            answer_check=answer_check,
         )
         if outcome.response is not None:
             last_response = outcome.response
@@ -444,6 +454,8 @@ async def _make_llm_request_with_adaptive_context(
         if not outcome.ok:
             if outcome.status is ChunkStatus.REPETITION and not log_callback:
                 tqdm.write("\n⚠️ Repetition loop detected - increase OLLAMA_NUM_CTX")
+            if on_rejected and outcome.status in (ChunkStatus.REFUSED, ChunkStatus.TRUNCATED):
+                on_rejected(outcome.detail or outcome.status.value)
             return None, main_content, last_response
 
         all_translations.append((current_sep, outcome.text))
@@ -472,7 +484,9 @@ async def generate_translation_request(main_content, previous_translation_contex
                                        prompt_options=None, context_manager: AdaptiveContextManager = None,
                                        placeholder_format: Optional[Tuple[str, str]] = None,
                                        raw_response_callback: Optional[Callable[[LLMResponse], None]] = None,
-                                       on_raw_fallback: Optional[Callable[[], None]] = None):
+                                       on_raw_fallback: Optional[Callable[[], None]] = None,
+                                       answer_check: Optional[Callable[[str, str], Optional[str]]] = None,
+                                       on_rejected: Optional[Callable[[str], None]] = None):
     """
     Generate translation request to LLM API with automatic context overflow handling.
 
@@ -494,6 +508,7 @@ async def generate_translation_request(main_content, previous_translation_contex
         on_raw_fallback (callable): Optional callable invoked (no arguments)
             when the returned translation came from an untagged raw response,
             so callers can count it in their stats.
+        answer_check / on_rejected: See _make_llm_request_with_adaptive_context.
 
     Returns:
         str: Translated text or None if failed
@@ -520,6 +535,8 @@ async def generate_translation_request(main_content, previous_translation_contex
             context_manager=context_manager,
             placeholder_format=placeholder_format,
             raw_response_callback=raw_response_callback,
+            answer_check=answer_check,
+            on_rejected=on_rejected,
         )
         if translated_text:
             budget.succeeded()

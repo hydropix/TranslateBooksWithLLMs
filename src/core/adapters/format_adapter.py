@@ -121,6 +121,26 @@ class FormatAdapter(ABC):
             f"Do NOT skip, summarize or shorten any part of it."
         )
 
+    def get_rejection_retry_instructions(self, feedback: str) -> str:
+        """
+        Build the instruction appended to the prompt when a unit is retried
+        because its answer was rejected (a refusal, a cut-off or runaway
+        answer, or the source text copied back).
+
+        Args:
+            feedback: Why the previous answer was rejected
+
+        Returns:
+            Instruction text telling the model what to do instead
+        """
+        return (
+            f"CRITICAL: Your previous response was rejected ({feedback}). "
+            f"Translate the ENTIRE text into the target language, from its first "
+            f"sentence to its last. Do NOT copy the source text unchanged, do NOT "
+            f"refuse, comment or explain, and do NOT shorten any part of it. If "
+            f"the input has [N] markers, keep each of them exactly once, in order."
+        )
+
     @abstractmethod
     async def save_unit_translation(
         self,

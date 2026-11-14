@@ -47,6 +47,7 @@ def _install_provider(monkeypatch, budget):
 
     for target in fake_llm._PATCH_TARGETS:
         monkeypatch.setattr(target, factory, raising=True)
+    fake_llm.allow_echo(monkeypatch)
 
 
 @pytest.fixture

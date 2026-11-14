@@ -53,6 +53,7 @@ def budget(monkeypatch):
 
     for target in fake_llm._PATCH_TARGETS:
         monkeypatch.setattr(target, factory, raising=True)
+    fake_llm.allow_echo(monkeypatch)
     monkeypatch.setattr("src.utils.notifier.notify", lambda *a, **k: None)
     return state
 

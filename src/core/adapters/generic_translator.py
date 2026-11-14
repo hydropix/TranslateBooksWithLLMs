@@ -263,6 +263,16 @@ class GenericTranslator:
 
             raw_log = self._open_raw_response_log(log_callback) if SAVE_RAW_LLM_RESPONSES else None
 
+            # Acceptance of a well-tagged answer (shared request core): a
+            # refusal, a cut-off or runaway answer, or the source copied back
+            # when the languages differ is rejected and retried like a
+            # validation failure, never saved as translated.
+            from src.core.request_core import languages_differ, tagged_answer_problem
+            reject_echo = languages_differ(source_language, target_language)
+
+            def answer_check(source_text, answer):
+                return tagged_answer_problem(answer, source_text, reject_echo=reject_echo)
+
             last_context = ""
             # Units whose translation was taken from an untagged raw reply:
             # saved, but worth a look, so they are counted and reported.
@@ -275,7 +285,11 @@ class GenericTranslator:
                 Results failing adapter validation (e.g. SRT [N] markers
                 dropped by the LLM) are retried with a reinforced prompt up
                 to max_validation_attempts; after exhaustion the best-effort
-                content is returned wrapped in _ValidationFailed."""
+                content is returned wrapped in _ValidationFailed.
+
+                A rejected answer (refusal, cut off, runaway, source copied
+                back) is retried the same way; if the last attempt was still
+                rejected, the unit fails (None): nothing of it is saved."""
                 unit = units[i]
                 if log_callback:
                     log_callback("unit_start",
@@ -290,6 +304,7 @@ class GenericTranslator:
                     if base_instructions else prompt_options
                 )
                 result = None
+                rejected = []
 
                 for attempt in range(max_validation_attempts):
                     record_raw = None
@@ -309,7 +324,27 @@ class GenericTranslator:
                         context_manager=context_manager,
                         raw_response_callback=record_raw,
                         on_raw_fallback=lambda _i=i: raw_fallback_units.add(_i),
+                        answer_check=answer_check,
+                        on_rejected=rejected.append,
                     )
+
+                    if not result and rejected:
+                        # The answer came back but was not a translation.
+                        feedback = f"answer rejected: {rejected[-1]}"
+                        rejected.clear()
+                        if log_callback:
+                            log_callback("unit_answer_rejected",
+                                f"Unit {i+1}/{total_units}: {feedback} "
+                                f"(attempt {attempt+1}/{max_validation_attempts})")
+                        reinforced = self.adapter.get_rejection_retry_instructions(feedback)
+                        attempt_options = {
+                            **(prompt_options or {}),
+                            'custom_instructions': _join_instructions(
+                                base_instructions, reinforced
+                            ),
+                        }
+                        result = None
+                        continue
 
                     # API failure / empty result: existing failure semantics.
                     if not result:
@@ -333,6 +368,14 @@ class GenericTranslator:
                             base_instructions, reinforced
                         ),
                     }
+
+                if result is None:
+                    if log_callback:
+                        log_callback("unit_answer_rejected_exhausted",
+                            f"Unit {i+1}/{total_units}: every answer was rejected after "
+                            f"{max_validation_attempts} attempts — the unit keeps its "
+                            f"source text, is marked failed and will be retried on resume")
+                    return None
 
                 if log_callback:
                     log_callback("unit_validation_exhausted",

@@ -93,6 +93,23 @@ _PATCH_TARGETS = (
 
 
 def install(monkeypatch) -> None:
-    """Patch all ``create_llm_provider`` lookup sites to the echo provider."""
+    """Patch all ``create_llm_provider`` lookup sites to the echo provider.
+
+    The echo provider copies the source back by design, which the TXT/SRT/PGN
+    acceptance rules reject when source and target languages differ
+    (``request_core.tagged_answer_problem``). With this fake installed, the
+    languages are treated as equal for that one rule, so the characterization
+    runs keep exercising the happy path.
+    """
     for target in _PATCH_TARGETS:
         monkeypatch.setattr(target, _fake_create_llm_provider, raising=True)
+    allow_echo(monkeypatch)
+
+
+def allow_echo(monkeypatch) -> None:
+    """Accept an answer equal to its source (see :func:`install`).
+
+    For tests that patch an echo provider of their own onto ``_PATCH_TARGETS``.
+    """
+    monkeypatch.setattr("src.core.request_core.languages_differ",
+                        lambda *_args, **_kwargs: False, raising=True)

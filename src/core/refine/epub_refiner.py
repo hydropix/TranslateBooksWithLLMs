@@ -24,6 +24,7 @@ from src.core.epub.placeholder_renumberer import globalize_chunks
 from src.core.epub.container import TranslationContainer
 from src.core.job import JobConfig, JobContext
 from src.core.llm.exceptions import LLMClientConfigError, RateLimitError
+from src.core.progress import Phase, ProgressReporter
 from .client_setup import build_refine_client
 
 
@@ -49,7 +50,7 @@ async def _refine_one_xhtml(
     prompt_options: Optional[Dict],
     check_interruption_callback: Optional[Callable],
     container: Optional[TranslationContainer] = None,
-    stats_callback: Optional[Callable] = None,
+    progress: Optional[ProgressReporter] = None,
 ) -> bool:
     """Refine a single parsed XHTML document in place.
 
@@ -86,7 +87,7 @@ async def _refine_one_xhtml(
         placeholder_format=placeholder_format,
         log_callback=log_callback,
         prompt_options=prompt_options,
-        stats_callback=stats_callback,
+        progress=progress,
     )
 
     if check_interruption_callback and check_interruption_callback():
@@ -133,7 +134,6 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
     max_tokens_per_chunk = (job.max_tokens_per_chunk if job.max_tokens_per_chunk is not None
                             else MAX_TOKENS_PER_CHUNK)
     log_callback = ctx.log_callback
-    stats_callback = ctx.stats_callback
     check_interruption_callback = ctx.check_interruption
 
     if not os.path.exists(input_filepath):
@@ -180,16 +180,16 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
             chunks_done = 0  # chunks of files already handled (refined, failed or skipped)
             failed_chunks = 0
 
-            def _emit(done: int, failed_c: int) -> None:
-                if stats_callback:
-                    stats_callback({
-                        'total_chunks': total_chunks,
-                        'completed_chunks': min(done, total_chunks),
-                        'failed_chunks': failed_c,
-                    })
+            # Each refined chunk ticks the reporter; every file end sets the
+            # book-level counts again, so a file whose actual chunks differ
+            # from its precount cannot push the count past the total.
+            progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+            progress.begin(total_chunks)
+            progress.emit()
 
-            if stats_callback:
-                stats_callback({'total_chunks': total_chunks, 'completed_chunks': 0, 'failed_chunks': 0})
+            def _emit_file_done() -> None:
+                progress.set_counts(min(chunks_done, total_chunks), failed=failed_chunks)
+                progress.emit()
 
             completed, failed, interrupted = 0, 0, False
             for idx, href in enumerate(content_files):
@@ -235,8 +235,7 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
                         context_manager=context_manager,
                         prompt_options=prompt_options,
                         check_interruption_callback=check_interruption_callback,
-                        stats_callback=lambda st, base=chunks_done: _emit(
-                            base + st.get('completed_chunks', 0), failed_chunks),
+                        progress=progress,
                     )
                 except RateLimitError:
                     # Keep the files refined so far, exactly as an interruption
@@ -256,7 +255,7 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
                         failed += 1
                         failed_chunks += file_chunks
                         chunks_done += file_chunks
-                        _emit(chunks_done, failed_chunks)
+                        _emit_file_done()
                         continue
                     completed += 1
                 else:
@@ -264,7 +263,7 @@ async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:
                     failed_chunks += file_chunks
 
                 chunks_done += file_chunks
-                _emit(chunks_done, failed_chunks)
+                _emit_file_done()
 
             from src.utils.file_utils import get_partial_output_path
             final_output = (

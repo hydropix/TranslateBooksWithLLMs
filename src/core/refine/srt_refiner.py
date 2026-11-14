@@ -7,7 +7,7 @@ subtitle indices are preserved verbatim.
 
 import os
 import aiofiles
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict
 
 from src.config import (
     DEFAULT_MODEL,
@@ -19,6 +19,7 @@ from src.config import (
 _NO_CHAR_CAP = 10 ** 12
 from src.core.llm.exceptions import RateLimitError
 from src.core.job import JobConfig, JobContext
+from src.core.progress import Phase, ProgressReporter
 from src.core.srt_processor import SRTProcessor
 from src.core.subtitle_translator import refine_subtitle_translations
 
@@ -108,7 +109,6 @@ async def refine_srt_file(job: JobConfig, ctx: JobContext) -> bool:
     model_name = job.refine_provider_config().model or DEFAULT_MODEL
     prompt_options = job.engine_prompt_options()
     log_callback = ctx.log_callback
-    stats_callback = ctx.stats_callback
     check_interruption_callback = ctx.check_interruption
     checkpoint_manager = ctx.checkpoint_manager
     translation_id = ctx.translation_id
@@ -153,23 +153,10 @@ async def refine_srt_file(job: JobConfig, ctx: JobContext) -> bool:
         log_callback("srt_refine_start",
                      f"✨ Refining {len(subtitles) - start_index} subtitles in {target_language}...")
 
-    if stats_callback:
-        stats_callback({
-            'total_chunks': len(subtitles),
-            'completed_chunks': start_index,
-            'failed_chunks': 0,
-        })
-
-    # On resume the refine helper only sees the remaining cues, so shift its
-    # progress back onto the whole file.
-    refine_stats_callback = stats_callback
-    if stats_callback and start_index:
-        def refine_stats_callback(stats: Dict[str, Any]) -> None:
-            stats_callback({
-                **stats,
-                'total_chunks': len(subtitles),
-                'completed_chunks': stats.get('completed_chunks', 0) + start_index,
-            })
+    # Counted over the whole file: the cues a resumed pass reuses are done.
+    progress = ProgressReporter(ctx.stats_callback, phase=Phase.REFINING)
+    progress.begin(len(subtitles), done=start_index)
+    progress.emit()
 
     # Key translations by list position, NOT by the cue number printed in
     # the file: update_translated_subtitles applies by position, and real
@@ -210,7 +197,7 @@ async def refine_srt_file(job: JobConfig, ctx: JobContext) -> bool:
                 prompt_options.get('refinement_instructions', '')
                 if prompt_options else ''
             ),
-            stats_callback=refine_stats_callback,
+            progress=progress,
             check_interruption_callback=check_interruption_callback,
             subtitle_blocks=refine_blocks,
             subtitle_positions=subtitle_positions,

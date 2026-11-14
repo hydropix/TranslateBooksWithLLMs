@@ -34,17 +34,7 @@
       "total_chunks": 65
     },
     {
-      "completed_chunks": 1,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
       "completed_chunks": 2,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
-      "completed_chunks": 3,
       "failed_chunks": 0,
       "total_chunks": 65
     },
@@ -65,11 +55,6 @@
     },
     {
       "completed_chunks": 6,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
-      "completed_chunks": 7,
       "failed_chunks": 0,
       "total_chunks": 65
     },
@@ -164,11 +149,6 @@
       "total_chunks": 65
     },
     {
-      "completed_chunks": 24,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
       "completed_chunks": 25,
       "failed_chunks": 0,
       "total_chunks": 65
@@ -190,11 +170,6 @@
     },
     {
       "completed_chunks": 29,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
-      "completed_chunks": 30,
       "failed_chunks": 0,
       "total_chunks": 65
     },
@@ -230,11 +205,6 @@
     },
     {
       "completed_chunks": 36,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
-      "completed_chunks": 37,
       "failed_chunks": 0,
       "total_chunks": 65
     },
@@ -314,11 +284,6 @@
       "total_chunks": 65
     },
     {
-      "completed_chunks": 51,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
       "completed_chunks": 52,
       "failed_chunks": 0,
       "total_chunks": 65
@@ -339,22 +304,12 @@
       "total_chunks": 65
     },
     {
-      "completed_chunks": 55,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
       "completed_chunks": 56,
       "failed_chunks": 0,
       "total_chunks": 65
     },
     {
       "completed_chunks": 57,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
-      "completed_chunks": 58,
       "failed_chunks": 0,
       "total_chunks": 65
     },
@@ -390,11 +345,6 @@
     },
     {
       "completed_chunks": 64,
-      "failed_chunks": 0,
-      "total_chunks": 65
-    },
-    {
-      "completed_chunks": 65,
       "failed_chunks": 0,
       "total_chunks": 65
     },

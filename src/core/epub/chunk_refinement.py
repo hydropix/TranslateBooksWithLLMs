@@ -13,12 +13,12 @@ from dataclasses import replace as _replace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.config import MAX_REFINE_RETRIES
+from src.core.progress import ProgressReporter
 from src.prompts.prompts import PromptPair
 
 from .chunk_fallback import keep_edge_whitespace, validate_placeholders
 from .engine_log import report_error
 from .placeholder_renumberer import globalize_placeholders, localize_placeholders
-from .translation_metrics import TranslationMetrics
 from ..context_optimizer import AdaptiveContextManager
 
 
@@ -217,27 +217,6 @@ class _ChunkRefiner:
             return translated_text
 
 
-def _report_refine_progress(stats_callback: Optional[Callable], stats: Optional[TranslationMetrics],
-                            total_chunks: int, refined_count: int) -> None:
-    """Progress update after each refined chunk."""
-    if not stats_callback:
-        return
-    if stats is not None:
-        # In-translation refine (Phase 2 of a two-phase workflow): drive the
-        # shared metrics so its to_dict() reflects refinement progress.
-        stats.refinement_chunks_completed = refined_count
-        stats_callback(stats.to_dict())
-    else:
-        # Refine-only callers (e.g. DOCX) pass no metrics object. Emit a plain
-        # per-chunk count so the bar advances instead of sitting at 0 until
-        # completion.
-        stats_callback({
-            'total_chunks': total_chunks,
-            'completed_chunks': refined_count,
-            'failed_chunks': 0,
-        })
-
-
 async def refine_chunks(
     translated_chunks: List[str],
     chunks: List[Dict],
@@ -248,8 +227,7 @@ async def refine_chunks(
     placeholder_format: Tuple[str, str],
     log_callback: Optional[Callable],
     prompt_options: Optional[Dict],
-    stats_callback: Optional[Callable] = None,
-    stats: Optional[TranslationMetrics] = None,
+    progress: Optional[ProgressReporter] = None,
     max_refine_retries: Optional[int] = None
 ) -> List[str]:
     """Refine translated placeholder chunks with a second LLM pass.
@@ -266,8 +244,8 @@ async def refine_chunks(
         placeholder_format: Placeholder format tuple (prefix, suffix)
         log_callback: The job's log callback
         prompt_options: Prompt options dict
-        stats_callback: Optional callback for progress updates
-        stats: Optional TranslationMetrics updated during refinement
+        progress: The caller's ProgressReporter, advanced and emitted once per
+            refined chunk (the caller has begun it with its own total)
         max_refine_retries: Re-prompts allowed per chunk when the refined text
             corrupts placeholders (default: MAX_REFINE_RETRIES from config)
 
@@ -299,7 +277,9 @@ async def refine_chunks(
     try:
         for idx, (translated_text, chunk_dict) in enumerate(zip(translated_chunks, chunks)):
             refined_chunks.append(await refiner.refine(idx, translated_text, chunk_dict))
-            _report_refine_progress(stats_callback, stats, total_chunks, len(refined_chunks))
+            if progress is not None:
+                progress.record()
+                progress.emit()
     except RateLimitError as e:
         e.partial_result = refined_chunks + list(translated_chunks[len(refined_chunks):])
         raise

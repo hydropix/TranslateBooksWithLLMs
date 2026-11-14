@@ -5,6 +5,7 @@ from typing import List, Dict, Optional, Tuple
 
 from src.prompts.prompts import generate_subtitle_refinement_block_prompt
 from src.config import SRT_LINES_PER_BLOCK
+from .progress import Phase, ProgressReporter
 from .request_core import REFINEMENT_LABELS, request_chunk
 from .translator import _build_chunk_glossary_block
 
@@ -17,7 +18,7 @@ async def refine_subtitle_translations(
     log_callback=None,
     prompt_options=None,
     post_processing_instructions="",
-    stats_callback=None,
+    progress: Optional[ProgressReporter] = None,
     check_interruption_callback=None,
     subtitle_blocks: Optional[List[List[Dict[str, str]]]] = None,
     subtitle_positions: Optional[Dict[int, int]] = None,
@@ -37,7 +38,8 @@ async def refine_subtitle_translations(
         log_callback: Optional logging callback
         prompt_options: Optional prompt options dict
         post_processing_instructions: Additional refinement instructions
-        stats_callback: Optional callback to report per-subtitle progress
+        progress: The caller's ProgressReporter, advanced and emitted once
+            per subtitle. None counts into a private reporter nobody reads.
         check_interruption_callback: Optional callback to abort the pass early
         subtitle_blocks: Optional list of subtitle blocks (each block is a
             list of subtitle dicts with a 'number' field). When provided,
@@ -58,8 +60,9 @@ async def refine_subtitle_translations(
 
     total_subtitles = len(translations)
     refined_translations: Dict[int, str] = {}
-    completed_count = 0
-    failed_count = 0
+    if progress is None:
+        progress = ProgressReporter(phase=Phase.REFINING)
+        progress.begin(total_subtitles)
     # Transient per-job state (e.g. glossary cap warning dedupe) — never persisted.
     runtime_state: dict = {}
 
@@ -112,12 +115,12 @@ async def refine_subtitle_translations(
     previous_refined_block = ""
 
     # Preserve empty subtitles untouched so the output stays complete.
-    # Count them as completed: they require no refinement, so leaving them
-    # out of completed_count would prevent progress from ever reaching 100%.
+    # Count them as done: they require no refinement, so leaving them out of
+    # the progress count would prevent it from ever reaching 100%.
     for g_idx, text in translations.items():
         if not text or not text.strip():
             refined_translations[g_idx] = text
-            completed_count += 1
+            progress.record()
 
     max_block_attempts = 2  # initial attempt + 1 retry with reinforced reminder
 
@@ -229,9 +232,9 @@ async def refine_subtitle_translations(
         # Apply refined where available, keep original draft otherwise.
         # No per-subtitle fallback: small models corrupt single-subtitle calls
         # with hallucinated content from the surrounding context.
-        # Both branches bump completed_count: the subtitle is finalized in
-        # the output either way, so progress reaches 100%.
-        # NOTE: we do NOT bump failed_count for kept-original. In refine
+        # Both branches count the subtitle as done: it is finalized in the
+        # output either way, so progress reaches 100%.
+        # NOTE: a kept-original subtitle is NOT recorded as failed. In refine
         # semantics, the subtitle already has a valid translation — refine
         # just didn't polish it further. The file is complete; reporting
         # failed_chunks > 0 here would make the backend mark the job as
@@ -249,13 +252,8 @@ async def refine_subtitle_translations(
                 if log_callback:
                     log_callback("srt_refinement_fallback",
                                  f"Subtitle {g_idx + 1}: keeping original (block missed this index)")
-            completed_count += 1
-            if stats_callback:
-                stats_callback({
-                    'total_chunks': total_subtitles,
-                    'completed_chunks': completed_count,
-                    'failed_chunks': failed_count,
-                })
+            progress.record()
+            progress.emit()
 
         # Update previous_refined_block context (last up to 5 subtitles of this group).
         last_items = []

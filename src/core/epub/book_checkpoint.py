@@ -156,7 +156,7 @@ async def save_file_checkpoint(
         # the chunk unrecoverable all over again (issue #261).
         #
         # `content_href` is the authoritative partial-state key: it is what
-        # `xhtml_translator._save_state` saves under and what
+        # `chunk_loop.ChunkSlots.save_state` saves under and what
         # `translate_xhtml_file` loads with. `file_rel_path` (the
         # temp-dir-relative path) is a different string and is only the key
         # used by `save_epub_file` above; deleting with it here never matched

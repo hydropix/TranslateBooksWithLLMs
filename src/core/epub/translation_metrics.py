@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 
 # Cross-file counters of an EPUB run that survive a resume, in the order and
 # under the keys of the checkpoint's stored `epub_accumulated_stats` dict
-# (issue #180). Per-file metrics are rehydrated by xhtml_translator from the
+# (issue #180). Per-file metrics are rehydrated by document_translation from the
 # partial state instead. Changing a key breaks the resume of existing jobs.
 ACCUMULATED_COUNTERS = (
     'token_alignment_used',

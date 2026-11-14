@@ -53,7 +53,7 @@ def begin_pass(run: EpubRun, book: BookRunState) -> None:
     # stay untouched (issue #180).
     #
     # It starts as the cross-file snapshot just restored, and grows by each
-    # re-entered file's own restored counters: `xhtml_translator` rebuilds a
+    # re-entered file's own restored counters: `document_translation` rebuilds a
     # file's TranslationMetrics from its XHTML partial state, so a re-entered
     # file's `file_stats` replay the chunks it already did in an earlier pass -
     # chunks the snapshot above *also* counts (they were merged into
@@ -92,7 +92,7 @@ def _rehydrate_accumulated_stats(run: EpubRun, book: BookRunState) -> Dict[str, 
     On resume, rehydrate the cross-file fallback counters from the checkpoint
     so the Fallbacks stat card does not restart at zero (issue #180). Per-file
     metrics are still restored from the partial XHTML state inside
-    xhtml_translator. Returns the stored progress dict ({} when none).
+    document_translation. Returns the stored progress dict ({} when none).
     """
     if not (run.can_checkpoint and run.ctx.resume_from_index > 0):
         return {}

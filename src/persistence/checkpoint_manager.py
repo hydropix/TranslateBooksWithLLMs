@@ -733,7 +733,7 @@ class CheckpointManager:
         This is the single authority for that location. Issue #261 was caused
         by save/load/delete each recomputing their own sanitised filename
         inline: the file loop deleted with a different key (the temp-dir-
-        relative path) than the one `xhtml_translator` saved under (the
+        relative path) than the one the chunk loop saved under (the
         `content_href`), so the delete silently never matched and stale
         "finished" states blocked every retry. Routing every caller through
         this one helper makes that kind of divergence impossible.

@@ -3420,12 +3420,14 @@ html.dark .glossary-hint code {
     text-decoration: underline;
 }
 
-#glossaryListTable tbody a {
+#glossaryListTable tbody a,
+#styleListTable tbody a {
     color: var(--primary-light);
     text-decoration: none;
     font-weight: 600;
 }
-#glossaryListTable tbody a:hover {
+#glossaryListTable tbody a:hover,
+#styleListTable tbody a:hover {
     text-decoration: underline;
 }
 .glossary-info-card.is-warning {

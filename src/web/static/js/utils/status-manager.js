@@ -38,6 +38,9 @@ const STATUS_TYPES = {
  * Current status
  */
 let currentStatus = 'checking';
+// Last public setter call, replayed on a UI language switch so the pill is
+// re-rendered in the new locale instead of being reset by applyToDOM.
+let lastRender = () => StatusManager.setStatus('checking');
 
 export const StatusManager = {
     /**
@@ -46,6 +49,7 @@ export const StatusManager = {
     initialize() {
         // Set initial checking state
         this.setStatus('checking');
+        window.addEventListener('localeChanged', () => lastRender());
     },
 
     /**
@@ -65,6 +69,10 @@ export const StatusManager = {
         const statusText = DomHelpers.getElement('providerStatusText');
         if (statusText) {
             const text = customText || t(statusInfo.textKey);
+            // The template's data-i18n marker only covers the initial
+            // "checking" text; left in place, applyToDOM overwrites the live
+            // status with it on every language switch.
+            statusText.removeAttribute('data-i18n');
             statusText.textContent = text;
             // Colour is driven by style.css from the dot's state class: muted
             // while healthy, escalated only on disconnected / error.
@@ -143,6 +151,7 @@ export const StatusManager = {
      * Set checking status
      */
     setChecking() {
+        lastRender = () => this.setStatus('checking');
         this.setStatus('checking');
     },
 
@@ -152,6 +161,7 @@ export const StatusManager = {
      * @param {number} modelCount - Number of models available (optional)
      */
     setConnected(provider = null, modelCount = null) {
+        lastRender = () => this.setConnected(provider, modelCount);
         let text = t('common:llm_connected');
         if (provider) {
             const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
@@ -171,6 +181,7 @@ export const StatusManager = {
      * @param {string} reason - Optional reason for disconnection
      */
     setDisconnected(reason = null) {
+        lastRender = () => this.setDisconnected(reason);
         const text = reason
             ? t('settings:llm_disconnected_with_reason', { reason })
             : t('settings:llm_disconnected');
@@ -182,6 +193,7 @@ export const StatusManager = {
      * @param {string} message - Optional error message
      */
     setError(message = null) {
+        lastRender = () => this.setError(message);
         const text = message
             ? t('settings:llm_error_with_msg', { message })
             : t('settings:llm_error');
@@ -193,6 +205,7 @@ export const StatusManager = {
      * @param {string} message - Optional waiting message
      */
     setWaiting(message = null) {
+        lastRender = () => this.setWaiting(message);
         const text = message || t('settings:llm_waiting_default');
         this.setStatus('waiting', text);
     }

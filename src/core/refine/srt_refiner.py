@@ -41,7 +41,7 @@ async def _write_refined_srt(
     refined_subs = srt_processor.update_translated_subtitles(subtitles, refined)
     refined_srt = srt_processor.reconstruct_srt(refined_subs)
     try:
-        async with aiofiles.open(output_filepath, 'w', encoding='utf-8') as f:
+        async with aiofiles.open(output_filepath, 'w', encoding='utf-8', newline='') as f:
             await f.write(refined_srt)
         return True
     except Exception as e:

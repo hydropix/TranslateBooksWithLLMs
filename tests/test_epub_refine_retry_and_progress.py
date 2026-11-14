@@ -2,7 +2,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from src.core.epub import xhtml_translator as xt
+from src.core.epub import chunk_refinement
 from src.core.refine import epub_refiner
 from tests.job_helpers import make_ctx, make_job
 
@@ -28,7 +28,7 @@ class FakeClient:
 
 
 def _refine(client, retries):
-    return asyncio.run(xt._refine_epub_chunks(
+    return asyncio.run(chunk_refinement.refine_chunks(
         [DRAFT], [CHUNK], "French", "m", client, None, FMT, None, None,
         max_refine_retries=retries))
 
@@ -92,6 +92,6 @@ def test_refine_progress_never_exceeds_total(tmp_path, monkeypatch):
 
 def test_reminder_lists_placeholders_in_numeric_order():
     tag_map = {f"[id{i}]": "<x>" for i in range(13)}
-    reminder = xt._build_refine_placeholder_reminder(tag_map)
+    reminder = chunk_refinement.build_refine_placeholder_reminder(tag_map)
     expected = ", ".join(f"[id{i}]" for i in range(13))
     assert expected in reminder

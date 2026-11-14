@@ -16,92 +16,92 @@ not part of a reference the XML parser understands.
 from lxml import etree
 
 from src.core.epub.body_serializer import replace_body_content
-from src.core.epub.xhtml_translator import _escape_stray_angle_brackets
+from src.core.epub.body_reassembly import escape_stray_markup
 
 
 def test_escapes_simple_angle_brackets():
-    assert _escape_stray_angle_brackets("<Cloud>") == "&lt;Cloud&gt;"
+    assert escape_stray_markup("<Cloud>") == "&lt;Cloud&gt;"
 
 
 def test_escapes_brackets_around_korean_text():
-    assert _escape_stray_angle_brackets("<엔젤릭>") == "&lt;엔젤릭&gt;"
+    assert escape_stray_markup("<엔젤릭>") == "&lt;엔젤릭&gt;"
 
 
 def test_escapes_brackets_around_spanish_translation():
-    assert _escape_stray_angle_brackets("<Ángelico>") == "&lt;Ángelico&gt;"
+    assert escape_stray_markup("<Ángelico>") == "&lt;Ángelico&gt;"
 
 
 def test_leaves_placeholder_brackets_untouched():
     text = "[id0]Hola [id1]<Skill>[id2]"
-    assert _escape_stray_angle_brackets(text) == "[id0]Hola [id1]&lt;Skill&gt;[id2]"
+    assert escape_stray_markup(text) == "[id0]Hola [id1]&lt;Skill&gt;[id2]"
 
 
 def test_preserves_existing_entities():
     # Predefined XML entities already produced by the LLM stay intact instead
     # of being double-escaped to &amp;lt;.
-    assert _escape_stray_angle_brackets("&lt;Cloud&gt;") == "&lt;Cloud&gt;"
+    assert escape_stray_markup("&lt;Cloud&gt;") == "&lt;Cloud&gt;"
 
 
 def test_handles_mixed_text_with_multiple_brackets():
     raw = "Las clientes entraron en <Cloud> con paso firme hacia <Angelico>"
     expected = "Las clientes entraron en &lt;Cloud&gt; con paso firme hacia &lt;Angelico&gt;"
-    assert _escape_stray_angle_brackets(raw) == expected
+    assert escape_stray_markup(raw) == expected
 
 
 def test_empty_string_returns_empty():
-    assert _escape_stray_angle_brackets("") == ""
+    assert escape_stray_markup("") == ""
 
 
 def test_text_without_brackets_unchanged():
-    assert _escape_stray_angle_brackets("Hola mundo") == "Hola mundo"
+    assert escape_stray_markup("Hola mundo") == "Hola mundo"
 
 
 # --- Ampersand handling (issue #202) ---
 
 
 def test_escapes_bare_ampersand():
-    assert _escape_stray_angle_brackets("AT&T") == "AT&amp;T"
-    assert _escape_stray_angle_brackets("Tom & Jerry") == "Tom &amp; Jerry"
+    assert escape_stray_markup("AT&T") == "AT&amp;T"
+    assert escape_stray_markup("Tom & Jerry") == "Tom &amp; Jerry"
 
 
 def test_preserves_predefined_xml_entities():
-    assert _escape_stray_angle_brackets("a &amp; b") == "a &amp; b"
-    assert _escape_stray_angle_brackets("&quot;hi&quot; &apos;y&apos;") == \
+    assert escape_stray_markup("a &amp; b") == "a &amp; b"
+    assert escape_stray_markup("&quot;hi&quot; &apos;y&apos;") == \
         "&quot;hi&quot; &apos;y&apos;"
 
 
 def test_preserves_valid_numeric_references():
-    assert _escape_stray_angle_brackets("&#233;&#xE9;") == "&#233;&#xE9;"
+    assert escape_stray_markup("&#233;&#xE9;") == "&#233;&#xE9;"
 
 
 def test_escapes_invalid_numeric_references():
     # NUL and out-of-range codepoints are not valid XML characters; the
     # recover parser would drop them, so the reference is kept as plain text.
-    assert _escape_stray_angle_brackets("&#0;") == "&amp;#0;"
-    assert _escape_stray_angle_brackets("&#x110000;") == "&amp;#x110000;"
+    assert escape_stray_markup("&#0;") == "&amp;#0;"
+    assert escape_stray_markup("&#x110000;") == "&amp;#x110000;"
 
 
 def test_replaces_html_only_entities_with_literal_characters():
     # &nbsp; / &hellip; are undefined in DTD-less XHTML and would be deleted
     # by the recover parser, so they become their literal characters.
-    assert _escape_stray_angle_brackets("a&nbsp;b") == "a b"
-    assert _escape_stray_angle_brackets("wait&hellip;") == "wait…"
+    assert escape_stray_markup("a&nbsp;b") == "a b"
+    assert escape_stray_markup("wait&hellip;") == "wait…"
 
 
 def test_html_entity_decoding_to_markup_chars_is_reescaped():
     # &LT; is a valid HTML5 name for '<' but not an XML predefined entity;
     # the decoded character must come back escaped, not as a raw bracket.
-    assert _escape_stray_angle_brackets("&LT;tag&GT;") == "&lt;tag&gt;"
+    assert escape_stray_markup("&LT;tag&GT;") == "&lt;tag&gt;"
 
 
 def test_escapes_unknown_entity_names():
-    assert _escape_stray_angle_brackets("&foobar123;") == "&amp;foobar123;"
+    assert escape_stray_markup("&foobar123;") == "&amp;foobar123;"
 
 
 def test_double_escaped_source_ampersand_survives():
     # Source extraction emits '&amp;amp;' for a literal '&amp;' in the text;
     # the leading '&amp;' is a valid reference and 'amp;' is plain text.
-    assert _escape_stray_angle_brackets("&amp;amp;") == "&amp;amp;"
+    assert escape_stray_markup("&amp;amp;") == "&amp;amp;"
 
 
 def _roundtrip_through_body(payload: str) -> str:
@@ -111,7 +111,7 @@ def _roundtrip_through_body(payload: str) -> str:
         '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>old</p></body></html>'
     )
     body = doc.find('.//{http://www.w3.org/1999/xhtml}body')
-    replace_body_content(body, _escape_stray_angle_brackets(payload))
+    replace_body_content(body, escape_stray_markup(payload))
     return ''.join(body.itertext())
 
 

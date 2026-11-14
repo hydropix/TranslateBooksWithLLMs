@@ -4,7 +4,7 @@ A job that ends `partial` because one chunk fell back to its source text used to
 be unfinishable: the resume pointer is a file index, so the file holding the bad
 chunk counted as done and Resume translated nothing. These tests pin the fix end
 to end, on a 3-chapter in-memory EPUB and with no network at all
-(`generate_translation_request` is stubbed inside the xhtml_translator module).
+(`generate_translation_request` is stubbed inside the chunk_fallback module).
 
 Three scenarios, in order:
 
@@ -32,7 +32,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import src.core.epub.translator as epub_translator
-import src.core.epub.xhtml_translator as xhtml_translator
+from src.core.epub import chunk_fallback
 from src.api.completion_status import classify_completion
 from src.common.placeholder_format import PlaceholderFormat
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -221,7 +221,7 @@ async def _run_pass(job, monkeypatch, resume_from_index, starve,
                               PlaceholderFormat.from_config().remove_all(main_content))
         return "%s %s" % (TRANSLATED_MARKER, main_content)
 
-    monkeypatch.setattr(xhtml_translator, "generate_translation_request",
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request",
                         fake_generate_translation_request)
 
     # Which repair phase a starved chunk goes through is a property of the

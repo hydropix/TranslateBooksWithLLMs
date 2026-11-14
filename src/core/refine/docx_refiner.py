@@ -9,14 +9,15 @@ import os
 import tempfile
 
 from src.config import DEFAULT_MODEL
-from src.core.epub.xhtml_translator import _refine_epub_chunks, _escape_stray_angle_brackets
+from src.core.epub.body_reassembly import escape_stray_markup
+from src.core.epub.chunk_refinement import refine_chunks
+from src.core.epub.placeholder_renumberer import globalize_chunks
 from src.core.epub.container import TranslationContainer
 from src.core.epub.html_chunker import HtmlChunker
 from src.core.docx.converter import DocxHtmlConverter
 from src.core.job import JobConfig, JobContext
 from src.core.llm.exceptions import LLMClientConfigError
 from .client_setup import build_refine_client
-from .epub_refiner import _globalize_chunk_text
 
 
 async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
@@ -91,9 +92,9 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
         if stats_callback:
             stats_callback({'total_chunks': len(chunks), 'completed_chunks': 0, 'failed_chunks': 0})
 
-        draft_globalized = [_globalize_chunk_text(c, placeholder_format) for c in chunks]
+        draft_globalized = globalize_chunks(chunks, placeholder_format)
 
-        refined_chunks = await _refine_epub_chunks(
+        refined_chunks = await refine_chunks(
             translated_chunks=draft_globalized,
             chunks=chunks,
             target_language=target_language,
@@ -113,7 +114,7 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
             return False
 
         full_text = ''.join(refined_chunks)
-        full_text = _escape_stray_angle_brackets(full_text)
+        full_text = escape_stray_markup(full_text)
         final_html = tag_preserver.restore_tags(full_text, tag_map)
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.docx', delete=False, encoding='utf-8') as tmp:

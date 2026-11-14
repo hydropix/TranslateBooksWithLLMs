@@ -13,7 +13,7 @@ import pytest
 from src.core.context_optimizer import AdaptiveContextManager, MAX_REPETITION_RETRIES
 from src.core.llm import RepetitionLoopError
 from src.core import translator
-from src.core.epub import xhtml_translator
+from src.core.epub import chunk_refinement
 
 
 def _manager(initial=4096, step=4096, max_context=131072):
@@ -93,7 +93,7 @@ async def test_epub_refinement_request_that_always_loops_is_bounded_and_restored
 
     # The shared request core reports the loop as a failed request (the
     # caller keeps the draft) instead of raising.
-    assert await xhtml_translator._request_refinement_with_adaptive_context(
+    assert await chunk_refinement.request_refinement(
         client, cm, prompt_pair, "m", None
     ) is None
 

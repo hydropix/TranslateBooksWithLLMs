@@ -7,7 +7,7 @@ but does not persist partial state (no resume support in v1).
 
 import os
 import tempfile
-from typing import Optional, Callable, Dict, Any, List, Tuple
+from typing import Optional, Callable, Dict, Any, List
 from lxml import etree
 
 from src.config import (
@@ -16,52 +16,23 @@ from src.config import (
 from src.core.epub.translator import (
     _extract_epub, _parse_epub_manifest, _repackage_epub,
 )
-from src.core.epub.xhtml_translator import (
-    _setup_translation, _preserve_tags, _create_chunks,
-    _replace_body, _escape_stray_angle_brackets, _refine_epub_chunks,
-)
+from src.core.epub.body_reassembly import escape_stray_markup, replace_body
+from src.core.epub.chunk_refinement import refine_chunks
+from src.core.epub.document_chunking import chunk_document, tag_preserver_for
+from src.core.epub.placeholder_renumberer import globalize_chunks
 from src.core.epub.container import TranslationContainer
 from src.core.job import JobConfig, JobContext
 from src.core.llm.exceptions import LLMClientConfigError
 from .client_setup import build_refine_client
 
 
-def _globalize_chunk_text(
-    chunk: Dict,
-    placeholder_format: Tuple[str, str],
-) -> str:
-    """Convert a chunk's placeholders from local to global indices.
-
-    `_refine_epub_chunks` expects globally-numbered placeholders because it
-    re-localizes internally before sending to the LLM. In translate-mode the
-    chunks already carry global indices; in refine-only mode they come fresh
-    from HtmlChunker with local indices, so we re-globalize here.
-    """
-    text = chunk['text']
-    global_indices = chunk.get('global_indices', [])
-    if not global_indices:
-        return text
-
-    prefix, suffix = placeholder_format
-    for local_idx, global_idx in enumerate(global_indices):
-        local_ph = f"{prefix}{local_idx}{suffix}"
-        text = text.replace(local_ph, f"__TEMP_GLOBAL_{global_idx}__")
-    for global_idx in global_indices:
-        text = text.replace(f"__TEMP_GLOBAL_{global_idx}__",
-                            f"{prefix}{global_idx}{suffix}")
-    return text
-
-
 def _count_file_chunks(doc_root, max_tokens_per_chunk: int) -> int:
     """Count the chunks a content file will be split into (no LLM call)."""
     try:
-        body_html, body_element, tag_preserver = _setup_translation(doc_root, None, None)
-        if not body_html or body_element is None:
+        body_element, prepared = chunk_document(doc_root, max_tokens_per_chunk)
+        if body_element is None or prepared.is_empty:
             return 0
-        text, tag_map, _ = _preserve_tags(
-            body_html, tag_preserver, None, protect_technical=True
-        )
-        return len(_create_chunks(text, tag_map, max_tokens_per_chunk, None, None))
+        return len(prepared.chunks)
     except Exception:
         return 0
 
@@ -79,32 +50,32 @@ async def _refine_one_xhtml(
     container: Optional[TranslationContainer] = None,
     stats_callback: Optional[Callable] = None,
 ) -> bool:
-    """Refine a single parsed XHTML document in place."""
-    body_html, body_element, tag_preserver = _setup_translation(
-        doc_root, log_callback, container
+    """Refine a single parsed XHTML document in place.
+
+    The body is chunked exactly like the translation chunked it (same
+    technical content protection setting).
+    """
+    body_element, prepared = chunk_document(
+        doc_root, max_tokens_per_chunk, container=container, log_callback=log_callback
     )
-    if not body_html or body_element is None:
+    if body_element is None or prepared.is_empty:
         if log_callback:
             log_callback("no_body", "No <body> element found")
         return False
 
-    text_with_placeholders, global_tag_map, placeholder_format = _preserve_tags(
-        body_html, tag_preserver, log_callback, protect_technical=True
-    )
-
-    chunks = _create_chunks(
-        text_with_placeholders, global_tag_map, max_tokens_per_chunk,
-        log_callback, container,
-    )
-
+    chunks = prepared.chunks
+    global_tag_map = prepared.global_tag_map
+    placeholder_format = prepared.placeholder_format
     if not chunks:
         if log_callback:
             log_callback("no_chunks", "No translatable chunks in this XHTML, skipping")
         return True
 
-    draft_globalized = [_globalize_chunk_text(c, placeholder_format) for c in chunks]
+    # Fresh chunks carry local indices; refine_chunks expects the draft with
+    # global ones (it re-localizes each chunk before sending it).
+    draft_globalized = globalize_chunks(chunks, placeholder_format)
 
-    refined_chunks = await _refine_epub_chunks(
+    refined_chunks = await refine_chunks(
         translated_chunks=draft_globalized,
         chunks=chunks,
         target_language=target_language,
@@ -123,11 +94,10 @@ async def _refine_one_xhtml(
                          "Refinement interrupted before reconstruction")
         return False
 
-    full_text = ''.join(refined_chunks)
-    full_text = _escape_stray_angle_brackets(full_text)
-    final_html = tag_preserver.restore_tags(full_text, global_tag_map)
+    full_text = escape_stray_markup(''.join(refined_chunks))
+    final_html = tag_preserver_for(placeholder_format, container).restore_tags(full_text, global_tag_map)
 
-    return _replace_body(body_element, final_html, log_callback)
+    return replace_body(body_element, final_html, log_callback)
 
 
 async def refine_epub_file(job: JobConfig, ctx: JobContext) -> bool:

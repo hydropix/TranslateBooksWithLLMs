@@ -575,6 +575,10 @@ PLACEHOLDER_PATTERN = r'\[id(\d+)\]'
 EPUB_TOKEN_ALIGNMENT_ENABLED = os.getenv('EPUB_TOKEN_ALIGNMENT_ENABLED', 'true').lower() == 'true'
 """Enable token alignment fallback for EPUB translation (Phase 2)"""
 
+# Technical content protection (code, formulas, measurements hidden behind
+# placeholders) for the translation pass. Disabled on purpose for now.
+TECHNICAL_PROTECTION_ENABLED = False
+
 EPUB_SCRIPT_NORMALIZATION_ENABLED = os.getenv(
     'EPUB_SCRIPT_NORMALIZATION_ENABLED', 'true').lower() == 'true'
 """Enable source-script (CJK) typography normalization for translated EPUBs:

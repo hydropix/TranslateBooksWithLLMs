@@ -40,7 +40,7 @@ async def _chunk_count(tmp_path, monkeypatch, max_tokens):
 
     monkeypatch.setattr(docx_refiner, "build_refine_client", lambda *a, **kw: (_Client(), None))
     monkeypatch.setattr(docx_refiner, "DocxHtmlConverter", _Converter)
-    monkeypatch.setattr(docx_refiner, "_refine_epub_chunks", fake_refine)
+    monkeypatch.setattr(docx_refiner, "refine_chunks", fake_refine)
     src = tmp_path / "in.docx"
     src.write_bytes(b"x")
 

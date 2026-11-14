@@ -747,6 +747,10 @@ class CheckpointManager:
         themselves.
         """
         safe_filename = file_href.replace('/', '_').replace('\\', '_')
+        # A drive prefix ('C:') would make pathlib treat the name as a
+        # drive-relative path and drop the state directory in front of it.
+        # Hrefs without ':' keep their historical file name.
+        safe_filename = safe_filename.replace(':', '_')
         return self.uploads_dir / translation_id / "xhtml_states" / f"{safe_filename}.json"
 
     def save_xhtml_partial_state(

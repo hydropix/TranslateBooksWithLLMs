@@ -14,7 +14,7 @@ import aiofiles
 from lxml import etree
 
 from src.config import NAMESPACES
-from src.utils.security import safe_extract_zip
+from src.utils.security import is_within_directory, safe_extract_zip
 
 
 def extract_epub(input_filepath: str, temp_dir: str,
@@ -123,6 +123,19 @@ def parse_epub_manifest(temp_dir: str, log_callback: Optional[Callable] = None) 
         raise ValueError("CRITICAL ERROR: manifest or spine missing in EPUB.")
 
     content_files = content_files_from_spine(spine, manifest)
+
+    # Manifest hrefs are attacker-controlled, like archive entry names: an
+    # absolute href or one climbing out with '../' would make the engine read
+    # a host file and write its "translation" back in place. Only documents
+    # inside the extracted book are translated.
+    contained = []
+    for href in content_files:
+        if is_within_directory(resolve_content_path(opf_dir, href), temp_dir):
+            contained.append(href)
+        elif log_callback:
+            log_callback("epub_href_outside_book",
+                         f"Skipping manifest item outside the book: {href!r}")
+    content_files = contained
 
     if log_callback:
         log_callback("epub_files_found", f"Found {len(content_files)} content files to translate.")

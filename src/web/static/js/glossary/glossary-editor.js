@@ -478,7 +478,7 @@ async function _doFieldCommit(tr, el) {
                     category: created.category || values.category || '',
                     gender: created.gender || values.gender || '',
                 });
-                flashRow(tr, 'rgba(34, 197, 94, 0.15)');
+                flashRow(tr, 'var(--success-light-bg)');
             }
         } catch (err) {
             console.error('Add term failed:', err);
@@ -521,7 +521,7 @@ async function _doFieldCommit(tr, el) {
         el.dataset.lastValue = newValue;
         const numId = parseInt(tid, 10);
         _updateLocalTerm(numId, { [field]: newValue });
-        flashRow(tr, 'rgba(34, 197, 94, 0.15)');
+        flashRow(tr, 'var(--success-light-bg)');
     } catch (err) {
         console.error('Update term failed:', err);
         if (isConflictError(err)) {

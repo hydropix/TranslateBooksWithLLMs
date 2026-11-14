@@ -270,7 +270,7 @@ async function showTTSModal(filename, filepath) {
 
                 <div class="modal-footer">
                     <button id="ttsModalCancel" class="btn btn-secondary" data-i18n="common:cancel">${t('common:cancel')}</button>
-                    <button id="ttsModalGenerate" class="btn btn-primary" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);" data-i18n="tts:generate_audio_with_icon">${t('tts:generate_audio_with_icon')}</button>
+                    <button id="ttsModalGenerate" class="btn btn-primary" style="background: var(--success-light); border-color: var(--success-light);" data-i18n="tts:generate_audio_with_icon">${t('tts:generate_audio_with_icon')}</button>
                 </div>
             </div>
         </div>

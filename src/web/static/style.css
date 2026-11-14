@@ -18,8 +18,8 @@
     --border-strong: #d6cdbf;
     --primary-tint: rgba(62, 90, 120, 0.06);
     --primary-tint-border: rgba(62, 90, 120, 0.45);
-    --success-light: #28a745;
-    --success-light-bg: #e6faed;
+    --success-light: #0d7d8a;
+    --success-light-bg: rgba(13, 125, 138, 0.1);
     --info-light: #0d6efd;
     --info-light-bg: #e0edff;
     /* Danger palette — shared by .btn-danger, the Fallbacks card alert
@@ -112,8 +112,8 @@ html.dark {
     --border-strong: #454c55;
     --primary-tint: rgba(120, 155, 195, 0.08);
     --primary-tint-border: rgba(140, 170, 205, 0.5);
-    --success-light: #34d399;
-    --success-light-bg: #1a2a1a;
+    --success-light: #3fb3c0;
+    --success-light-bg: rgba(63, 179, 192, 0.15);
     --info-light: #60a5fa;
     --info-light-bg: #1a1a2a;
     /* Slightly darker red in dark mode so the saturated solid fill does not
@@ -179,9 +179,9 @@ html.dark .message.error {
 }
 
 html.dark .message.success {
-    background: #1a3a2e;
-    border-color: #166534;
-    color: #86efac;
+    background: var(--success-light-bg);
+    border-color: transparent;
+    color: var(--success-ink);
 }
 
 html.dark .message.info {
@@ -191,8 +191,8 @@ html.dark .message.info {
 }
 
 html.dark #ttsOptions {
-    background: linear-gradient(135deg, rgba(52, 211, 153, 0.15) 0%, rgba(52, 211, 153, 0.08) 100%);
-    border-color: rgba(52, 211, 153, 0.4);
+    background: var(--success-light-bg);
+    border-color: color-mix(in srgb, var(--success-light) 40%, transparent);
 }
 
 html.dark .log-entry.log-summary-detailed {
@@ -493,7 +493,7 @@ html.dark .neu-inset-light {
 }
 
 .header .status-indicator .status-dot.connected {
-    background-color: #22c55e;
+    background-color: var(--success-light);
     animation: none;
 }
 
@@ -1959,6 +1959,311 @@ input[type="checkbox"] {
 }
 
 /* ========================================
+   Translation history
+
+   A dense, bounded list: one row per completed job, at most ~6 rows tall
+   before it scrolls inside the card, so the page no longer grows with
+   every finished translation. A filter box appears once it scrolls.
+   ======================================== */
+
+.history-count {
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    background: var(--llm-chip-bg, var(--background-inset));
+    color: var(--text-muted-light);
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.history-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.history-body [hidden] {
+    display: none !important;
+}
+
+.history-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md, 8px);
+    background: var(--background-inset);
+}
+
+.history-filter .material-symbols-outlined {
+    font-size: 1.1rem;
+    color: var(--text-faint);
+}
+
+.history-filter input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-dark);
+    font: inherit;
+    font-size: 0.875rem;
+    padding: 0.5rem 0;
+    box-shadow: none;
+}
+
+.history-filter:focus-within {
+    border-color: var(--border-strong, var(--border-light));
+}
+
+.history-list {
+    max-height: 23rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md, 8px);
+    background: var(--background-inset);
+    scrollbar-width: thin;
+}
+
+.history-header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.history-header-actions .btn {
+    padding: 0.5rem 1rem;
+}
+
+.history-cleanup {
+    position: relative;
+}
+
+.history-cleanup-menu {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 20;
+    min-width: 16rem;
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-md, 8px);
+    background: var(--background-light);
+    box-shadow: var(--shadow-soft);
+}
+
+.history-cleanup-menu[hidden] {
+    display: none;
+}
+
+.history-cleanup-item {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    border: 0;
+    border-radius: var(--r-sm, 5px);
+    background: transparent;
+    color: var(--text-dark);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.history-cleanup-item .material-symbols-outlined {
+    font-size: 1.1rem;
+    color: var(--text-faint);
+}
+
+.history-cleanup-item:hover:not(:disabled),
+.history-cleanup-item:focus-visible {
+    background: var(--primary-tint, rgba(0, 0, 0, 0.04));
+}
+
+.history-cleanup-item:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.history-cleanup-item--danger,
+.history-cleanup-item--danger .material-symbols-outlined {
+    color: var(--danger-light, #dc2626);
+}
+
+.history-cleanup-note {
+    margin: 0.25rem 0 0;
+    padding: 0.4rem 0.6rem 0.2rem;
+    border-top: 1px solid var(--border-light);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+}
+
+.history-row__remove {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 1rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.history-row:hover .history-row__remove,
+.history-row__remove:focus-visible {
+    opacity: 1;
+}
+
+.history-row__remove:hover {
+    color: var(--danger-light, #dc2626);
+    background: var(--primary-tint, rgba(0, 0, 0, 0.05));
+}
+
+/* No hover on touch screens: keep the remove button visible. */
+@media (hover: none) {
+    .history-row__remove {
+        opacity: 1;
+    }
+}
+
+.history-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-top: 1px solid var(--border-light);
+    transition: background-color 0.15s;
+}
+
+.history-row:first-child {
+    border-top: 0;
+}
+
+.history-row:hover {
+    background: var(--primary-tint, rgba(0, 0, 0, 0.03));
+}
+
+.history-row__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.75rem;
+    overflow: hidden;
+}
+
+.history-row__icon > * {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.history-row__icon svg,
+.history-row__icon img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.history-row__main {
+    min-width: 0;
+}
+
+.history-row__name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-dark);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-row__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    margin-top: 0.1rem;
+    font-size: 0.75rem;
+    color: var(--text-faint);
+}
+
+.history-row__output {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-row__tag,
+.history-row__chunks {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.history-row__tag {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    padding: 0 0.3rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r-sm, 4px);
+}
+
+.history-row__date {
+    font-size: 0.75rem;
+    color: var(--text-muted-light);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.history-row__actions {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 5.25rem;
+}
+
+.history-row__missing {
+    font-size: 1.1rem;
+    color: var(--text-faint);
+    cursor: help;
+}
+
+.history-no-match {
+    margin: 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+}
+
+@media (max-width: 600px) {
+    .history-row {
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
+        gap: 0.6rem;
+    }
+
+    .history-row__date {
+        display: none;
+    }
+
+    .history-row__chunks {
+        display: none;
+    }
+}
+
+/* ========================================
    Messages
    ======================================== */
 
@@ -1997,8 +2302,8 @@ input[type="checkbox"] {
 
 .success {
     background: var(--success-light-bg);
-    border: 1px solid #86efac;
-    color: #166534;
+    border: 1px solid transparent;
+    color: var(--success-ink);
 }
 
 .info {
@@ -2062,8 +2367,8 @@ input[type="checkbox"] {
 #ttsOptions {
     margin-top: 1rem;
     padding: 1.5rem;
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    background: var(--success-light-bg);
+    border: 1px solid color-mix(in srgb, var(--success-light) 30%, transparent);
 }
 
 .gpu-status {
@@ -2076,9 +2381,9 @@ input[type="checkbox"] {
 }
 
 .gpu-status.gpu-available {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(22, 163, 74, 0.15) 100%);
-    border: 1px solid rgba(34, 197, 94, 0.4);
-    color: #16a34a;
+    background: var(--success-light-bg);
+    border: 1px solid color-mix(in srgb, var(--success-light) 40%, transparent);
+    color: var(--success-ink);
 }
 
 .gpu-status.gpu-unavailable {
@@ -2094,8 +2399,8 @@ input[type="checkbox"] {
 }
 
 .status-dot.available {
-    background: #22c55e;
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    background: var(--success-light);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--success-light) 60%, transparent);
     animation: pulse-green 2s infinite;
 }
 
@@ -2112,11 +2417,11 @@ input[type="checkbox"] {
 
 @keyframes pulse-green {
     0%, 100% {
-        box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+        box-shadow: 0 0 8px color-mix(in srgb, var(--success-light) 60%, transparent);
         transform: scale(1);
     }
     50% {
-        box-shadow: 0 0 15px rgba(34, 197, 94, 0.9);
+        box-shadow: 0 0 15px color-mix(in srgb, var(--success-light) 90%, transparent);
         transform: scale(1.1);
     }
 }
@@ -2250,9 +2555,9 @@ input[type="range"].tts-slider {
 }
 
 .key-status.configured {
-    background: rgba(34, 197, 94, 0.2);
-    color: #16a34a;
-    border: 1px solid rgba(34, 197, 94, 0.4);
+    background: var(--success-light-bg);
+    color: var(--success-ink);
+    border: 1px solid color-mix(in srgb, var(--success-light) 40%, transparent);
 }
 
 .key-status.not-configured {
@@ -4202,13 +4507,13 @@ html.dark .sample-warning-error {
     color: #fca5a5;
 }
 .sample-warning-success {
-    background: rgba(34, 197, 94, 0.12);
-    color: #15803d;
-    border-left-color: #22c55e;
+    background: var(--success-light-bg);
+    color: var(--success-ink);
+    border-left-color: var(--success-light);
 }
 html.dark .sample-warning-success {
-    background: rgba(34, 197, 94, 0.18);
-    color: #86efac;
+    background: var(--success-light-bg);
+    color: var(--success-ink);
 }
 .sample-warning-info {
     background: rgba(59, 130, 246, 0.12);
@@ -4443,10 +4748,10 @@ html.dark .sample-card {
     line-height: 1.5;
 }
 /* Refined output: by default read as clean prose — the final text with the
-   added words highlighted green and the removed words hidden. Hovering the
+   added words highlighted in the success tint and the removed words hidden. Hovering the
    block reveals the full word-level diff (struck-through removals in red). */
 .sample-output-diff ins {
-    background: rgba(34, 197, 94, 0.18);
+    background: color-mix(in srgb, var(--success-light) 18%, transparent);
     text-decoration: none;
     padding: 0 2px;
 }
@@ -4460,7 +4765,7 @@ html.dark .sample-card {
     padding: 0 2px;
 }
 html.dark .sample-output-diff ins {
-    background: rgba(34, 197, 94, 0.26);
+    background: color-mix(in srgb, var(--success-light) 26%, transparent);
 }
 html.dark .sample-output-diff:hover del {
     background: rgba(239, 68, 68, 0.26);
@@ -4731,9 +5036,10 @@ html.dark .file-test-btn { color: #a5b4fc; }
    ======================================== */
 @layer square-ui {
     :root {
-        --r-sm: 5px;
-        --r-md: 8px;
-        --r-lg: 14px;
+        --r-sm: 6px;
+        --r-md: 11px;
+        --r-lg: 18px;
+        --r-pill: 999px;
     }
 
     *,
@@ -4778,8 +5084,18 @@ html.dark .file-test-btn { color: #a5b4fc; }
         border-radius: var(--r-lg) !important;
     }
 
-    .status-dot,
+    /* Every button reads as a pill: the round end is the "clickable"
+       cue, while fields and panels keep soft rectangular corners. */
+    .btn,
+    .post-mode-btn,
     .key-status,
+    .header .header-lang-wrapper,
+    .header #themeToggleBtn {
+        border-radius: var(--r-pill) !important;
+    }
+
+    .status-dot,
+    .key-status::before,
     .glossary-ner-loading .dot,
     .quick-test-spinner,
     .inline-spinner {
@@ -4964,4 +5280,791 @@ html.dark .file-test-btn { color: #a5b4fc; }
         overflow-x: auto;
         max-width: 100%;
     }
+}
+
+/* ========================================
+   Lab paper theme
+
+   Warm paper page with a faint cutting-mat grid, frosted-glass cards,
+   ink-black pill buttons, one cobalt accent reserved for the tier-1
+   action (Start), monospace uppercase kickers for field labels and an
+   old-style serif for titles.
+
+   Kept as one block at the end of the file so the whole look can be
+   tuned (or dropped) in a single place. It only re-points tokens and
+   overrides surface treatment; layout and tiers are untouched.
+   ======================================== */
+
+:root {
+    --paper: #f1eadc;
+    --paper-hi: #fbf7ee;
+    --ink: #1d1b16;
+    --ink-2: rgba(29, 27, 22, 0.78);
+    --ink-3: rgba(29, 27, 22, 0.62);
+    --rule: rgba(29, 27, 22, 0.16);
+    --rule-soft: rgba(29, 27, 22, 0.09);
+    --accent: #1a52ad;
+    --accent-hover: #15448f;
+    --accent-soft: rgba(26, 82, 173, 0.11);
+    --grid-line: rgba(29, 27, 22, 0.045);
+
+    --frost-bg: rgba(250, 246, 238, 0.8);
+    --frost-blur: blur(22px) saturate(1.25);
+    --frost-edge: rgba(255, 255, 255, 0.62);
+    --frost-shadow:
+        0 0 0 1px rgba(29, 27, 22, 0.07),
+        0 1px 0 rgba(255, 255, 255, 0.75) inset,
+        0 24px 46px -26px rgba(40, 28, 10, 0.55),
+        0 3px 10px -4px rgba(40, 28, 10, 0.2);
+
+    --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+
+    /* Re-point the existing palette onto paper and ink. */
+    --primary-light: var(--ink);
+    --primary-light-hover: #3a362d;
+    --background-outer: var(--paper);
+    --background-light: var(--paper-hi);
+    --background-inset: #f6f0e4;
+    --text-dark: var(--ink);
+    --text-muted-light: var(--ink-2);
+    --text-faint: var(--ink-3);
+    --border-light: var(--rule-soft);
+    --border-strong: var(--rule);
+    --primary-tint: rgba(29, 27, 22, 0.035);
+    --primary-tint-border: rgba(29, 27, 22, 0.28);
+    --llm-chip-bg: rgba(29, 27, 22, 0.08);
+    --shadow-soft: var(--frost-shadow);
+}
+
+html.dark {
+    --paper: #17150f;
+    --paper-hi: #24211a;
+    --ink: #f1eadc;
+    --ink-2: rgba(241, 234, 220, 0.78);
+    --ink-3: rgba(241, 234, 220, 0.56);
+    --rule: rgba(241, 234, 220, 0.16);
+    --rule-soft: rgba(241, 234, 220, 0.09);
+    --accent: #5b8fe0;
+    --accent-hover: #77a3e8;
+    --accent-soft: rgba(91, 143, 224, 0.16);
+    --grid-line: rgba(241, 234, 220, 0.035);
+
+    --frost-bg: rgba(36, 33, 26, 0.78);
+    --frost-edge: rgba(255, 255, 255, 0.07);
+    --frost-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35),
+        0 1px 0 rgba(255, 255, 255, 0.05) inset,
+        0 24px 46px -26px rgba(0, 0, 0, 0.8),
+        0 3px 10px -4px rgba(0, 0, 0, 0.4);
+
+    --primary-light: var(--ink);
+    --primary-light-hover: #ffffff;
+    --background-outer: var(--paper);
+    --background-light: var(--paper-hi);
+    --background-inset: #1d1a14;
+    --text-dark: var(--ink);
+    --text-muted-light: var(--ink-2);
+    --text-faint: var(--ink-3);
+    --border-light: var(--rule-soft);
+    --border-strong: var(--rule);
+    --primary-tint: rgba(241, 234, 220, 0.03);
+    --primary-tint-border: rgba(241, 234, 220, 0.24);
+    --llm-chip-bg: rgba(241, 234, 220, 0.1);
+    --shadow-soft: var(--frost-shadow);
+}
+
+/* Page: paper with a faint 24px grid, like a cutting mat. */
+body {
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-attachment: fixed;
+}
+
+/* Header: translucent frosted strip instead of a solid band. */
+.header {
+    background: color-mix(in srgb, var(--paper) 72%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-bottom-color: var(--rule-soft);
+}
+
+.header .logo-text h2 {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: 0.005em;
+}
+
+.header .logo-text .app-version {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+}
+
+.header .tab-nav .tab-btn {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--ink-2);
+}
+
+.header .tab-nav .tab-btn-active {
+    color: var(--ink);
+    font-weight: 500;
+    border-bottom-color: var(--accent);
+}
+
+.header .header-lang-wrapper {
+    background: color-mix(in srgb, var(--paper-hi) 72%, transparent);
+    border: 1px solid var(--rule);
+}
+
+/* Cards: frosted glass panels. */
+.main-card,
+.modal-content {
+    background: var(--frost-bg);
+    -webkit-backdrop-filter: var(--frost-blur);
+    backdrop-filter: var(--frost-blur);
+    border: 1px solid var(--frost-edge);
+    box-shadow: var(--frost-shadow);
+}
+
+.card-header {
+    background: transparent;
+    border-bottom-color: var(--rule-soft);
+}
+
+.card-header h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+/* Field labels as monospace kickers. */
+.form-group label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--ink-3);
+}
+
+/* Fields sit on brighter paper, not pure white. */
+.form-control,
+.neu-inset-light .form-control,
+.form-control:focus {
+    background-color: var(--paper-hi);
+    color: var(--ink);
+}
+
+html.dark .form-control,
+html.dark .neu-inset-light .form-control,
+html.dark .form-control:focus {
+    background-color: var(--background-inset);
+}
+
+.neu-inset-light {
+    background: var(--paper-hi);
+    border-color: var(--rule);
+}
+
+.neu-inset-light:hover {
+    border-color: rgba(127, 120, 105, 0.55);
+}
+
+.neu-inset-light:focus-within,
+.neu-inset-light:has(#targetLang) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.form-control::placeholder {
+    color: var(--ink-3);
+}
+
+/* Buttons: ink pill, ghost pill, cobalt pill for Start. */
+.btn {
+    font-size: 0.84375rem;
+    font-weight: 550;
+    letter-spacing: 0.005em;
+}
+
+.btn-primary {
+    background: var(--ink);
+    color: var(--paper-hi);
+    border: 1px solid var(--ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-light-hover);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid rgba(127, 120, 105, 0.45);
+}
+
+.btn-secondary:hover {
+    background: var(--rule-soft);
+    border-color: var(--ink-3);
+}
+
+#translateBtn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fffdf7;
+    box-shadow: 0 10px 22px -12px var(--accent);
+}
+
+#translateBtn:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+#translateBtn:disabled {
+    background: color-mix(in srgb, var(--accent) 45%, var(--paper));
+    border-color: transparent;
+    opacity: 1;
+}
+
+.glossary-toolbar-btn.btn-primary {
+    box-shadow: none;
+}
+
+/* Drop zone: quiet paper well instead of a tinted slate box. */
+.file-upload {
+    background: var(--primary-tint);
+    border-color: var(--primary-tint-border);
+}
+
+.file-upload:hover,
+.file-upload.dragging {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.file-upload .upload-icon {
+    background: var(--ink);
+}
+
+.file-upload .upload-icon .material-symbols-outlined {
+    color: var(--paper-hi);
+}
+
+.file-upload h3 {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 500;
+}
+
+.file-upload .browse-btn {
+    color: var(--accent);
+}
+
+/* Progress: thin ink track, cobalt fill. */
+.progress-bar-container {
+    background: var(--rule-soft);
+}
+
+.progress-bar {
+    background: var(--accent);
+}
+
+/* Run figures and log read like instrument readouts. */
+.stat-card {
+    border-color: var(--rule-soft);
+    background: color-mix(in srgb, var(--paper-hi) 55%, transparent);
+}
+
+.log-container {
+    font-family: var(--font-mono);
+}
+
+/* Icons inside a button follow the button ink, including in card headers
+   where .card-header .material-symbols-outlined would grey them out. */
+.btn .material-symbols-outlined,
+.card-header .btn .material-symbols-outlined {
+    color: inherit;
+}
+
+/* ----------------------------------------
+   Lab paper theme: neutral wells, fewer frames
+
+   Inside a card, boxes are told apart by a flat neutral fill (light grey
+   with a hint of beige) rather than by an outline. Borders are kept only
+   where they carry state: focus, drag-over, the chosen target language.
+   Sections within a card are split by a single hairline rule.
+   ---------------------------------------- */
+
+:root {
+    /* Wells sit a step lighter than the frosted card (raised paper),
+       held by a hairline ring instead of a border. */
+    --well: rgba(255, 253, 247, 0.72);
+    --well-hover: rgba(255, 253, 247, 0.95);
+    --well-strong: rgba(29, 27, 22, 0.07);
+    --well-ring: 0 0 0 1px rgba(29, 27, 22, 0.06);
+}
+
+html.dark {
+    --well: #2b2822;
+    --well-hover: #332f28;
+    --well-strong: #3b362e;
+    --well-ring: 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+:root,
+html.dark {
+    --llm-chip-bg: var(--well-strong);
+    --option-chip-bg: var(--well);
+    --option-chip-border: var(--well);
+    --background-inset: var(--well);
+}
+
+/* Fields: borderless wells; brighter paper and an accent ring on focus. */
+.neu-inset-light,
+html.dark .neu-inset-light {
+    background: var(--well);
+    border-color: transparent;
+}
+
+.neu-inset-light .form-control,
+.form-control,
+html.dark .form-control,
+html.dark .neu-inset-light .form-control {
+    background-color: var(--well);
+}
+
+.neu-inset-light:hover {
+    border-color: transparent;
+    background: var(--well-hover);
+}
+
+.neu-inset-light:hover .form-control {
+    background-color: var(--well-hover);
+}
+
+.neu-inset-light:focus-within,
+.neu-inset-light:focus-within .form-control,
+.form-control:focus,
+html.dark .form-control:focus,
+html.dark .neu-inset-light:focus-within .form-control {
+    background-color: var(--paper-hi);
+}
+
+.neu-inset-light:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* T1 cue kept, but as a hairline rather than a glowing frame. */
+.neu-inset-light:has(#targetLang):not(:focus-within) {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    box-shadow: none;
+}
+
+/* Drop zone: a flat well; the dashed outline only appears on drag-over. */
+.file-upload {
+    background: var(--well);
+    border: 1.5px dashed transparent;
+}
+
+.file-upload:hover {
+    background: var(--well-hover);
+    border-color: transparent;
+}
+
+.file-upload.dragging {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+/* "Already translated" zone: no frame at all, it reads as a quiet row. */
+.file-upload.file-upload-secondary,
+.file-upload.file-upload-secondary:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+.file-upload.file-upload-secondary.dragging {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+/* Inner panels: wells instead of outlined boxes. */
+.preflight-panel,
+.progress-section,
+.log-container,
+.stat-card {
+    background: var(--well);
+    border-color: transparent;
+}
+
+.file-table {
+    background: transparent;
+}
+
+/* Section rules inside a card stay, but at the softest weight. */
+.card-header {
+    border-bottom-color: var(--rule-soft);
+}
+
+/* Messages: same flat treatment. Info is neutral; success and error keep
+   their tint so the state still reads at a glance, without the frame. */
+.message.info {
+    background: var(--well);
+    color: var(--ink);
+}
+
+.message.info,
+.message.success,
+.message.error {
+    border-color: transparent;
+}
+
+html.dark .message.info {
+    background: var(--well);
+    color: var(--ink);
+}
+
+html.dark .message.info,
+html.dark .message.success,
+html.dark .message.error {
+    border-color: transparent;
+}
+
+/* Hairline ring that holds a well without drawing a frame. */
+.neu-inset-light:not(:focus-within),
+.file-upload:not(.file-upload-secondary):not(.dragging),
+.preflight-panel,
+.progress-section,
+.log-container,
+.stat-card,
+.message.info {
+    box-shadow: var(--well-ring);
+}
+
+/* ----------------------------------------
+   Lab paper theme: brick red
+
+   One terracotta red for every destructive or alarming surface, warm
+   enough to sit on paper next to the ink and cobalt. Destructive buttons
+   are filled with white text, like the other solid buttons.
+   ---------------------------------------- */
+
+:root {
+    --danger-light: #b24a2c;
+    --danger-light-hover: #963b21;
+    --danger-light-border: #b24a2c;
+    --danger-light-bg: rgba(178, 74, 44, 0.11);
+    --danger-light-text: #963b21;
+}
+
+html.dark {
+    --danger-light: #c4583a;
+    --danger-light-hover: #d46a4b;
+    --danger-light-border: #c4583a;
+    --danger-light-bg: rgba(196, 88, 58, 0.18);
+    --danger-light-text: #eba08a;
+}
+
+.btn-danger {
+    background: var(--danger-light);
+    color: #fffdf7;
+    border: 1px solid var(--danger-light);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: var(--danger-light-hover);
+    border-color: var(--danger-light-hover);
+}
+
+.btn-danger:disabled {
+    background: color-mix(in srgb, var(--danger-light) 40%, var(--paper));
+    border-color: transparent;
+    color: #fffdf7;
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+/* ----------------------------------------
+   Lab paper theme: refine drop zone affordance
+
+   The secondary "already translated" zone needs a visible drop cue
+   without competing with the main drop zone: a light dashed outline, a
+   small round icon before the title, and a fill plus accent outline
+   on hover and drag-over.
+   ---------------------------------------- */
+
+.file-upload.file-upload-secondary {
+    border: 1.5px dashed rgba(127, 120, 105, 0.6);
+    background: transparent;
+    box-shadow: none;
+}
+
+.file-upload.file-upload-secondary:hover {
+    background: var(--well);
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.file-upload.file-upload-secondary.dragging {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+.file-upload-secondary .upload-icon {
+    display: inline-flex;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin: 0;
+    background: var(--well-strong);
+    border-radius: 50% !important;
+}
+
+.file-upload-secondary .upload-icon .material-symbols-outlined {
+    font-size: 1rem;
+    color: var(--ink-2);
+}
+
+.file-upload-secondary h4 {
+    color: var(--ink);
+}
+
+/* ----------------------------------------
+   Lab paper theme: frameless layout
+
+   Default look, active while <html data-layout="flat"> (set in the
+   template). The big cards lose their
+   frame, fill and shadow; each section starts on a full-width hairline
+   rule instead, and the content aligns with the header. Inner wells,
+   dialogs and the sticky header are unchanged. Remove the attribute
+   from the template to go back to framed cards.
+   ---------------------------------------- */
+
+html[data-layout="flat"] .main-card {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+    border-top: 1px solid var(--rule);
+    box-shadow: none;
+    overflow: visible;
+    margin-bottom: calc(1.25rem * var(--ui-density-y));
+}
+
+/* The first section sits right under the header rule: no double line. */
+html[data-layout="flat"] [id^="tab-"] > .main-card:first-child {
+    border-top: 0;
+}
+
+/* Square corners: a rounded box with only a top border bends the rule's
+   ends downwards. Declared in the shape layer, whose !important outranks
+   any unlayered rule. */
+@layer square-ui {
+    html[data-layout="flat"] .main-card {
+        border-radius: 0 !important;
+    }
+}
+
+html[data-layout="flat"] .card-header,
+html[data-layout="flat"] .card-body {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+}
+
+html[data-layout="flat"] .card-header {
+    border-bottom: 0;
+    padding-bottom: 0.25rem;
+}
+
+/* Drop zones stay framed in the flat layout: a frosted, softly shadowed
+   panel is the clearest "put something here" cue on an open page. */
+html[data-layout="flat"] {
+    --drop-shadow:
+        0 0 0 1px rgba(29, 27, 22, 0.07),
+        0 1px 0 rgba(255, 255, 255, 0.75) inset,
+        0 14px 28px -18px rgba(40, 28, 10, 0.45),
+        0 2px 6px -3px rgba(40, 28, 10, 0.16);
+}
+
+html[data-layout="flat"].dark {
+    --drop-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.35),
+        0 1px 0 rgba(255, 255, 255, 0.05) inset,
+        0 14px 28px -18px rgba(0, 0, 0, 0.7),
+        0 2px 6px -3px rgba(0, 0, 0, 0.35);
+}
+
+html[data-layout="flat"] .file-upload:not(.file-upload-secondary) {
+    background: var(--frost-bg);
+    border: 1.5px solid var(--frost-edge);
+    box-shadow: var(--drop-shadow);
+}
+
+html[data-layout="flat"] .file-upload:not(.file-upload-secondary):hover {
+    background: var(--paper-hi);
+}
+
+html[data-layout="flat"] .file-upload.file-upload-secondary {
+    background: color-mix(in srgb, var(--paper-hi) 55%, transparent);
+    box-shadow: 0 10px 22px -18px rgba(40, 28, 10, 0.4);
+}
+
+html[data-layout="flat"] .file-upload.dragging {
+    background: var(--accent-soft);
+    border: 1.5px dashed var(--accent);
+}
+
+/* The progress / resumable-jobs wrapper is a box around boxes; on the open
+   page it is redundant, so only the cards inside it keep a well. */
+html[data-layout="flat"] .progress-section {
+    background: transparent;
+    box-shadow: none;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* ----------------------------------------
+   Lab paper theme: page scrollbar
+
+   Scrollbars stay hidden app-wide (see the `*` reset), except for the
+   page itself, which gets a thin ink thumb on a transparent rail.
+   scrollbar-width / scrollbar-color cover Firefox and Chromium 121+
+   (where they take precedence over ::-webkit-scrollbar); the WebKit
+   pseudo-elements cover Safari and older Chromium.
+   ---------------------------------------- */
+
+:root {
+    --scroll-thumb: rgba(29, 27, 22, 0.26);
+    --scroll-thumb-hover: rgba(29, 27, 22, 0.45);
+}
+
+html.dark {
+    --scroll-thumb: rgba(241, 234, 220, 0.22);
+    --scroll-thumb-hover: rgba(241, 234, 220, 0.4);
+}
+
+html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+html::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+html::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+    background-clip: padding-box;
+}
+
+/* ----------------------------------------
+   Lab paper theme: API key status
+
+   A quiet hairline tag next to the "API key" kicker: a small status dot
+   and the state in the same monospace caps as the label. Colour lives in
+   the dot only, so the tag reads as information, not as an alert.
+   ---------------------------------------- */
+
+:root {
+    --ok: var(--success-light);
+    --warn: #b7791f;
+}
+
+html.dark {
+    --ok: var(--success-light);
+    --warn: #e0a447;
+}
+
+.key-status,
+.key-status.configured,
+.key-status.not-configured {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.55rem 0.1rem 0.45rem;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.4;
+    vertical-align: middle;
+}
+
+.key-status:empty {
+    display: none;
+}
+
+.key-status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    flex: none;
+    background: var(--ink-3);
+    border-radius: 50% !important;
+}
+
+.key-status.configured::before {
+    background: var(--ok);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 18%, transparent);
+}
+
+.key-status.not-configured::before {
+    background: var(--warn);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 18%, transparent);
+}
+
+/* ----------------------------------------
+   Lab paper theme: success colour
+
+   Bright green is retired. Success and "done" feedback (post-action
+   messages, log ticks, completion lines) wear a petrol teal instead,
+   distinct from the cobalt action accent and calm on paper.
+   ---------------------------------------- */
+
+:root {
+    --success-light: #0d7d8a;
+    --success-light-bg: rgba(13, 125, 138, 0.1);
+    --success-ink: #0b5f69;
+}
+
+html.dark {
+    --success-light: #3fb3c0;
+    --success-light-bg: rgba(63, 179, 192, 0.15);
+    --success-ink: #8fd6de;
+}
+
+.message.success,
+html.dark .message.success {
+    background: var(--success-light-bg);
+    border-color: transparent;
+    color: var(--success-ink);
+}
+
+/* Error messages use the same brick red as destructive buttons. */
+.message.error,
+html.dark .message.error {
+    background: var(--danger-light-bg);
+    border-color: transparent;
+    color: var(--danger-light-text);
 }

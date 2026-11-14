@@ -375,7 +375,7 @@ export const TTSManager = {
 
                 if (statusSpan) {
                     statusSpan.textContent = t('tts:voice_prompt_uploaded_short');
-                    statusSpan.style.color = '#22c55e';
+                    statusSpan.style.color = 'var(--success-light)';
                 }
             }
         } catch (error) {

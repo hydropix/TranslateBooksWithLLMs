@@ -101,7 +101,7 @@ export async function loadList() {
         const assignIcon = isAssigned ? 'bookmark_added' : 'bookmark_add';
         assignBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size: 0.875rem;">${assignIcon}</span>`;
         if (isAssigned) {
-            assignBtn.style.color = '#10b981';
+            assignBtn.style.color = 'var(--success-light)';
         }
         assignBtn.addEventListener('click', async () => {
             const select = $('glossarySelect');

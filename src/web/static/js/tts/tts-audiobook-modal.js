@@ -193,7 +193,7 @@ async function showTTSModal(filename, filepath) {
 
                     <!-- Chatterbox Options (hidden by default) -->
                     <div id="ttsModalChatterboxOptions" style="display: none;">
-                        <div style="background: var(--background-inset); border-radius: 8px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--warning-light-border);">
+                        <div class="tts-voice-cloning" style="background: var(--background-inset); border-radius: 8px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--warning-light-border);">
                             <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--warning-light-text);" data-i18n="tts:voice_cloning_heading">${t('tts:voice_cloning_heading')}</h4>
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-size: 13px;" data-i18n="tts:voice_prompt">${t('tts:voice_prompt')}</label>

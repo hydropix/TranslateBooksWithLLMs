@@ -144,21 +144,24 @@ html.dark {
     --llm-chip-bg: #2b3037;
 }
 
+/* background-color, not the `background` shorthand: the shorthand also
+   resets background-image, which wiped the chevron select.form-control draws
+   and left every dark-mode <select> looking like a plain text box. */
 html.dark .form-control {
-    background: var(--background-inset);
-    color: #e8e8e8;
+    background-color: var(--background-inset);
+    color: var(--text-dark);
 }
 
 html.dark .neu-inset-light .form-control {
-    background: var(--background-inset);
+    background-color: var(--background-inset);
 }
 
 html.dark .form-control:focus {
-    background: var(--background-inset);
+    background-color: var(--background-inset);
 }
 
 html.dark .form-control::placeholder {
-    color: #777777;
+    color: var(--text-faint);
 }
 
 html.dark .file-table thead tr {
@@ -2172,13 +2175,34 @@ input[type="checkbox"] {
     display: inline-block;
 }
 
-/* TTS Slider Styles */
-.tts-slider {
+/* Audiobook (TTS) modal.
+   color-scheme makes the parts the browser draws itself (the open <select>
+   list, the modal scrollbar) follow the app theme instead of the OS one. */
+#ttsModal {
+    color-scheme: light;
+}
+
+html.dark #ttsModal {
+    color-scheme: dark;
+}
+
+/* The voice-cloning panel is painted with --background-inset, the same token
+   dark-mode fields use, so its <select> vanished into it. Lift the field to the
+   card surface, as the light theme does with a white field on the inset. */
+html.dark #ttsModal .tts-voice-cloning .form-control {
+    background-color: var(--background-light);
+}
+
+/* TTS Slider Styles.
+   The track wears --border-strong: --background-light is the modal surface
+   itself, which left only the thumb visible in both themes. The type selector
+   is there so this rule outranks the generic input[type="range"] one below. */
+input[type="range"].tts-slider {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
     height: 8px;
-    background: var(--background-light);
+    background: var(--border-strong);
     outline: none;
     cursor: pointer;
     margin-top: 0.5rem;

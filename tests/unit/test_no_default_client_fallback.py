@@ -18,7 +18,7 @@ from tests.job_helpers import make_ctx, make_job
 async def test_translation_request_without_client_fails_clearly():
     with pytest.raises(ValueError, match="No LLM client"):
         await translator.generate_translation_request(
-            "Hello world, a sentence.", "", "", "", llm_client=None,
+            "Hello world, a sentence.", "", llm_client=None,
         )
 
 

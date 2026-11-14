@@ -73,7 +73,7 @@ async def test_translation_chunk_that_always_loops_is_bounded_and_restored():
     client = _looping_client()
 
     result = await translator.generate_translation_request(
-        "Some text to translate.", "", "", "",
+        "Some text to translate.", "",
         source_language="English", target_language="French", model="m",
         llm_client=client, context_manager=cm,
     )
@@ -108,7 +108,7 @@ async def test_retrying_the_same_chunk_starts_from_the_original_window():
     for _ in range(3):
         client = _looping_client()
         await translator.generate_translation_request(
-            "Some text to translate.", "", "", "",
+            "Some text to translate.", "",
             source_language="English", target_language="French", model="m",
             llm_client=client, context_manager=cm,
         )

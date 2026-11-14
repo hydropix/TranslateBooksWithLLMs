@@ -298,8 +298,6 @@ class GenericTranslator:
 
                     result = await generate_translation_request(
                         main_content=unit.content,
-                        context_before=unit.context_before,
-                        context_after=unit.context_after,
                         previous_translation_context=(last_context if sequential else ""),
                         source_language=source_language,
                         target_language=target_language,

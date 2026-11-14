@@ -56,8 +56,6 @@ async def _request(text: str, settings: ChunkLoopSettings, *, has_placeholders: 
     """One translation request for a chunk (no cross-chunk context)."""
     return await generate_translation_request(
         text,
-        context_before="",
-        context_after="",
         previous_translation_context="",
         source_language=settings.source_language,
         target_language=settings.target_language,

@@ -317,8 +317,6 @@ def _join_split_translations(parts: List[Tuple[str, str]]) -> Optional[str]:
 
 async def _make_llm_request_with_adaptive_context(
     main_content: str,
-    context_before: str,
-    context_after: str,
     previous_translation_context: str,
     source_language: str,
     target_language: str,
@@ -344,8 +342,6 @@ async def _make_llm_request_with_adaptive_context(
 
     Args:
         main_content: Text to translate
-        context_before: Unused by the prompt (kept for callers)
-        context_after: Unused by the prompt (kept for callers)
         previous_translation_context: Previous translation for consistency
         source_language: Source language
         target_language: Target language
@@ -472,7 +468,7 @@ async def _make_llm_request_with_adaptive_context(
 
 # Legacy wrapper for backward compatibility
 
-async def generate_translation_request(main_content, context_before, context_after, previous_translation_context,
+async def generate_translation_request(main_content, previous_translation_context,
                                        source_language="English", target_language="Chinese", model=DEFAULT_MODEL,
                                        llm_client=None, log_callback=None, has_placeholders=False,
                                        prompt_options=None, context_manager: AdaptiveContextManager = None,
@@ -484,8 +480,6 @@ async def generate_translation_request(main_content, context_before, context_aft
 
     Args:
         main_content (str): Text to translate
-        context_before (str): Context before main content
-        context_after (str): Context after main content
         previous_translation_context (str): Previous translation for consistency
         source_language (str): Source language
         target_language (str): Target language
@@ -517,8 +511,6 @@ async def generate_translation_request(main_content, context_before, context_aft
     with ContextBudget(context_manager) as budget:
         translated_text, _, last_response = await _make_llm_request_with_adaptive_context(
             main_content=main_content,
-            context_before=context_before,
-            context_after=context_after,
             previous_translation_context=previous_translation_context,
             source_language=source_language,
             target_language=target_language,

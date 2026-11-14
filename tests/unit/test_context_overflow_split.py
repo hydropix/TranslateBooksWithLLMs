@@ -46,7 +46,7 @@ def _bare_prompt(monkeypatch):
 
 async def _translate(content, max_len):
     translated, _, _ = await _make_llm_request_with_adaptive_context(
-        main_content=content, context_before="", context_after="",
+        main_content=content,
         previous_translation_context="", source_language="English",
         target_language="French", model="m", llm_client=_client(max_len),
         log_callback=None, has_placeholders=False,

@@ -716,10 +716,10 @@ async def translate_paragraphs_plain(
         count-stating retry and the per-paragraph repair so the three can never
         drift apart. `options` overrides prompt_options for that one call only.
         """
+        # context_before / context_after are not part of the prompt; the
+        # request takes the text and the previous translation only.
         return await generate_translation_request(
             main_content=main_content,
-            context_before=context_before,
-            context_after=context_after,
             previous_translation_context=previous,
             source_language=source_language,
             target_language=target_language,

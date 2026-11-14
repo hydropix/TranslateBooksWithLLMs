@@ -62,16 +62,12 @@ def _recording_merging_llm(prefix="T::", fail_on=()):
     A multi-paragraph blob comes back folded into one paragraph (the #253
     failure mode); a single-paragraph repair call comes back 1:1, unless its
     source text is listed in `fail_on`, in which case it returns None.
-    Every call is recorded as {'main', 'before', 'after'}.
+    Every call is recorded as {'main'}.
     """
     calls = []
 
-    async def fake_request(*, main_content, context_before="", context_after="", **kwargs):
-        calls.append({
-            'main': main_content,
-            'before': context_before,
-            'after': context_after,
-        })
+    async def fake_request(*, main_content, **kwargs):
+        calls.append({'main': main_content})
         paragraphs = [p.strip() for p in re.split(r"\n{2,}", main_content) if p.strip()]
         if len(paragraphs) > 1:
             return prefix + " ".join(paragraphs)
@@ -332,13 +328,6 @@ async def test_merged_segment_is_repaired_paragraph_by_paragraph(monkeypatch):
     joined = "\n\n".join(THREE)
     assert [call['main'] for call in fake.calls] == [joined, joined] + THREE
     assert len(_repair_started_logs(logs)) == 1
-    # Each repair call is positioned by its neighbours inside the segment; the
-    # segment's own (empty) context fills the two edges.
-    assert [(call['before'], call['after']) for call in fake.calls[2:]] == [
-        ("", THREE[1]),
-        (THREE[0], THREE[2]),
-        (THREE[1], ""),
-    ]
 
     replace_body_with_paragraphs(body, out, tags, images, source_paragraphs=paragraphs)
     assert [child.get("class") for child in body] == [None, None, None]

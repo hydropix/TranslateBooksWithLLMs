@@ -31,7 +31,13 @@ async function loadAvailableFiles() {
     }
 }
 
+/** Above this many rows the list scrolls, so a filter box is shown. */
+const HISTORY_FILTER_THRESHOLD = 6;
+
 export const HistoryManager = {
+    /** IDs of the listed entries whose output file no longer exists. */
+    _missingIds: [],
+
     /**
      * Build the card for one completed job.
      *
@@ -61,41 +67,48 @@ export const HistoryManager = {
         const totalChunks = item.total_chunks || 0;
 
         // `completed_at` is set when the job reaches 'completed'; older rows
-        // may only carry `updated_at`.
+        // may only carry `updated_at`. The row shows a short date; the full
+        // timestamp lives in the tooltip.
         const completedRaw = item.completed_at || item.updated_at;
-        const completedDate = completedRaw
-            ? new Date(completedRaw).toLocaleString(getCurrentLocale())
+        const completedAt = completedRaw ? new Date(completedRaw) : null;
+        const locale = getCurrentLocale();
+        const shortDate = completedAt
+            ? completedAt.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
+            : t('translation:job_card_na');
+        const fullDate = completedAt
+            ? completedAt.toLocaleString(locale)
             : t('translation:job_card_na');
 
         const safeDisplayName = DomHelpers.escapeHtml(displayNameFormatted);
         const safeOutputFilename = DomHelpers.escapeHtml(outputFilename);
 
         const card = document.createElement('div');
-        card.className = 'history-job-card';
-        card.style.cssText = 'border: 1px solid var(--border-light); padding: 20px; margin-bottom: 15px; border-radius: 8px; background: var(--background-inset);';
+        card.className = 'history-row';
+        // Lower-cased haystack for the client-side filter.
+        card.dataset.search = `${displayNameFormatted} ${outputFilename}`.toLowerCase();
 
         card.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-width: 0;">
-                        <span style="flex-shrink: 0; display: inline-flex; align-items: center;">${getFileIcon(item.file_type)}</span>
-                        <span style="font-size: 18px; font-weight: 600; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${safeDisplayName}">${safeDisplayName}</span>
-                        <span style="flex-shrink: 0; padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--success-light); background: var(--success-light-bg); border: 1px solid var(--success-light); border-radius: 4px;">${t('translation:history_status_completed')}</span>
-                    </div>
-                    <div style="font-size: 14px; color: var(--text-muted-light); margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="→ ${safeOutputFilename}">
-                        → ${safeOutputFilename}
-                    </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px; color: var(--text-faint); margin-top: 8px;">
-                        <span>${t('translation:history_type_line', { type: DomHelpers.escapeHtml(fileType) })}</span>
-                        <span>${tHtml('translation:history_chunks', { completed: completedChunks, total: totalChunks })}</span>
-                        <span>${t('translation:history_completed_at', { date: DomHelpers.escapeHtml(completedDate) })}</span>
-                    </div>
+            <span class="history-row__icon">${getFileIcon(item.file_type)}</span>
+            <div class="history-row__main">
+                <div class="history-row__name" title="${safeDisplayName}">${safeDisplayName}</div>
+                <div class="history-row__meta">
+                    <span class="history-row__output" title="→ ${safeOutputFilename}">→ ${safeOutputFilename}</span>
+                    <span class="history-row__tag">${DomHelpers.escapeHtml(fileType)}</span>
+                    <span class="history-row__chunks">${tHtml('translation:history_chunks', { completed: completedChunks, total: totalChunks })}</span>
                 </div>
-                <div class="history-job-actions" style="flex-shrink: 0;"></div>
             </div>
+            <time class="history-row__date" title="${DomHelpers.escapeHtml(t('translation:history_completed_at', { date: fullDate }))}">${DomHelpers.escapeHtml(shortDate)}</time>
+            <div class="history-row__actions"></div>
+            <button type="button" class="history-row__remove material-symbols-outlined"
+                    title="${DomHelpers.escapeHtml(t('translation:history_remove_title'))}"
+                    aria-label="${DomHelpers.escapeHtml(t('translation:history_remove_title'))}">close</button>
         `;
 
-        const actionsContainer = card.querySelector('.history-job-actions');
+        card.querySelector('.history-row__remove').addEventListener('click', () => {
+            this.removeEntry(item.translation_id, card);
+        });
+
+        const actionsContainer = card.querySelector('.history-row__actions');
         if (item.output_filename && availableFiles.has(item.output_filename)) {
             actionsContainer.appendChild(FileActions.createActionGroup({
                 actions: ['download', 'open', 'reveal'],
@@ -106,12 +119,115 @@ export const HistoryManager = {
             // The row outlives its output file (deleted from the Files tab, or
             // pruned): say so instead of offering actions that would 404.
             const missing = document.createElement('span');
-            missing.style.cssText = 'font-size: 12px; color: var(--text-faint); font-style: italic;';
-            missing.textContent = t('translation:history_output_missing');
+            missing.className = 'history-row__missing material-symbols-outlined';
+            missing.textContent = 'link_off';
+            missing.title = t('translation:history_output_missing');
+            missing.setAttribute('aria-label', t('translation:history_output_missing'));
             actionsContainer.appendChild(missing);
         }
 
         return card;
+    },
+
+    /**
+     * Show only the rows whose name or output file contains the filter text.
+     */
+    applyFilter() {
+        const input = DomHelpers.getElement('historyFilter');
+        const listContainer = DomHelpers.getElement('historyList');
+        const noMatch = DomHelpers.getElement('historyNoMatch');
+        if (!listContainer) return;
+
+        const query = (input ? input.value : '').trim().toLowerCase();
+        let visible = 0;
+        listContainer.querySelectorAll('.history-row').forEach((row) => {
+            const match = !query || row.dataset.search.includes(query);
+            row.hidden = !match;
+            if (match) visible++;
+        });
+        if (noMatch) noMatch.hidden = visible > 0;
+    },
+
+    /**
+     * Refresh the cleanup menu's "entries without a file" item: its count
+     * goes through data-i18n-params so a locale switch re-renders it.
+     */
+    updateCleanupMenu() {
+        const label = DomHelpers.getElement('historyCleanupMissingLabel');
+        const item = DomHelpers.getElement('historyCleanupMissing');
+        const count = this._missingIds.length;
+        if (label) {
+            label.setAttribute('data-i18n-params', JSON.stringify({ count }));
+            applyToDOM(label.parentElement);
+        }
+        if (item) item.disabled = count === 0;
+    },
+
+    toggleCleanupMenu(open) {
+        const menu = DomHelpers.getElement('historyCleanupMenu');
+        const button = DomHelpers.getElement('historyCleanupBtn');
+        if (!menu || !button) return;
+        const show = open === undefined ? menu.hidden : open;
+        menu.hidden = !show;
+        button.setAttribute('aria-expanded', String(show));
+    },
+
+    /**
+     * Remove one entry from the history. The output file is not touched, so
+     * no confirmation is asked: the row only points at the Files tab.
+     * @param {string} translationId - Job identifier
+     * @param {HTMLElement} row - The row to drop on success
+     */
+    async removeEntry(translationId, row) {
+        try {
+            await ApiClient.deleteHistoryEntry(translationId);
+            row.remove();
+            this._missingIds = this._missingIds.filter(id => id !== translationId);
+            this.afterRowsRemoved();
+        } catch (error) {
+            MessageLogger.showMessage(t('translation:history_clear_error', { error: error.message }), 'error');
+        }
+    },
+
+    /**
+     * Clear either the entries whose output file is gone or the whole history.
+     * @param {'missing'|'all'} scope
+     */
+    async cleanup(scope) {
+        this.toggleCleanupMenu(false);
+        const ids = scope === 'missing' ? [...this._missingIds] : undefined;
+        if (scope === 'missing' && ids.length === 0) return;
+
+        const question = scope === 'missing'
+            ? t('translation:history_confirm_clear_missing', { count: ids.length })
+            : t('translation:history_confirm_clear_all');
+        if (!confirm(question)) return;
+
+        try {
+            const result = await ApiClient.clearHistory(ids);
+            const deleted = (result && result.deleted) || 0;
+            MessageLogger.showMessage(t('translation:history_cleared', { count: deleted }), 'success');
+        } catch (error) {
+            MessageLogger.showMessage(t('translation:history_clear_error', { error: error.message }), 'error');
+        }
+        await this.loadHistory();
+    },
+
+    /** Keep the count, filter and empty state in step after a local removal. */
+    afterRowsRemoved() {
+        const listContainer = DomHelpers.getElement('historyList');
+        const remaining = listContainer ? listContainer.querySelectorAll('.history-row').length : 0;
+        if (remaining === 0) {
+            // Same as an empty listing: the section disappears.
+            this.loadHistory();
+            return;
+        }
+        const count = DomHelpers.getElement('historyCount');
+        if (count) count.textContent = String(remaining);
+        const filterWrap = DomHelpers.getElement('historyFilterWrap');
+        if (filterWrap) filterWrap.hidden = remaining <= HISTORY_FILTER_THRESHOLD;
+        this.updateCleanupMenu();
+        this.applyFilter();
     },
 
     /**
@@ -162,6 +278,22 @@ export const HistoryManager = {
             // Translate the data-i18n markup carried by the injected cards
             applyToDOM(listContainer);
 
+            const count = DomHelpers.getElement('historyCount');
+            if (count) {
+                count.textContent = String(history.length);
+                count.hidden = false;
+            }
+            // The filter only earns its place once the list needs scrolling.
+            const filterWrap = DomHelpers.getElement('historyFilterWrap');
+            if (filterWrap) filterWrap.hidden = history.length <= HISTORY_FILTER_THRESHOLD;
+            this.applyFilter();
+
+            // Entries whose output file is gone are what "clean up" targets first.
+            this._missingIds = history
+                .filter(item => !(item.output_filename && availableFiles.has(item.output_filename)))
+                .map(item => item.translation_id);
+            this.updateCleanupMenu();
+
             MessageLogger.addLog(t('translation:history_count_log', { count: history.length }));
 
         } catch (error) {
@@ -183,6 +315,30 @@ export const HistoryManager = {
     initialize() {
         // Load the history on initialization
         this.loadHistory();
+
+        const filter = DomHelpers.getElement('historyFilter');
+        if (filter) filter.addEventListener('input', () => this.applyFilter());
+
+        const cleanupBtn = DomHelpers.getElement('historyCleanupBtn');
+        if (cleanupBtn) {
+            cleanupBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.toggleCleanupMenu();
+            });
+        }
+        DomHelpers.getElement('historyCleanupMissing')
+            ?.addEventListener('click', () => this.cleanup('missing'));
+        DomHelpers.getElement('historyCleanupAll')
+            ?.addEventListener('click', () => this.cleanup('all'));
+
+        // Close the menu on any outside click or on Escape.
+        document.addEventListener('click', (event) => {
+            const menu = DomHelpers.getElement('historyCleanupMenu');
+            if (menu && !menu.hidden && !menu.contains(event.target)) this.toggleCleanupMenu(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') this.toggleCleanupMenu(false);
+        });
 
         // Card copy (status badge, type / chunks / date lines) is baked in via
         // t() at render time rather than through reactive data-i18n markup, and

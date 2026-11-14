@@ -900,6 +900,52 @@ class Database:
                 _logger.error(f"Error deleting chunks: {e}")
                 return False
 
+    def delete_completed_jobs(self, translation_ids: Optional[List[str]] = None) -> int:
+        """
+        Delete 'completed' rows, i.e. entries of the translation history.
+
+        Only completed rows are touched, so a stale or forged ID can never
+        drop the checkpoint of a paused or running job. Output files are not
+        this table's concern and stay on disk.
+
+        Args:
+            translation_ids: IDs to delete; None clears every completed row.
+                An empty list deletes nothing.
+
+        Returns:
+            Number of rows deleted, or -1 on error.
+        """
+        if translation_ids is not None and not translation_ids:
+            return 0
+
+        with self._lock:
+            try:
+                conn = self._get_connection()
+                cursor = conn.cursor()
+
+                if translation_ids is None:
+                    where, params = "status = 'completed'", ()
+                else:
+                    placeholders = ",".join("?" for _ in translation_ids)
+                    where = f"status = 'completed' AND translation_id IN ({placeholders})"
+                    params = tuple(translation_ids)
+
+                # Completed jobs already had their chunks pruned; this is the
+                # same defence in depth as delete_job.
+                cursor.execute(
+                    f"DELETE FROM checkpoint_chunks WHERE translation_id IN "
+                    f"(SELECT translation_id FROM translation_jobs WHERE {where})",
+                    params
+                )
+                cursor.execute(f"DELETE FROM translation_jobs WHERE {where}", params)
+                deleted = cursor.rowcount
+
+                conn.commit()
+                return deleted
+            except Exception as e:
+                _logger.error(f"Error deleting history rows: {e}")
+                return -1
+
     def delete_job(self, translation_id: str) -> bool:
         """
         Delete a job and all its chunks (CASCADE).

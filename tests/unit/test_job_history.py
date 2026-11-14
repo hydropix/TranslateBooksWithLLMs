@@ -451,3 +451,82 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         history = response.get_json()['history']
         assert [item['translation_id'] for item in history] == ['newer']
+
+
+class TestHistoryCleanup:
+    """DELETE /api/history/<id> and POST /api/history/clear."""
+
+    def _seed(self, cm):
+        _complete_job(cm, 'done-a')
+        _complete_job(cm, 'done-b')
+        _complete_job(cm, 'done-c')
+        cm.db.create_job('paused-job', 'txt', {})
+        cm.db.update_job_progress('paused-job', status='paused')
+
+    def _history_ids(self, client):
+        return sorted(i['translation_id'] for i in client.get('/api/history').get_json()['history'])
+
+    def test_delete_one_entry(self, cm, history_client):
+        self._seed(cm)
+
+        response = history_client.delete('/api/history/done-a')
+
+        assert response.status_code == 200
+        assert response.get_json() == {"deleted": 1}
+        assert self._history_ids(history_client) == ['done-b', 'done-c']
+
+    def test_delete_never_touches_a_paused_job(self, cm, history_client):
+        self._seed(cm)
+
+        response = history_client.delete('/api/history/paused-job')
+
+        assert response.status_code == 404
+        assert _raw_row(cm, 'paused-job') is not None
+
+    def test_delete_unknown_entry_is_404(self, history_client):
+        assert history_client.delete('/api/history/nope').status_code == 404
+
+    def test_clear_selected_ids(self, cm, history_client):
+        self._seed(cm)
+
+        response = history_client.post(
+            '/api/history/clear',
+            json={"translation_ids": ['done-a', 'done-c', 'paused-job']},
+        )
+
+        assert response.status_code == 200
+        assert response.get_json() == {"deleted": 2}
+        assert self._history_ids(history_client) == ['done-b']
+        assert _raw_row(cm, 'paused-job') is not None
+
+    def test_clear_all_keeps_unfinished_jobs(self, cm, history_client):
+        self._seed(cm)
+
+        response = history_client.post('/api/history/clear', json={})
+
+        assert response.status_code == 200
+        assert response.get_json() == {"deleted": 3}
+        assert self._history_ids(history_client) == []
+        assert _raw_row(cm, 'paused-job') is not None
+
+    def test_empty_id_list_deletes_nothing(self, cm, history_client):
+        self._seed(cm)
+
+        response = history_client.post('/api/history/clear', json={"translation_ids": []})
+
+        assert response.get_json() == {"deleted": 0}
+        assert len(self._history_ids(history_client)) == 3
+
+    @pytest.mark.parametrize('payload', [
+        {"translation_ids": "done-a"},
+        {"translation_ids": [1, 2]},
+        {"translation_ids": [""]},
+        {"translation_ids": ["x"] * 501},
+    ])
+    def test_invalid_id_lists_are_rejected(self, cm, history_client, payload):
+        self._seed(cm)
+
+        response = history_client.post('/api/history/clear', json=payload)
+
+        assert response.status_code == 400
+        assert len(self._history_ids(history_client)) == 3

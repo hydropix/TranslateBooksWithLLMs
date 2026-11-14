@@ -47,6 +47,12 @@ _HISTORY_FIELDS = (
 )
 
 
+#: Upper bound on the IDs one /api/history/clear call may name. The history
+#: listing returns at most 200 rows, and this keeps the IN (...) clause well
+#: below SQLite's bound-parameter limit.
+_HISTORY_CLEAR_MAX_IDS = 500
+
+
 def _history_item(job):
     """Project a completed job onto the fields the browser is allowed to see.
 
@@ -227,6 +233,42 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
 
         jobs = state_manager.checkpoint_manager.get_job_history(limit)
         return jsonify({"history": [_history_item(job) for job in jobs]})
+
+    @bp.route('/api/history/<translation_id>', methods=['DELETE'])
+    def delete_history_entry(translation_id):
+        """Remove one completed job from the history.
+
+        Only the history row goes; the translated file stays in
+        translated_files/. A paused or running job is not a history entry and
+        answers 404, so this route can never drop a resumable checkpoint.
+        """
+        deleted = state_manager.checkpoint_manager.db.delete_completed_jobs([translation_id])
+        if deleted < 0:
+            return jsonify({"error": "Failed to delete history entry"}), 500
+        if deleted == 0:
+            return jsonify({"error": "History entry not found"}), 404
+        return jsonify({"deleted": deleted}), 200
+
+    @bp.route('/api/history/clear', methods=['POST'])
+    def clear_history():
+        """Remove several completed jobs from the history, or all of them.
+
+        Body: {"translation_ids": [...]} to remove those entries, or no
+        "translation_ids" key to clear the whole history. Translated files are
+        never touched.
+        """
+        data = request.get_json(silent=True) or {}
+        ids = data.get('translation_ids')
+        if ids is not None:
+            if (not isinstance(ids, list)
+                    or len(ids) > _HISTORY_CLEAR_MAX_IDS
+                    or not all(isinstance(i, str) and i for i in ids)):
+                return jsonify({"error": "Invalid translation_ids"}), 400
+
+        deleted = state_manager.checkpoint_manager.db.delete_completed_jobs(ids)
+        if deleted < 0:
+            return jsonify({"error": "Failed to clear history"}), 500
+        return jsonify({"deleted": deleted}), 200
 
     @bp.route('/api/resume/<translation_id>', methods=['POST'])
     def resume_translation_job_endpoint(translation_id):

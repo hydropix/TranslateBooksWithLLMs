@@ -216,7 +216,6 @@ class _ChunkPass:
             bilingual=settings.bilingual,
             original_chunks=self.original_chunks,
             chunk_statuses=self.slots.statuses,
-            protect_technical=settings.protect_technical,
             created_at=_utc_now_iso(),
             updated_at=_utc_now_iso(),
             global_stats=global_stats_dict,

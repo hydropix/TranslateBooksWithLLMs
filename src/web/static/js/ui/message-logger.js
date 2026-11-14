@@ -508,7 +508,7 @@ export const MessageLogger = {
         // Remove placeholder tags for cleaner preview (UI only, not in console logs)
         // NOTE: These patterns must stay synchronized with src/config.py
         translatedText = translatedText.replace(/\[TAG\d+\]/g, ' ');  // HTML tag placeholders
-        translatedText = translatedText.replace(/\[id\d+\]/g, ' ');   // Technical content placeholders
+        translatedText = translatedText.replace(/\[id\d+\]/g, ' ');   // Tag placeholders
         // Also remove legacy Unicode format for backward compatibility
         translatedText = translatedText.replace(/⟦TAG\d+⟧/g, ' ');
 

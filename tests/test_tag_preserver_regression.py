@@ -1,15 +1,16 @@
 """
-Regression tests for technical content protection system.
+Regression tests for the tag-preservation path the EPUB translation uses.
 
-Ensures:
-- Zero regression on existing functionality when protection is disabled
-- Backward compatibility with all existing translation workflows
-- No breaking changes to API or behavior
+Covers TagPreserver.preserve_tags/restore_tags, the placeholder validator,
+the chunker and the file-level translation entry point, including content that
+looks technical (code, formulas, escaped markup): it is sent to the LLM as
+ordinary text and must come back unchanged when the model echoes it.
 """
 
 import pytest
 from lxml import etree
 
+from src.core.epub.body_serializer import extract_body_html
 from src.core.epub.tag_preservation import TagPreserver
 from tests.epub_engine_helpers import translate_xhtml
 from src.core.epub.placeholder_validator import PlaceholderValidator
@@ -44,7 +45,6 @@ class TestBackwardCompatibilityTagPreserver:
         """Default constructor works as before."""
         preserver = TagPreserver()
         assert preserver is not None
-        assert preserver.protect_technical == False  # Default is False
 
     def test_preserve_tags_method_unchanged(self):
         """Original preserve_tags() method works identically."""
@@ -141,31 +141,6 @@ class TestBackwardCompatibilityXhtmlTranslator:
 
         assert success or stats is not None
 
-    @pytest.mark.asyncio
-    async def test_translate_with_protect_technical_false(self):
-        """Explicit protect_technical_content=False works."""
-        xhtml = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>Test</title></head>
-<body><p>The $V_{cm}$ voltage</p></body>
-</html>"""
-
-        doc_root = etree.fromstring(xhtml.encode('utf-8'))
-        provider = SimpleTranslationProvider()
-
-        success, stats = await translate_xhtml(
-            doc_root=doc_root,
-            source_language="English",
-            target_language="French",
-            model_name="test-model",
-            llm_client=provider,
-            prompt_options={'protect_technical_content': False}
-        )
-
-        # Should work, technical content not protected
-        assert success or stats is not None
-
 
 class TestPlaceholderValidatorCompatibility:
     """Ensure PlaceholderValidator still works with mixed placeholders."""
@@ -179,7 +154,7 @@ class TestPlaceholderValidatorCompatibility:
         assert is_valid
 
     def test_validator_with_mixed_placeholders(self):
-        """Validator works when placeholders represent both tags and technical content."""
+        """Validator works when a placeholder wraps non-tag content."""
         # This simulates: <p>The $V_{cm}$ voltage</p>
         # Where [id0]=<p>, [id1]=$V_{cm}$, [id2]=</p>
         tag_map = {"[id0]": "<p>", "[id1]": "$V_{cm}$", "[id2]": "</p>"}
@@ -210,7 +185,7 @@ class TestHtmlChunkerCompatibility:
     """Ensure HtmlChunker still works correctly."""
 
     def test_chunker_with_standard_html(self):
-        """Chunker works with standard HTML (no technical content)."""
+        """Chunker works with standard HTML."""
         chunker = HtmlChunker(max_tokens=100)
 
         html = "[id0]This is paragraph one.[id1][id2]This is paragraph two.[id3]"
@@ -239,7 +214,7 @@ class TestNoRegressionOnExistingTests:
 
     def test_empty_paragraph_grouping(self):
         """Empty paragraph grouping still works."""
-        preserver = TagPreserver(protect_technical=False)
+        preserver = TagPreserver()
 
         html = "<p></p><p>1.</p><p>Text</p>"
         result, tag_map = preserver.preserve_tags(html)
@@ -249,7 +224,7 @@ class TestNoRegressionOnExistingTests:
 
     def test_nested_tag_preservation(self):
         """Nested tags still preserved correctly."""
-        preserver = TagPreserver(protect_technical=False)
+        preserver = TagPreserver()
 
         html = "<div><p><span>Text</span></p></div>"
         result, tag_map = preserver.preserve_tags(html)
@@ -259,7 +234,7 @@ class TestNoRegressionOnExistingTests:
 
     def test_self_closing_tags(self):
         """Self-closing tags still work."""
-        preserver = TagPreserver(protect_technical=False)
+        preserver = TagPreserver()
 
         html = "<p>Line 1<br/>Line 2</p>"
         result, tag_map = preserver.preserve_tags(html)
@@ -268,143 +243,36 @@ class TestNoRegressionOnExistingTests:
         assert "<br/>" in restored or "<br>" in restored
 
 
-class TestFeatureToggleWorks:
-    """Test that protect_technical acts as proper feature toggle."""
+class TestTechnicalLookingContent:
+    """Code, formulas and escaped markup go through the plain tag path."""
 
-    def test_protection_off_by_default(self):
-        """Protection is OFF by default."""
+    def test_html_entities_stay_in_the_translatable_text(self):
+        html = "<p>Example:</p><pre>&lt;section&gt;&lt;h1&gt;Title&lt;/h1&gt;&lt;/section&gt;</pre>"
         preserver = TagPreserver()
-        assert preserver.protect_technical == False
+        result, tag_map = preserver.preserve_tags(html)
+        assert "&lt;section&gt;" in result
+        assert not any("&lt;" in value for value in tag_map.values())
+        assert preserver.restore_tags(result, tag_map) == html
 
-    def test_protection_can_be_enabled(self):
-        """Protection can be enabled."""
-        preserver = TagPreserver(protect_technical=True)
-        assert preserver.protect_technical == True
+    @pytest.mark.parametrize("html", [
+        "<p>The $V_{cm}$ voltage is 100 MHz.</p>",
+        "<p>Run <code>npm install</code> first.</p>",
+        "<p>Example:</p><pre><code>def f():\n    return 1</code></pre><p>Done</p>",
+        "<p>Simple text $5 dollars</p>",
+    ])
+    def test_round_trip_is_lossless(self, html):
+        preserver = TagPreserver()
+        result, tag_map = preserver.preserve_tags(html)
+        assert preserver.restore_tags(result, tag_map) == html
 
-    def test_protection_only_active_when_enabled(self):
-        """Protection only happens when explicitly enabled."""
-        text = "<p>The $V_{cm}$ voltage</p>"
-
-        # Without protection
-        preserver_off = TagPreserver(protect_technical=False)
-        result_off, map_off = preserver_off.preserve_tags(text)
-
-        # With protection
-        preserver_on = TagPreserver(protect_technical=True)
-        result_on, map_on = preserver_on.preserve_tags_and_technical_content(text)
-
-        # Should have different number of placeholders
-        # Off: 2 (just tags), On: 3 (tags + formula)
-        assert len(map_off) < len(map_on)
-
-
-class TestNoMemoryLeaks:
-    """Test that repeated operations don't leak memory."""
-
-    def test_repeated_preserve_restore_cycles(self):
-        """Many preserve/restore cycles don't leak."""
-        preserver = TagPreserver(protect_technical=True)
-
-        html = "<p>The $V_{cm}$ voltage is 10 Mbps using `chip`.</p>"
-
-        # Run many cycles
-        for i in range(100):
-            result, tag_map = preserver.preserve_tags_and_technical_content(html)
-            restored = preserver.restore_tags(result, tag_map)
-
-            # Should always restore correctly
-            assert restored == html
-
-    def test_detector_is_reused(self):
-        """Detector instance is reused (not recreated each time)."""
-        preserver = TagPreserver(protect_technical=True)
-
-        # First call should create detector
-        preserver.preserve_tags_and_technical_content("<p>$x$</p>")
-        detector1 = preserver._detector
-
-        # Second call should reuse same detector
-        preserver.preserve_tags_and_technical_content("<p>$y$</p>")
-        detector2 = preserver._detector
-
-        assert detector1 is detector2
-
-
-class TestErrorHandling:
-    """Test error handling remains robust."""
-
-    def test_malformed_html_handled(self):
-        """Malformed HTML doesn't crash."""
-        preserver = TagPreserver(protect_technical=True)
-
-        # Unclosed tag
-        html = "<p>Text without closing tag"
-
-        try:
-            result, tag_map = preserver.preserve_tags_and_technical_content(html)
-            # Should complete (might not restore perfectly, but shouldn't crash)
-            assert result is not None
-        except Exception as e:
-            pytest.fail(f"Should handle malformed HTML gracefully, got: {e}")
-
-    def test_empty_input_handled(self):
-        """Empty input doesn't crash."""
-        preserver = TagPreserver(protect_technical=True)
-
-        result, tag_map = preserver.preserve_tags_and_technical_content("")
-
-        assert result == ""
-        assert len(tag_map) == 0
-
-    def test_very_long_text_handled(self):
-        """Very long text is handled."""
-        preserver = TagPreserver(protect_technical=True)
-
-        # Create long text
-        long_text = "<p>" + ("word " * 10000) + "</p>"
-
-        try:
-            result, tag_map = preserver.preserve_tags_and_technical_content(long_text)
-            assert result is not None
-        except Exception as e:
-            pytest.fail(f"Should handle long text, got: {e}")
-
-
-class TestPlaceholderFormatConsistency:
-    """Ensure placeholder format remains consistent."""
-
-    def test_placeholder_format_unchanged(self):
-        """Placeholder format is still [idN]."""
-        preserver = TagPreserver(protect_technical=True)
-
-        html = "<p>The $V_{cm}$ voltage</p>"
-        result, tag_map = preserver.preserve_tags_and_technical_content(html)
-
-        # All placeholders should be [idN] format
-        for placeholder in tag_map.keys():
-            assert placeholder.startswith("[id")
-            assert placeholder.endswith("]")
-
-            # Extract number
-            num_str = placeholder[3:-1]
-            assert num_str.isdigit()
-
-    def test_sequential_numbering_maintained(self):
-        """Placeholders are numbered sequentially from 0."""
-        preserver = TagPreserver(protect_technical=True)
-
-        html = "<p>Text with $x$ and $y$ formulas</p>"
-        result, tag_map = preserver.preserve_tags_and_technical_content(html)
-
-        # Should have [id0], [id1], [id2], [id3] (in order)
-        numbers = []
-        for placeholder in tag_map.keys():
-            num = int(placeholder[3:-1])
-            numbers.append(num)
-
-        numbers.sort()
-        assert numbers == list(range(len(numbers)))
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    def test_body_extraction_keeps_formulas(self):
+        xhtml = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Test</title></head>
+<body>
+<p>The $V_{cm}$ voltage is measured.</p>
+</body>
+</html>"""
+        body_html, body_element = extract_body_html(etree.fromstring(xhtml.encode('utf-8')))
+        assert "$V_{cm}$" in body_html
+        assert body_element is not None

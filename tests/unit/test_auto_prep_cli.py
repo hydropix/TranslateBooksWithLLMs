@@ -184,7 +184,7 @@ def test_auto_style_alone_merges_fragment(monkeypatch):
     options, _log, create = _apply(job, fake_build, monkeypatch)
 
     assert options == {**before, "custom_instructions": "keep it dry"}
-    assert options["preserve_technical_content"] is True
+    assert options["text_cleanup"] is False
     assert create.client.closed is True
 
 

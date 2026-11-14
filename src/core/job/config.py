@@ -713,7 +713,6 @@ class JobConfig:
                 output_path = f"{base} ({args.target_lang}){output_ext}"
 
         prompt_options: Dict[str, Any] = {
-            'preserve_technical_content': True,
             'text_cleanup': bool(getattr(args, 'text_cleanup', False)),
         }
         glossary_file = getattr(args, 'glossary', None)

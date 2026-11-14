@@ -36,8 +36,6 @@ class ChunkLoopSettings:
         retry_token_aligned: Explicit, user-initiated retry of the chunks
             token alignment translated with approximate tag positions. Never
             set by the automatic path (design decision D3).
-        protect_technical: The chunks were built with technical content
-            protection. Only recorded in the partial state.
         checkpoint_manager: Saves the partial state, or None.
         translation_id: The job id the partial state is saved under.
         file_href: The document's key in the partial state.
@@ -61,7 +59,6 @@ class ChunkLoopSettings:
     max_tokens_per_chunk: Optional[int] = None
     bilingual: bool = False
     retry_token_aligned: bool = False
-    protect_technical: bool = False
     checkpoint_manager: Any = None
     translation_id: Optional[str] = None
     file_href: Optional[str] = None

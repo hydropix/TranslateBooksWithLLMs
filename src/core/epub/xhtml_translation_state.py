@@ -159,9 +159,6 @@ class XHTMLTranslationState:
     # None means "unknown" (legacy state); from_dict() rebuilds it in that case.
     chunk_statuses: Optional[List[str]] = None
 
-    # Technical Content Protection (always enabled)
-    protect_technical: bool = True
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Serialize state to JSON-compatible dictionary.
@@ -190,7 +187,6 @@ class XHTMLTranslationState:
             'bilingual': self.bilingual,
             'original_chunks': self.original_chunks,
             'chunk_statuses': self.chunk_statuses,
-            'protect_technical': self.protect_technical,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'global_stats': self.global_stats,
@@ -232,7 +228,6 @@ class XHTMLTranslationState:
                 data['chunks'],
                 data['current_chunk_index'],
             ),
-            protect_technical=data.get('protect_technical', True),
             created_at=data['created_at'],
             updated_at=data['updated_at'],
             global_stats=data.get('global_stats'),

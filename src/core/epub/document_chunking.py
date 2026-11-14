@@ -2,9 +2,8 @@
 
 One implementation for every caller that chunks an XHTML body: the
 translation (``document_translation``), the chunk precount
-(``prepare_document``) and the EPUB refine-only mode. All of them read the
-technical content protection switch from ``src.config`` at call time, so the
-refiner chunks exactly like the translation did.
+(``prepare_document``) and the EPUB refine-only mode, so the refiner chunks
+exactly like the translation did.
 """
 
 from typing import Callable, Dict, List, Optional, Tuple
@@ -17,41 +16,28 @@ from .run_context import PreparedDocument
 from .tag_preservation import TagPreserver
 
 
-def technical_protection_enabled() -> bool:
-    """``src.config.TECHNICAL_PROTECTION_ENABLED``, read at call time."""
-    from src import config
-    return bool(config.TECHNICAL_PROTECTION_ENABLED)
-
-
 def preserve_tags(
     body_html: str,
     tag_preserver: TagPreserver,
     log_callback: Optional[Callable] = None,
-    protect_technical: bool = False
 ) -> Tuple[str, Dict[str, str], Tuple[str, str]]:
-    """Replace HTML tags (and, when protected, technical content) with placeholders.
+    """Replace HTML tags with placeholders.
 
     Returns:
         Tuple of (text_with_placeholders, global_tag_map, placeholder_format)
     """
-    tag_preserver.protect_technical = protect_technical
-    if protect_technical:
-        text_with_placeholders, global_tag_map = tag_preserver.preserve_tags_and_technical_content(body_html)
-    else:
-        text_with_placeholders, global_tag_map = tag_preserver.preserve_tags(body_html)
+    text_with_placeholders, global_tag_map = tag_preserver.preserve_tags(body_html)
 
     placeholder_format = (tag_preserver.placeholder_format.prefix, tag_preserver.placeholder_format.suffix)
     if log_callback:
         log_callback("tags_preserved", tags_preserved_message(
-            len(global_tag_map), placeholder_format, protect_technical))
+            len(global_tag_map), placeholder_format))
     return text_with_placeholders, global_tag_map, placeholder_format
 
 
-def tags_preserved_message(tag_count: int, placeholder_format: Tuple[str, str],
-                           protect_technical: bool) -> str:
+def tags_preserved_message(tag_count: int, placeholder_format: Tuple[str, str]) -> str:
     format_info = f" using format {placeholder_format[0]}N{placeholder_format[1]}"
-    protection_info = " (with technical content protection)" if protect_technical else ""
-    return f"Preserved {tag_count} tag groups{format_info}{protection_info}"
+    return f"Preserved {tag_count} tag groups{format_info}"
 
 
 def create_chunks(
@@ -82,23 +68,17 @@ def chunk_body_html(
     *,
     container: Optional[TranslationContainer] = None,
     log_callback: Optional[Callable] = None,
-    protect_technical: Optional[bool] = None,
 ) -> PreparedDocument:
     """Tag-preserve and chunk an extracted body.
 
-    ``protect_technical`` None uses the translation's setting
-    (:func:`technical_protection_enabled`). An empty body gives an empty
-    ``PreparedDocument``.
+    An empty body gives an empty ``PreparedDocument``.
     """
     container = container or TranslationContainer()
     preserver = container.tag_preserver
     if not body_html or not body_html.strip():
         return PreparedDocument([], {}, (preserver.placeholder_format.prefix,
                                          preserver.placeholder_format.suffix), is_empty=True)
-    if protect_technical is None:
-        protect_technical = technical_protection_enabled()
-    text, tag_map, placeholder_format = preserve_tags(body_html, preserver, log_callback,
-                                                      protect_technical)
+    text, tag_map, placeholder_format = preserve_tags(body_html, preserver, log_callback)
     chunks = create_chunks(text, tag_map, max_tokens_per_chunk, log_callback, container)
     return PreparedDocument(chunks, tag_map, placeholder_format)
 

@@ -322,7 +322,6 @@ async def run() -> int:
                     max_tokens_per_chunk=MAX_TOKENS,
                     parallel_workers=1,
                     prompt_options={
-                    "preserve_technical_content": True,
                     "text_cleanup": False,
                     "plain_text_mode": True,
                     "glossary_terms": GLOSSARY,

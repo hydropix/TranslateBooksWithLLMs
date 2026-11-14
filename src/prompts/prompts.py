@@ -156,16 +156,6 @@ def _plain_text_format_rules(prompt_options: Optional[Dict[str, Any]] = None) ->
 # OPTIONAL PROMPT SECTIONS
 # ============================================================================
 
-# Technical content preservation section (for technical documents). Kept for
-# reference only: it is never emitted (see _build_optional_prompt_sections).
-TECHNICAL_CONTENT_SECTION = """
-**Technical Content (DO NOT TRANSLATE):**
-- Code snippets and syntax: `function()`, `variable_name`, `class MyClass`
-- Command lines: `npm install`, `git commit -m "message"`
-- File paths: `/usr/bin/`, `C:/Users/Documents/`
-- URLs: `https://example.com`, `www.site.org`
-- Programming identifiers, API names, and technical terms"""
-
 # Text cleanup section (for OCR or poorly formatted source texts)
 TEXT_CLEANUP_SECTION = """
 # TEXT CLEANUP (Source Defects Correction)
@@ -202,8 +192,6 @@ def _build_optional_prompt_sections(
 
     Args:
         prompt_options: Dictionary containing prompt customization flags:
-            - preserve_technical_content: accepted but ignored. No prompt section is
-              emitted for it (see the comment in the body).
             - text_cleanup: Include OCR/typographic defect correction instructions
         keep_paragraph_breaks: If True, use the paragraph-preserving variant of the
             text-cleanup section (forbids merging/splitting paragraphs). Callers set it
@@ -217,15 +205,6 @@ def _build_optional_prompt_sections(
         prompt_options = {}
 
     sections = []
-
-    # Technical content protection is currently DISABLED (owner decision): the EPUB
-    # pipeline runs with TECHNICAL_PROTECTION_ENABLED = False (src/config.py),
-    # so code, formulas and the like are NOT hidden in placeholders such as [id0], [id1].
-    # TECHNICAL_CONTENT_SECTION is not emitted either: the preserve_technical_content
-    # option has no effect on the prompt. Re-enabling either one is a deliberate
-    # behavior change, not a cleanup. Leaving the old hook commented for reference:
-    # if prompt_options.get('preserve_technical_content', False):
-    #     sections.append(TECHNICAL_CONTENT_SECTION)
 
     # Text cleanup for OCR or poorly formatted sources
     if prompt_options.get('text_cleanup', False):
@@ -265,9 +244,8 @@ def generate_translation_prompt(
         translate_tag_in: Opening tag for translation output
         translate_tag_out: Closing tag for translation output
         has_placeholders: If True, includes placeholder preservation instructions (for EPUB HTML tags)
-        prompt_options: Optional dict with prompt customization options:
-            - preserve_technical_content: If True, includes instructions to NOT translate
-              code, paths, URLs, etc. (for technical documents)
+        prompt_options: Optional dict with prompt customization options
+            (custom_instructions, text_cleanup, glossary terms, ...)
         placeholder_format: Optional tuple of (prefix, suffix) for placeholders.
             e.g., ('[', ']') for [0] format or ('[[', ']]') for [[0]] format.
             If None, uses default [[0]] format

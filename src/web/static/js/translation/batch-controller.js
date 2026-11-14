@@ -66,7 +66,6 @@ function getTranslationConfig(file) {
 
     const ciValue = DomHelpers.getValue('customInstructionSelect') || '';
     const promptOptions = {
-        preserve_technical_content: true,
         text_cleanup: DomHelpers.getElement('textCleanup')?.checked || false,
         refine: refineAfter,
         plain_text_mode: DomHelpers.getElement('plainTextMode')?.checked || false,

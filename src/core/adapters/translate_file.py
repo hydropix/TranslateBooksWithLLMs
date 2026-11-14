@@ -176,8 +176,8 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
 
     ctx, seen_stats = ctx.tap_stats()
 
-    # EPUB keeps its dedicated pipeline (HTML chunking, tag preservation,
-    # technical content protection) and returns a JobResult itself.
+    # EPUB keeps its dedicated pipeline (HTML chunking, tag preservation)
+    # and returns a JobResult itself.
     if detected_type == 'epub':
         from src.core.epub.translator import translate_epub_file
         return await translate_epub_file(job, ctx)

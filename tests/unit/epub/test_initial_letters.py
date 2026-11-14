@@ -11,11 +11,9 @@ DROPCAP_SPLIT = '<p class="noindent"><span class="dropcap">A</span>lice was begi
 DROPCAP_WORD = '<p><span class="dropcap">A</span> good translation, it has been said.</p>'
 
 
-@pytest.fixture(params=[False, True], ids=["plain", "technical"])
-def preserve(request):
-    preserver = TagPreserver(protect_technical=request.param)
-    if request.param:
-        return preserver, preserver.preserve_tags_and_technical_content
+@pytest.fixture
+def preserve():
+    preserver = TagPreserver()
     return preserver, preserver.preserve_tags
 
 

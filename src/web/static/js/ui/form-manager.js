@@ -602,7 +602,6 @@ export const FormManager = {
 
         const ciValue = DomHelpers.getValue('customInstructionSelect') || '';
         const promptOptions = {
-            preserve_technical_content: true,
             text_cleanup: DomHelpers.getElement('textCleanup')?.checked || false,
             refine: false,
             custom_instruction_file: ciValue === '__auto__' ? '' : ciValue
@@ -619,7 +618,6 @@ export const FormManager = {
             openai_api_key: openaiApiKey,
             openrouter_api_key: openrouterApiKey,
             // Prompt options (optional system prompt instructions)
-            // Technical content protection is always enabled
             prompt_options: promptOptions,
             // Bilingual output (original + translation interleaved)
             bilingual_output: DomHelpers.getElement('bilingualMode')?.checked || false,

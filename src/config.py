@@ -455,24 +455,13 @@ METADATA_VERSION = "1.0"
 DEFAULT_SOURCE_LANGUAGE = os.getenv('DEFAULT_SOURCE_LANGUAGE', '')  # Empty = auto-detect
 DEFAULT_TARGET_LANGUAGE = os.getenv('DEFAULT_TARGET_LANGUAGE', '')  # Empty = use browser language
 
-# ============================================================================
-# PROMPT OPTIONS CONFIGURATION
+# Server configuration
+HOST = os.getenv('HOST', '127.0.0.1')
 # DNS-rebinding protection (src/api/host_guard.py): extra Host header values the
 # server accepts, comma-separated, optional port (e.g. "translate.example.com,nas.lan:5000").
 # Loopback names are always accepted. Enforced whenever HOST is a loopback address,
 # and also on a non-loopback bind (0.0.0.0) as soon as it is set.
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '')
-# ============================================================================
-# These options control which optional sections are included in the system prompt.
-# Each option can be enabled/disabled via the web interface or CLI.
-
-# Technical Content Preservation (always enabled)
-# Automatically detects and preserves code, paths, URLs, formulas, etc.
-# This is always active as it has no negative impact on literary texts.
-PROMPT_PRESERVE_TECHNICAL_CONTENT = True
-
-# Server configuration
-HOST = os.getenv('HOST', '127.0.0.1')
 # Resolve OUTPUT_DIR to an absolute path so downstream code (file listing, writes,
 # checkpoints) is independent of any later cwd change. A relative value still
 # anchors to the cwd at config-load time, which matches the previous behavior
@@ -579,10 +568,6 @@ PLACEHOLDER_PATTERN = r'\[id(\d+)\]'
 
 EPUB_TOKEN_ALIGNMENT_ENABLED = os.getenv('EPUB_TOKEN_ALIGNMENT_ENABLED', 'true').lower() == 'true'
 """Enable token alignment fallback for EPUB translation (Phase 2)"""
-
-# Technical content protection (code, formulas, measurements hidden behind
-# placeholders) for the translation pass. Disabled on purpose for now.
-TECHNICAL_PROTECTION_ENABLED = False
 
 EPUB_SCRIPT_NORMALIZATION_ENABLED = os.getenv(
     'EPUB_SCRIPT_NORMALIZATION_ENABLED', 'true').lower() == 'true'

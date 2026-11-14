@@ -249,24 +249,6 @@ Some models (DeepSeek R1, Qwen3, QwQ, etc.) produce internal reasoning within `<
 2. Try a larger model for better HTML handling
 3. Enable debug mode to see tag preservation details
 
-### "Technical content corrupted" (code, formulas, measurements)
-
-**Cause**: Model translated content that should be preserved.
-
-**Note**: Technical content protection is **always enabled** and automatic.
-
-**Protected content includes**:
-- Code blocks (` ```python ``` `)
-- Inline code (`` `variable` ``)
-- LaTeX formulas (`$E=mc^2$`, `$$\int_0^1 x dx$$`)
-- Measurements (`10 Mbps`, `5V`, `100 mA`)
-- Technical IDs (`TIA/EIA-485-A`, `DS1487`)
-
-**Solutions**:
-1. This should work automatically - check if content matches expected patterns
-2. Enable debug mode to see what's being protected
-3. Report issue if valid technical content is being translated
-
 ---
 
 ## TXT Issues
@@ -320,16 +302,6 @@ The per-chunk source and extracted translation are also kept in `data/jobs.db` (
 
 ### "This PDF has no extractable text layer"
 
-## DOCX Issues
-
-### "The header or footer is still in the source language"
-
-**Cause**: In the default mode the translated DOCX is a rebuilt document. Headings, paragraphs, bold, italic and underline, lists, tables (merged cells included), images, equations and hyperlinks in body paragraphs (link target kept, link text translated) are carried over; a link inside a heading, list item or table cell keeps its text but not its target. Headers and footers are copied from the source unchanged, page-number fields and images included, but their text is not translated. Only the first section's headers and footers are kept, and section breaks are not reproduced.
-
-**Solution**: Edit the header and footer text in the translated document by hand. Plain Text Mode keeps neither headers nor footers.
-
----
-
 **Cause**: The PDF is a scan (its pages are images). OCR is not supported.
 
 **Solution**: Run the file through an OCR tool (for example `ocrmypdf`) to add a text layer, then translate the OCR'd PDF.
@@ -345,6 +317,16 @@ The per-chunk source and extracted translation are also kept in `data/jobs.db` (
 **Solutions**:
 1. If a table came out as plain paragraphs, it probably has no ruling lines: this is a known limit.
 2. If you need the exact original layout, translate the source document (DOCX, EPUB) instead of its PDF export.
+
+---
+
+## DOCX Issues
+
+### "The header or footer is still in the source language"
+
+**Cause**: In the default mode the translated DOCX is a rebuilt document. Headings, paragraphs, bold, italic and underline, lists, tables (merged cells included), images, equations and hyperlinks in body paragraphs (link target kept, link text translated) are carried over; a link inside a heading, list item or table cell keeps its text but not its target. Headers and footers are copied from the source unchanged, page-number fields and images included, but their text is not translated. Only the first section's headers and footers are kept, and section breaks are not reproduced.
+
+**Solution**: Edit the header and footer text in the translated document by hand. Plain Text Mode keeps neither headers nor footers.
 
 ---
 
@@ -387,18 +369,18 @@ See [docs/STYLE_EXTRACTION.md](STYLE_EXTRACTION.md) for the full guide.
 
 **Cause**: Network issue, CORS, or proxy problem.
 
-### "Forbidden: the Host header of this request is not allowed" (HTTP 403)
-
-**Cause**: DNS-rebinding protection. With `HOST=127.0.0.1` (the default) the server only answers requests addressed to `localhost`, `127.0.0.1` or `[::1]`. A reverse proxy, a custom local domain or a hosts-file alias sends another name. The server log shows the rejected `Host`.
-
-**Solution**: add that name to `ALLOWED_HOSTS` in `.env` (comma-separated, optional port), for example `ALLOWED_HOSTS=translate.example.com`, then restart. If `ALLOWED_HOSTS` is set together with `HOST=0.0.0.0`, LAN clients must use one of the listed names too.
-
 **Solutions**:
 1. Check browser console for WebSocket errors
 2. Verify `HOST=127.0.0.1` or `HOST=0.0.0.0` in `.env`
 3. Check firewall allows WebSocket connections
 4. Try a different browser
 5. Disable proxy/VPN temporarily
+
+### "Forbidden: the Host header of this request is not allowed" (HTTP 403)
+
+**Cause**: DNS-rebinding protection. With `HOST=127.0.0.1` (the default) the server only answers requests addressed to `localhost`, `127.0.0.1` or `[::1]`. A reverse proxy, a custom local domain or a hosts-file alias sends another name. The server log shows the rejected `Host`.
+
+**Solution**: add that name to `ALLOWED_HOSTS` in `.env` (comma-separated, optional port), for example `ALLOWED_HOSTS=translate.example.com`, then restart. If `ALLOWED_HOSTS` is set together with `HOST=0.0.0.0`, LAN clients must use one of the listed names too.
 
 ---
 

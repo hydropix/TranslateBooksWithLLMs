@@ -15,7 +15,7 @@ hands the result to ``translate_document`` through ``FileTask.prepared``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from lxml import etree
@@ -29,7 +29,6 @@ from .document_chunking import (
     chunk_body_html,
     tag_preserver_for,
     tags_preserved_message,
-    technical_protection_enabled,
 )
 from .exceptions import BodyExtractionError, XmlParsingError
 from .run_context import EpubRun, FileTask, PreparedDocument
@@ -112,11 +111,6 @@ async def translate_xhtml_document(
     placeholder-mode file without ``resume_state``.
     """
     container = container or TranslationContainer()
-    # Technical content protection is currently disabled for translation (it
-    # was turned off on purpose). The log line and the persisted state must
-    # report the real setting. Partial states written before this fix always
-    # claimed True, so a resumed state's flag is not trusted.
-    settings = replace(settings, protect_technical=technical_protection_enabled())
     if prepared is not None and resume_state is None and not settings.plain_text_mode:
         body = find_body(doc_root)
         if body is None:
@@ -139,8 +133,7 @@ async def translate_xhtml_document(
         return await translate_plain_text(body, settings, resume_state)
     if not _resumes_placeholder_state(resume_state, settings):
         resume_state = None
-        prepared = chunk_body_html(body_html, settings.chunk_size, container=container,
-                                   protect_technical=settings.protect_technical)
+        prepared = chunk_body_html(body_html, settings.chunk_size, container=container)
     return await _translate_with_placeholders(body, settings, resume_state, prepared, container)
 
 
@@ -228,12 +221,8 @@ def _plan_from_resume(resume_state: Any, settings: ChunkLoopSettings,
 def _fresh_plan(prepared: PreparedDocument, settings: ChunkLoopSettings,
                 container: TranslationContainer) -> _ChunkPlan:
     """A first pass over freshly prepared chunks (every chunk pending)."""
-    if settings.protect_technical:
-        settings.log("technical_protection_auto",
-                     "🔒 Technical content protection active (code, formulas, measurements "
-                     "will be auto-detected and preserved)")
     settings.log("tags_preserved", tags_preserved_message(
-        len(prepared.global_tag_map), prepared.placeholder_format, settings.protect_technical))
+        len(prepared.global_tag_map), prepared.placeholder_format))
     settings.log("chunks_created", f"Created {len(prepared.chunks)} chunks")
 
     stats = TranslationMetrics()

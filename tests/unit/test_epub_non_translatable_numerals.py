@@ -33,7 +33,6 @@ def test_bare_roman_numeral_needs_standalone_context():
     assert is_non_translatable("I", standalone=True)
 
 
-@pytest.mark.parametrize("method", ["preserve_tags", "preserve_tags_and_technical_content"])
 @pytest.mark.parametrize("html,word", [
     ("<p>He <em>did</em> it.</p>", "did"),
     ("<p>The <span>Civil</span> War</p>", "Civil"),
@@ -41,23 +40,22 @@ def test_bare_roman_numeral_needs_standalone_context():
     ("<p><em>I</em> went home.</p>", "I"),
     ("<p>Yes, <b>Mimi.</b></p>", "Mimi."),
 ])
-def test_words_inside_inline_tags_reach_the_llm(method, html, word):
+def test_words_inside_inline_tags_reach_the_llm(html, word):
     preserver = TagPreserver()
-    text, tag_map = getattr(preserver, method)(html)
+    text, tag_map = preserver.preserve_tags(html)
     assert word in text
     assert not any(word in v for v in tag_map.values())
 
 
-@pytest.mark.parametrize("method", ["preserve_tags", "preserve_tags_and_technical_content"])
 @pytest.mark.parametrize("html", [
     "<h2>IV</h2><p>Hello world</p>",
     "<h2><span>XII</span></h2><p>Hello world</p>",
     "<p>I</p><p>Hello world</p>",
     "<h2>IV.</h2><p>Hello world</p>",
 ])
-def test_standalone_chapter_numerals_stay_frozen(method, html):
+def test_standalone_chapter_numerals_stay_frozen(html):
     preserver = TagPreserver()
-    text, tag_map = getattr(preserver, method)(html)
+    text, tag_map = preserver.preserve_tags(html)
     assert text.count("Hello world") == 1
     # Only the translatable sentence remains outside placeholders
     stripped = text

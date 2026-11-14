@@ -154,7 +154,6 @@ async function loadGlossaries() {
 function normalizePromptOptions(po) {
     return JSON.stringify({
         ci: (po && po.custom_instructions) || '',
-        ptc: !!(po && po.preserve_technical_content),
         tc: !!(po && po.text_cleanup),
     });
 }
@@ -925,9 +924,8 @@ function buildRunPayload({ defer = false } = {}) {
     }));
 
     // custom_instructions is now per-column (custom_instruction_file above);
-    // these two stay run-wide.
+    // text_cleanup stays run-wide.
     const promptOptions = {
-        preserve_technical_content: $('preserveTechnicalContent')?.checked || false,
         text_cleanup: $('textCleanup')?.checked || false,
     };
 

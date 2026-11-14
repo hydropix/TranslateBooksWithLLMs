@@ -54,8 +54,7 @@ async def _refine_one_xhtml(
 ) -> bool:
     """Refine a single parsed XHTML document in place.
 
-    The body is chunked exactly like the translation chunked it (same
-    technical content protection setting).
+    The body is chunked exactly like the translation chunked it.
     """
     body_element, prepared = chunk_document(
         doc_root, max_tokens_per_chunk, container=container, log_callback=log_callback

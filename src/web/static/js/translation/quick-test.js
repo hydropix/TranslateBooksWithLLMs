@@ -83,7 +83,6 @@ function readGlobalLlmConfig() {
 
 function readPromptOptions() {
     return {
-        preserve_technical_content: !!($('preserveTechnicalContent')?.checked),
         text_cleanup: !!($('textCleanup')?.checked),
     };
 }

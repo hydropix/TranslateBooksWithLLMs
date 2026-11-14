@@ -43,7 +43,7 @@ class _Converter:
     def to_html(self, path):
         return "<p>Alpha paragraph.</p><p>Beta paragraph.</p>", {}
 
-    def from_html(self, html, metadata, path):
+    def from_html(self, html, metadata, path, source_docx_path=None):
         with open(path, "w", encoding="utf-8") as f:
             f.write(html)
 

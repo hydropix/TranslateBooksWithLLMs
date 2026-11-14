@@ -175,7 +175,7 @@ class DocxTranslationAdapter:
 
         Args:
             reconstructed_content: Reconstructed HTML content
-            source: Source file path (not used, metadata from context)
+            source: Source DOCX path (headers and footers are copied from it)
             context: Context dict avec metadata
             log_callback: Callback de logging
 
@@ -196,7 +196,10 @@ class DocxTranslationAdapter:
 
         try:
             # Convert and save to temp file
-            self.converter.from_html(reconstructed_content, metadata, tmp_path)
+            # The source carries the headers and footers mammoth never read.
+            source_docx = context.get('source_path') or source
+            self.converter.from_html(reconstructed_content, metadata, tmp_path,
+                                     source_docx_path=source_docx)
 
             # Read back as bytes
             with open(tmp_path, 'rb') as f:

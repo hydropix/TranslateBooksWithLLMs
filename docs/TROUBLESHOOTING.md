@@ -15,6 +15,7 @@ Solutions to common problems with TranslateBookWithLLM.
 - [TXT Issues](#txt-issues)
 - [SRT Issues](#srt-issues)
 - [PDF Issues](#pdf-issues)
+- [DOCX Issues](#docx-issues)
 - [Style Preset Issues](#style-preset-issues)
 - [Web Interface Issues](#web-interface-issues)
 - [Configuration Issues](#configuration-issues)
@@ -318,6 +319,16 @@ The per-chunk source and extracted translation are also kept in `data/jobs.db` (
 ## PDF Issues
 
 ### "This PDF has no extractable text layer"
+
+## DOCX Issues
+
+### "The header or footer is still in the source language"
+
+**Cause**: In the default mode the translated DOCX is a rebuilt document. Headings, paragraphs, bold, italic and underline, lists, tables (merged cells included), images, equations and hyperlinks in body paragraphs (link target kept, link text translated) are carried over; a link inside a heading, list item or table cell keeps its text but not its target. Headers and footers are copied from the source unchanged, page-number fields and images included, but their text is not translated. Only the first section's headers and footers are kept, and section breaks are not reproduced.
+
+**Solution**: Edit the header and footer text in the translated document by hand. Plain Text Mode keeps neither headers nor footers.
+
+---
 
 **Cause**: The PDF is a scan (its pages are images). OCR is not supported.
 

@@ -21,14 +21,15 @@ from src.core.progress import Phase, ProgressReporter
 from .client_setup import build_refine_client
 
 
-def _write_docx(converter, tag_preserver, refined_chunks, tag_map, metadata, output_filepath) -> None:
+def _write_docx(converter, tag_preserver, refined_chunks, tag_map, metadata, output_filepath,
+                source_docx_path=None) -> None:
     """Rebuild the DOCX from refined chunks (GLOBAL placeholders) and write it."""
     full_text = escape_stray_markup(''.join(refined_chunks))
     final_html = tag_preserver.restore_tags(full_text, tag_map)
     with tempfile.NamedTemporaryFile(mode='w', suffix='.docx', delete=False, encoding='utf-8') as tmp:
         tmp_path = tmp.name
     try:
-        converter.from_html(final_html, metadata, tmp_path)
+        converter.from_html(final_html, metadata, tmp_path, source_docx_path=source_docx_path)
         with open(tmp_path, 'rb') as src, open(output_filepath, 'wb') as dst:
             dst.write(src.read())
     finally:
@@ -132,7 +133,8 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
             # Same contract as the TXT and SRT refiners.
             parts = e.partial_result
             if parts is not None and len(parts) == len(chunks):
-                _write_docx(converter, tag_preserver, parts, tag_map, metadata, output_filepath)
+                _write_docx(converter, tag_preserver, parts, tag_map, metadata, output_filepath,
+                            source_docx_path=input_filepath)
                 if log_callback:
                     log_callback("refine_partial_saved",
                                  f"💾 Partial refined output saved before rate-limit pause: '{output_filepath}'")
@@ -144,7 +146,8 @@ async def refine_docx_file(job: JobConfig, ctx: JobContext) -> bool:
                              "Refinement interrupted before reconstruction")
             return False
 
-        _write_docx(converter, tag_preserver, refined_chunks, tag_map, metadata, output_filepath)
+        _write_docx(converter, tag_preserver, refined_chunks, tag_map, metadata, output_filepath,
+                    source_docx_path=input_filepath)
 
         if log_callback:
             log_callback("docx_refine_done",

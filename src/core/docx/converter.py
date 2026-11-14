@@ -8,18 +8,27 @@ Uses:
 
 import base64
 import binascii
+import copy
 import io
+import logging
 import os
 import re
 import tempfile
 import mammoth
 from docx import Document
-from docx.shared import Inches
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, RGBColor
+from docx.text.run import Run
 from typing import Tuple, Dict, Any, Optional, Set
 from lxml import etree
 
 
+logger = logging.getLogger(__name__)
+
 _W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+_R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 _M_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/math'
 _XML_NS = 'http://www.w3.org/XML/1998/namespace'
 
@@ -60,6 +69,17 @@ _OMML_XPATH = etree.XPath(
     namespaces={'m': _M_NS},
 )
 _WT_XPATH = etree.XPath('.//w:t', namespaces={'w': _W_NS})
+
+# Header/footer slots of a python-docx Section, copied from the source
+# document because mammoth never reads headers and footers.
+_HEADER_FOOTER_ATTRS = (
+    'header', 'first_page_header', 'even_page_header',
+    'footer', 'first_page_footer', 'even_page_footer',
+)
+
+# Colour of Word's built-in "Hyperlink" character style, applied by hand
+# because python-docx's default template does not define that style.
+_HYPERLINK_COLOR = RGBColor(0x05, 0x63, 0xC1)
 
 
 class DocxHtmlConverter:
@@ -122,7 +142,8 @@ class DocxHtmlConverter:
         self,
         html_content: str,
         metadata: Dict[str, Any],
-        output_path: str
+        output_path: str,
+        source_docx_path: Optional[str] = None,
     ) -> None:
         """
         Reconstruct DOCX from translated HTML + metadata.
@@ -138,6 +159,9 @@ class DocxHtmlConverter:
             html_content: Translated HTML content
             metadata: Original document metadata (styles, fonts, etc.)
             output_path: Path to output DOCX file
+            source_docx_path: The source DOCX. When given, its headers and
+                footers are copied into the output unchanged: mammoth does
+                not read them, so they never reach the translated HTML.
         """
         # Reverse the equation-tag substitution done in to_html so the rest
         # of the rebuild pipeline (which expects raw text markers) is unchanged.
@@ -167,6 +191,9 @@ class DocxHtmlConverter:
                 for element in body:
                     self._convert_html_element_to_docx(doc, element, metadata)
 
+        if source_docx_path:
+            self._copy_headers_footers(source_docx_path, doc)
+
         # Attribution stamp: identical for every install, disabled by the
         # ATTRIBUTION_ENABLED switch. Left untouched when attribution is off.
         import src.config as cfg
@@ -180,6 +207,90 @@ class DocxHtmlConverter:
         equations = metadata.get('equations') if metadata else None
         if equations:
             self._restore_equations(output_path, equations)
+
+    def _copy_headers_footers(self, source_docx_path: str, doc: Document) -> None:
+        """
+        Copy the first section's headers and footers from the source DOCX.
+
+        The rebuilt document has a single section, so the first section's
+        header/footer set is the one carried over. Their XML is copied as is
+        (text untranslated, fields such as page numbers kept); images are
+        re-embedded and hyperlinks re-related in the output's own parts.
+        A failure here is logged and leaves the output without them rather
+        than failing the whole translation.
+        """
+        try:
+            source = Document(source_docx_path)
+            if not source.sections or not doc.sections:
+                return
+            src_section = source.sections[0]
+            dst_section = doc.sections[0]
+            dst_section.different_first_page_header_footer = (
+                src_section.different_first_page_header_footer
+            )
+            doc.settings.odd_and_even_pages_header_footer = (
+                source.settings.odd_and_even_pages_header_footer
+            )
+            for attr in _HEADER_FOOTER_ATTRS:
+                src_story = getattr(src_section, attr)
+                # A first section's "linked" slot has no definition at all.
+                if src_story.is_linked_to_previous:
+                    continue
+                dst_story = getattr(dst_section, attr)
+                dst_story.is_linked_to_previous = False
+                self._copy_story(src_story, dst_story)
+        except Exception as exc:  # noqa: BLE001 - a header must not sink the job
+            logger.warning("Could not copy DOCX headers/footers: %s", exc)
+
+    def _copy_story(self, src_story, dst_story) -> None:
+        """Replace ``dst_story``'s content with a copy of ``src_story``'s."""
+        src_el = src_story._element
+        dst_el = dst_story._element
+        for child in list(dst_el):
+            dst_el.remove(child)
+        for child in src_el:
+            dst_el.append(copy.deepcopy(child))
+        self._remap_relationships(dst_el, src_story.part, dst_story.part)
+
+    def _remap_relationships(self, element, src_part, dst_part) -> None:
+        """
+        Point every r:* reference in a copied subtree at ``dst_part``'s rels.
+
+        Images are re-embedded and external targets (hyperlinks) re-related.
+        A reference to any other internal part cannot be carried over, so the
+        run holding it is removed rather than left dangling.
+        """
+        mapping: Dict[str, Optional[str]] = {}
+        for node in list(element.iter()):
+            for attr_name, value in list(node.attrib.items()):
+                if not attr_name.startswith(f'{{{_R_NS}}}'):
+                    continue
+                if value not in mapping:
+                    mapping[value] = self._copy_relationship(value, src_part, dst_part)
+                new_id = mapping[value]
+                if new_id is not None:
+                    node.set(attr_name, new_id)
+                    continue
+                holder = node
+                while holder is not None and holder.tag != qn('w:r'):
+                    holder = holder.getparent()
+                target = holder if holder is not None else node
+                parent = target.getparent()
+                if parent is not None:
+                    parent.remove(target)
+                break
+
+    def _copy_relationship(self, r_id: str, src_part, dst_part) -> Optional[str]:
+        """Recreate relationship ``r_id`` of ``src_part`` in ``dst_part``."""
+        rel = src_part.rels.get(r_id)
+        if rel is None:
+            return None
+        if rel.is_external:
+            return dst_part.relate_to(rel.target_ref, rel.reltype, is_external=True)
+        if rel.reltype == RT.IMAGE:
+            new_id, _ = dst_part.get_or_add_image(io.BytesIO(rel.target_part.blob))
+            return new_id
+        return None
 
     def _replace_equations_with_markers(
         self, docx_path: str
@@ -561,20 +672,61 @@ class DocxHtmlConverter:
             for tr in rows
         ]
 
-        # The widest row defines the column count; a narrow header row must
-        # not truncate the rows below it.
-        cols = max(len(cells) for cells in row_cells)
+        # The widest row (spans included) defines the column count; a narrow
+        # header row must not truncate the rows below it.
+        placements, cols = self._place_table_cells(row_cells)
         if cols == 0:
             return
 
         table = doc.add_table(rows=len(rows), cols=cols)
         table.style = 'Table Grid'
 
+        for row_idx, col_idx, row_span, col_span, cell in placements:
+            target = table.cell(row_idx, col_idx)
+            if row_span > 1 or col_span > 1:
+                try:
+                    target = target.merge(
+                        table.cell(row_idx + row_span - 1, col_idx + col_span - 1)
+                    )
+                except Exception:  # noqa: BLE001 - malformed overlapping spans
+                    target = table.cell(row_idx, col_idx)
+            target.text = self._get_text_content(cell)
+
+    @staticmethod
+    def _span(value: Optional[str]) -> int:
+        """A colspan/rowspan attribute as a positive int (1 when invalid)."""
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return 1
+
+    def _place_table_cells(self, row_cells: list) -> Tuple[list, int]:
+        """
+        Lay HTML cells out on a grid, honouring colspan and rowspan.
+
+        Returns ``(placements, column_count)``; each placement is
+        ``(row, col, row_span, col_span, cell_element)``. A cell starts at
+        the first column of its row not already covered by a rowspan from
+        above, and a rowspan past the last row is clipped. Without spans this
+        is the plain "n-th cell in the n-th column" layout.
+        """
+        row_count = len(row_cells)
+        occupied: Set[Tuple[int, int]] = set()
+        placements = []
         for row_idx, cells in enumerate(row_cells):
-            for col_idx, cell in enumerate(cells):
-                if col_idx < cols:
-                    text = self._get_text_content(cell)
-                    table.rows[row_idx].cells[col_idx].text = text
+            col_idx = 0
+            for cell in cells:
+                while (row_idx, col_idx) in occupied:
+                    col_idx += 1
+                row_span = min(self._span(cell.get('rowspan')), row_count - row_idx)
+                col_span = self._span(cell.get('colspan'))
+                for dr in range(row_span):
+                    for dc in range(col_span):
+                        occupied.add((row_idx + dr, col_idx + dc))
+                placements.append((row_idx, col_idx, row_span, col_span, cell))
+                col_idx += col_span
+        cols = max((col for _, col in occupied), default=-1) + 1
+        return placements, cols
 
     def _collect_table_rows(self, element: etree._Element) -> list:
         """
@@ -626,6 +778,8 @@ class DocxHtmlConverter:
                 # Nested inline formatting (<strong><em>…</em></strong>) is
                 # accumulated so a bold + italic run keeps both properties.
                 self._add_formatted_runs(paragraph, child, frozenset())
+            elif child.tag == 'a':
+                self._add_hyperlink(paragraph, child, frozenset())
             elif child.tag == 'img':
                 self._add_image_run(paragraph, child)
             else:
@@ -641,7 +795,10 @@ class DocxHtmlConverter:
         """Emit the runs of an inline-formatting subtree, accumulating
         bold/italic/underline down nested <strong>/<em>/<u> elements."""
         formats = inherited | {_INLINE_FORMAT_TAGS[element.tag]}
+        self._emit_inline_content(paragraph, element, formats)
 
+    def _emit_inline_content(self, paragraph, element: etree._Element, formats: frozenset):
+        """Emit ``element``'s text and inline children with ``formats`` on."""
         def emit(text):
             if not text:
                 return
@@ -653,11 +810,46 @@ class DocxHtmlConverter:
         for child in element:
             if child.tag in _INLINE_FORMAT_TAGS:
                 self._add_formatted_runs(paragraph, child, formats)
+            elif child.tag == 'a':
+                self._add_hyperlink(paragraph, child, formats)
             elif child.tag == 'img':
                 self._add_image_run(paragraph, child)
             else:
                 emit(self._get_text_content(child))
             emit(child.tail)
+
+    def _add_hyperlink(self, paragraph, element: etree._Element, formats: frozenset) -> None:
+        """
+        Emit an <a> as a DOCX hyperlink backed by an external relationship.
+
+        The link text keeps its inline formatting. Internal anchors
+        (``#bookmark``) and bare bookmark targets (<a id> without href) are
+        emitted as plain text: bookmarks are not rebuilt, so a link to one
+        would dangle.
+        """
+        href = (element.get('href') or '').strip()
+        if not href or href.startswith('#'):
+            self._emit_inline_content(paragraph, element, formats)
+            return
+
+        p_elem = paragraph._p
+        first_new = len(p_elem)
+        self._emit_inline_content(paragraph, element, formats)
+        new_runs = [
+            child for child in list(p_elem)[first_new:] if child.tag == qn('w:r')
+        ]
+        if not new_runs:
+            return
+
+        r_id = paragraph.part.relate_to(href, RT.HYPERLINK, is_external=True)
+        hyperlink = OxmlElement('w:hyperlink')
+        hyperlink.set(qn('r:id'), r_id)
+        p_elem.insert(list(p_elem).index(new_runs[0]), hyperlink)
+        for run_elem in new_runs:
+            hyperlink.append(run_elem)
+            run = Run(run_elem, paragraph)
+            run.font.color.rgb = _HYPERLINK_COLOR
+            run.underline = True
 
     def _add_image_run(self, paragraph, img_element: etree._Element) -> None:
         """

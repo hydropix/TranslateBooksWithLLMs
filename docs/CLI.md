@@ -182,7 +182,7 @@ python translate.py -i book.txt -o book_fr.txt \
 # OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 python translate.py -i book.txt -o book_fr.txt \
     --provider openai \
-    --api_endpoint http://localhost:8080/v1/chat/completions \
+    --api_endpoint http://localhost:9931/v1/chat/completions \
     -m your-model
 ```
 

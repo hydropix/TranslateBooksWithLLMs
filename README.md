@@ -145,7 +145,7 @@ python translate.py -i book.txt --provider nim \
 
 # With local OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 python translate.py -i book.txt --provider openai \
-    --api_endpoint http://localhost:8080/v1/chat/completions -m your-model -tl French
+    --api_endpoint http://localhost:9931/v1/chat/completions -m your-model -tl French
 ```
 
 ### Main options

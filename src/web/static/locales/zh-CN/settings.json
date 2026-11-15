@@ -37,7 +37,7 @@
   "open_folder_title": "打开文件夹",
   "select_none": "无",
 
-  "openai_local_servers_hint": "本地服务器：llama.cpp（8080）、LM Studio（1234）、vLLM 等。",
+  "openai_local_servers_hint": "本地服务器：llama.cpp（9931）、LM Studio（1234）、vLLM 等。",
 
   "naming_convention_label": "命名规则",
   "naming_convention_input_title": "可使用 {originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext} 作为占位符",

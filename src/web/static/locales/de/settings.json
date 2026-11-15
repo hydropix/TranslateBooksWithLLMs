@@ -37,7 +37,7 @@
   "open_folder_title": "Ordner öffnen",
   "select_none": "Keine",
 
-  "openai_local_servers_hint": "Lokale Server: llama.cpp (8080), LM Studio (1234), vLLM usw.",
+  "openai_local_servers_hint": "Lokale Server: llama.cpp (9931), LM Studio (1234), vLLM usw.",
 
   "naming_convention_label": "Benennungskonvention",
   "naming_convention_input_title": "Verwenden Sie {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} als Platzhalter",

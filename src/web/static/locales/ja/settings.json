@@ -37,7 +37,7 @@
   "open_folder_title": "フォルダを開く",
   "select_none": "なし",
 
-  "openai_local_servers_hint": "ローカルサーバー: llama.cpp (8080)、LM Studio (1234)、vLLM など",
+  "openai_local_servers_hint": "ローカルサーバー: llama.cpp (9931)、LM Studio (1234)、vLLM など",
 
   "naming_convention_label": "命名規則",
   "naming_convention_input_title": "プレースホルダーとして {originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext} を使用できます",

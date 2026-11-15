@@ -61,7 +61,7 @@ TBL supports local and hosted endpoints that implement the OpenAI Chat Completio
 
 | Server | Default Endpoint |
 |--------|------------------|
-| llama.cpp (`llama-server`) | `http://localhost:8080/v1/chat/completions` |
+| llama.cpp (`llama-server`) | `http://localhost:9931/v1/chat/completions` (older builds used `8080`) |
 | LM Studio | `http://localhost:1234/v1/chat/completions` |
 | vLLM | `http://localhost:8000/v1/chat/completions` |
 | LocalAI | `http://localhost:8080/v1/chat/completions` |
@@ -72,7 +72,7 @@ TBL supports local and hosted endpoints that implement the OpenAI Chat Completio
 # llama.cpp (llama-server)
 python translate.py -i book.txt -o book_fr.txt \
     --provider openai \
-    --api_endpoint http://localhost:8080/v1/chat/completions \
+    --api_endpoint http://localhost:9931/v1/chat/completions \
     -m your-model-name
 
 # LM Studio

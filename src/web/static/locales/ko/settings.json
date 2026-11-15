@@ -37,7 +37,7 @@
   "open_folder_title": "폴더 열기",
   "select_none": "없음",
 
-  "openai_local_servers_hint": "로컬 서버: llama.cpp (8080), LM Studio (1234), vLLM 등.",
+  "openai_local_servers_hint": "로컬 서버: llama.cpp (9931), LM Studio (1234), vLLM 등.",
 
   "naming_convention_label": "파일명 규칙",
   "naming_convention_input_title": "{originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}를 플레이스홀더로 사용",

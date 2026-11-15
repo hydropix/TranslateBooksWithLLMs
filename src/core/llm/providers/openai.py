@@ -76,9 +76,10 @@ class OpenAICompatibleProvider(OpenAIChatProvider):
     async def _fixed_params(self, request: LLMRequest) -> Dict[str, Any]:
         # Thinking-disable switches only for local servers (llama.cpp, vLLM,
         # LM Studio); the official API and cloud gateways (NIM) reject them.
+        # No top-level "thinking" key: strict servers such as Unsloth Studio
+        # validate it as an object and reject a boolean with HTTP 400 (#339).
         if not self._is_official_openai_endpoint() and self._is_local_endpoint():
             return {
-                "thinking": False,
                 "enable_thinking": False,
                 "chat_template_kwargs": {"enable_thinking": False},
             }

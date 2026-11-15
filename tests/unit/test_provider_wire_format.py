@@ -89,7 +89,7 @@ CASES = {
     "openai_local": (dict(provider_type="openai", model="qwen3", api_key="",
                           api_endpoint="http://localhost:8080/v1/"),
                      "http://localhost:8080/v1/chat/completions", None,
-                     {"temperature": 0.3, "thinking": False, "enable_thinking": False,
+                     {"temperature": 0.3, "enable_thinking": False,
                       "chat_template_kwargs": {"enable_thinking": False}}),
     "nim": (dict(provider_type="nim", model="meta/llama-3.1-70b-instruct", api_key=FAKE_KEY),
             "https://integrate.api.nvidia.com/v1/chat/completions", f"Bearer {FAKE_KEY}",

@@ -68,6 +68,9 @@ const resultsCache = new Map();
 // default to the endpoint set in Settings (fetched once via /api/config).
 const ENDPOINT_PROVIDERS = new Set(['openai', 'ollama']);
 let settingsEndpoints = { ollama: '', openai: '' };
+// LLM_PROVIDER from the server config; new columns start on it so a user who
+// does not run Ollama never triggers requests to localhost:11434 (#339).
+let settingsProvider = 'ollama';
 
 // Available custom-instruction presets (files in Custom_Instructions/), shared
 // by every column's per-LLM picker. [{ filename, display_name }]
@@ -106,6 +109,7 @@ async function loadSettingsEndpoints() {
             ollama: cfg.ollama_api_endpoint || cfg.api_endpoint || '',
             openai: cfg.openai_api_endpoint || '',
         };
+        if (PROVIDER_ORDER.includes(cfg.llm_provider)) settingsProvider = cfg.llm_provider;
         let changed = false;
         state.columns.forEach((col) => {
             if (!col.api_endpoint && settingsEndpoints[col.provider]) {
@@ -544,12 +548,13 @@ function refreshResultsFromCache() {
 }
 
 function addColumn() {
+    const provider = settingsProvider;
     state.columns.push({
-        provider: 'ollama',
+        provider,
         model: '',
-        // Defaults to the Settings endpoint for the provider (ollama here);
-        // resets to the new provider's default when the provider changes.
-        api_endpoint: settingsEndpoints.ollama || '',
+        // Defaults to the Settings endpoint for the provider; resets to the
+        // new provider's default when the provider changes.
+        api_endpoint: settingsEndpoints[provider] || '',
         custom_instruction_file: '', // per-LLM custom-instruction preset ('' = none)
         glossary_id: '',             // per-LLM glossary ('' = none)
     });
@@ -1339,8 +1344,16 @@ export const SampleManager = {
         // addColumn() already renders; only render here when we didn't add one,
         // to avoid a double render() whose overlapping setTimeouts race on the
         // shared SearchableSelect ids.
-        if (state.columns.length === 0) addColumn();
-        else renderColumns();
+        // The first column waits for /api/config so it starts on the configured
+        // provider instead of rendering (and fetching models from) Ollama first.
+        const endpointsLoaded = loadSettingsEndpoints();
+        if (state.columns.length === 0) {
+            endpointsLoaded.then(() => {
+                if (state.columns.length === 0) addColumn();
+            });
+        } else {
+            renderColumns();
+        }
         // Seed the N / max-chars inputs from the shared defaults so the constant
         // is the single source — the HTML no longer hard-codes its own value.
         const nInput = $('sampleNSamples');
@@ -1352,8 +1365,6 @@ export const SampleManager = {
         rerenderOnLocale();
         WebSocketManager.on('sample_update', handleSampleUpdate);
         setMode('translate');
-        // Seed default endpoints from Settings; backfills + re-renders columns.
-        loadSettingsEndpoints();
         // Load custom-instruction presets and glossaries for the per-LLM pickers.
         loadCustomInstructionFiles();
         loadGlossaries();

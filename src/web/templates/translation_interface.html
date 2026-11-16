@@ -1132,11 +1132,12 @@
                     <div class="form-group" style="margin-bottom: 15px;">
                         <label data-i18n="settings:naming_convention_label">Naming Convention</label>
                         <div class="neu-inset-light">
-                            <input type="text" class="form-control" id="outputFilenamePattern" value="{originalName} ({targetLang}).{ext}" data-i18n-attr="title:settings:naming_convention_input_title" title="Use {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} as placeholders">
+                            <input type="text" class="form-control" id="outputFilenamePattern" value="{translatedName} ({targetLang}).{ext}" data-i18n-attr="title:settings:naming_convention_input_title" title="Use {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} as placeholders">
                         </div>
                         <small data-i18n-html="settings:naming_convention_help" style="color: var(--text-muted-light); font-size: 0.6875rem; margin-top: 0.5rem; display: block;">
-                            Placeholders: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>
-                            Example: {originalName} ({targetLang}) ({model})_{date}.{ext}
+                            Placeholders: {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>
+                            {translatedName} is the original name translated into the target language by the model (one extra request per file).<br>
+                            Example: {translatedName} ({targetLang}) ({model})_{date}.{ext}
                         </small>
                     </div>
 

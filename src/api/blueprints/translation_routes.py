@@ -10,6 +10,7 @@ from src.api.services.path_validator import PathValidator
 from src.api.translation_state import new_job_id
 from src.core.job import JobConfig, JobConfigError
 from src.core.job.config import parse_term_fix_request
+from src.core.job.output_name import provisional_name
 
 logger = logging.getLogger('translation_routes')
 
@@ -92,6 +93,9 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         # The registry holds the persisted (secret-free) form; the worker gets
         # the JobConfig, whose credentials only live in memory.
         config = job.to_persisted()
+        # A {translatedName} placeholder is resolved by the worker; until
+        # then the job is listed under its original name, never the token.
+        config['output_filename'] = provisional_name(job)
         state_manager.create_translation(translation_id, config)
         start_translation_job(translation_id, job)
 

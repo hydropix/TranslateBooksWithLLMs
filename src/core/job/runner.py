@@ -38,6 +38,7 @@ from typing import Any, Callable, Dict, Optional
 
 from .config import OP_REFINE, OP_TERM_FIX, JobConfig
 from .context import JobContext
+from .output_name import resolve_output_name
 from .prepare import apply_auto_prep, snapshot_custom_instructions, snapshot_glossary
 from .result import JobResult, JobStatus
 
@@ -251,6 +252,9 @@ class JobRunner:
         await apply_auto_prep(tmp_job, options, self.sinks.log, self._auto_prep_progress)
         snapshot_custom_instructions(options, self.custom_instructions_dir, self.sinks.log)
         job = job.with_changes(prompt_options=options)
+        # Before the checkpoint exists, so the stored name never holds the
+        # {translatedName} placeholder and a resume targets the same file.
+        job = await resolve_output_name(job, self.sinks.log)
 
         persisted = job.to_persisted()
         self.checkpoint_manager.start_job(self.translation_id, job.file_type, persisted,

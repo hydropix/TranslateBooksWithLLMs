@@ -32,7 +32,7 @@ services:
       - PORT=5000
       - HOST=0.0.0.0
       - OUTPUT_DIR=/app/translated_files
-      - OUTPUT_FILENAME_PATTERN={originalName} ({targetLang}).{ext}
+      - OUTPUT_FILENAME_PATTERN={translatedName} ({targetLang}).{ext}
       - DEBUG_MODE=false
 
       # -----------------------------------------------------------------------

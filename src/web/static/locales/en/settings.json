@@ -40,8 +40,8 @@
   "openai_local_servers_hint": "Local servers: llama.cpp (9931), LM Studio (1234), vLLM, etc.",
 
   "naming_convention_label": "Naming Convention",
-  "naming_convention_input_title": "Use {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} as placeholders",
-  "naming_convention_help": "Placeholders: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>Example: {originalName} ({targetLang}) ({model})_{date}.{ext}",
+  "naming_convention_input_title": "Use {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} as placeholders",
+  "naming_convention_help": "Placeholders: {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>{translatedName} is the original name translated into the target language by the model (one extra request per file).<br>Example: {translatedName} ({targetLang}) ({model})_{date}.{ext}",
 
   "disable_auto_pause_title": "Don't auto-pause on rate limit (HTTP 429)",
   "disable_auto_pause_description": "By default, the translation pauses after the provider rate-limits and asks you to resume manually. Enable this to keep the translation running: it will wait for <code>Retry-After</code> seconds (or 60s default) and auto-resume from the last checkpoint. Useful for long novels on free-tier APIs. Click \"Interrupt\" anytime to cancel the auto-resume.",

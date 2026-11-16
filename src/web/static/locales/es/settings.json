@@ -40,8 +40,8 @@
   "openai_local_servers_hint": "Servidores locales: llama.cpp (9931), LM Studio (1234), vLLM, etc.",
 
   "naming_convention_label": "Convención de nomenclatura",
-  "naming_convention_input_title": "Usa {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} como variables",
-  "naming_convention_help": "Variables: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>Ejemplo: {originalName} ({targetLang}) ({model})_{date}.{ext}",
+  "naming_convention_input_title": "Usa {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} como variables",
+  "naming_convention_help": "Variables: {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>{translatedName} es el nombre original traducido al idioma de destino por el modelo (una solicitud adicional por archivo).<br>Ejemplo: {translatedName} ({targetLang}) ({model})_{date}.{ext}",
 
   "disable_auto_pause_title": "No pausar automáticamente al alcanzar el límite de tasa (HTTP 429)",
   "disable_auto_pause_description": "Por defecto, la traducción se pausa cuando el proveedor aplica un límite de tasa y te pide reanudarla manualmente. Activa esta opción para mantener la traducción en marcha: esperará <code>Retry-After</code> segundos (o 60s por defecto) y se reanudará automáticamente desde el último punto de control. Útil para novelas largas con APIs de nivel gratuito. Pulsa «Interrumpir» en cualquier momento para cancelar la reanudación automática.",

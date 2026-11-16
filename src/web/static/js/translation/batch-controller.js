@@ -50,7 +50,7 @@ function getTranslationConfig(file) {
     // on the file object was computed at upload time and may be stale,
     // especially when the same file is re-translated with a different model.
     const outputPattern = DomHelpers.getValue('outputFilenamePattern')
-        || '{originalName} ({targetLang}).{ext}';
+        || '{translatedName} ({targetLang}).{ext}';
     const resolvedOutputFilename = generateOutputFilename(
         { name: file.name },
         outputPattern,

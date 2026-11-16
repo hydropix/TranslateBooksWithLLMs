@@ -40,8 +40,8 @@
   "openai_local_servers_hint": "本地服务器：llama.cpp（9931）、LM Studio（1234）、vLLM 等。",
 
   "naming_convention_label": "命名规则",
-  "naming_convention_input_title": "可使用 {originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext} 作为占位符",
-  "naming_convention_help": "占位符：{originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext}<br>示例：{originalName} ({targetLang}) ({model})_{date}.{ext}",
+  "naming_convention_input_title": "可使用 {translatedName}、{originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext} 作为占位符",
+  "naming_convention_help": "占位符：{translatedName}、{originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext}<br>{translatedName} 是由模型翻译成目标语言的原始文件名（每个文件多一次请求）。<br>示例：{translatedName} ({targetLang}) ({model})_{date}.{ext}",
 
   "disable_auto_pause_title": "速率限制（HTTP 429）时不自动暂停",
   "disable_auto_pause_description": "默认情况下，当服务商触发速率限制时翻译会暂停，并要求您手动恢复。启用此选项以让翻译持续运行：它会等待 <code>Retry-After</code> 秒（或默认 60 秒），然后从最后的检查点自动恢复。适合在免费层 API 上跑长篇小说。随时点击\"中断\"可取消自动恢复。",

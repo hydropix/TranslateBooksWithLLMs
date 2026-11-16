@@ -40,8 +40,8 @@
   "openai_local_servers_hint": "ローカルサーバー: llama.cpp (9931)、LM Studio (1234)、vLLM など",
 
   "naming_convention_label": "命名規則",
-  "naming_convention_input_title": "プレースホルダーとして {originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext} を使用できます",
-  "naming_convention_help": "プレースホルダー: {originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext}<br>例: {originalName} ({targetLang}) ({model})_{date}.{ext}",
+  "naming_convention_input_title": "プレースホルダーとして {translatedName}、{originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext} を使用できます",
+  "naming_convention_help": "プレースホルダー: {translatedName}、{originalName}、{targetLang}、{sourceLang}、{model}、{date}、{datetime}、{ext}<br>{translatedName} は、モデルが翻訳先の言語に翻訳した元のファイル名です（ファイルごとに追加で 1 回のリクエスト）。<br>例: {translatedName} ({targetLang}) ({model})_{date}.{ext}",
 
   "disable_auto_pause_title": "レート制限 (HTTP 429) で自動的に一時停止しない",
   "disable_auto_pause_description": "デフォルトでは、プロバイダーがレート制限を行った後、翻訳が一時停止し、手動で再開するよう求められます。これを有効にすると翻訳を継続したまま <code>Retry-After</code> 秒 (またはデフォルトで 60 秒) 待機し、最後のチェックポイントから自動的に再開します。無料枠 API で長編小説を翻訳する際に便利です。自動再開をキャンセルするには、いつでも「中断」をクリックしてください。",

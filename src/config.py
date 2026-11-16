@@ -75,7 +75,7 @@ _RELOADABLE_ENV_SETTINGS = (
     # "anthropic/claude-sonnet-4-6". Keys are read from each provider's native
     # env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), not from a single key.
     ('LITELLM_MODEL',       'LITELLM_MODEL',       ''),
-    ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
+    ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{translatedName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
     # Webhook notifications — kept here so the web UI can change them at runtime
     # via /api/settings without a server restart. notifier.py reads these via
@@ -470,7 +470,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '')
 OUTPUT_DIR = str(Path(os.getenv('OUTPUT_DIR', 'translated_files')).expanduser().resolve())
 
 # Output filename pattern
-# Placeholders: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}
+# Placeholders: {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}
 # OUTPUT_FILENAME_PATTERN is loaded via _apply_reloadable_env_settings()
 
 # =============================================================================

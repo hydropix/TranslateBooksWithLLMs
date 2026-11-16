@@ -84,6 +84,17 @@ def test_translate_route_stores_sanitized_output_filename(tmp_path):
     assert state_manager.created[0]['output_filename'] == 'run.bat.txt'
 
 
+def test_translate_route_lists_a_queued_job_under_its_original_name(tmp_path):
+    """The {translatedName} placeholder is resolved by the worker: the job
+    registry and the response must not show the raw token meanwhile."""
+    client, state_manager = _translate_client(tmp_path)
+    body = {**_body('{translatedName} (French).txt'), 'input_filename': 'My Book.txt'}
+    resp = client.post('/api/translate', json=body)
+    assert resp.status_code == 200
+    assert state_manager.created[0]['output_filename'] == 'My Book (French).txt'
+    assert resp.get_json()['config_received']['output_filename'] == 'My Book (French).txt'
+
+
 def test_translate_route_rejects_unusable_output_filename(tmp_path):
     client, state_manager = _translate_client(tmp_path)
     resp = client.post('/api/translate', json=_body('../..'))

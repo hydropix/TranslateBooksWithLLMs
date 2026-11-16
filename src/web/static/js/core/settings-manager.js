@@ -22,6 +22,13 @@ const STORAGE_VERSION = 1;
 const STORAGE_KEY_PREFIX = 'tbl_user_preferences';
 const STORAGE_KEY = `${STORAGE_KEY_PREFIX}_v${STORAGE_VERSION}`;
 
+// The default naming pattern before {translatedName} existed. Most installs
+// have it saved in .env (the Save button always writes the field), so it is
+// upgraded on the way to the field until the user edits the pattern; from
+// then on their choice is kept as is, the old default included.
+const LEGACY_FILENAME_PATTERN = '{originalName} ({targetLang}).{ext}';
+const DEFAULT_FILENAME_PATTERN = '{translatedName} ({targetLang}).{ext}';
+
 /**
  * Preference keys mirrored to the server so they follow the user across devices.
  *
@@ -196,6 +203,11 @@ export const SettingsManager = {
                 element.addEventListener(event, () => this._markEnvDirty());
             }
         });
+
+        // A pattern the user typed is theirs: never upgrade it again.
+        DomHelpers.getElement('outputFilenamePattern')?.addEventListener('input', () => {
+            this.saveLocalPreferences({ filenamePatternEdited: true });
+        });
     },
 
     /**
@@ -337,7 +349,8 @@ export const SettingsManager = {
 
         // Apply output filename pattern (naming convention)
         if (prefs.outputFilenamePattern) {
-            DomHelpers.setValue('outputFilenamePattern', prefs.outputFilenamePattern);
+            DomHelpers.setValue('outputFilenamePattern',
+                this.upgradeFilenamePattern(prefs.outputFilenamePattern));
         }
 
         // Apply last provider AFTER endpoints are set
@@ -800,6 +813,20 @@ export const SettingsManager = {
                 // Otherwise keep it pending until the list has loaded
             }
         }
+    },
+
+    /**
+     * A stored naming pattern as the form should show and use it: the
+     * pre-{translatedName} default becomes the current default, unless the
+     * user has edited the pattern in this browser.
+     * @param {string} pattern - Pattern from .env or localStorage
+     * @returns {string} Pattern to put in the field
+     */
+    upgradeFilenamePattern(pattern) {
+        if (pattern !== LEGACY_FILENAME_PATTERN || this.getLocalPreferences().filenamePatternEdited) {
+            return pattern;
+        }
+        return DEFAULT_FILENAME_PATTERN;
     },
 
     /**

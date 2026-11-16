@@ -40,8 +40,8 @@
   "openai_local_servers_hint": "Serveurs locaux : llama.cpp (9931), LM Studio (1234), vLLM, etc.",
 
   "naming_convention_label": "Convention de nommage",
-  "naming_convention_input_title": "Utilisez {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} comme variables",
-  "naming_convention_help": "Variables : {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>Exemple : {originalName} ({targetLang}) ({model})_{date}.{ext}",
+  "naming_convention_input_title": "Utilisez {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext} comme variables",
+  "naming_convention_help": "Variables : {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}<br>{translatedName} est le nom d'origine traduit dans la langue cible par le modèle (une requête supplémentaire par fichier).<br>Exemple : {translatedName} ({targetLang}) ({model})_{date}.{ext}",
 
   "disable_auto_pause_title": "Ne pas mettre en pause automatiquement sur limite de débit (HTTP 429)",
   "disable_auto_pause_description": "Par défaut, la traduction est mise en pause après une limite de débit du fournisseur et vous demande de reprendre manuellement. Activez cette option pour garder la traduction en cours : elle attendra <code>Retry-After</code> secondes (ou 60 s par défaut) et reprendra automatiquement depuis le dernier point de reprise. Utile pour les romans longs sur les API gratuites. Cliquez sur « Interrompre » à tout moment pour annuler la reprise automatique.",

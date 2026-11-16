@@ -14,6 +14,7 @@ A desktop app that translates **books**, **subtitles**, and **documents** with A
 
 - **No size limit.** Process documents of any length - from a single page to thousand-page novels. The intelligent chunking system handles unlimited content while preserving context between segments.
 - **Perfect preservation.** Your documents come out exactly as they went in: EPUB formatting, styles, and structure remain intact. SRT timecodes stay perfectly synchronized. Every tag, every timestamp, every formatting detail is preserved.
+- **Translated file names.** The result is saved under a name in the target language: `Le Petit Prince - tome 1.epub` becomes `The Little Prince - Volume 1 (English).epub`. One extra LLM call per file; switch the naming pattern back to `{originalName}` in the settings to keep the original name.
 - **Resume anytime.** Interrupted translation? Pick up exactly where you left off. The checkpoint system saves progress automatically.
 - **Reusable writing styles.** Extract a style preset from sample books (or write one by hand) and apply it to every chunk for a consistent register, rhythm, and imagery across the whole translation.
 - **Auto glossary & style.** No glossary or preset ready? Pick Auto in the dropdown and the app derives both straight from the document being translated - one extra LLM call each before the job starts, nothing saved.

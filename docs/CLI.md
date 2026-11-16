@@ -24,7 +24,7 @@ python translate.py -i input_file -o output_file
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-o, --output` | Output file path | Auto-generated as `{original} ({target_lang}).{ext}` |
+| `-o, --output` | Output file path. `{translatedName}` in the file name is replaced by the input file's name translated into the target language (one extra request to the model; the original name is kept if that fails) | Auto-generated as `{original} ({target_lang}).{ext}` |
 
 ### Languages
 
@@ -127,6 +127,9 @@ python translate.py -i paper.pdf -tl French
 
 # Custom output filename
 python translate.py -i book.txt -o my_custom_name.txt -tl French
+
+# Output named after the translated file name, e.g. "Le Petit Prince (French).epub"
+python translate.py -i "The Little Prince.epub" -o "{translatedName} (French).epub" -tl French
 ```
 
 PDF input must be a text PDF (scanned PDFs are rejected, there is no OCR). The output is a new, reflowed PDF that keeps headings, paragraphs, lists and images, rebuilds ruled tables as tables, and preserves paragraph colours, background boxes and the font family (serif, sans-serif, monospace), but not the original page layout or bold and colour inside a sentence; multi-column layouts are best effort. Refinement is not available for PDF yet: `--refine` is ignored with a warning and `--refine-only` exits with an error.

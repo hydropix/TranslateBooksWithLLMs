@@ -85,7 +85,9 @@ function resolveLanguageValue(selectId, customId, fallback) {
 
 /**
  * Generate output filename based on pattern.
- * Supported placeholders: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}
+ * Supported placeholders: {translatedName}, {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}
+ * {translatedName} is passed through untouched: the server replaces it with
+ * the file name translated by the job's model when the job starts.
  *
  * @param {File|{name: string}} file - Original file (only .name is used)
  * @param {string} pattern - Output pattern
@@ -120,7 +122,7 @@ export function generateOutputFilename(file, pattern, overrides = {}) {
         '{ext}': fileExtension
     };
 
-    let result = pattern || '{originalName} ({targetLang}).{ext}';
+    let result = pattern || '{translatedName} ({targetLang}).{ext}';
     for (const [token, value] of Object.entries(replacements)) {
         result = result.split(token).join(value);
     }
@@ -859,7 +861,7 @@ export const FileUpload = {
 
         // Get output filename pattern
         const outputPattern = DomHelpers.getValue('outputFilenamePattern') ||
-                             "{originalName} ({targetLang}).{ext}";
+                             "{translatedName} ({targetLang}).{ext}";
         const outputFilename = generateOutputFilename(file, outputPattern);
         const fileExtension = file.name.split('.').pop().toLowerCase();
 

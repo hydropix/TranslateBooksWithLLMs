@@ -322,7 +322,8 @@ export const FormManager = {
             
             // Output filename pattern (naming convention)
             if (config.output_filename_pattern) {
-                DomHelpers.setValue('outputFilenamePattern', config.output_filename_pattern);
+                DomHelpers.setValue('outputFilenamePattern',
+                    SettingsManager.upgradeFilenamePattern(config.output_filename_pattern));
             }
 
             // Disable auto-pause on rate limit (runtime behavior default)

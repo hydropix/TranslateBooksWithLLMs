@@ -68,6 +68,9 @@ _OWNED_KEYS = frozenset({
 
 _UPLOAD_PREFIX_RE = re.compile(r'^[0-9a-f]{16}_')
 
+#: Longest source file name kept for display; a longer one is cut at this length.
+INPUT_FILENAME_MAX_CHARS = 200
+
 
 class JobConfigError(ValueError):
     """A request or argument set that cannot become a job.
@@ -122,7 +125,7 @@ def display_input_filename(requested: object, safe_path) -> Optional[str]:
     stripped. Returns None when neither is available.
     """
     if isinstance(requested, str) and requested.strip():
-        return os.path.basename(requested.strip())[:200]
+        return os.path.basename(requested.strip())[:INPUT_FILENAME_MAX_CHARS]
     if safe_path is not None:
         return _UPLOAD_PREFIX_RE.sub('', safe_path.name, count=1)
     return None

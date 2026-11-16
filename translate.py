@@ -170,7 +170,9 @@ def build_parser() -> argparse.ArgumentParser:
                "on HTTP 429 — useful to chain free-tier accounts.",
     )
     parser.add_argument("-i", "--input", default=None, help="Path to the input file (text, EPUB, SRT, PGN, DOCX or PDF). Required unless --resume is given.")
-    parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
+    parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix. "
+                             "{translatedName} in the file name is replaced by the input file's name "
+                             "translated into the target language.")
     parser.add_argument("--resume", default=None, metavar="JOB_ID", help="Resume an interrupted, rate-limited or partial CLI job from its checkpoint (the id is printed when the job stops).")
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")

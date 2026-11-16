@@ -130,8 +130,12 @@ def _resume_job(args, checkpoint_manager) -> JobConfig:
     data = checkpoint_manager.load_checkpoint(args.resume)
     if not data:
         raise JobConfigError(f"No checkpoint found for job '{args.resume}'.")
-    stored = data['job']['config']
-    input_path = stored.get('preserved_input_path') or stored.get('file_path')
+    stored = dict(data['job']['config'] or {})
+    # Configs stored before v1.6.0 lack file_type; the job row always has it.
+    if not stored.get('file_type') and data['job'].get('file_type'):
+        stored['file_type'] = data['job']['file_type']
+    input_path = (stored.get('preserved_input_path') or stored.get('file_path')
+                  or stored.get('input_file_path'))
     if not input_path or not os.path.exists(input_path):
         raise JobConfigError(f"The input file of job '{args.resume}' is no longer available.")
     job = JobConfig.from_persisted(stored, input_path=input_path)

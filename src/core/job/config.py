@@ -62,6 +62,8 @@ _OWNED_KEYS = frozenset({
     'origin', 'output_dir', 'refine_model', 'refine_llm_provider', 'refine_llm_api_endpoint',
     # Runtime-only markers older handlers wrote into the in-memory config.
     'is_resume', 'resume_from_index', '_auto_resume_last_index', '_auto_resume_stuck_count',
+    # Keys of the slim config CLI jobs stored before v1.6.0 (issue #341).
+    'input_file_path', 'output_file_path', 'model_name',
 })
 
 _UPLOAD_PREFIX_RE = re.compile(r'^[0-9a-f]{16}_')
@@ -369,6 +371,21 @@ class JobConfig:
             operation = OP_REFINE
         else:
             operation = OP_TRANSLATE
+        # CLI jobs created before v1.6.0 stored a slim config: a full
+        # 'output_file_path', 'input_file_path' and 'model_name', and no
+        # 'origin'. Rebuild those as CLI jobs writing to the stored path
+        # (issue #341).
+        legacy_output = stored.get('output_file_path')
+        if legacy_output and not stored.get('output_filename'):
+            stored.setdefault('origin', 'cli')
+            if output_dir is None:
+                output_dir, stored['output_filename'] = os.path.split(legacy_output)
+            else:
+                stored['output_filename'] = os.path.basename(legacy_output)
+        if not stored.get('model') and stored.get('model_name'):
+            stored['model'] = stored['model_name']
+        if not stored.get('file_path') and stored.get('input_file_path'):
+            stored['file_path'] = stored['input_file_path']
         output_name = stored.get('output_filename') or ''
         output_dir = output_dir if output_dir is not None else stored.get('output_dir')
         output_path = os.path.join(output_dir, output_name) if output_dir else output_name

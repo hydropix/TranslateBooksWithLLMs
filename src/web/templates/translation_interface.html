@@ -60,9 +60,11 @@
         /* Top tabs are tier-4 chrome: plain text in the header, the active
            one marked by weight and an accent underline (works in light and
            dark). Icons are dropped to keep the row quiet. */
+        /* Tabs never wrap: when they no longer fit beside the logo and the
+           status, header-layout.js stacks the header instead (.header-stacked). */
         #topTabNav {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             gap: 0 1.1rem;
             margin: 0;
             padding: 0;
@@ -81,6 +83,8 @@
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
+            flex: 0 0 auto;
+            white-space: nowrap;
         }
         .tab-nav .tab-btn .material-symbols-outlined {
             display: none;

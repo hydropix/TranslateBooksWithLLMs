@@ -389,6 +389,37 @@ html.dark .neu-inset-light {
     margin-left: auto;
 }
 
+/* Stacked header, set by js/ui/header-layout.js when the tabs no longer fit
+   beside the logo and the status: logo + status on the first row, the tabs
+   alone on a full-width row below, never wrapping. The mobile breakpoint
+   applies the same layout without waiting for the script. */
+.header.header-stacked {
+    row-gap: 0;
+}
+
+.header.header-stacked .logo-section {
+    order: 1;
+}
+
+.header.header-stacked .status-section {
+    order: 2;
+    margin-left: auto;
+    min-width: 0;
+}
+
+/* .header prefix: the template's inline <style> also targets #topTabNav
+   and loads after this file. */
+.header.header-stacked #topTabNav {
+    order: 3;
+    flex: 0 0 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.header.header-stacked #topTabNav::-webkit-scrollbar {
+    display: none;
+}
+
 .header .status-indicator {
     display: flex;
     align-items: center;

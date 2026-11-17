@@ -27,6 +27,8 @@ import { NotificationsManager } from './ui/notifications-manager.js';
 import { GlossaryManager } from './glossary/glossary-manager.js';
 // Installs window.switchTopTab, used by the template's tab buttons.
 import './ui/tab-router.js';
+// Stacks the header (status above, tabs on their own row) when it gets tight.
+import './ui/header-layout.js';
 import { StyleManager } from './style/style-manager.js';
 
 // ========================================

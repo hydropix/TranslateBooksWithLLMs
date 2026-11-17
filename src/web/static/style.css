@@ -816,8 +816,11 @@ select.form-control {
     background: var(--danger-light-bg);
 }
 
-/* T1: the one filled, raised button of the screen. */
-#translateBtn {
+/* .btn-launch (colour, see the theme block) marks every button that starts
+   a run: translation, sample, extraction, audio generation, resume.
+   .btn-launch--hero is the size of the one big button of a screen
+   (Translate: Start, Sample: Run). */
+.btn-launch--hero {
     min-height: 2.75rem;
     padding-left: 1.5rem;
     padding-right: 1.5rem;
@@ -825,7 +828,7 @@ select.form-control {
     box-shadow: 0 6px 14px -8px rgba(40, 58, 82, 0.6);
 }
 
-#translateBtn:disabled {
+.btn-launch--hero:disabled {
     box-shadow: none;
 }
 
@@ -976,6 +979,14 @@ select.form-control {
 .post-mode-btn.active {
     background: var(--llm-chip-bg);
     color: var(--text-dark);
+}
+
+/* Once files are queued in the zone, the mode is committed: use the same
+   filled-ink treatment as the Sample tab mode toggle. */
+.has-files .post-mode-btn.active,
+.has-files .post-mode-btn.active:hover:not(:disabled) {
+    background: var(--ink);
+    color: var(--paper-hi);
 }
 
 .post-mode-btn:disabled {
@@ -1219,7 +1230,8 @@ select.form-control {
 /* Alert state for a quality-signal counter (e.g. Fallbacks): fallbacks are a
    quality warning, so amber rather than accent; red stays reserved for
    destructive surfaces like .btn-danger (Interrupt / Stop). */
-.stat-card-critical {
+/* Doubled class: outranks the later theme `.stat-card` overrides. */
+.stat-card.stat-card-critical {
     background: var(--warning-light-bg);
     border-color: var(--warning-light-border);
     color: var(--warning-light-text);
@@ -1923,16 +1935,18 @@ input[type="checkbox"] {
     text-decoration: underline;
 }
 
-/* Compact action buttons */
+/* Compact row actions (file queue, Files tab, history, glossary and style
+   lists): one look for every action, solid accent with a white icon; only
+   destructive actions differ, in solid danger red. */
 .file-action-btn {
     padding: 0;
-    background: var(--background-light);
-    border: 1px solid var(--border-light);
-    color: var(--text-dark);
+    background: var(--accent, #1a52ad);
+    border: 1px solid var(--accent, #1a52ad);
+    color: #fff;
     cursor: pointer;
     font-size: 1rem;
     font-weight: 600;
-    transition: all 0.2s;
+    transition: background 0.2s ease, border-color 0.2s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1941,28 +1955,19 @@ input[type="checkbox"] {
     flex-shrink: 0;
 }
 
-.file-action-btn:hover {
-    transform: translateY(-1px);
-}
-
-.file-action-btn.download {
-    color: var(--primary-light);
+.file-action-btn:hover:not(:disabled) {
+    background: var(--accent-hover, #15448f);
+    border-color: var(--accent-hover, #15448f);
 }
 
 .file-action-btn.delete {
-    color: #ef4444;
+    background: var(--danger-light);
+    border-color: var(--danger-light);
 }
 
-.file-action-btn.audiobook {
-    color: #8b5cf6;
-}
-
-.file-action-btn.reveal {
-    color: #f59e0b;
-}
-
-.file-action-btn.open {
-    color: var(--primary-light);
+.file-action-btn.delete:hover:not(:disabled) {
+    background: var(--danger-light-hover, var(--danger-light));
+    border-color: var(--danger-light-hover, var(--danger-light));
 }
 
 /* Action-button group containers (used by Files tab rows + completion card) */
@@ -1973,7 +1978,7 @@ input[type="checkbox"] {
 }
 
 .file-action-group--compact {
-    gap: 0.125rem;
+    gap: 4px;
 }
 
 .file-action-group--labeled {
@@ -4476,10 +4481,13 @@ html.dark .update-overlay__error { color: #fca5a5; }
 .sample-mode-btn {
     padding: 0.5rem 1rem;
 }
-.sample-mode-btn-active {
-    background: var(--primary-light);
-    color: #fff;
-    border-color: var(--primary-light);
+/* Doubled class so it outranks the later `.btn-secondary` theme override,
+   which otherwise wipes the selected state. */
+.sample-mode-btn.sample-mode-btn-active,
+.sample-mode-btn.sample-mode-btn-active:hover {
+    background: var(--ink);
+    color: var(--paper-hi);
+    border-color: var(--ink);
 }
 
 .sample-column-card {
@@ -4902,9 +4910,9 @@ html.dark .sample-badge-fallback {
 .file-test-btn {
     margin-left: auto;
     padding: 4px 10px 4px 8px;
-    border: 1px solid rgba(99, 102, 241, 0.35);
-    background: rgba(99, 102, 241, 0.10);
-    color: #4f46e5;
+    border: 1px solid var(--accent, #1a52ad);
+    background: var(--accent, #1a52ad);
+    color: #fff;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -4916,12 +4924,31 @@ html.dark .sample-badge-fallback {
     flex-shrink: 0;
 }
 .file-test-btn + .file-remove-btn { margin-left: 8px; }
+
 .file-test-btn:hover {
-    background: rgba(99, 102, 241, 0.18);
-    border-color: rgba(99, 102, 241, 0.55);
+    background: var(--accent-hover, #15448f);
+    border-color: var(--accent-hover, #15448f);
 }
 .file-test-btn .material-symbols-outlined { font-size: 16px; }
-html.dark .file-test-btn { color: #a5b4fc; }
+
+/* Queue row, right side: quick test followed by the source-file shortcuts
+   (open / reveal, the Files tab actions) on one line, all solid accent
+   with white content; only quick test keeps a text label. */
+.file-side-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.file-side-actions .file-test-btn { margin-left: 0; }
+.file-side-actions + .file-remove-btn { margin-left: 0; }
+.file-source-actions { gap: 4px; }
+.file-source-actions .file-action-btn {
+    width: 27px;
+    height: 27px;
+}
+.file-source-actions .file-action-btn .material-symbols-outlined { font-size: 16px; }
 
 .quick-test-content { max-width: 720px; }
 
@@ -4932,21 +4959,27 @@ html.dark .file-test-btn { color: #a5b4fc; }
     gap: 4px;
     min-width: 0;
 }
+/* Hand-off to the full comparison: a solid accent button, like the
+   other actions of the queue row. */
 .quick-test-compare-link {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     align-self: flex-start;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--primary-light, #4f46e5);
+    padding: 5px 12px 5px 10px;
+    border: 1px solid var(--accent, #1a52ad);
+    background: var(--accent, #1a52ad);
+    color: #fff;
     font-size: 0.8125rem;
     font-weight: 600;
+    line-height: 1.4;
     cursor: pointer;
-    transition: opacity 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
-.quick-test-compare-link:hover { opacity: 0.75; }
+.quick-test-compare-link:hover {
+    background: var(--accent-hover, #15448f);
+    border-color: var(--accent-hover, #15448f);
+}
 .quick-test-compare-link .material-symbols-outlined { font-size: 1rem; }
 .quick-test-compare-link .quick-test-compare-arrow { transition: transform 0.15s ease; }
 .quick-test-compare-link:hover .quick-test-compare-arrow { transform: translateX(3px); }
@@ -5293,7 +5326,7 @@ html.dark .file-test-btn { color: #a5b4fc; }
         padding-right: 1rem;
     }
 
-    #translateBtn {
+    .btn-launch--hero {
         width: 100%;
     }
 
@@ -5545,18 +5578,18 @@ html.dark .form-control:focus {
     border-color: var(--ink-3);
 }
 
-#translateBtn {
+.btn-launch {
     background: var(--accent);
     border-color: var(--accent);
     color: #fffdf7;
     box-shadow: 0 10px 22px -12px var(--accent);
 }
 
-#translateBtn:hover:not(:disabled) {
+.btn-launch:hover:not(:disabled) {
     background: var(--accent-hover);
 }
 
-#translateBtn:disabled {
+.btn-launch:disabled {
     background: color-mix(in srgb, var(--accent) 45%, var(--paper));
     border-color: transparent;
     opacity: 1;
@@ -6098,4 +6131,148 @@ html.dark .message.error {
     background: var(--danger-light-bg);
     border-color: transparent;
     color: var(--danger-light-text);
+}
+
+/* Style extraction progress panel (extract-from-books modal): a spinner
+   header with elapsed time, an eased gauge, the step list, and provider
+   log lines (retries, rate-limit waits). */
+.style-extract-progress {
+    margin-top: 15px;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border-light);
+    background: rgba(79, 70, 229, 0.04);
+}
+.style-extract-progress-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+}
+.style-extract-progress-head .inline-spinner {
+    margin-left: 0;
+    flex-shrink: 0;
+}
+.style-extract-progress-label {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.style-extract-progress-elapsed {
+    color: var(--text-muted-light);
+    font-size: 0.85rem;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.style-extract-gauge {
+    position: relative;
+    height: 8px;
+    margin: 0.7rem 0 0.8rem;
+    background: var(--border-light);
+    overflow: hidden;
+}
+.style-extract-gauge-fill {
+    position: relative;
+    height: 100%;
+    width: 0;
+    background: #4f46e5;
+    transition: width 0.5s ease-out;
+    overflow: hidden;
+}
+/* Moving sheen so the bar still reads as "alive" while the model thinks. */
+.style-extract-gauge-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+    transform: translateX(-100%);
+    animation: style-extract-sheen 1.6s ease-in-out infinite;
+}
+@keyframes style-extract-sheen {
+    to { transform: translateX(100%); }
+}
+.style-extract-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.88rem;
+}
+.style-extract-step {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.25rem 0;
+}
+.style-extract-step-icon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+.style-extract-step.is-pending .style-extract-step-icon {
+    border: 2px solid var(--border-light);
+    border-radius: 50%;
+}
+.style-extract-step.is-done .style-extract-step-icon {
+    color: #16a34a;
+    font-weight: 700;
+}
+.style-extract-step.is-pending .style-extract-step-title {
+    color: var(--text-muted-light);
+}
+.style-extract-step.is-active .style-extract-step-title {
+    font-weight: 600;
+}
+.style-extract-step-body {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.style-extract-step-detail {
+    color: var(--text-muted-light);
+    font-size: 0.8rem;
+    margin-top: 0.1rem;
+}
+.style-extract-log {
+    margin: 0.6rem 0 0;
+    padding: 0.5rem 0.7rem;
+    list-style: none;
+    font-size: 0.8rem;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+html.dark .style-extract-progress {
+    background: rgba(129, 140, 248, 0.06);
+}
+html.dark .style-extract-gauge-fill {
+    background: #818cf8;
+}
+html.dark .style-extract-step.is-done .style-extract-step-icon {
+    color: #4ade80;
+}
+html.dark .style-extract-log {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.45);
+    color: #fde68a;
+}
+@media (prefers-reduced-motion: reduce) {
+    .style-extract-gauge-fill { transition: none; }
+    .style-extract-gauge-fill::after { animation: none; display: none; }
+}
+
+/* Label above each assembled-prompt preview in the extract modal. */
+.style-preview-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.6rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+}
+.style-preview-label span {
+    color: var(--text-muted-light);
+    font-size: 0.8rem;
 }

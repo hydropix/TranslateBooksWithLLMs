@@ -113,7 +113,7 @@ function formatJobCard(job, hasActiveTranslation, activeNames) {
                 </div>
 
                 <div style="display: flex; gap: 10px; flex-shrink: 0;">
-                    <button class="btn btn-primary" onclick="resumeJob(${jsTid})"
+                    <button class="btn btn-primary btn-launch" onclick="resumeJob(${jsTid})"
                             title="${resumeTitle}"
                             ${hasActiveTranslation ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
                         ${t('translation:job_card_resume_btn')}

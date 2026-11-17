@@ -330,5 +330,44 @@ class TestExtractStyleProviderHandling:
         assert captured.get("api_key") is None
 
 
+class TestExtractStyleStreaming:
+    @staticmethod
+    def _events(response):
+        return [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+    def test_stream_emits_stages_then_result(self, client):
+        """stream=1 -> NDJSON stage events in order, ending with the usual payload."""
+        canned = _canned_style_response(CLEAN_RULES)
+        with patch("src.core.llm.factory.create_llm_provider", return_value=_CannedProvider(canned)):
+            response = _post_extract(
+                client,
+                files=[_upload(SAMPLE_TEXT.encode(), "a.txt"), _upload(SAMPLE_TEXT.encode(), "b.txt")],
+                stream="1",
+            )
+            events = self._events(response)
+
+        assert response.status_code == 200
+        assert response.mimetype == "application/x-ndjson"
+        stages = [e["stage"] for e in events if e["type"] == "stage"]
+        assert stages == ["sampling", "sampling", "llm", "parsing"]
+        sampled = [e for e in events if e["type"] == "file_sampled"]
+        assert [e["file"] for e in sampled] == ["a.txt", "b.txt"]
+        assert events[-1]["type"] == "result"
+        assert len(events[-1]["data"]["rules"]) == 3
+
+    def test_stream_rate_limit_ends_with_error_event(self, client):
+        """A provider error mid-stream ends with an `error` event carrying the status."""
+        provider = _RateLimitedProvider(retry_after=17, provider_name="ollama")
+        with patch("src.core.llm.factory.create_llm_provider", return_value=provider):
+            response = _post_extract(
+                client, files=[_upload(SAMPLE_TEXT.encode(), "novel.txt")], stream="1"
+            )
+            events = self._events(response)
+
+        assert events[-1]["type"] == "error"
+        assert events[-1]["status"] == 429
+        assert events[-1]["data"]["retry_after"] == 17
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

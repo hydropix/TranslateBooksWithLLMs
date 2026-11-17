@@ -631,7 +631,9 @@ function applyColumnToSettings(idx) {
 function setMode(mode) {
     state.mode = mode;
     document.querySelectorAll('#sampleModeButtons .sample-mode-btn').forEach((btn) => {
-        btn.classList.toggle('sample-mode-btn-active', btn.dataset.mode === mode);
+        const active = btn.dataset.mode === mode;
+        btn.classList.toggle('sample-mode-btn-active', active);
+        btn.setAttribute('aria-pressed', String(active));
     });
 }
 
@@ -1262,13 +1264,13 @@ function wireFileInput() {
         ['dragover', 'dragenter'].forEach((evt) => {
             uploadZone.addEventListener(evt, (e) => {
                 e.preventDefault();
-                uploadZone.classList.add('drag-over');
+                uploadZone.classList.add('dragging');
             });
         });
         ['dragleave', 'drop'].forEach((evt) => {
             uploadZone.addEventListener(evt, (e) => {
                 e.preventDefault();
-                uploadZone.classList.remove('drag-over');
+                uploadZone.classList.remove('dragging');
             });
         });
         uploadZone.addEventListener('drop', (e) => {

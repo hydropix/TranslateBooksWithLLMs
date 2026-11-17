@@ -703,9 +703,13 @@ export const ApiClient = {
      * Sample uploaded documents and ask an LLM to characterize their writing style
      * @param {FormData} formData - Multipart body: files[], mode, source_lang, target_lang,
      *   max_chars, sample_count, provider, model, api_key, api_endpoint
+     * @param {Function} [onProgress] - When given, the request asks for NDJSON
+     *   progress events (`stream=1`) and calls `onProgress(event)` for every
+     *   `stage`, `file_sampled` and `log` event before resolving.
      * @returns {Promise<Object>} {rules, summary, suggested_name, assembled, mode, warnings, ...}
      */
-    async extractStyle(formData) {
+    async extractStyle(formData, onProgress) {
+        if (onProgress) formData.set('stream', '1');
         const response = await fetch(`${API_BASE_URL}/api/custom-instructions/extract-style`, {
             method: 'POST',
             body: formData
@@ -715,7 +719,42 @@ export const ApiClient = {
             await handleApiError(response);
         }
 
-        return await response.json();
+        if (!onProgress || !response.body) {
+            return await response.json();
+        }
+
+        // NDJSON stream: one event per line, ending with `result` or `error`.
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let final = null;
+        const handleLine = (line) => {
+            if (!line.trim()) return;
+            const event = JSON.parse(line);
+            if (event.type === 'result' || event.type === 'error') {
+                final = event;
+            } else {
+                onProgress(event);
+            }
+        };
+        for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let newline;
+            while ((newline = buffer.indexOf('\n')) !== -1) {
+                handleLine(buffer.slice(0, newline));
+                buffer = buffer.slice(newline + 1);
+            }
+        }
+        handleLine(buffer + decoder.decode());
+
+        if (final && final.type === 'result') return final.data;
+        const body = (final && final.data) || null;
+        const err = new Error((body && body.error) || 'Style extraction stream ended unexpectedly');
+        err.status = final ? final.status : 0;
+        err.body = body;
+        throw err;
     },
 
     /**

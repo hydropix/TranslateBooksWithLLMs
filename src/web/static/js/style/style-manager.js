@@ -49,6 +49,18 @@ let _extractCandidates = [];
 let _extractSummary = '';
 let _extractAssembleTimer = null;
 let _extractAssembleReqId = 0;
+// Live progress of a running extraction (null when idle). Kept as plain
+// data so the panel can be re-rendered on every event, on the elapsed-time
+// tick and on a locale switch.
+let _extractProgress = null;
+let _extractProgressTimer = null;
+
+const EXTRACT_STEPS = ['upload', 'sampling', 'llm', 'parsing'];
+// Rough chars-per-token ratio, only used to give an order of magnitude.
+const CHARS_PER_TOKEN = 4;
+// Time constant (s) of the eased gauge while the model is thinking: the bar
+// covers ~63% of the LLM segment after this long, then keeps creeping.
+const LLM_GAUGE_TAU_S = 45;
 
 // ========================================
 // Helpers
@@ -1070,13 +1082,195 @@ function _renderExtractResponse(resp) {
     if (createBtn) createBtn.classList.remove('hidden');
 }
 
+// --- Extraction progress panel ---
+
+function _formatElapsed(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const minutes = Math.floor(total / 60);
+    const seconds = String(total % 60).padStart(2, '0');
+    return `${minutes}:${seconds}`;
+}
+
+function _formatNumber(value) {
+    return Number(value || 0).toLocaleString();
+}
+
+function _startExtractProgress() {
+    _extractProgress = {
+        step: 'upload',
+        startedAt: Date.now(),
+        llmStartedAt: null,
+        totalFiles: _extractFiles.length,
+        files: [],
+        currentFile: null,
+        model: '',
+        sampleChars: 0,
+        sampleCount: 0,
+        logs: [],
+    };
+    clearInterval(_extractProgressTimer);
+    _extractProgressTimer = setInterval(_renderExtractProgress, 500);
+    const loading = $('styleExtractLoading');
+    if (loading) loading.classList.remove('hidden');
+    _renderExtractProgress();
+}
+
+function _stopExtractProgress() {
+    clearInterval(_extractProgressTimer);
+    _extractProgressTimer = null;
+    _extractProgress = null;
+    const loading = $('styleExtractLoading');
+    if (loading) loading.classList.add('hidden');
+}
+
+function _onExtractProgressEvent(event) {
+    const p = _extractProgress;
+    if (!p || !event) return;
+    if (event.type === 'stage') {
+        p.step = event.stage === 'sampled' ? 'sampling' : event.stage;
+        if (event.stage === 'sampling') {
+            p.currentFile = { name: event.file, index: event.index, total: event.total };
+        } else if (event.stage === 'llm') {
+            p.llmStartedAt = Date.now();
+            p.model = event.model || '';
+            p.sampleChars = event.sample_chars || 0;
+            p.sampleCount = event.sample_count || 0;
+            p.currentFile = null;
+        }
+    } else if (event.type === 'file_sampled') {
+        p.files.push(event);
+    } else if (event.type === 'log') {
+        p.logs.push({ event: event.event, message: event.message, at: Date.now() });
+    }
+    _renderExtractProgress();
+}
+
+function _extractGaugePercent(p) {
+    const stepIndex = EXTRACT_STEPS.indexOf(p.step);
+    if (p.step === 'upload') return 3;
+    if (p.step === 'sampling') {
+        const done = p.files.length;
+        return 5 + 15 * (p.totalFiles ? done / p.totalFiles : 0);
+    }
+    if (p.step === 'llm') {
+        const seconds = (Date.now() - (p.llmStartedAt || Date.now())) / 1000;
+        return 20 + 75 * (1 - Math.exp(-seconds / LLM_GAUGE_TAU_S));
+    }
+    return stepIndex >= 3 ? 98 : 0;
+}
+
+function _extractStepLabel(step, p) {
+    if (step === 'llm' && p.model) return t('style:extract_step_llm_model', { model: p.model });
+    return t(`style:extract_step_${step}`);
+}
+
+function _extractStepDetails(step, p) {
+    const details = [];
+    if (step === 'sampling') {
+        p.files.forEach((f) => {
+            details.push(f.skipped
+                ? t('style:extract_file_skipped', { file: f.file })
+                : t('style:extract_file_sampled', {
+                    file: f.file,
+                    count: f.sample_count,
+                    chars: _formatNumber(f.sample_chars),
+                    total: _formatNumber(f.full_text_chars),
+                }));
+        });
+        if (p.step === 'sampling' && p.currentFile) {
+            details.push(t('style:extract_file_reading', {
+                file: p.currentFile.name, index: p.currentFile.index, total: p.currentFile.total,
+            }));
+        }
+    } else if (step === 'llm' && p.llmStartedAt) {
+        details.push(t('style:extract_llm_sent', {
+            count: p.sampleCount,
+            chars: _formatNumber(p.sampleChars),
+            tokens: _formatNumber(Math.round(p.sampleChars / CHARS_PER_TOKEN)),
+        }));
+        if (p.step === 'llm') details.push(t('style:extract_llm_waiting'));
+    }
+    return details;
+}
+
+function _renderExtractProgress() {
+    const p = _extractProgress;
+    if (!p) return;
+
+    const label = $('styleExtractProgressLabel');
+    if (label) label.textContent = _extractStepLabel(p.step, p);
+
+    const elapsed = $('styleExtractProgressElapsed');
+    if (elapsed) {
+        elapsed.textContent = t('style:extract_elapsed', { time: _formatElapsed(Date.now() - p.startedAt) });
+    }
+
+    const percent = Math.min(99, Math.round(_extractGaugePercent(p)));
+    const gauge = $('styleExtractGauge');
+    if (gauge) gauge.setAttribute('aria-valuenow', String(percent));
+    const fill = $('styleExtractGaugeFill');
+    if (fill) fill.style.width = `${percent}%`;
+
+    const list = $('styleExtractSteps');
+    if (list) {
+        list.innerHTML = '';
+        const current = EXTRACT_STEPS.indexOf(p.step);
+        EXTRACT_STEPS.forEach((step, index) => {
+            const state = index < current ? 'done' : (index === current ? 'active' : 'pending');
+            const li = document.createElement('li');
+            li.className = `style-extract-step is-${state}`;
+
+            const icon = document.createElement('span');
+            icon.className = 'style-extract-step-icon';
+            if (state === 'active') {
+                icon.classList.add('inline-spinner');
+            } else if (state === 'done') {
+                icon.textContent = '✓';
+            }
+            li.appendChild(icon);
+
+            const body = document.createElement('div');
+            body.className = 'style-extract-step-body';
+            const title = document.createElement('div');
+            title.className = 'style-extract-step-title';
+            title.textContent = _extractStepLabel(step, p);
+            body.appendChild(title);
+            if (state !== 'pending') {
+                _extractStepDetails(step, p).forEach((text) => {
+                    const detail = document.createElement('div');
+                    detail.className = 'style-extract-step-detail';
+                    detail.textContent = text;
+                    body.appendChild(detail);
+                });
+            }
+            li.appendChild(body);
+            list.appendChild(li);
+        });
+    }
+
+    const log = $('styleExtractProgressLog');
+    if (log) {
+        log.innerHTML = '';
+        log.classList.toggle('hidden', p.logs.length === 0);
+        p.logs.slice(-5).forEach((entry) => {
+            const li = document.createElement('li');
+            const key = entry.event === 'llm_retry' ? 'style:extract_log_retry' : 'style:extract_log_provider';
+            li.textContent = t(key, { message: entry.message });
+            log.appendChild(li);
+        });
+    }
+}
+
 async function handleExtractRun() {
     if (_extractFiles.length === 0) return;
 
     const runBtn = $('styleExtractRunBtn');
-    const loading = $('styleExtractLoading');
     if (runBtn) runBtn.disabled = true;
-    if (loading) loading.classList.remove('hidden');
+    const results = $('styleExtractResults');
+    if (results) results.classList.add('hidden');
+    const warningsEl = $('styleExtractWarnings');
+    if (warningsEl) warningsEl.classList.add('hidden');
+    _startExtractProgress();
 
     const modeModel = $('styleExtractModeModel');
     const mode = modeModel && modeModel.checked ? 'model' : 'source';
@@ -1108,16 +1302,16 @@ async function handleExtractRun() {
 
     let resp;
     try {
-        resp = await ApiClient.extractStyle(formData);
+        resp = await ApiClient.extractStyle(formData, _onExtractProgressEvent);
     } catch (err) {
         console.error('Style extraction failed:', err);
         toast.error(t('style:extract_failed', { error: knownApiErrorMessage(err) || err.message || t('glossary:unknown_error') }));
         if (runBtn) runBtn.disabled = false;
-        if (loading) loading.classList.add('hidden');
+        _stopExtractProgress();
         return;
     }
 
-    if (loading) loading.classList.add('hidden');
+    _stopExtractProgress();
     _renderExtractResponse(resp);
 }
 
@@ -1199,8 +1393,7 @@ function openExtractModal() {
     const warnings = $('styleExtractWarnings');
     if (warnings) { warnings.classList.add('hidden'); warnings.innerHTML = ''; }
 
-    const loading = $('styleExtractLoading');
-    if (loading) loading.classList.add('hidden');
+    _stopExtractProgress();
 
     const runBtn = $('styleExtractRunBtn');
     if (runBtn) runBtn.classList.remove('hidden');
@@ -1275,6 +1468,7 @@ function _rerenderExtractModal() {
         });
     }
     _syncCreateEnablement();
+    _renderExtractProgress();
 }
 
 // ========================================

@@ -14,6 +14,7 @@ import { StatusManager } from '../utils/status-manager.js';
 import { QuickTestManager } from '../translation/quick-test.js';
 import { t } from '../i18n/i18n.js';
 import { getFileIcon, createCompactEPUBIcon } from './file-icons.js';
+import { FileActions } from './file-actions.js';
 
 const FILE_QUEUE_STORAGE_KEY = 'tbl_file_queue';
 
@@ -730,8 +731,31 @@ export const FileUpload = {
                 e.stopPropagation();
                 if (btn.disabled) return;
                 this.setPostMode(btn.dataset.mode);
+                this._retargetQueuedPostFiles(btn.dataset.mode);
             });
         });
+    },
+
+    /**
+     * Switch every queued refine / term-fix file to `mode`. Both operations
+     * share the same upload and the same single-language setup, so only the
+     * `operation` field changes.
+     * @param {'refine'|'term_fix'} mode
+     */
+    _retargetQueuedPostFiles(mode) {
+        const filesToProcess = StateManager.getState('files.toProcess') || [];
+        let changed = false;
+        filesToProcess.forEach(f => {
+            const isPost = f.operation === 'refine' || f.operation === 'term_fix';
+            if (isPost && f.status === 'Queued' && f.operation !== mode) {
+                f.operation = mode;
+                changed = true;
+            }
+        });
+        if (!changed) return;
+        StateManager.setState('files.toProcess', filesToProcess);
+        this.notifyFileListChanged();
+        window.dispatchEvent(new CustomEvent('translationOptionsChanged'));
     },
 
     /**
@@ -807,15 +831,25 @@ export const FileUpload = {
         const translateZone = DomHelpers.getElement('fileUpload');
         if (translateZone) translateZone.classList.toggle('zone-disabled', !!op && op !== 'translate');
 
-        // The "already translated" zone stays usable for its queued operation:
-        // pin the switch to that mode and lock the other one.
+        // The "already translated" zone stays usable for its queued operation,
+        // with the switch pinned to that mode. While the files are still
+        // waiting, the switch can retarget them (refine <-> term fix); once
+        // one has left the "Queued" state the other mode is locked.
         const postZone = DomHelpers.getElement('fileUploadRefine');
         if (!postZone) return;
         const postOpQueued = op === 'refine' || op === 'term_fix';
         postZone.classList.toggle('zone-disabled', !!op && !postOpQueued);
+        // Drives the stronger "chosen" styling of the mode switch.
+        postZone.classList.toggle('has-files', postOpQueued);
         if (postOpQueued) this.setPostMode(op);
+        const filesToProcess = StateManager.getState('files.toProcess') || [];
+        const postStarted = postOpQueued && (
+            StateManager.getState('translation.isBatchActive')
+            || filesToProcess.some(f =>
+                (f.operation === 'refine' || f.operation === 'term_fix') && f.status !== 'Queued')
+        );
         postZone.querySelectorAll('.post-mode-btn').forEach(btn => {
-            btn.disabled = postOpQueued && btn.dataset.mode !== op;
+            btn.disabled = postStarted && btn.dataset.mode !== op;
         });
     },
 
@@ -1062,6 +1096,11 @@ export const FileUpload = {
                 // translates them once with the currently-selected LLM/options,
                 // so the user can eyeball quality before a big run. Queued only.
                 // A term fix has its own preview ("Check matches" in its panel).
+                // The source-file shortcuts (open with the OS default app /
+                // show in folder) follow it on the same line.
+                const sideActions = document.createElement('div');
+                sideActions.className = 'file-side-actions';
+
                 if (file.status === 'Queued' && op !== 'term_fix') {
                     const testBtn = document.createElement('button');
                     testBtn.className = 'file-test-btn';
@@ -1072,7 +1111,15 @@ export const FileUpload = {
                         e.stopPropagation();
                         QuickTestManager.open(file);
                     };
-                    header.appendChild(testBtn);
+                    sideActions.appendChild(testBtn);
+                }
+
+                if (file.filePath) {
+                    sideActions.appendChild(this._buildSourceActions(file));
+                }
+
+                if (sideActions.childElementCount > 0) {
+                    header.appendChild(sideActions);
                 }
 
                 // Remove button
@@ -1264,6 +1311,27 @@ export const FileUpload = {
         }
 
         return wrap;
+    },
+
+    /**
+     * Compact open / reveal buttons for the queued source file, the same
+     * actions as the Files tab. The upload's stored name carries a random
+     * prefix, so the /api/files/<name> routes resolve it under uploads/.
+     * @private
+     */
+    _buildSourceActions(file) {
+        const storedName = file.filePath.split(/[\\/]/).pop();
+        const group = FileActions.createActionGroup({
+            actions: ['open', 'reveal'],
+            filename: storedName
+        });
+        group.classList.add('file-source-actions');
+        // Let the stylesheet size the icons like the quick-test button's.
+        group.querySelectorAll('.material-symbols-outlined')
+            .forEach(icon => icon.style.removeProperty('font-size'));
+        // The row itself selects the active file on click.
+        group.addEventListener('click', (e) => e.stopPropagation());
+        return group;
     },
 
     /**

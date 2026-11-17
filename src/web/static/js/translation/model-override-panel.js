@@ -80,7 +80,7 @@ export function overridePanelHtml({
                 &#9888;&#65039; <span data-i18n="translation:resume_style_warning">${DomHelpers.escapeHtml(t('translation:resume_style_warning'))}</span>
             </div>
             <div class="model-override-panel__actions">
-                <button type="button" class="btn btn-primary resume-apply" data-tid="${safeTid}" data-i18n="${safeApplyKey}">${DomHelpers.escapeHtml(t(applyLabelKey))}</button>
+                <button type="button" class="btn btn-primary btn-launch resume-apply" data-tid="${safeTid}" data-i18n="${safeApplyKey}">${DomHelpers.escapeHtml(t(applyLabelKey))}</button>
             </div>
         </div>
     `;

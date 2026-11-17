@@ -17,13 +17,16 @@ All endpoints are mounted at the top level (not under a blueprint prefix) to
 match the pre-existing URLs.
 """
 import asyncio
+import concurrent.futures
+import json
 import logging
 import os
 import platform
+import queue
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
 import yaml
@@ -413,53 +416,7 @@ def create_custom_instruction_blueprint():
                     }), 413
                 file_payloads.append((upload.filename, raw))
 
-            n_files = len(file_payloads)
-            per_file_budget = max_chars // n_files
-            remainder = max_chars - per_file_budget * n_files
-            per_file_samples = max(1, sample_count // n_files)
-
-            pre_warnings: List[str] = []
-            per_file_meta: List[Dict[str, Any]] = []
-            joined_blocks: List[str] = []
-
-            for index, (fname, raw) in enumerate(file_payloads):
-                budget = per_file_budget + (remainder if index == 0 else 0)
-                joined_i, effective_i, full_chars_i = document_sampler.extract_samples_from_upload(
-                    raw, fname, budget, per_file_samples, min_sample_size=_EXTRACT_MIN_SAMPLE_SIZE
-                )
-                if not joined_i:
-                    pre_warnings.append(f"Could not extract any text from '{fname}' — skipped.")
-                    continue
-
-                if effective_i < per_file_samples:
-                    if effective_i == 1 and full_chars_i <= budget:
-                        pre_warnings.append(
-                            f"'{fname}' is short ({full_chars_i} chars) — sent in full instead of "
-                            f"{per_file_samples} excerpts."
-                        )
-                    else:
-                        pre_warnings.append(
-                            f"'{fname}': reduced from {per_file_samples} to {effective_i} excerpts "
-                            f"(each excerpt needs ≥ {_EXTRACT_MIN_SAMPLE_SIZE} chars)."
-                        )
-
-                header = f"\n\n===== EXCERPTS FROM: {fname} =====\n\n"
-                joined_blocks.append(f"{header}{joined_i}")
-                per_file_meta.append({
-                    "filename": fname,
-                    "sample_chars": len(joined_i),
-                    "sample_count": effective_i,
-                    "full_text_chars": full_chars_i,
-                })
-
-            if not joined_blocks:
-                return jsonify({"error": "Could not extract any text from the uploaded files."}), 400
-
-            combined_text = "".join(joined_blocks)
-            sample_chars = len(combined_text)
-
             import src.config as _config
-            from src.core.llm.factory import create_llm_provider
 
             provider_type = (data.get('provider') or _config.LLM_PROVIDER or 'ollama').lower()
             model = data.get('model') or _config.DEFAULT_MODEL
@@ -478,108 +435,262 @@ def create_custom_instruction_blueprint():
                 return jsonify({"error": rejection.message}), 400
             api_key = api_key or None
 
-            try:
-                provider = create_llm_provider(
-                    provider=provider_type,
-                    model=model,
-                    api_endpoint=api_endpoint,
-                    api_key=api_key,
-                    context_window=_EXTRACT_CONTEXT_WINDOW,
-                )
-            except Exception as e:
-                return jsonify({"error": f"Could not initialize provider '{provider_type}': {e}"}), 400
+            # `stream=1` switches the response to NDJSON progress events (one
+            # JSON object per line) ending with a `result` or `error` event;
+            # without it the endpoint keeps its plain JSON contract.
+            stream = str(data.get('stream') or '').lower() in ('1', 'true', 'yes')
 
-            async def _extract_with_cleanup():
-                # Closing the provider on the same loop that opened it lets
-                # httpx finalize its streaming async generators synchronously,
-                # avoiding 'Task was destroyed' warnings on loop teardown.
-                try:
-                    return await extract_style(
-                        text=combined_text,
-                        mode=mode,
-                        source_language=source_lang,
-                        target_language=target_lang,
-                        llm_provider=provider,
-                        max_chars=max_chars,
-                    )
-                finally:
-                    try:
-                        await provider.close()
-                    except Exception:
-                        pass
-
-            def _run_extract():
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-                    try:
-                        return loop.run_until_complete(_extract_with_cleanup())
-                    finally:
-                        try:
-                            loop.run_until_complete(loop.shutdown_asyncgens())
-                        except Exception:
-                            pass
-                finally:
-                    try:
-                        loop.close()
-                    finally:
-                        asyncio.set_event_loop(None)
-
-            # If a loop is already running on this thread, hop to a worker
-            # thread so we don't recurse into it.
-            try:
-                running = asyncio.get_running_loop()
-            except RuntimeError:
-                running = None
-
-            if running is None:
-                style, extract_warnings = _run_extract()
-            else:
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    style, extract_warnings = pool.submit(_run_extract).result()
-
-            combined_warnings = pre_warnings + list(extract_warnings or [])
-
-            rules = style.get('rules', [])
-            unflagged_rules = [rule for rule in rules if not rule.get('flags')]
-            context = style.get('context', '')
-            assembled = assemble_instructions(mode, unflagged_rules, context)
-
-            return jsonify({
-                "rules": rules,
-                "summary": style.get('summary', ''),
-                "suggested_name": style.get('suggested_name', 'extracted_style'),
-                "context": context,
-                "assembled": assembled,
-                "mode": mode,
-                "warnings": combined_warnings,
-                "provider": provider_type,
-                "model": model,
-                "sample_chars": sample_chars,
-                "per_file": per_file_meta,
-            })
-
-        except RateLimitError as e:
-            logger.warning(
-                f"Rate limited while extracting style: "
-                f"provider={e.provider} retry_after={e.retry_after}"
+            events = _extract_style_events(
+                file_payloads=file_payloads,
+                mode=mode,
+                source_lang=source_lang,
+                target_lang=target_lang,
+                max_chars=max_chars,
+                sample_count=sample_count,
+                provider_type=provider_type,
+                model=model,
+                api_endpoint=api_endpoint,
+                api_key=api_key,
             )
-            payload = {
-                "error": str(e),
-                "provider": e.provider,
-                "retry_after": e.retry_after,
-            }
-            response = jsonify(payload)
-            response.status_code = 429
-            if e.retry_after is not None:
-                response.headers['Retry-After'] = str(e.retry_after)
+
+            if stream:
+                def _ndjson():
+                    for event in events:
+                        if event.get('type') == 'error':
+                            event = {k: v for k, v in event.items() if k != 'headers'}
+                        yield json.dumps(event, ensure_ascii=False) + '\n'
+
+                return Response(
+                    _ndjson(),
+                    mimetype='application/x-ndjson',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+                )
+
+            final: Dict[str, Any] = {}
+            for event in events:
+                if event.get('type') in ('result', 'error'):
+                    final = event
+            if final.get('type') == 'result':
+                return jsonify(final['data'])
+            response = jsonify(final.get('data') or {"error": "Style extraction failed"})
+            response.status_code = final.get('status', 500)
+            for name, value in (final.get('headers') or {}).items():
+                response.headers[name] = value
             return response
+
         except Exception as e:
             logger.error(f"Error extracting style: {e}", exc_info=True)
             return jsonify({"error": str(e)}), 500
 
     return bp
+
+
+def _extract_style_events(
+    *,
+    file_payloads: List[Tuple[str, bytes]],
+    mode: str,
+    source_lang: str,
+    target_lang: str,
+    max_chars: int,
+    sample_count: int,
+    provider_type: str,
+    model: str,
+    api_endpoint: Optional[str],
+    api_key: Optional[str],
+) -> Iterator[Dict[str, Any]]:
+    """Run style extraction as a sequence of progress events.
+
+    Yields `stage` events (`sampling`, `sampled`, `llm`, `parsing`), `log`
+    events relayed from the provider (retries, rate-limit waits), and
+    exactly one terminal event: `{"type": "result", "data": {...}}` or
+    `{"type": "error", "status": int, "data": {...}, "headers": {...}}`.
+    Everything it needs is passed in, so it can run after the request
+    context is gone (streamed response).
+    """
+    def _error(status: int, payload: Dict[str, Any], headers: Optional[Dict[str, str]] = None):
+        return {"type": "error", "status": status, "data": payload, "headers": headers or {}}
+
+    try:
+        n_files = len(file_payloads)
+        per_file_budget = max_chars // n_files
+        remainder = max_chars - per_file_budget * n_files
+        per_file_samples = max(1, sample_count // n_files)
+
+        pre_warnings: List[str] = []
+        per_file_meta: List[Dict[str, Any]] = []
+        joined_blocks: List[str] = []
+
+        for index, (fname, raw) in enumerate(file_payloads):
+            yield {
+                "type": "stage", "stage": "sampling",
+                "file": fname, "index": index + 1, "total": n_files,
+            }
+            budget = per_file_budget + (remainder if index == 0 else 0)
+            joined_i, effective_i, full_chars_i = document_sampler.extract_samples_from_upload(
+                raw, fname, budget, per_file_samples, min_sample_size=_EXTRACT_MIN_SAMPLE_SIZE
+            )
+            if not joined_i:
+                pre_warnings.append(f"Could not extract any text from '{fname}' — skipped.")
+                yield {
+                    "type": "file_sampled", "file": fname, "index": index + 1,
+                    "total": n_files, "skipped": True,
+                }
+                continue
+
+            if effective_i < per_file_samples:
+                if effective_i == 1 and full_chars_i <= budget:
+                    pre_warnings.append(
+                        f"'{fname}' is short ({full_chars_i} chars) — sent in full instead of "
+                        f"{per_file_samples} excerpts."
+                    )
+                else:
+                    pre_warnings.append(
+                        f"'{fname}': reduced from {per_file_samples} to {effective_i} excerpts "
+                        f"(each excerpt needs ≥ {_EXTRACT_MIN_SAMPLE_SIZE} chars)."
+                    )
+
+            header = f"\n\n===== EXCERPTS FROM: {fname} =====\n\n"
+            joined_blocks.append(f"{header}{joined_i}")
+            per_file_meta.append({
+                "filename": fname,
+                "sample_chars": len(joined_i),
+                "sample_count": effective_i,
+                "full_text_chars": full_chars_i,
+            })
+            yield {
+                "type": "file_sampled", "file": fname, "index": index + 1, "total": n_files,
+                "skipped": False, "full_text_chars": full_chars_i,
+                "sample_chars": len(joined_i), "sample_count": effective_i,
+            }
+
+        if not joined_blocks:
+            yield _error(400, {"error": "Could not extract any text from the uploaded files."})
+            return
+
+        combined_text = "".join(joined_blocks)
+        sample_chars = len(combined_text)
+
+        from src.core.llm.factory import create_llm_provider
+
+        # Provider log lines (retry, rate-limit wait, request failure) are
+        # relayed to the client as `log` events while the request runs.
+        log_queue: "queue.Queue[Tuple[str, str]]" = queue.Queue()
+
+        def _log_callback(event: str, message: str) -> None:
+            log_queue.put((event, message))
+
+        try:
+            provider = create_llm_provider(
+                provider=provider_type,
+                model=model,
+                api_endpoint=api_endpoint,
+                api_key=api_key,
+                context_window=_EXTRACT_CONTEXT_WINDOW,
+                log_callback=_log_callback,
+            )
+        except Exception as e:
+            yield _error(400, {"error": f"Could not initialize provider '{provider_type}': {e}"})
+            return
+
+        yield {
+            "type": "stage", "stage": "llm",
+            "provider": provider_type, "model": model,
+            "sample_chars": sample_chars,
+            "sample_count": sum(meta["sample_count"] for meta in per_file_meta),
+        }
+
+        async def _extract_with_cleanup():
+            # Closing the provider on the same loop that opened it lets
+            # httpx finalize its streaming async generators synchronously,
+            # avoiding 'Task was destroyed' warnings on loop teardown.
+            try:
+                return await extract_style(
+                    text=combined_text,
+                    mode=mode,
+                    source_language=source_lang,
+                    target_language=target_lang,
+                    llm_provider=provider,
+                    max_chars=max_chars,
+                )
+            finally:
+                try:
+                    await provider.close()
+                except Exception:
+                    pass
+
+        def _run_extract():
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(_extract_with_cleanup())
+                finally:
+                    try:
+                        loop.run_until_complete(loop.shutdown_asyncgens())
+                    except Exception:
+                        pass
+            finally:
+                try:
+                    loop.close()
+                finally:
+                    asyncio.set_event_loop(None)
+
+        # The LLM call runs on a worker thread (its own event loop, never
+        # nested in a running one) so this generator can keep relaying
+        # provider log lines while it waits.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_run_extract)
+            while True:
+                try:
+                    event, message = log_queue.get(timeout=0.25)
+                    yield {"type": "log", "event": event, "message": message}
+                    continue
+                except queue.Empty:
+                    pass
+                if future.done():
+                    break
+            while not log_queue.empty():
+                event, message = log_queue.get_nowait()
+                yield {"type": "log", "event": event, "message": message}
+            style, extract_warnings = future.result()
+
+        yield {"type": "stage", "stage": "parsing"}
+
+        combined_warnings = pre_warnings + list(extract_warnings or [])
+
+        rules = style.get('rules', [])
+        unflagged_rules = [rule for rule in rules if not rule.get('flags')]
+        context = style.get('context', '')
+        assembled = assemble_instructions(mode, unflagged_rules, context)
+
+        yield {"type": "result", "data": {
+            "rules": rules,
+            "summary": style.get('summary', ''),
+            "suggested_name": style.get('suggested_name', 'extracted_style'),
+            "context": context,
+            "assembled": assembled,
+            "mode": mode,
+            "warnings": combined_warnings,
+            "provider": provider_type,
+            "model": model,
+            "sample_chars": sample_chars,
+            "per_file": per_file_meta,
+        }}
+
+    except RateLimitError as e:
+        logger.warning(
+            f"Rate limited while extracting style: "
+            f"provider={e.provider} retry_after={e.retry_after}"
+        )
+        headers = {'Retry-After': str(e.retry_after)} if e.retry_after is not None else {}
+        yield _error(429, {
+            "error": str(e),
+            "provider": e.provider,
+            "retry_after": e.retry_after,
+        }, headers)
+    except Exception as e:
+        logger.error(f"Error extracting style: {e}", exc_info=True)
+        yield _error(500, {"error": str(e)})
 
 
 def _validate_write_body(

@@ -248,6 +248,22 @@ Each file's excerpts are pulled independently with `extract_samples_from_upload(
 
 If a file yields no usable text it is skipped with a warning; if a file's budget can't afford `sample_count` excerpts of at least 1200 characters, the excerpt count is reduced (or the whole file is sent if it's shorter than its budget) and a warning is added. If every uploaded file fails, the endpoint returns 400 instead of calling the LLM.
 
+### Progress streaming
+
+Send the form field `stream=1` to get the response as NDJSON (one JSON object per line) instead of a single JSON body. The web UI uses this to show its progress panel. Events, in order:
+
+| `type` | Fields | When |
+|---|---|---|
+| `stage` | `stage: "sampling"`, `file`, `index`, `total` | Before each file is sampled |
+| `file_sampled` | `file`, `skipped`, `sample_count`, `sample_chars`, `full_text_chars` | After each file is sampled |
+| `stage` | `stage: "llm"`, `provider`, `model`, `sample_chars`, `sample_count` | Right before the LLM call |
+| `log` | `event`, `message` | Provider log lines during the call (retries, rate-limit waits) |
+| `stage` | `stage: "parsing"` | After the LLM answered |
+| `result` | `data` (the usual JSON body) | Success, last line |
+| `error` | `status`, `data` (`{"error": ...}`) | Failure, last line |
+
+Request validation errors (bad mode, unsupported file type, too many files, rejected endpoint) are still returned as a plain JSON 4xx before any streaming starts.
+
 The LLM call itself reuses the provider/model/key already configured for translation (context window fixed at 16384, independent of `OLLAMA_NUM_CTX`) — you don't need a separate key for extraction.
 
 ---

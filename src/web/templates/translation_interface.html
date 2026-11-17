@@ -516,7 +516,7 @@
 
                 <!-- Action Buttons -->
                 <div style="text-align: center; margin-top: 30px; display: flex; justify-content: center; gap: 15px; align-items: center; flex-wrap: wrap;">
-                    <button class="btn btn-primary" id="translateBtn" onclick="startBatchTranslation()" disabled>
+                    <button class="btn btn-primary btn-launch btn-launch--hero" id="translateBtn" onclick="startBatchTranslation()" disabled>
                         <span class="material-symbols-outlined">play_circle</span>
                         <span data-i18n="translation:start_batch">Start</span>
                     </button>
@@ -924,9 +924,9 @@
                     <div class="form-group" style="margin-top: 18px; margin-bottom: 12px;">
                         <label style="font-weight: 600;" data-i18n="sample:mode_label">Mode</label>
                         <div id="sampleModeButtons" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button type="button" class="btn btn-secondary sample-mode-btn sample-mode-btn-active" data-mode="translate" data-i18n="sample:mode_translate">Translate</button>
-                            <button type="button" class="btn btn-secondary sample-mode-btn" data-mode="refine" data-i18n="sample:mode_refine">Refine</button>
-                            <button type="button" class="btn btn-secondary sample-mode-btn" data-mode="translate_refine" data-i18n="sample:mode_translate_refine">Translate + Refine</button>
+                            <button type="button" class="btn btn-secondary sample-mode-btn sample-mode-btn-active" data-mode="translate" aria-pressed="true" data-i18n="sample:mode_translate">Translate</button>
+                            <button type="button" class="btn btn-secondary sample-mode-btn" data-mode="refine" aria-pressed="false" data-i18n="sample:mode_refine">Refine</button>
+                            <button type="button" class="btn btn-secondary sample-mode-btn" data-mode="translate_refine" aria-pressed="false" data-i18n="sample:mode_translate_refine">Translate + Refine</button>
                         </div>
                     </div>
 
@@ -968,7 +968,7 @@
 
                     <!-- Action buttons -->
                     <div style="text-align: center; margin-top: 24px; display: flex; justify-content: center; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <button class="btn btn-primary" id="sampleRunBtn">
+                        <button class="btn btn-primary btn-launch btn-launch--hero" id="sampleRunBtn">
                             <span class="material-symbols-outlined">play_circle</span>
                             <span data-i18n="sample:run">Run</span>
                         </button>
@@ -1338,7 +1338,7 @@
                 <span class="material-symbols-outlined">folder_open</span>
                 <h2 data-i18n="files:title">File Management</h2>
                 <div style="margin-left: auto; display: flex; gap: 0.5rem;">
-                    <button class="btn btn-secondary" onclick="openOutputFolder()" data-i18n-attr="title:files:open_folder_title" title="Open translations folder" style="padding: 0.5rem 1rem;">
+                    <button class="btn btn-secondary glossary-toolbar-btn" onclick="openOutputFolder()" data-i18n-attr="title:files:open_folder_title" title="Open translations folder">
                         <span class="material-symbols-outlined">folder_open</span>
                         <span data-i18n="files:open_folder">Open folder</span>
                     </button>
@@ -1464,7 +1464,7 @@
                         <span class="material-symbols-outlined">arrow_back</span>
                     </button>
                     <h2 id="glossaryEditorTitle" data-i18n="glossary:editor_title" style="margin: 0;">Edit glossary</h2>
-                    <button type="button" class="btn btn-secondary" id="glossaryEditorDeleteBtn" data-i18n-attr="title:glossary:editor_delete_title" title="Delete this glossary" style="margin-left: auto; padding: 0.5rem; color: #ef4444;">
+                    <button type="button" class="btn btn-danger" id="glossaryEditorDeleteBtn" data-i18n-attr="title:glossary:editor_delete_title" title="Delete this glossary" style="margin-left: auto; padding: 0.5rem;">
                         <span class="material-symbols-outlined">delete</span>
                     </button>
                 </div>
@@ -1660,7 +1660,7 @@
                     <!-- Bulk actions bar (shown only when rows are selected) -->
                     <div id="glossaryBulkBar" class="glossary-bulk-bar" style="display: none;">
                         <span class="glossary-bulk-count"><span id="glossaryBulkCount">0</span> <span data-i18n="glossary:bulk_selected">selected</span></span>
-                        <button type="button" class="btn btn-secondary glossary-toolbar-btn" id="glossaryBulkDeleteBtn">
+                        <button type="button" class="btn btn-danger glossary-toolbar-btn" id="glossaryBulkDeleteBtn">
                             <span class="material-symbols-outlined">delete</span>
                             <span data-i18n="common:delete">Delete</span>
                         </button>
@@ -1805,7 +1805,7 @@
                         <span class="material-symbols-outlined">download</span>
                         <span data-i18n="style:export">Export</span>
                     </button>
-                    <button type="button" class="btn btn-secondary glossary-toolbar-btn" id="styleEditorDeleteBtn">
+                    <button type="button" class="btn btn-danger glossary-toolbar-btn" id="styleEditorDeleteBtn">
                         <span class="material-symbols-outlined">delete</span>
                         <span data-i18n="style:delete">Delete</span>
                     </button>
@@ -1927,7 +1927,18 @@
                             </div>
                         </div>
 
-                        <div id="styleExtractLoading" class="hidden" data-i18n="style:extracting" style="margin-top: 15px; color: var(--text-muted-light);">Extracting...</div>
+                        <div id="styleExtractLoading" class="style-extract-progress hidden" role="status" aria-live="polite">
+                            <div class="style-extract-progress-head">
+                                <span class="inline-spinner" aria-hidden="true"></span>
+                                <span id="styleExtractProgressLabel" class="style-extract-progress-label" data-i18n="style:extracting">Extracting...</span>
+                                <span id="styleExtractProgressElapsed" class="style-extract-progress-elapsed"></span>
+                            </div>
+                            <div id="styleExtractGauge" class="style-extract-gauge" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="styleExtractGaugeFill" class="style-extract-gauge-fill"></div>
+                            </div>
+                            <ol id="styleExtractSteps" class="style-extract-steps"></ol>
+                            <ul id="styleExtractProgressLog" class="style-extract-log hidden"></ul>
+                        </div>
                         <div id="styleExtractWarnings" class="ner-warnings hidden"></div>
 
                         <div id="styleExtractResults" class="hidden" style="margin-top: 15px;">
@@ -1962,8 +1973,16 @@
                             </div>
 
                             <h3 data-i18n="style:preview_title">Preview</h3>
-                            <div class="neu-inset-light" style="margin-bottom: 10px;">
+                            <div class="style-preview-label">
+                                <strong data-i18n="style:translation_block_label">Translation instructions</strong>
+                                <span data-i18n="style:preview_translation_hint">Added to every translation request.</span>
+                            </div>
+                            <div class="neu-inset-light" style="margin-bottom: 14px;">
                                 <pre id="stylePreviewTranslation" style="margin: 0; padding: 10px; white-space: pre-wrap; font-family: monospace; font-size: 0.85rem;"></pre>
+                            </div>
+                            <div class="style-preview-label">
+                                <strong data-i18n="style:refinement_block_label">Refinement instructions</strong>
+                                <span data-i18n="style:preview_refinement_hint">Used only by the optional refinement (polish) pass, which rewrites the finished translation.</span>
                             </div>
                             <div class="neu-inset-light">
                                 <pre id="stylePreviewRefinement" style="margin: 0; padding: 10px; white-space: pre-wrap; font-family: monospace; font-size: 0.85rem;"></pre>
@@ -1971,7 +1990,7 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-primary" id="styleExtractRunBtn">
+                        <button class="btn btn-primary btn-launch" id="styleExtractRunBtn">
                             <span class="material-symbols-outlined">play_arrow</span>
                             <span data-i18n="style:run_extract">Run extraction</span>
                         </button>
@@ -2080,7 +2099,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="ner-modal-cancel" data-i18n="common:cancel">Cancel</button>
-                <button class="btn btn-primary" id="ner-extract-btn">
+                <button class="btn btn-primary btn-launch" id="ner-extract-btn">
                     <span class="material-symbols-outlined">play_arrow</span>
                     <span data-i18n="glossary:ner_extract_btn">Extract</span>
                 </button>
@@ -2100,7 +2119,7 @@
                     <span class="material-symbols-outlined" style="vertical-align: middle;">visibility</span>
                     <span data-i18n="glossary:preview_modal_title">Preview prompt block</span>
                 </h3>
-                <button class="close-btn" id="glossary-preview-close" data-i18n-attr="aria-label:common:close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+                <button class="close-btn" id="glossary-preview-close" data-i18n-attr="aria-label:common:close" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
                 <p data-i18n="glossary:preview_modal_intro" style="margin-top: 0; color: var(--text-muted-light); font-size: 0.9rem;">
@@ -2156,7 +2175,7 @@
                     <span class="material-symbols-outlined">stop_circle</span>
                     <span data-i18n="translation:quicktest_stop">Stop</span>
                 </button>
-                <button class="btn btn-primary" id="quickTestDoneBtn" data-i18n="common:close">Close</button>
+                <button class="btn btn-secondary" id="quickTestDoneBtn" data-i18n="common:close">Close</button>
             </div>
         </div>
     </div>
@@ -2184,7 +2203,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="preflightModalCancel" data-i18n="common:cancel">Cancel</button>
-                <button class="btn btn-primary" id="preflightModalLaunch" data-i18n="translation:preflight_modal_launch">Launch anyway</button>
+                <button class="btn btn-primary btn-launch" id="preflightModalLaunch" data-i18n="translation:preflight_modal_launch">Launch anyway</button>
             </div>
         </div>
     </div>

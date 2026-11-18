@@ -45,6 +45,7 @@ from src.core.llm.rate_limit_handler import (
     compute_wait_time,
     handle_rate_limit,
     is_retryable_http_status,
+    wait_for_request_slot,
 )
 from src.core.llm.utils.error_classification import (
     NEVER_OVERFLOW_STATUSES,
@@ -329,6 +330,8 @@ class LLMProvider(ABC):
         rate_limit_events = 0
         state: Dict[str, Any] = {}
         while attempt < policy.max_attempts:
+            # Before acquire(), so the key is picked after the wait.
+            await wait_for_request_slot(self.provider_name)
             current_key = await self._key_pool.acquire() if self._key_pool else None
             request = LLMRequest(
                 prompt=prompt, system_prompt=system_prompt, model=model,

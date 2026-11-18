@@ -310,6 +310,12 @@ RETRY_BACKOFF_FACTOR = float(os.getenv('RETRY_BACKOFF_FACTOR', '2'))
 RETRY_MAX_DELAY = float(os.getenv('RETRY_MAX_DELAY', '30'))
 RETRY_JITTER = float(os.getenv('RETRY_JITTER', '0.25'))
 
+# Minimum seconds between the starts of two LLM requests to the same provider,
+# shared by every job and parallel worker in this process. Use a bit above
+# 60 / RPM (e.g. 6.5 for a 10 RPM quota). Retries count as requests. 0 disables
+# the pacing.
+REQUEST_INTERVAL = max(0.0, float(os.getenv('REQUEST_INTERVAL', '0')))
+
 # Gemini safety filter threshold applied to all four harm categories
 # (HARASSMENT, HATE_SPEECH, SEXUALLY_EXPLICIT, DANGEROUS_CONTENT). Default is
 # BLOCK_NONE because the tool is used to translate adult-themed novels where

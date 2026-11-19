@@ -200,7 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
     prompt_group.add_argument("--refine-only", action="store_true", dest="refine_only", help="Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language.")
     prompt_group.add_argument("--glossary", default=None, help="Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent.")
     prompt_group.add_argument("--glossary-id", default=None, help="Glossary ID (from glossaries.db) injected per-chunk to keep entity translations consistent.")
-    prompt_group.add_argument("--custom-instruction", default=None, help="Path to a custom instruction file (.yaml) injected per-chunk to keep entity translations consistent.")
+    prompt_group.add_argument("--custom-instruction", default=None, help="Name of a custom instruction file (from Custom_Instructions) injected per-chunk to keep entity translations consistent.")
     prompt_group.add_argument(
         "--auto-glossary", action="store_true", dest="auto_glossary",
         help="Derive a throwaway glossary from the input document with one extra LLM call "

@@ -78,7 +78,7 @@ python translate.py -i input_file -o output_file
 | `--refine-only` | Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language. |
 | `--glossary` | Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent |
 | `--glossary-id` | Glossary ID (from glossaries.db) injected per-chunk to keep entity translations consistent |
-| `--custom-instruction` | Path to a custom instruction file (.yaml) injected per-chunk to keep entity translations consistent |
+| `--custom-instruction` | Name of a custom instruction file (from Custom_Instructions) injected per-chunk to keep entity translations consistent |
 | `--auto-glossary` | Derive a throwaway glossary from the input document with one extra LLM call before translating (no file, nothing saved). Ignored when `--glossary` is given or with `--refine-only`. |
 | `--auto-style` | Derive style instructions from the input document with one extra LLM call before translating (no preset file, nothing saved). |
 

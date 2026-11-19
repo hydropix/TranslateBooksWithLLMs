@@ -732,6 +732,8 @@ class JobConfig:
         prompt_options: Dict[str, Any] = {
             'text_cleanup': bool(getattr(args, 'text_cleanup', False)),
         }
+        if custom_instruction := getattr(args, 'custom_instruction', None):
+            prompt_options['custom_instruction_file'] = custom_instruction
         glossary_file = getattr(args, 'glossary', None)
         if glossary_file and operation != OP_TERM_FIX:
             try:

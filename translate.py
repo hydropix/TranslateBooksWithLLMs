@@ -20,6 +20,7 @@ ensure_utf8_stdio()
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
+from src.api.translation_state import get_glossary_store
 from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.tts.tts_config import TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
@@ -152,7 +153,7 @@ def run_cli_job(job: JobConfig, logger, *, translation_id=None, checkpoint_manag
     checkpoint_manager = checkpoint_manager or CheckpointManager()
     translation_id = translation_id or f"cli_{uuid.uuid4().hex[:8]}"
     runner = JobRunner(job, translation_id=translation_id, checkpoint_manager=checkpoint_manager,
-                       sinks=CliJobSinks(logger), is_resume=is_resume,
+                       sinks=CliJobSinks(logger), is_resume=is_resume, glossary_store=get_glossary_store,
                        temp_dir=job.output_dir or None, engines=engines)
     result = asyncio.run(runner.run())
     nothing_translated = bool(result.verdict and result.verdict.nothing_translated)
@@ -192,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     prompt_group.add_argument("--refine", action="store_true", help="Run a refinement pass on the translated output to polish quality and literary style (TXT, SRT, EPUB, DOCX).")
     prompt_group.add_argument("--refine-only", action="store_true", dest="refine_only", help="Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language.")
     prompt_group.add_argument("--glossary", default=None, help="Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent.")
+    prompt_group.add_argument("--glossary-id", default=None, help="Glossary ID (from glossaries.db) injected per-chunk to keep entity translations consistent.")
     prompt_group.add_argument("--custom-instruction", default=None, help="Path to a custom instruction file (.yaml) injected per-chunk to keep entity translations consistent.")
     prompt_group.add_argument(
         "--auto-glossary", action="store_true", dest="auto_glossary",

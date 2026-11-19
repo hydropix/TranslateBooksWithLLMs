@@ -58,6 +58,17 @@ python translate.py -i input_file -o output_file
 | `--poe_api_key` | Poe API key — get one at [poe.com/api_key](https://poe.com/api_key) |
 | `--nim_api_key` | NVIDIA NIM API key — get one at [build.nvidia.com](https://build.nvidia.com/) |
 
+### API Endpoints
+
+| Option | Description |
+|--------|-------------|
+| `--openrouter_api_endpoint` | OpenRouter API endpoint |
+| `--openai_api_endpoint` | OpenAI API endpoint |
+| `--mistral_api_endpoint` | Mistral API endpoint |
+| `--deepseek_api_endpoint` | DeepSeek API endpoint |
+| `--poe_api_endpoint` | Poe API endpoint |
+| `--nim_api_endpoint` | NVIDIA NIM API endpoint |
+
 ### Prompt Options
 
 | Option | Description |

@@ -684,6 +684,7 @@ class JobConfig:
             operation = OP_TRANSLATE
 
         needs_llm = not (operation == OP_TERM_FIX and term_fix['mode'] == 'literal')
+        api_endpoint = getattr(args, f'{provider_name}_api_endpoint', None) if provider_name in KEY_PROVIDERS else None
         api_key = getattr(args, f'{provider_name}_api_key', None) if provider_name in KEY_PROVIDERS else None
         if needs_llm:
             if provider_name in KEY_PROVIDERS and key_required(provider_name, args.api_endpoint) \
@@ -779,7 +780,7 @@ class JobConfig:
             refine_after=refine and operation == OP_TRANSLATE,
             term_fix=term_fix,
             provider=ProviderConfig(provider=provider_name, model=model,
-                                    endpoint=args.api_endpoint, api_key=api_key or None),
+                                    endpoint=api_endpoint or args.api_endpoint, api_key=api_key or None),
             context_window=None,
             auto_adjust_context=True,
             min_chunk_size=5,

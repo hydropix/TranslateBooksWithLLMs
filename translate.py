@@ -21,7 +21,7 @@ ensure_utf8_stdio()
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
 from src.api.translation_state import get_glossary_store
-from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
+from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, OPENAI_API_ENDPOINT, OPENROUTER_API_ENDPOINT, MISTRAL_API_ENDPOINT, DEEPSEEK_API_ENDPOINT, POE_API_ENDPOINT, NIM_API_ENDPOINT, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.tts.tts_config import TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -185,6 +185,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deepseek_api_key", default=DEEPSEEK_API_KEY, help="DeepSeek API key (required if using deepseek provider).")
     parser.add_argument("--poe_api_key", default=POE_API_KEY, help="Poe API key (required if using poe provider). Get your key at https://poe.com/api_key")
     parser.add_argument("--nim_api_key", default=NIM_API_KEY, help="NVIDIA NIM API key (required if using nim provider). Get your key at https://build.nvidia.com/")
+    parser.add_argument("--openai_api_endpoint", default=OPENAI_API_ENDPOINT, help="OpenAI API endpoint.")
+    parser.add_argument("--openrouter_api_endpoint", default=OPENROUTER_API_ENDPOINT, help="OpenRouter API endpoint.")
+    parser.add_argument("--mistral_api_endpoint", default=MISTRAL_API_ENDPOINT, help="Mistral API endpoint.")
+    parser.add_argument("--deepseek_api_endpoint", default=DEEPSEEK_API_ENDPOINT, help="DeepSeek API endpoint.")
+    parser.add_argument("--poe_api_endpoint", default=POE_API_ENDPOINT, help="Poe API endpoint.")
+    parser.add_argument("--nim_api_endpoint", default=NIM_API_ENDPOINT, help="NVIDIA NIM API endpoint.")
     parser.add_argument("--parallel", type=int, default=PARALLEL_TRANSLATIONS, metavar="N", help=f"Number of chunks translated concurrently (default: {PARALLEL_TRANSLATIONS}). Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context chaining.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
 

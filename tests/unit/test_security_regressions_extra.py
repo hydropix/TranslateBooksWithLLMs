@@ -15,7 +15,7 @@ replaced Windows-invalid characters and prefixed reserved device names.
 import io
 import os
 import zipfile
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -24,7 +24,7 @@ from flask import Flask
 from src.api.blueprints.file_routes import create_file_blueprint
 from src.api.blueprints.security_routes import create_security_blueprint
 from src.api.services.file_service import FileService
-from src.api.services.path_validator import PathValidator
+from src.api.services.path_validator import PathValidator, is_windows_device_name
 
 BS = '\\'
 
@@ -55,7 +55,9 @@ def test_DEFECT_output_filename_is_never_a_windows_device_name(requested):
     hard to handle in Explorer and scripts."""
     name = PathValidator.safe_output_filename(requested)
     assert name is not None
-    assert not PureWindowsPath(name).is_reserved(), name
+    # Same device-name rule the validator applies; PureWindowsPath.is_reserved()
+    # cannot be used here: it was removed in Python 3.15.
+    assert not is_windows_device_name(name), name
 
 
 @pytest.mark.parametrize('requested', ['notes:hidden.txt', 'x.txt:evil.bat', 'x.txt::$DATA',

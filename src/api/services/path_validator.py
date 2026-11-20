@@ -2,10 +2,26 @@
 Path validation utilities for secure file operations
 """
 import os
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Optional, Tuple, Union
 
 from src.utils.security import is_within_directory
+
+# DOS device names reserved by Windows (mirrors ntpath._reserved_names as of
+# Python 3.13). pathlib's PureWindowsPath.is_reserved() was deprecated in
+# Python 3.13 and removed in 3.15; its suggested replacement
+# os.path.isreserved()/ntpath.isreserved() only exists on 3.13+, so the check
+# is spelled out here to work on every supported version.
+_WINDOWS_DEVICE_NAMES = frozenset(
+    {'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'}
+    | {f'COM{c}' for c in '123456789¹²³'}
+    | {f'LPT{c}' for c in '123456789¹²³'}
+)
+
+
+def is_windows_device_name(name: str) -> bool:
+    """True when `name`'s stem is a DOS device name ('CON', 'NUL.txt', ...)."""
+    return name.partition('.')[0].rstrip(' ').upper() in _WINDOWS_DEVICE_NAMES
 
 
 class PathValidator:
@@ -59,7 +75,7 @@ class PathValidator:
             return None
         # Device names ('CON', 'NUL.txt', 'COM1.epub', ...) open the device
         # instead of a file on Windows 10 and older.
-        if PureWindowsPath(name).is_reserved():
+        if is_windows_device_name(name):
             name = f"_{name}"
         if Path(name).suffix.lower() not in PathValidator.OUTPUT_EXTENSIONS:
             name = f"{name}.txt"

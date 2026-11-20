@@ -131,7 +131,9 @@ def snapshot_glossary(prompt_options, glossary_store_getter: Optional[Callable[[
     try:
         store = glossary_store_getter()
         glossary = store.get_glossary(int(glossary_id))
-        if glossary and glossary.terms:
+        if glossary is None:
+            prompt_options['glossary_load_error'] = f"glossary {glossary_id} not found"
+        elif glossary.terms:
             prompt_options['glossary_terms'] = glossary.terms_dict
             prompt_options['glossary_name'] = glossary.name
             metadata = glossary.terms_metadata

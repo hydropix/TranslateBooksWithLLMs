@@ -135,7 +135,7 @@ _USER_VISIBLE_ATTRS = ("placeholder", "title", "aria-label", "alt", "label")
 # punctuation, common UI glyphs (sort arrows, close ×, etc.).
 _TRIVIAL_TEXT_RE = re.compile(
     "^[\\s\\d%·•\\-–—|/\\\\*+.,:;!?()\\[\\]{}<>=°@#&'\"`~^$"
-    "⇅×↑↓✕✖"
+    "⇅×↑↓✕✖✓✔"
     "]*$"
 )
 

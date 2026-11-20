@@ -340,6 +340,10 @@ def scripted_llm(monkeypatch):
     _ScriptedLLMClient.script = []
     _ScriptedLLMClient.calls = []
     monkeypatch.setattr(llm_factory_module, "create_llm_provider", _fake_factory(_ScriptedLLMClient))
+    # The scripted "translations" are the English source upper-cased, which the
+    # source-residue check (issue #270) rightly reads as an echo. These tests
+    # count calls for other reasons, so keep that check out of them.
+    monkeypatch.setattr(config_module, "SOURCE_RESIDUE_CHECK_ENABLED", False)
     return _ScriptedLLMClient
 
 

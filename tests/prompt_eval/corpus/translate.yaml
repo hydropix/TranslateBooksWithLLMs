@@ -1,0 +1,210 @@
+# Translation cases for the prompt regression harness.
+#
+# Every text is original prose written for this corpus (no excerpts from
+# published books), 60 to 250 words per case. Paragraphs are separated by a
+# blank line. Keys are the field names of tests/prompt_eval/model.py:Case.
+# When a prompt bug is fixed, add a case here that reproduces it.
+
+cases:
+  - id: T01_plain_paragraphs_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: Paragraph count must survive, including a one-word dialogue paragraph that small models tend to merge or drop.
+    text: |-
+      The ferry left the harbour an hour late, and by the time it cleared the breakwater the light had already turned the colour of weak tea. Marion stood at the rail with her collar raised, watching the town shrink into a row of grey teeth.
+
+      Her brother came up the stairs with two paper cups and handed her one without a word. He had always known when silence was the kinder gift.
+
+      "Do you think he will be there?" he asked at last.
+
+      "Yes."
+
+      She did not add anything else, and he did not press her. The engines thudded beneath their feet, steady as a pulse, and the island grew slowly out of the haze ahead of them.
+
+  - id: T02_plain_repeated_quotes_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    must_not_contain: &t02_must_not_contain
+      - Nothing in this book can be trusted
+      - The sea was calm
+    notes: Issue #270 skip pattern. A short sentence repeated verbatim and a quoted sentence are the parts models leave in English.
+    text: &t02_text |-
+      The lighthouse keeper wrote the same line at the top of every page of his log. The sea was calm. He wrote it even on the nights when the wind tore slates from the roof, because his father had written it before him.
+
+      When the inspector arrived in March, he read the log from beginning to end and frowned. "Nothing in this book can be trusted," he said, closing it with a snap.
+
+      The keeper only shrugged. He poured the inspector a cup of coffee and pointed through the window at the grey water, which lay perfectly still under the morning fog.
+
+      That night, after the inspector had gone, he opened a fresh page and wrote with great care. The sea was calm.
+
+  - id: T03_retry_variant_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      source_residue_retry: true
+    must_not_contain: *t02_must_not_contain
+    notes: Same text as T02, rendered with the source-residue retry section (first use case, branch fix/leftover-source-text).
+    text: *t02_text
+
+  - id: T04_dialogue_short_lines_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: Eight short dialogue paragraphs. Models tend to merge consecutive short lines into one paragraph.
+    text: |-
+      "Are you coming?" Clara called from the hallway.
+
+      "In a minute," said Paul, without looking up.
+
+      "You said that an hour ago."
+
+      "Then it has been a very long minute."
+
+      "Mother is waiting. The soup is getting cold, and she will not start without you."
+
+      "Tell her I am finishing the letter."
+
+      "What letter? You have not written a single word since lunch."
+
+      "That," he said, tapping the empty page with his pen, "is exactly why it is taking so long."
+
+  - id: T05_placeholders_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: true
+    notes: Placeholders with nested inline formatting (bold inside a link). Every token must survive exactly once.
+    text: |-
+      [id0]Before you leave the station, please read the [id1][id2]safety notice[id3][id4] posted beside the ticket office. It explains what to do if the last train of the evening is cancelled, where to find the night bus that replaces it, and which number to call if you need help getting home. Staff at the information desk can also print a copy for you, and the notice is available in several languages for visitors who are new to the city.[id5]
+
+  - id: T06_placeholders_dense_en_de
+    builder: translate
+    source_language: English
+    target_language: German
+    has_placeholders: true
+    notes: Dense placeholders, including two adjacent pairs with no text between them.
+    text: |-
+      [id0]The workshop opens at nine.[id1] Bring your own [id2]gloves[id3][id4] and a notebook, because the instructor will not lend tools to anyone who arrives late. During the morning session you will learn how to sharpen a chisel, how to read the grain of a plank, and why patience matters more than strength.[id5] After lunch, each participant builds a small box from a single board of [id6]oak[id7][id8] and takes it home at the end of the day.[id9]
+
+  - id: T07_names_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    must_keep:
+      - Oswin Tallaby
+      - Mirela Quast
+      - Vellmoor
+      - Port Agnelle
+    notes: Invented proper names must be kept verbatim, not translated or respelled.
+    text: |-
+      Oswin Tallaby had never been further than the market at Vellmoor, so when the letter arrived from Port Agnelle he read it three times before he believed it. His aunt, Mirela Quast, wrote that the boatyard needed a careful pair of hands and that she would pay his passage if he came before the autumn storms. He packed a single bag, left the key under the stone by the gate, and walked to Vellmoor before dawn to catch the coach. Mirela Quast was waiting at the quay in Port Agnelle when he arrived, taller than he remembered and smelling of tar and salt.
+
+  - id: T08_glossary_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    prompt_options:
+      glossary_terms:
+        skyreaver: ravageur céleste
+        moonglass: verre-de-lune
+        Hollow Court: Cour Creuse
+    must_contain_any:
+      - [ravageur céleste, ravageurs célestes]
+      - [verre-de-lune, verres-de-lune]
+      - [Cour Creuse]
+    notes: Invented glossary terms must use the glossary rendering, singular or plural.
+    text: |-
+      The skyreaver circled the tower twice before it landed on the parapet, its wings still dusted with frost. Below, the envoys of the Hollow Court waited in silence, each holding a lantern of moonglass that threw pale blue light across the stones. Nobody spoke until the beast folded its wings. Then the eldest envoy stepped forward and lifted her lantern high, as the laws of the Hollow Court required. Two more skyreavers appeared over the ridge, and the moonglass lanterns flickered as if they, too, were afraid.
+
+  - id: T09_glossary_en_de
+    builder: translate
+    source_language: English
+    target_language: German
+    has_placeholders: false
+    prompt_options:
+      glossary_terms:
+        skyreaver: Himmelsräuber
+        moonglass: Mondglas
+        Hollow Court: Hohler Hof
+    must_contain_any:
+      - [Himmelsräuber, Himmelsräubern, Himmelsräubers]
+      - [Mondglas, Mondglases, Mondgläser, Mondgläsern]
+      - [Hohler Hof, Hohlen Hof, Hohlen Hofes, Hohlen Hofs, Hohle Hof]
+    notes: Same as T08 for German, where the glossary terms must be case-inflected.
+    text: |-
+      The skyreaver circled the tower twice before it landed on the parapet, its wings still dusted with frost. Below, the envoys of the Hollow Court waited in silence, each holding a lantern of moonglass that threw pale blue light across the stones. Nobody spoke until the beast folded its wings. Then the eldest envoy stepped forward and lifted her lantern high, as the laws of the Hollow Court required. Two more skyreavers appeared over the ridge, and the moonglass lanterns flickered as if they, too, were afraid.
+
+  - id: T10_script_residue_ko_en
+    builder: translate
+    source_language: Korean
+    target_language: English
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: Korean source. Any Hangul left in the output is source residue.
+    text: |-
+      비가 그친 뒤 골목은 다시 조용해졌다. 지수는 우산을 접고 오래된 서점 앞에 멈춰 섰다. 유리창 너머로 노란 불빛이 책장 사이에 고여 있었고, 주인 할아버지는 계산대 뒤에서 졸고 있었다. 길 건너 빵집에서는 마지막 손님이 막 문을 닫고 나오는 참이었다.
+
+      그녀는 천천히 문을 밀고 들어갔다. 종이 냄새와 먼지 냄새가 한꺼번에 밀려왔다. 어릴 때 아버지와 함께 이곳에 왔던 기억이 떠올라 그녀는 잠시 숨을 멈추었다. 그때도 할아버지는 똑같은 자리에서 똑같은 자세로 졸고 있었다.
+
+      "찾는 책이 있나요?" 할아버지가 눈을 반쯤 뜨고 물었다. 지수는 고개를 저었다. 사실 그녀가 찾는 것은 책이 아니라 그날 오후의 따뜻한 기분이었지만, 그것을 어떻게 말해야 할지 몰라서 그냥 웃기만 했다.
+
+  - id: T11_script_residue_en_ja
+    builder: translate
+    source_language: English
+    target_language: Japanese
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: English source into Japanese. Long Latin runs left in the output are source residue.
+    text: |-
+      The tea house stood at the end of a narrow lane, where the stone steps were worn smooth by a century of visitors. Every morning the owner swept the steps, watered the moss, and hung a small paper lantern beside the door, even in summer when no one needed the light.
+
+      One autumn a young student began to come every afternoon. She always ordered the same green tea, sat at the same table by the window, and wrote in a thick notebook until the light faded.
+
+      On the last day of the year she left the notebook on the table. Inside, on the final page, she had drawn the lantern, the steps and the owner with his broom, and beneath the drawing she had written a single word of thanks.
+
+  - id: T12_script_residue_ru_fr
+    builder: translate
+    source_language: Russian
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: Russian source into French. Any Cyrillic left in the output is source residue.
+    text: |-
+      Поезд опоздал на два часа, и на перроне уже никого не было. Анна поставила чемодан на мокрые доски и огляделась. Фонари горели тускло, а над вокзалом кружили чайки, хотя до моря было очень далеко.
+
+      Она достала из кармана письмо и перечитала адрес. Улица Садовая, дом семь. Сторож в будке сказал, что идти недалеко, но посоветовал дождаться утра, потому что ночью в посёлке легко заблудиться, а собаки во дворах не любят чужих.
+
+      Анна поблагодарила его и всё-таки пошла. Ей казалось, что если она остановится сейчас, то уже никогда не решится сделать этот последний шаг.
+
+  - id: T13_text_cleanup_fr_en
+    builder: translate
+    source_language: French
+    target_language: English
+    has_placeholders: false
+    prompt_options:
+      text_cleanup: true
+    notes: OCR-style text with broken hyphenation and hard line breaks, translated with the text cleanup option.
+    text: |-
+      Le vieux méca-
+      nicien essuya ses mains sur un chif-
+      fon graisseux et regarda le moteur avec une
+      sorte de tendresse. Depuis qua-
+      rante ans, il réparait les ba-
+      teaux du port, et il n'en avait jamais aban-
+      donné un seul. Les jeunes pêcheurs se mo-
+      quaient de lui, mais ils venaient tou-
+      jours le chercher quand la mer devenait mauvaise et que leurs moteurs refusaient de démar-
+      rer au petit matin.

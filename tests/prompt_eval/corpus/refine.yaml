@@ -1,0 +1,69 @@
+# Refinement cases for the prompt regression harness.
+#
+# The text of each case is a French draft translation (test data written for
+# this corpus). For refine cases, source_language is the draft's language and
+# target_language is the same language.
+
+cases:
+  - id: R01_clean_draft_fr
+    builder: refine
+    source_language: French
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: Correct but stiff, literal draft. The rewrite must keep four paragraphs and stay in French.
+    text: |-
+      Le jardinier arriva au château dans le matin de lundi, et il commença immédiatement à faire le travail de couper les haies qui étaient devenues très hautes pendant l'hiver.
+
+      La dame du château le regarda depuis la fenêtre de sa chambre. Elle était en train de penser que les haies avaient été plus belles dans le temps où son mari était encore vivant et où il prenait soin d'elles lui-même.
+
+      Dans l'après-midi, elle descendit dans le jardin pour lui faire la proposition d'une tasse de thé. Le jardinier accepta et ils restèrent assis sur le banc pour une longue période de temps sans dire des choses.
+
+      Quand le soleil fut descendu derrière les arbres, il reprit ses outils et il lui dit qu'il allait revenir le jour suivant pour finir le travail.
+
+  - id: R02_draft_with_english_sentence_fr
+    builder: refine
+    source_language: French
+    target_language: French
+    has_placeholders: false
+    must_not_contain:
+      - I will not sign anything until my lawyer has read it
+    notes: Draft with one full English sentence left by the first pass. The refinement must translate it.
+    text: |-
+      Le notaire posa le contrat sur la table et tendit un stylo au vieil homme. Celui-ci ne le prit pas. Il regarda longuement la fenêtre, puis il dit d'une voix calme : « I will not sign anything until my lawyer has read it. » Le notaire soupira et rangea le stylo dans sa poche. Il savait que l'avocat en question était parti en vacances pour trois semaines et que la vente allait donc attendre, comme elle attendait déjà depuis le début du printemps.
+
+  - id: R03_draft_placeholders_fr
+    builder: refine
+    source_language: French
+    target_language: French
+    has_placeholders: true
+    notes: Draft with placeholders. Every token must survive the rewrite exactly once.
+    text: |-
+      [id0]Pour réserver une place dans le refuge, vous devez remplir le [id1]formulaire en ligne[id2] au moins trois jours avant votre arrivée. Les places sont limitées et le gardien ne peut pas accepter les randonneurs qui arrivent sans réservation pendant la saison haute.[id3] Si vous annulez votre venue, merci de prévenir le refuge par [id4]téléphone[id5] afin que votre place puisse être donnée à une autre personne qui attend.
+
+  - id: R04_draft_names_fr
+    builder: refine
+    source_language: French
+    target_language: French
+    has_placeholders: false
+    must_keep:
+      - Ilvane Dorsk
+      - Teodric Brume
+      - Calmaris
+    notes: Invented names must be kept verbatim by the rewrite.
+    text: |-
+      Ilvane Dorsk arriva à Calmaris dans la fin de l'après-midi, avec la poussière de la route qui était encore sur ses bottes. Elle chercha l'auberge que Teodric Brume lui avait indiquée dans sa lettre, mais personne dans la rue ne semblait savoir où elle se trouvait. Finalement, un enfant la conduisit jusqu'à une porte bleue au fond d'une ruelle. Teodric Brume était assis à l'intérieur, devant un feu, et il ne parut pas du tout surpris de la voir entrer.
+
+  - id: R05_good_draft_fr
+    builder: refine
+    source_language: French
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    notes: Already polished text. Checks that the refinement does not overreach (length, paragraphs, language).
+    text: |-
+      La maison se dressait au bout du chemin, à demi cachée par les tilleuls. Personne n'y avait vécu depuis des années, et pourtant les volets restaient peints, les vitres propres, comme si quelqu'un veillait sur elle en secret.
+
+      Chaque automne, au village, on se demandait qui pouvait bien s'en occuper. Les uns parlaient d'un neveu lointain, les autres d'une promesse faite à la dernière propriétaire. Personne ne savait rien, et chacun en parlait avec assurance.
+
+      Un soir de novembre, une lumière brilla enfin à l'étage. Elle ne dura qu'une heure, puis la maison retomba dans le noir, plus silencieuse encore qu'avant.

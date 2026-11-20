@@ -31,6 +31,7 @@ from .xhtml_translation_state import (
     CHUNK_TRANSLATED,
     CHUNK_UNTRANSLATED,
 )
+from ..common.source_residue import detect_blocking_residue, residue_log_message
 from ..translator import generate_translation_request
 
 # TokenAlignmentFallback is expensive to build; built on first Phase 2 use.
@@ -108,10 +109,36 @@ async def _request(text: str, settings: ChunkLoopSettings, *, has_placeholders: 
     )
 
 
+def _has_source_residue(source_text: str, translated_text: str,
+                        settings: ChunkLoopSettings) -> bool:
+    """True, with a warning logged, when a translation kept source text (issue #270).
+
+    ``generate_translation_request`` already retried once; what is left is
+    kept, since it is still the most translated version, and the caller
+    records the chunk as untranslated so a resume or a repair pass picks it up.
+    """
+    report = detect_blocking_residue(source_text, translated_text,
+                                     settings.source_language, settings.target_language)
+    if report is None:
+        return False
+    if settings.log_callback:
+        settings.log_callback(
+            "source_residue_kept",
+            f"⚠️ {residue_log_message(report, settings.source_language)} - chunk marked "
+            "untranslated, it will be retried on resume")
+    return True
+
+
 async def _phase1_translate(chunk_text: str, local_tag_map: Dict[str, str],
                             settings: ChunkLoopSettings, stats: TranslationMetrics,
-                            placeholder_format: Optional[Tuple[str, str]]) -> Optional[str]:
-    """Normal translation with retries; the validated reply, or None."""
+                            placeholder_format: Optional[Tuple[str, str]]
+                            ) -> Tuple[Optional[str], bool]:
+    """Normal translation with retries.
+
+    Returns ``(reply, residue_kept)``: the validated reply (or None), and
+    whether that reply still holds source-language text (issue #270). A
+    residue reply is counted as a fallback, not as a success.
+    """
     log_callback = settings.log_callback
     max_retries = settings.max_retries
     has_placeholders = len(local_tag_map) > 0
@@ -149,14 +176,18 @@ async def _phase1_translate(chunk_text: str, local_tag_map: Dict[str, str],
             stats.retry_attempts += 1
             continue
 
+        if _has_source_residue(chunk_text, translated, settings):
+            stats.fallback_used += 1
+            return translated, True
+
         if attempt == 0:
             stats.successful_first_try += 1
         else:
             stats.successful_after_retry += 1
             if log_callback:
                 log_callback("retry_success", f"✓ Translation succeeded after {attempt + 1} attempt(s)")
-        return translated
-    return None
+        return translated, False
+    return None, False
 
 
 def _get_aligner():
@@ -252,18 +283,25 @@ async def translate_chunk_with_fallback(
     """
     from src.config import EPUB_TOKEN_ALIGNMENT_ENABLED
 
-    result = await _phase1_translate(chunk_text, local_tag_map, settings, stats, placeholder_format)
+    result, residue_kept = await _phase1_translate(
+        chunk_text, local_tag_map, settings, stats, placeholder_format)
     outcome = CHUNK_TRANSLATED
     if result is None and EPUB_TOKEN_ALIGNMENT_ENABLED:
         result = await _phase2_token_alignment(chunk_text, local_tag_map, settings, stats)
         outcome = CHUNK_TOKEN_ALIGNED
+        if result is not None and _has_source_residue(chunk_text, result, settings):
+            stats.fallback_used += 1
+            residue_kept = True
     if result is None:
         outcome = CHUNK_UNTRANSLATED
         result = chunk_text
         _phase3_keep_source(settings, stats)
-
-    if outcome != CHUNK_UNTRANSLATED:
+    else:
         result = reattach_block_closing_punctuation(chunk_text, result, local_tag_map)
+        if residue_kept:
+            # Kept as the most translated text, but recorded as untranslated
+            # so a resume or a repair pass retries it (issue #270).
+            outcome = CHUNK_UNTRANSLATED
 
     stats.record_chunk_outcome(chunk_index, outcome)
     restored = globalize_placeholders(result, global_indices)

@@ -6,10 +6,15 @@ what to do with it: retry with backoff, rotate keys on 429, raise the
 pipeline errors, fail fast on 4xx, and report usage to the job tracker.
 """
 
+import asyncio
+import threading
+import time
+
 import httpx
 import pytest
 
 from src.core.llm import base as base_mod
+from src.core.llm import rate_limit_handler
 from src.core.llm.base import LLMProvider, LLMResponse
 from src.core.llm.cost_tracker import begin_job_cost_tracking, end_job_cost_tracking
 from src.core.llm.exceptions import (
@@ -235,3 +240,72 @@ def test_policy_from_web_job_config():
     default = RetryPolicy.from_config()
     bad = RetryPolicy.from_job_config({"max_attempts": "x", "retry_delay": -1})
     assert (bad.max_attempts, bad.base_delay) == (default.max_attempts, default.base_delay)
+
+
+# --------------------------------------------------------------- pacing
+# The cross-thread test uses real sleeps and measures the monotonic clock.
+INTERVAL = 0.1
+# Slack for a thread stalled between slot admission and its _send() timestamp;
+# a broken limiter gives gaps near 0, so this stays discriminating.
+SLACK = INTERVAL / 2
+
+
+@pytest.fixture
+def paced(monkeypatch):
+    monkeypatch.setattr("src.config.REQUEST_INTERVAL", INTERVAL)
+    monkeypatch.setattr(rate_limit_handler, "_last_request_start", {})
+
+
+class StampedProvider(ScriptedProvider):
+    """Records the monotonic start time of every attempt."""
+
+    def __init__(self, script, name="scripted"):
+        super().__init__(script, policy=RetryPolicy(max_attempts=3, base_delay=0, jitter=0))
+        self.provider_name = name
+        self.starts = []
+
+    async def _send(self, request):
+        self.starts.append(time.monotonic())
+        return await super()._send(request)
+
+
+def test_request_starts_are_spaced_across_jobs_and_retries(paced):
+    # Web jobs run on their own thread and event loop; one of them retries.
+    retrying, other = StampedProvider([_http(503), _ok()]), StampedProvider([_ok()])
+    threads = [threading.Thread(target=asyncio.run, args=(p.generate("hi"),))
+               for p in (retrying, other)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    starts = sorted(retrying.starts + other.starts)
+    assert len(starts) == 3
+    assert all(b - a >= INTERVAL - SLACK for a, b in zip(starts, starts[1:]))
+
+
+@pytest.mark.asyncio
+async def test_pacing_is_per_provider(paced, sleeps):
+    await StampedProvider([_ok()], "gemini").generate("hi")
+    await StampedProvider([_ok()], "mistral").generate("hi")
+    assert sleeps == []  # mistral never waited for gemini's slot
+
+
+@pytest.mark.asyncio
+async def test_cancelled_waiter_leaves_no_reservation(paced, monkeypatch):
+    monkeypatch.setattr("src.config.REQUEST_INTERVAL", 60.0)
+    claimed = {"scripted": time.monotonic()}  # a request just started
+    rate_limit_handler._last_request_start.update(claimed)
+    asleep = asyncio.Event()
+
+    async def sleep_until_cancelled(delay):
+        asleep.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(base_mod.asyncio, "sleep", sleep_until_cancelled)
+    waiter = asyncio.create_task(StampedProvider([_ok()]).generate("hi"))
+    await asyncio.wait_for(asleep.wait(), 5)  # fail, don't hang, if it never sleeps
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    # A batch closed by a rate-limit pause must not push back the next slot.
+    assert rate_limit_handler._last_request_start == claimed

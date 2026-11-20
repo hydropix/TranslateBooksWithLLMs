@@ -110,3 +110,9 @@ def sampler_epub_bytes(sampler_epub_path):
 def sampler_spine_docs():
     """Mapping of {href: xhtml_string} for the sampler's spine documents."""
     return dict(_sampler_module.SPINE_DOCS)
+
+
+@pytest.fixture(autouse=True)
+def _no_request_pacing(monkeypatch):
+    """Keep a developer's .env REQUEST_INTERVAL from slowing every LLM test."""
+    monkeypatch.setattr("src.config.REQUEST_INTERVAL", 0.0)

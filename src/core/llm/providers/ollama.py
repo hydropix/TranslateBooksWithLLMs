@@ -17,7 +17,7 @@ from ..base import (
 )
 from ..exceptions import ProviderError, RateLimitError, RepetitionLoopError
 from ..policy import RetryPolicy
-from ..rate_limit_handler import compute_wait_time
+from ..rate_limit_handler import compute_wait_time, wait_for_request_slot
 from ..thinking.cache import get_thinking_cache
 from ..thinking.detection import detect_repetition_loop
 from ..thinking.behavior import ThinkingBehavior, _model_matches_pattern
@@ -96,6 +96,8 @@ class OllamaProvider(LLMProvider):
             payload["think"] = think_param
 
         client = await self._get_client()
+        # A real request to the provider: paced like the ones generate() sends.
+        await wait_for_request_slot(self.provider_name)
         response = await client.post(self.api_endpoint, json=payload, timeout=60)
         response.raise_for_status()
         data = response.json()

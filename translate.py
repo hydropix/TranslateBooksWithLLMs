@@ -20,8 +20,7 @@ ensure_utf8_stdio()
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-from src.api.translation_state import get_glossary_store
-from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, OPENAI_API_ENDPOINT, OPENROUTER_API_ENDPOINT, MISTRAL_API_ENDPOINT, DEEPSEEK_API_ENDPOINT, POE_API_ENDPOINT, NIM_API_ENDPOINT, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
+from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, OPENAI_API_ENDPOINT, NIM_API_ENDPOINT, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.tts.tts_config import TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -147,13 +146,19 @@ def _resume_job(args, checkpoint_manager) -> JobConfig:
     return job
 
 
+def _cli_glossary_store():
+    """Open the glossary database only when a job selects --glossary-id."""
+    from src.core.glossary import GlossaryStore
+    return GlossaryStore()
+
+
 def run_cli_job(job: JobConfig, logger, *, translation_id=None, checkpoint_manager=None,
                 is_resume=False, engines=None) -> JobResult:
     """Run a job from the command line and return its result."""
     checkpoint_manager = checkpoint_manager or CheckpointManager()
     translation_id = translation_id or f"cli_{uuid.uuid4().hex[:8]}"
     runner = JobRunner(job, translation_id=translation_id, checkpoint_manager=checkpoint_manager,
-                       sinks=CliJobSinks(logger), is_resume=is_resume, glossary_store=get_glossary_store,
+                       sinks=CliJobSinks(logger), is_resume=is_resume, glossary_store=_cli_glossary_store,
                        temp_dir=job.output_dir or None, engines=engines)
     result = asyncio.run(runner.run())
     nothing_translated = bool(result.verdict and result.verdict.nothing_translated)
@@ -176,7 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
-    parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
+    parser.add_argument("--api_endpoint", default=None, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.). Overrides --openai_api_endpoint / --nim_api_endpoint when given (default: {API_ENDPOINT} for Ollama).")
     parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
@@ -185,12 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deepseek_api_key", default=DEEPSEEK_API_KEY, help="DeepSeek API key (required if using deepseek provider).")
     parser.add_argument("--poe_api_key", default=POE_API_KEY, help="Poe API key (required if using poe provider). Get your key at https://poe.com/api_key")
     parser.add_argument("--nim_api_key", default=NIM_API_KEY, help="NVIDIA NIM API key (required if using nim provider). Get your key at https://build.nvidia.com/")
-    parser.add_argument("--openai_api_endpoint", default=OPENAI_API_ENDPOINT, help="OpenAI API endpoint.")
-    parser.add_argument("--openrouter_api_endpoint", default=OPENROUTER_API_ENDPOINT, help="OpenRouter API endpoint.")
-    parser.add_argument("--mistral_api_endpoint", default=MISTRAL_API_ENDPOINT, help="Mistral API endpoint.")
-    parser.add_argument("--deepseek_api_endpoint", default=DEEPSEEK_API_ENDPOINT, help="DeepSeek API endpoint.")
-    parser.add_argument("--poe_api_endpoint", default=POE_API_ENDPOINT, help="Poe API endpoint.")
-    parser.add_argument("--nim_api_endpoint", default=NIM_API_ENDPOINT, help="NVIDIA NIM API endpoint.")
+    parser.add_argument("--openai_api_endpoint", default=OPENAI_API_ENDPOINT, help="Endpoint used by the openai provider when --api_endpoint is not given (default: OPENAI_API_ENDPOINT from .env).")
+    parser.add_argument("--nim_api_endpoint", default=NIM_API_ENDPOINT, help="Endpoint used by the nim provider when --api_endpoint is not given (default: NIM_API_ENDPOINT from .env).")
     parser.add_argument("--parallel", type=int, default=PARALLEL_TRANSLATIONS, metavar="N", help=f"Number of chunks translated concurrently (default: {PARALLEL_TRANSLATIONS}). Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context chaining.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
 
@@ -199,8 +200,8 @@ def build_parser() -> argparse.ArgumentParser:
     prompt_group.add_argument("--refine", action="store_true", help="Run a refinement pass on the translated output to polish quality and literary style (TXT, SRT, EPUB, DOCX).")
     prompt_group.add_argument("--refine-only", action="store_true", dest="refine_only", help="Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language.")
     prompt_group.add_argument("--glossary", default=None, help="Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent.")
-    prompt_group.add_argument("--glossary-id", default=None, help="Glossary ID (from glossaries.db) injected per-chunk to keep entity translations consistent.")
-    prompt_group.add_argument("--custom-instruction", default=None, help="Name of a custom instruction file (from Custom_Instructions) injected per-chunk to keep entity translations consistent.")
+    prompt_group.add_argument("--glossary-id", type=int, default=None, dest="glossary_id", help="ID of a glossary saved from the web interface (glossaries.db), used like --glossary. Cannot be combined with --glossary.")
+    prompt_group.add_argument("--custom-instruction", default=None, dest="custom_instruction", metavar="FILE", help="File name (with its .yaml, .yml or .txt extension) of a custom instruction preset in the Custom_Instructions folder, as managed from the web interface.")
     prompt_group.add_argument(
         "--auto-glossary", action="store_true", dest="auto_glossary",
         help="Derive a throwaway glossary from the input document with one extra LLM call "

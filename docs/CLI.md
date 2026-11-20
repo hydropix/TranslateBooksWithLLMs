@@ -39,7 +39,7 @@ python translate.py -i input_file -o output_file
 |--------|-------------|---------|
 | `-m, --model` | Model name | qwen3:14b |
 | `--provider` | ollama / openrouter / openai / gemini / mistral / deepseek / poe / nim | ollama |
-| `--api_endpoint` | API URL | http://localhost:11434/api/generate |
+| `--api_endpoint` | API URL (overrides the provider endpoints below) | http://localhost:11434/api/generate for Ollama |
 | `--parallel` | Chunks translated concurrently. Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context | 1 |
 
 ### API Keys
@@ -60,14 +60,14 @@ python translate.py -i input_file -o output_file
 
 ### API Endpoints
 
+`--api_endpoint`, when given, is used as is for every provider that reads an endpoint.
+Without it, the `openai` and `nim` providers use their own endpoint below, read from
+`.env` like the web interface; the other cloud providers always use their fixed endpoint.
+
 | Option | Description |
 |--------|-------------|
-| `--openrouter_api_endpoint` | OpenRouter API endpoint |
-| `--openai_api_endpoint` | OpenAI API endpoint |
-| `--mistral_api_endpoint` | Mistral API endpoint |
-| `--deepseek_api_endpoint` | DeepSeek API endpoint |
-| `--poe_api_endpoint` | Poe API endpoint |
-| `--nim_api_endpoint` | NVIDIA NIM API endpoint |
+| `--openai_api_endpoint` | Endpoint of the `openai` provider (default: `OPENAI_API_ENDPOINT` from `.env`) |
+| `--nim_api_endpoint` | Endpoint of the `nim` provider (default: `NIM_API_ENDPOINT` from `.env`) |
 
 ### Prompt Options
 
@@ -77,9 +77,9 @@ python translate.py -i input_file -o output_file
 | `--refine` | Run a refinement pass on the translated output to polish quality and literary style (TXT, SRT, EPUB, DOCX; ignored with a warning for PDF and PGN) |
 | `--refine-only` | Run ONLY a refinement pass on an already-translated file (skips the translation phase). The input file is assumed to already be in the target language. |
 | `--glossary` | Path to a glossary file (.json or .csv) injected per-chunk to keep entity translations consistent |
-| `--glossary-id` | Glossary ID (from glossaries.db) injected per-chunk to keep entity translations consistent |
-| `--custom-instruction` | Name of a custom instruction file (from Custom_Instructions) injected per-chunk to keep entity translations consistent |
-| `--auto-glossary` | Derive a throwaway glossary from the input document with one extra LLM call before translating (no file, nothing saved). Ignored when `--glossary` is given or with `--refine-only`. |
+| `--glossary-id` | ID of a glossary saved from the web interface (glossaries.db), used like `--glossary`. Cannot be combined with `--glossary` |
+| `--custom-instruction` | File name, with its `.yaml`/`.yml`/`.txt` extension, of a custom instruction preset in the `Custom_Instructions` folder (managed from the web interface) |
+| `--auto-glossary` | Derive a throwaway glossary from the input document with one extra LLM call before translating (no file, nothing saved). Ignored when `--glossary` or `--glossary-id` is given, or with `--refine-only`. |
 | `--auto-style` | Derive style instructions from the input document with one extra LLM call before translating (no preset file, nothing saved). |
 
 ### Term Fix

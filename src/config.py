@@ -759,7 +759,7 @@ class TranslationConfig:
             source_language=args.source_lang,
             target_language=args.target_lang,
             model=args.model,
-            api_endpoint=args.api_endpoint,
+            api_endpoint=getattr(args, "api_endpoint", None) or API_ENDPOINT,
             interface_type="cli",
             enable_colors=not args.no_color,
             llm_provider=getattr(args, 'provider', LLM_PROVIDER),

@@ -684,10 +684,14 @@ class JobConfig:
             operation = OP_TRANSLATE
 
         needs_llm = not (operation == OP_TERM_FIX and term_fix['mode'] == 'literal')
-        api_endpoint = getattr(args, f'{provider_name}_api_endpoint', None) if provider_name in KEY_PROVIDERS else None
+        # An explicit --api_endpoint always wins; otherwise openai/nim use their
+        # own endpoint (from .env, like the web UI) and the rest the Ollama one.
+        endpoint = (getattr(args, 'api_endpoint', None)
+                    or getattr(args, f'{provider_name}_api_endpoint', None)
+                    or cfg.API_ENDPOINT)
         api_key = getattr(args, f'{provider_name}_api_key', None) if provider_name in KEY_PROVIDERS else None
         if needs_llm:
-            if provider_name in KEY_PROVIDERS and key_required(provider_name, args.api_endpoint) \
+            if provider_name in KEY_PROVIDERS and key_required(provider_name, endpoint) \
                     and not api_key:
                 hint = {'poe': " Get your key at https://poe.com/api_key",
                         'nim': " Get your key at https://build.nvidia.com/"}.get(provider_name, '')
@@ -733,11 +737,15 @@ class JobConfig:
         prompt_options: Dict[str, Any] = {
             'text_cleanup': bool(getattr(args, 'text_cleanup', False)),
         }
-        if custom_instruction := getattr(args, 'custom_instruction', None):
+        custom_instruction = getattr(args, 'custom_instruction', None)
+        if custom_instruction:
             prompt_options['custom_instruction_file'] = custom_instruction
-        if glossary_id := getattr(args, 'glossary_id', None):
-            prompt_options['glossary_id'] = glossary_id
         glossary_file = getattr(args, 'glossary', None)
+        glossary_id = getattr(args, 'glossary_id', None)
+        if glossary_file and glossary_id is not None:
+            raise JobConfigError("--glossary and --glossary-id cannot be combined")
+        if glossary_id is not None and operation != OP_TERM_FIX:
+            prompt_options['glossary_id'] = glossary_id
         if glossary_file and operation != OP_TERM_FIX:
             try:
                 from src.core.glossary.cli_loader import load_glossary_from_file
@@ -753,6 +761,9 @@ class JobConfig:
                 notices.append(f"Glossary file {glossary_file} contained no usable entries")
 
         want_glossary = bool(getattr(args, 'auto_glossary', False))
+        if want_glossary and glossary_id is not None:
+            notices.append("⚠️ --auto-glossary ignored: --glossary-id was provided.")
+            want_glossary = False
         if want_glossary and glossary_file:
             notices.append("⚠️ --auto-glossary ignored: --glossary was provided.")
             want_glossary = False
@@ -780,7 +791,7 @@ class JobConfig:
             refine_after=refine and operation == OP_TRANSLATE,
             term_fix=term_fix,
             provider=ProviderConfig(provider=provider_name, model=model,
-                                    endpoint=api_endpoint or args.api_endpoint, api_key=api_key or None),
+                                    endpoint=endpoint, api_key=api_key or None),
             context_window=None,
             auto_adjust_context=True,
             min_chunk_size=5,

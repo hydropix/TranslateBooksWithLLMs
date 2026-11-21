@@ -39,7 +39,10 @@ export const LifecycleManager = {
         this.cleanupOldStorageVersions();
 
         this.setupPageLoadHandler();
-        this.setupPageHideHandler();
+        // No pagehide/unload handler on purpose: a job belongs to the server,
+        // not to the tab. Closing, reloading or backgrounding the page must
+        // leave it running (issue #349); restoreActiveTranslation picks it up
+        // again on the next load.
         this.setupVisibilityChangeHandler();
         this.startStateConsistencyCheck();
     },
@@ -174,31 +177,6 @@ export const LifecycleManager = {
         }
     },
 
-
-    setupPageHideHandler() {
-        window.addEventListener('pagehide', (e) => {
-            const isBatchActive = StateManager.getState('translation.isBatchActive');
-            const currentJob = StateManager.getState('translation.currentJob');
-
-            if (isBatchActive && currentJob && currentJob.translationId) {
-                // sendBeacon cannot carry the X-API-Token header the server
-                // requires, so use a keepalive fetch: it survives page unload
-                // and goes through the globally patched fetch that adds the
-                // token header.
-                const interruptUrl = `${ApiClient.getBaseUrl()}/api/translation/${encodeURIComponent(currentJob.translationId)}/interrupt`;
-                try {
-                    fetch(interruptUrl, {
-                        method: 'POST',
-                        keepalive: true,
-                        headers: { 'Content-Type': 'application/json' },
-                        body: '{}'
-                    }).catch(() => { /* page is going away; nothing to report */ });
-                } catch (error) {
-                    console.error('Error interrupting translation on page close:', error);
-                }
-            }
-        });
-    },
 
     setupVisibilityChangeHandler() {
         document.addEventListener('visibilitychange', () => {

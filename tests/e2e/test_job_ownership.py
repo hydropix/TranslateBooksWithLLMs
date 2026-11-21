@@ -115,7 +115,8 @@ def test_reload_mid_job_keeps_ownership(page, input_files, api, live_server):
     assert translation_id in (restored["ownedJobIds"] or []), restored
     assert restored["isBatchActive"] is True and restored["currentJob"] == translation_id
 
-    api.wait_for_terminal(translation_id)
+    # Issue #349: the reload itself must not interrupt the job.
+    assert api.wait_for_terminal(translation_id) == "completed"
     page.wait_for_timeout(6000)
     final_ui = ui(page)
     assert final_ui["cards"] >= 1 and not final_ui["interrupt"], final_ui

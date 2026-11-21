@@ -64,6 +64,8 @@ E2E_PROVIDER=poe pytest tests/e2e -m e2e
   visibility/interval consistency check must resync the UI without a reload.
   The injected handlers are instrumented so a passing resync cannot be
   attributed to a socket reconnect instead.
+- **`test_page_close_keeps_job.py`** — issue #349. Closing the tab must leave the
+  job running on the server until it completes.
 - **`test_completion_classification.py`** — no browser. Every format must still
   end `completed` on a clean run, a run whose chunks fell back to source text
   must end `partial` with its checkpoint kept, and TXT reassembly must preserve

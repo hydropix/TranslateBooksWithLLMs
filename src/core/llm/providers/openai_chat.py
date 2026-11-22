@@ -63,13 +63,14 @@ def _error_in_ok_answer(body_error: Dict[str, Any]) -> ProviderError:
 class OpenAIChatProvider(LLMProvider):
     """Base for every provider speaking the OpenAI chat-completions protocol."""
 
+    REASONING_MODELS: tuple[str, ...] = ("gpt-5.5", "gpt-5.6", "gpt-6")
     API_URL: str = ""
     MODELS_URL: str = ""
     #: Substring of a model id -> context window, first match wins.
     MODEL_CONTEXT_SIZES: Dict[str, int] = {}
     #: Context limit reported for a model missing from the table (0 = unknown).
     DEFAULT_CONTEXT_LIMIT: int = 0
-    #: Whether ``temperature`` is sent (as an optional, droppable parameter).
+    #: Whether ``temperature`` or ``reasoning_effort`` is sent (as an optional, droppable parameter).
     SEND_TEMPERATURE: bool = True
     #: On a 400 that names none of the optional parameters, drop them all
     #: anyway and retry once (for gateways whose 400s rarely name the field).
@@ -87,6 +88,7 @@ class OpenAIChatProvider(LLMProvider):
         context_window: Optional[int] = None,
         retry_policy: Optional[RetryPolicy] = None,
         temperature: Optional[float] = None,
+        reasoning_effort: Optional[str] = None,
         log_callback=None,
     ):
         super().__init__(
@@ -95,6 +97,7 @@ class OpenAIChatProvider(LLMProvider):
         )
         self.api_endpoint = api_endpoint or self.API_URL
         self.context_window = context_window
+        self.reasoning_effort = reasoning_effort
         # Optional parameters a model rejected by name: never sent to that
         # model again by this instance (one failed 400 per run, not per chunk).
         self._rejected_optional: Dict[str, set] = {}
@@ -129,7 +132,10 @@ class OpenAIChatProvider(LLMProvider):
     async def _optional_params(self, request: LLMRequest) -> Dict[str, Any]:
         """Payload entries a model may reject; dropped once on a naming 400."""
         if self.SEND_TEMPERATURE:
-            return {"temperature": self.effective_temperature()}
+            if self.model.startswith(self.REASONING_MODELS):
+                return {"reasoning_effort": self.effective_reasoning_effort()}
+            else:
+                return {"temperature": self.effective_temperature()}
         return {}
 
     def _parse_cost(self, usage: Dict[str, Any], prompt_tokens: int,

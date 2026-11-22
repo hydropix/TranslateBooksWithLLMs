@@ -297,6 +297,10 @@ else:
 # models) gets the request re-sent once without it.
 TEMPERATURE = float(os.getenv('TEMPERATURE', '0.3'))
 
+# Reasoning effort level sent with every request by the compatible OpenAI models.
+# It controls how much internal "thinking" model does before translating.
+REASONING_EFFORT = os.getenv('REASONING_EFFORT', 'high')
+
 # Retry policy of every LLM request (see src/core/llm/policy.py). Transient
 # failures (timeouts, 5xx, connection errors) are retried up to
 # MAX_TRANSLATION_ATTEMPTS times, waiting RETRY_BASE_DELAY seconds before the
@@ -735,13 +739,13 @@ class TranslationConfig:
     created, from the current module globals, so values refreshed by
     reload_config() (or patched in tests) reach new instances.
     """
-    
+
     # Core settings
     source_language: str = _live('DEFAULT_SOURCE_LANGUAGE')
     target_language: str = _live('DEFAULT_TARGET_LANGUAGE')
     model: str = _live('DEFAULT_MODEL')
     api_endpoint: str = _live('API_ENDPOINT')
-    
+
     # LLM Provider settings (credentials live in ProviderConfig)
     llm_provider: str = _live('LLM_PROVIDER')
 

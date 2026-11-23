@@ -916,7 +916,7 @@ async def translate_paragraphs_plain(
                                     if log_callback:
                                         log_callback(
                                             "plain_text_paragraph_split_benign",
-                                            f"Chunk {i + 1}/{len(chunks)} (segment {i}): the model "
+                                            f"Chunk {i + 1}/{len(chunks)} (segment {i}, model {model_name}): the model "
                                             f"split the paragraph into {got} parts - merged back "
                                             "into its single slot"
                                         )
@@ -924,7 +924,7 @@ async def translate_paragraphs_plain(
                                     if log_callback:
                                         log_callback(
                                             "plain_text_paragraph_mismatch",
-                                            f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the model "
+                                            f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}, model {model_name}): the model "
                                             f"returned {got} paragraph(s) instead of {expected} - "
                                             "re-translating this segment"
                                         )
@@ -963,7 +963,7 @@ async def translate_paragraphs_plain(
                                         if log_callback:
                                             log_callback(
                                                 "plain_text_paragraph_retry_recovered",
-                                                f"Chunk {i + 1}/{len(chunks)} (segment {i}): the retry "
+                                                f"Chunk {i + 1}/{len(chunks)} (segment {i}, model {model_name}): the retry "
                                                 f"returned the expected {expected} paragraph(s) - no "
                                                 "per-paragraph repair needed"
                                             )
@@ -971,7 +971,7 @@ async def translate_paragraphs_plain(
                                         if log_callback:
                                             log_callback(
                                                 "plain_text_paragraph_repair_started",
-                                                f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): the "
+                                                f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}, model {model_name}): the "
                                                 f"retry did not return {expected} paragraph(s) - "
                                                 "locating the divergence to repair this segment"
                                             )
@@ -997,7 +997,7 @@ async def translate_paragraphs_plain(
                                         if log_callback:
                                             log_callback(
                                                 "plain_text_paragraph_repair_done",
-                                                f"Chunk {i + 1}/{len(chunks)} (segment {i}): repaired "
+                                                f"Chunk {i + 1}/{len(chunks)} (segment {i}, model {model_name}): repaired "
                                                 f"{expected} paragraph(s) in {repair_calls} extra "
                                                 f"call(s) ({repair_calls_total} repair call(s) so far "
                                                 "in this file)"
@@ -1018,7 +1018,7 @@ async def translate_paragraphs_plain(
                                             if log_callback:
                                                 log_callback(
                                                     "plain_text_paragraph_repair_failed",
-                                                    f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}): "
+                                                    f"⚠️ Chunk {i + 1}/{len(chunks)} (segment {i}, model {model_name}): "
                                                     "the repair still returned the wrong "
                                                     "count - keeping the original translation"
                                                 )

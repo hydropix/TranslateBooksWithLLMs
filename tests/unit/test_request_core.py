@@ -86,9 +86,21 @@ async def test_output_truncated():
 
 
 @pytest.mark.asyncio
-async def test_unclosed_tag_is_truncated_without_context_manager():
-    outcome = await _run(_Client(_resp(f"{TRANSLATE_TAG_IN}La pluie tombait")))
+async def test_unclosed_tag_is_truncated_after_one_retry_without_context_manager():
+    client = _Client(_resp(f"{TRANSLATE_TAG_IN}La pluie tombait"),
+                     _resp(f"{TRANSLATE_TAG_IN}La pluie tombait"))
+    outcome = await _run(client)
     assert outcome.status is ChunkStatus.TRUNCATED
+    assert len(client.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_unclosed_tag_retries_once_after_the_context_cannot_grow():
+    cm = AdaptiveContextManager(initial_context=8192, context_step=2048, max_context=8192)
+    client = _Client(_resp(f"{TRANSLATE_TAG_IN}La pluie"), _tagged("La pluie tombait."))
+    outcome = await _run(client, context_manager=cm)
+    assert outcome.status is ChunkStatus.OK
+    assert len(client.calls) == 2
 
 
 @pytest.mark.asyncio

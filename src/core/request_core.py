@@ -243,6 +243,7 @@ class PassLabels:
     empty: str
     truncated: str
     unclosed: str
+    unclosed_retry: str
     extraction_failed: Optional[str]
     unextractable: str
     rejected: str
@@ -260,6 +261,7 @@ TRANSLATION_LABELS = PassLabels(
     empty="empty_llm_response",
     truncated="output_truncated",
     unclosed="unclosed_translation_tag",
+    unclosed_retry="unclosed_tag_retry",
     extraction_failed="translation_extraction_failed",
     unextractable="epub_extraction_critical_fail",
     rejected="raw_response_fallback_rejected",
@@ -277,6 +279,7 @@ REFINEMENT_LABELS = PassLabels(
     empty="refinement_empty_response",
     truncated="refinement_output_truncated",
     unclosed="refinement_unclosed_tag",
+    unclosed_retry="refinement_unclosed_tag_retry",
     extraction_failed=None,
     unextractable="refinement_extraction_failed",
     rejected="refinement_fallback_rejected",
@@ -342,6 +345,10 @@ async def request_chunk(
             (status REFUSED), with a log line naming it.
     """
     last_response: Optional[LLMResponse] = None
+    # One plain repeat of the request for an unclosed tag, once the context
+    # cannot (or need not) grow: on cloud providers this cut-off is usually
+    # transient and the same prompt goes through on the next call (#354).
+    unclosed_retry_left = True
     while True:
         kwargs = {"system_prompt": prompt.system}
         if model:
@@ -461,9 +468,17 @@ async def request_chunk(
                      "🔄 Model stopped before closing tag. Retrying with larger context...")
                 context_manager.increase_context()
                 continue
+            finish_reason = getattr(response, "finish_reason", None)
+            if unclosed_retry_left:
+                unclosed_retry_left = False
+                _log(log_callback, labels.unclosed_retry,
+                     f"🔄 Response opened the translation tag but never closed it "
+                     f"(finish_reason: {finish_reason}). Retrying once...")
+                continue
             _log(log_callback, labels.unclosed,
-                 f"⚠️ Response opened the translation tag but never closed it: "
-                 f"the output was cut off. {labels.on_failure}")
+                 f"⚠️ Response opened the translation tag but never closed it "
+                 f"(finish_reason: {finish_reason}): the output was cut off. "
+                 f"{labels.on_failure}")
             return ChunkOutcome(ChunkStatus.TRUNCATED, response=response, detail="unclosed tag")
 
         if TRANSLATE_TAG_IN in stripped and TRANSLATE_TAG_OUT in stripped:

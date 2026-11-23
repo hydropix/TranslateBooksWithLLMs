@@ -235,7 +235,8 @@ class TestTruncatedOutputRejected:
         seen = []
         response = LLMResponse(content=f"{TRANSLATE_TAG_IN}\nBonjour le mo")
         await _request(response, raw_response_callback=seen.append)
-        assert seen == [response]
+        # The unclosed tag is retried once (#354): both answers are recorded.
+        assert seen == [response, response]
 
     @pytest.mark.asyncio
     async def test_failing_raw_callback_does_not_break_the_request(self):

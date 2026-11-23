@@ -20,19 +20,19 @@ async def _openai_payload(model: str, reasoning_effort: str | None = None) -> Di
 @pytest.mark.asyncio
 async def test_openai_payload_reasoning_effort() -> None:
     payload: Dict[str, Any] = await _openai_payload("gpt-5.6-sol", reasoning_effort="high")
-    assert payload["reasoning_effort"] == "high"
+    assert "temperature" not in payload and payload["reasoning_effort"] == "high"
 
     payload = await _openai_payload("gpt-6-sol", reasoning_effort="medium")
-    assert payload["reasoning_effort"] == "medium"
+    assert "temperature" not in payload and payload["reasoning_effort"] == "medium"
 
     payload = await _openai_payload("gpt-6.2-astra")
-    assert "reasoning_effort" not in payload
+    assert "reasoning_effort" not in payload and "temperature" not in payload
 
 
 @pytest.mark.asyncio
 async def test_openai_payload_temperature() -> None:
-    payload: Dict[str, Any] = await _openai_payload("gpt-5.4")
-    assert payload["temperature"] == 0.3 and "reasoning_effort" not in payload
+    payload: Dict[str, Any] = await _openai_payload("gpt-5.3-codex")
+    assert "reasoning_effort" not in payload and payload["temperature"] == 0.3
 
-    payload = await _openai_payload("gpt-5.5", reasoning_effort="max")
-    assert payload["temperature"] == 0.3 and "reasoning_effort" not in payload
+    payload = await _openai_payload("gpt-5.4", reasoning_effort="max")
+    assert "reasoning_effort" not in payload and payload["temperature"] == 0.3

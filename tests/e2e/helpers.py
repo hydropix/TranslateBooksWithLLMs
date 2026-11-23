@@ -109,6 +109,14 @@ def queue_files(page, paths):
 def start_batch(page, timeout_ms=20000):
     """Click Translate and return the first job id the tab registers."""
     page.click("#translateBtn")
+    # The pre-flight dialog gates the launch whenever it has a suggestion to
+    # make; confirm it as a user would, otherwise no job is ever started.
+    launch = page.locator("#preflightModalLaunch")
+    try:
+        launch.wait_for(state="visible", timeout=3000)
+        launch.click()
+    except Exception:
+        pass  # nothing to suggest, the batch started directly
     waited = 0
     while waited < timeout_ms:
         translation_id = state(page)["currentJob"]

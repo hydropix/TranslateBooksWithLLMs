@@ -392,13 +392,13 @@ export const TranslationTracker = {
      * dispatches `processNextFile`, which makes BatchController pick the next
      * 'Queued' file.
      *
-     * Limitation: closing or reloading the page interrupts the running job
-     * (LifecycleManager pagehide handler), so after a reload the restored job
-     * usually ends 'interrupted', which stops the batch by design and leaves
-     * the remaining files queued until the user restarts it. A job that
-     * already finished while the page was closed is not followed by the next
-     * file either (reconcileStateWithServer resets to idle), so a new job is
-     * never started on page load without a user action.
+     * Closing or reloading the page does not interrupt the running job: it
+     * keeps going on the server and is restored here on the next load.
+     *
+     * Limitation: a job that finished while the page was closed is not
+     * followed by the next file (reconcileStateWithServer resets to idle), so
+     * a new job is never started on page load without a user action; the
+     * remaining files stay queued until the user restarts the batch.
      */
     async restoreActiveTranslation() {
         try {

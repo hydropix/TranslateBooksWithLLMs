@@ -123,28 +123,23 @@ export const UpdateChecker = {
             if (isFrozen) {
                 installBtn.disabled = false;
                 installBtn.title = t('common:update_download_title');
-                this._setInstallBtnText(installBtn, t('common:update_download'));
+                this._setInstallBtnText(installBtn, 'common:update_download');
             } else {
                 installBtn.disabled = false;
                 installBtn.title = '';
-                this._setInstallBtnText(installBtn, t('common:update_now'));
+                this._setInstallBtnText(installBtn, 'common:update_now');
             }
         }
 
         banner.classList.remove('hidden');
     },
 
-    _setInstallBtnText(btn, text) {
-        // Replace the trailing text node (after the <span> icon) without
-        // touching the icon itself.
-        for (let i = btn.childNodes.length - 1; i >= 0; i--) {
-            const node = btn.childNodes[i];
-            if (node.nodeType === Node.TEXT_NODE) {
-                node.textContent = ` ${text}`;
-                return;
-            }
-        }
-        btn.appendChild(document.createTextNode(` ${text}`));
+    _setInstallBtnText(btn, key) {
+        // Update the translated label span without touching the icon.
+        const label = btn.querySelector('span[data-i18n]');
+        if (!label) return;
+        label.dataset.i18n = key;
+        label.textContent = t(key);
     },
 
     dismissBanner() {

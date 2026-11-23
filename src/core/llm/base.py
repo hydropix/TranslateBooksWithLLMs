@@ -258,13 +258,6 @@ class LLMProvider(ABC):
         from src import config
         return config.TEMPERATURE
 
-    def effective_reasoning_effort(self) -> str:
-        """The reasoning effort level to send (config ``REASONING_EFFORT`` by default)."""
-        if self.reasoning_effort is not None:
-            return self.reasoning_effort
-        from src import config
-        return config.REASONING_EFFORT
-
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME or self.provider_name

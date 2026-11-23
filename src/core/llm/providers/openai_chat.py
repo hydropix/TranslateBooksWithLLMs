@@ -63,6 +63,7 @@ def _error_in_ok_answer(body_error: Dict[str, Any]) -> ProviderError:
 class OpenAIChatProvider(LLMProvider):
     """Base for every provider speaking the OpenAI chat-completions protocol."""
 
+    #: Models prefixes to determine if ``reasoning_effort`` is supported
     REASONING_MODELS: tuple[str, ...] = ("gpt-5.5", "gpt-5.6", "gpt-6")
     API_URL: str = ""
     MODELS_URL: str = ""
@@ -71,6 +72,8 @@ class OpenAIChatProvider(LLMProvider):
     #: Context limit reported for a model missing from the table (0 = unknown).
     DEFAULT_CONTEXT_LIMIT: int = 0
     #: Whether ``temperature`` or ``reasoning_effort`` is sent (as an optional, droppable parameter).
+    #: ``temperature`` is unsupported since model ``gpt-5.5`` and ``reasoning_effort`` is added.
+    #: ``SEND_TEMPERATURE`` will cover both ``temperature`` and ``reasoning_effort`` for compatibility.
     SEND_TEMPERATURE: bool = True
     #: On a 400 that names none of the optional parameters, drop them all
     #: anyway and retry once (for gateways whose 400s rarely name the field).
@@ -132,10 +135,13 @@ class OpenAIChatProvider(LLMProvider):
     async def _optional_params(self, request: LLMRequest) -> Dict[str, Any]:
         """Payload entries a model may reject; dropped once on a naming 400."""
         if self.SEND_TEMPERATURE:
-            if self.model.startswith(self.REASONING_MODELS):
-                return {"reasoning_effort": self.effective_reasoning_effort()}
-            else:
+            # Send 'temperature' for non-reasoning models
+            if not self.model.startswith(self.REASONING_MODELS):
                 return {"temperature": self.effective_temperature()}
+            # Send 'reasoning_effort' if set
+            reasoning_effort: str | None = self.effective_reasoning_effort()
+            if reasoning_effort:
+                return {"reasoning_effort": reasoning_effort}
         return {}
 
     def _parse_cost(self, usage: Dict[str, Any], prompt_tokens: int,
@@ -242,3 +248,10 @@ class OpenAIChatProvider(LLMProvider):
                       f"without {sorted(optional)} to rule them out", level=logging.INFO)
             request.state["optional"] = {}
         return True
+
+    def effective_reasoning_effort(self) -> str | None:
+        """The reasoning effort level to send (config ``REASONING_EFFORT`` by default)."""
+        if self.reasoning_effort is not None:
+            return self.reasoning_effort
+        from src import config
+        return config.REASONING_EFFORT

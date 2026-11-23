@@ -297,9 +297,11 @@ else:
 # models) gets the request re-sent once without it.
 TEMPERATURE = float(os.getenv('TEMPERATURE', '0.3'))
 
-# Reasoning effort level sent with every request by the compatible OpenAI models.
+# Reasoning effort level sent with every request by compatible OpenAI models.
+# Default empty to omit the parameter when sending the request,
+# using provider model default.
 # It controls how much internal "thinking" model does before translating.
-REASONING_EFFORT = os.getenv('REASONING_EFFORT', 'high')
+REASONING_EFFORT: str | None = os.getenv('REASONING_EFFORT', None)
 
 # Retry policy of every LLM request (see src/core/llm/policy.py). Transient
 # failures (timeouts, 5xx, connection errors) are retried up to

@@ -32,12 +32,13 @@ class OpenAICompatibleProvider(OpenAIChatProvider):
                  provider_name: str = "openai-compatible",
                  *,
                  retry_policy: Optional[RetryPolicy] = None,
-                 temperature: Optional[float] = None):
+                 temperature: Optional[float] = None,
+                 reasoning_effort: Optional[str] = None):
         # No key pool for keyless local servers (llama.cpp, LM Studio, vLLM).
         super().__init__(
             api_key=api_key, model=model, api_endpoint=self._normalize_endpoint(api_endpoint),
             provider_name=provider_name, context_window=context_window,
-            retry_policy=retry_policy, temperature=temperature, log_callback=log_callback,
+            retry_policy=retry_policy, temperature=temperature, reasoning_effort=reasoning_effort, log_callback=log_callback,
         )
         self._detected_context_size: Optional[int] = None
         self._context_detector = ContextDetector()

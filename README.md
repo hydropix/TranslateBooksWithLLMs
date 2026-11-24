@@ -90,7 +90,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more solutions.
 <details>
 <summary><b>Install from source</b></summary>
 
-**Prerequisites:** [Python 3.8+](https://www.python.org/downloads/), [Ollama](https://ollama.com/), [Git](https://git-scm.com/)
+**Prerequisites:** [Python 3.11 to 3.14](https://www.python.org/downloads/) (3.15 is not supported yet: the latest `python-dotenv` release does not support it), [Ollama](https://ollama.com/), [Git](https://git-scm.com/)
 
 ```bash
 git clone https://github.com/hydropix/TranslateBooksWithLLMs.git

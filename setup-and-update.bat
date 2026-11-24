@@ -24,7 +24,7 @@ echo [1/6] Checking Python Installation...
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [X] Python is not installed or not in PATH
-    echo     Please install Python 3.8+ from https://www.python.org/
+    echo     Please install Python 3.11-3.14 from https://www.python.org/
     echo     Make sure to check "Add Python to PATH" during installation
     pause
     exit /b 1

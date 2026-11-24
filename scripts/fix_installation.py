@@ -23,13 +23,11 @@ def check_python_version():
     version_str = f"{version.major}.{version.minor}.{version.micro}"
     print(f"Python version: {version_str}")
 
-    if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print("[ERROR] Python 3.8 or higher is required")
+    if version.major < 3 or (version.major == 3 and version.minor < 11):
+        print("[ERROR] Python 3.11 or higher is required")
         return False
     else:
         print("[OK] Python version is compatible")
-        if version.minor < 11:
-            print("[INFO] Note: Python 3.11+ is recommended for better f-string handling")
         return True
 
 

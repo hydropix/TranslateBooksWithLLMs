@@ -34,7 +34,7 @@ or for editing the upstream Python project itself.
 
 ## 1. Set up the tool (once per environment)
 
-Requires Python 3.8+ and Git. Clone the repository and install dependencies:
+Requires Python 3.11-3.14 and Git. Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/hydropix/TranslateBooksWithLLMs.git

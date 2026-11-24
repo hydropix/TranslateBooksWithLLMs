@@ -6,7 +6,7 @@ This module provides file type detection based on:
 2. Magic bytes (for binary formats like EPUB, DOCX, PDF, ZIP)
 3. Content heuristics (for text-based formats like SRT, plain text)
 
-This allows translation of files with non-standard extensions (e.g., .log, .md, .text)
+This allows translation of files with non-standard extensions (e.g., .log, .text)
 by analyzing their actual content.
 """
 import os
@@ -14,17 +14,19 @@ import re
 import zipfile
 from typing import Literal, Optional, Tuple
 
-FileType = Literal["txt", "epub", "srt", "pgn", "docx", "pdf"]
+FileType = Literal["txt", "md", "epub", "srt", "pgn", "docx", "pdf"]
 
 # Known text file extensions that should be treated as plain text
 KNOWN_TEXT_EXTENSIONS = {
-    '.txt', '.text', '.log', '.md', '.markdown', '.rst', '.asc',
+    '.txt', '.text', '.log', '.rst', '.asc',
     '.cfg', '.ini', '.conf', '.csv', '.tsv', '.json', '.xml', '.html', '.htm',
     '.yaml', '.yml', '.toml', '.properties', '.env'
 }
 
 # Extensions with dedicated processors
 PROCESSOR_EXTENSIONS = {
+    '.md': 'md',
+    '.markdown': 'md',
     '.epub': 'epub',
     '.srt': 'srt',
     '.pgn': 'pgn',
@@ -44,7 +46,7 @@ def detect_file_type(file_path: str) -> FileType:
         file_path: Path to the file
 
     Returns:
-        File type as string ('txt', 'epub', 'srt', 'pgn', 'docx', 'pdf')
+        File type as string ('txt', 'md', 'epub', 'srt', 'pgn', 'docx', 'pdf')
 
     Raises:
         ValueError: If file type cannot be determined or is not supported
@@ -71,7 +73,7 @@ def detect_file_type(file_path: str) -> FileType:
     # Could not determine type
     raise ValueError(
         f"Cannot determine file type for: {ext}. "
-        f"Supported types: .txt, .epub, .srt, .pgn, .docx, .pdf, "
+        f"Supported types: .txt, .md, .epub, .srt, .pgn, .docx, .pdf, "
         f"or plain text files with any extension."
     )
 

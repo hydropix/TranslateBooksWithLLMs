@@ -5,6 +5,7 @@ This module provides a unified translation workflow that works with any file for
 through the FormatAdapter interface.
 """
 
+import re
 from typing import Callable, Optional, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 
@@ -270,6 +271,10 @@ class GenericTranslator:
             from src.core.request_core import languages_differ, tagged_answer_problem
             reject_echo = languages_differ(source_language, target_language)
 
+            # Adapters that protect spans with [idN] placeholders (Markdown)
+            # use the existing placeholder prompt mode.
+            placeholder_format = self.adapter.placeholder_format
+
             def answer_check(source_text, answer):
                 return tagged_answer_problem(answer, source_text, reject_echo=reject_echo)
 
@@ -322,6 +327,8 @@ class GenericTranslator:
                         log_callback=log_callback,
                         prompt_options=attempt_options,
                         context_manager=context_manager,
+                        has_placeholders=placeholder_format is not None,
+                        placeholder_format=placeholder_format,
                         raw_response_callback=record_raw,
                         on_raw_fallback=lambda _i=i: raw_fallback_units.add(_i),
                         answer_check=answer_check,
@@ -390,7 +397,7 @@ class GenericTranslator:
                         f"Translation interrupted at unit {at_index+1}/{total_units}")
                 # Try to save partial output for TXT/SRT/PGN (fast reconstruction).
                 # For EPUB, partial output may not be valid, so we skip it.
-                if self.adapter.format_name in ['txt', 'srt', 'pgn']:
+                if self.adapter.format_name in ['txt', 'srt', 'pgn', 'md']:
                     try:
                         if log_callback:
                             log_callback("reconstruct_partial", "Saving partial output before interruption")
@@ -498,7 +505,12 @@ class GenericTranslator:
                         _emit_unit_progress()
 
                         if sequential:
-                            last_context = previous_context_tail(translated_content)
+                            context_text = translated_content
+                            if placeholder_format is not None:
+                                # Placeholder numbers of another chunk would
+                                # only confuse the next request.
+                                context_text = re.sub(r'\[id\d+\]\s*', '', context_text)
+                            last_context = previous_context_tail(context_text)
 
                         if log_callback:
                             log_callback("unit_complete",

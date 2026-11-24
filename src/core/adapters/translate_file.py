@@ -2,11 +2,11 @@
 Unified file translation function using the adapter pattern.
 
 This module provides a single entry point for translating files of any supported
-format (TXT, SRT, EPUB, DOCX, PDF) using format-specific adapters.
+format (TXT, Markdown, SRT, EPUB, DOCX, PDF) using format-specific adapters.
 
 File type detection supports:
-1. Known extensions (.txt, .epub, .srt, .docx, .pdf)
-2. Content-based detection for unknown extensions (e.g., .log, .md, .text -> txt)
+1. Known extensions (.txt, .md, .epub, .srt, .docx, .pdf)
+2. Content-based detection for unknown extensions (e.g., .log, .text -> txt)
 3. Automatic routing to appropriate processors
 """
 
@@ -17,6 +17,7 @@ from .generic_translator import GenericTranslator
 from .txt_adapter import TxtAdapter
 from .srt_adapter import SrtAdapter
 from .pgn_adapter import PgnAdapter
+from .markdown_adapter import MarkdownAdapter
 from .exceptions import UnsupportedFormatError
 from src.core.job import JobConfig, JobContext, JobResult
 from src.utils.file_detector import detect_file_type, detect_file_type_by_content
@@ -201,6 +202,7 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
         'txt': TxtAdapter,
         'srt': SrtAdapter,
         'pgn': PgnAdapter,
+        'md': MarkdownAdapter,
     }
 
     adapter_class = adapter_map.get(detected_type)
@@ -239,6 +241,8 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
 #: Extension -> file type of every format the translate engine accepts.
 FILE_TYPE_BY_EXTENSION = {
     '.txt': 'txt',
+    '.md': 'md',
+    '.markdown': 'md',
     '.srt': 'srt',
     '.pgn': 'pgn',
     '.epub': 'epub',
@@ -255,7 +259,7 @@ def get_file_type_from_path(filepath: str) -> str:
         filepath: Path to the file
 
     Returns:
-        File type string: 'txt', 'srt', 'pgn', 'epub', 'docx', 'pdf', or 'unknown'
+        File type string: 'txt', 'md', 'srt', 'pgn', 'epub', 'docx', 'pdf', or 'unknown'
     """
     _, ext = os.path.splitext(filepath.lower())
     return FILE_TYPE_BY_EXTENSION.get(ext, 'unknown')

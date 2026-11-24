@@ -16,7 +16,7 @@ from pathlib import Path
 
 from lxml import etree
 
-TEXT_EXTS: frozenset[str] = frozenset({'.txt', '.srt'})
+TEXT_EXTS: frozenset[str] = frozenset({'.txt', '.srt', '.md', '.markdown'})
 RICH_EXTS: frozenset[str] = frozenset({'.epub', '.docx', '.pdf'})
 SUPPORTED_EXTS: frozenset[str] = TEXT_EXTS | RICH_EXTS
 

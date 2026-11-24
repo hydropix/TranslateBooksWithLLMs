@@ -13,6 +13,7 @@ from .generic_translator import GenericTranslator
 from .txt_adapter import TxtAdapter
 from .srt_adapter import SrtAdapter
 from .pgn_adapter import PgnAdapter
+from .markdown_adapter import MarkdownAdapter
 
 # Unified translation entry point
 from .translate_file import translate_file, get_file_type_from_path
@@ -37,6 +38,7 @@ __all__ = [
     'TxtAdapter',
     'SrtAdapter',
     'PgnAdapter',
+    'MarkdownAdapter',
 
     # Unified translation entry point
     'translate_file',

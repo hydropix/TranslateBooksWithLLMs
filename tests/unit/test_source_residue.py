@@ -318,3 +318,103 @@ class TestPlainTextPipeline:
         assert stats.failed_chunks == 0
         assert stats.fallback_used == 0
         assert translated == [text]
+
+
+# ---------------------------------------------------------------------------
+# 5. Single lowercase source words inside a non-Latin target (issue #353)
+# ---------------------------------------------------------------------------
+
+class TestLowercaseWordResidue:
+
+    @pytest.mark.parametrize("source, output, word", [
+        ("I tried not to fidget too much under his very intense gaze.",
+         "Я постарался не слишком ёрзать под его очень intense взглядом.", "intense"),
+        ("Frustration in the class steadily grew.",
+         "Разочарование в классе steadily росло.", "steadily"),
+        ("It would be a gross understatement.",
+         "Это было бы gross understatement.", "gross, understatement"),
+        ("Now I had to pack my things.",
+         "Сейчас мне нужно было pack вещи.", "pack"),
+    ])
+    def test_issue_examples_are_retry_only_findings(self, source, output, word):
+        report = detect_source_residue(source, output, "English", "Russian")
+        assert report is not None
+        assert report.kind == "word"
+        assert report.retry_only and not report.blocking
+        assert report.sample == word
+        assert detect_blocking_residue(source, output, "English", "Russian") is None
+
+    def test_other_non_latin_targets(self):
+        assert detect_source_residue(
+            "His gaze was intense.", "Το βλέμμα του ήταν intense.",
+            "English", "Greek").kind == "word"
+        assert detect_source_residue(
+            "His gaze was intense.", "彼の視線はintenseだった。",
+            "English", "Japanese").kind == "word"
+
+    @pytest.mark.parametrize("source, output", [
+        # Names and acronyms are capitalised.
+        ("Harry met Hermione at NASA.", "Harry встретил Hermione в NASA."),
+        # URLs, emails, paths, file names, code.
+        ("See https://example.com/docs for details.",
+         "Подробности на https://example.com/docs."),
+        ("Write to support@example.com today.", "Напишите на support@example.com сегодня."),
+        ("Open the config/settings.yaml file.", "Откройте файл config/settings.yaml."),
+        ("Call the my_function helper.", "Вызовите помощник my_function."),
+        ("Run `pip install` first.", "Сначала выполните `pip install`."),
+        # camelCase brands.
+        ("She bought an iPhone.", "Она купила iPhone."),
+        # A lowercase Latin word that is not in the source is not residue.
+        ("He shrugged.", "Он пожал плечами, как бы говоря «ну и что», et cetera."),
+        # Single letters are variables or initials.
+        ("Let x be the answer.", "Пусть x будет ответом."),
+        # A Latin word in a line with no target-script text (a quotation or
+        # a code line on its own) is left to the long-run check.
+        ("intense\nHe looked at her.", "intense\nОн посмотрел на неё."),
+    ])
+    def test_false_positives_are_not_flagged(self, source, output):
+        assert detect_source_residue(source, output, "English", "Russian") is None
+
+    def test_glossary_terms_are_whitelisted(self):
+        source = "He whispered lumos and the wand lit up."
+        output = "Он прошептал lumos, и палочка засветилась."
+        assert detect_source_residue(source, output, "English", "Russian").kind == "word"
+        assert detect_source_residue(source, output, "English", "Russian",
+                                     allowed_terms=["Lumos"]) is None
+        assert detect_source_residue(source, output, "English", "Russian",
+                                     allowed_terms={"lumos": "люмос"}.values()) is not None
+
+    def test_latin_target_is_unchanged(self):
+        assert detect_source_residue(
+            "His gaze was intense and steady.",
+            "Son regard était intense et steady.", "English", "French") is None
+
+    def test_serbian_target_allows_latin(self):
+        assert detect_source_residue(
+            "His gaze was intense.", "Његов поглед је био intense.",
+            "English", "Serbian") is None
+
+    @pytest.mark.asyncio
+    async def test_word_residue_earns_one_retry_using_the_glossary(self, monkeypatch):
+        seen = _stub_adaptive_request(monkeypatch, [
+            "Он прошептал lumos очень intense.",
+            "Он прошептал lumos очень напряжённо.",
+        ])
+        result = await core_translator.generate_translation_request(
+            "He whispered lumos very intense.", "",
+            source_language="English", target_language="Russian",
+            model="m", llm_client=object(),
+            prompt_options={"glossary_terms": {"lumos": "lumos"}})
+        assert result == "Он прошептал lumos очень напряжённо."
+        assert len(seen) == 2 and seen[1]["source_residue_retry"] is True
+
+    @pytest.mark.asyncio
+    async def test_glossary_only_latin_word_triggers_no_retry(self, monkeypatch):
+        seen = _stub_adaptive_request(monkeypatch, ["Он прошептал lumos."])
+        result = await core_translator.generate_translation_request(
+            "He whispered lumos.", "",
+            source_language="English", target_language="Russian",
+            model="m", llm_client=object(),
+            prompt_options={"glossary_terms": {"lumos": "lumos"}})
+        assert result == "Он прошептал lumos."
+        assert len(seen) == 1

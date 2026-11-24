@@ -33,12 +33,20 @@ legitimately keeps such text is never left 'partial' with a chunk that every
 repair pass would retranslate in vain. Only a leftover run of a non-Latin
 source script (Korean, Japanese kana, Chinese, Cyrillic, ...) is `blocking`:
 the chunk is then recorded as untranslated.
+
+A third, narrower signal covers single leftover words (issue #353). In a
+target written in a non-Latin script, a Latin run only counts above
+MIN_RUN_WORDS_LATIN words, so "под его очень intense взглядом" slipped
+through. A *lowercase* Latin word of the source text, sitting in a line of
+target-script text, is almost never legitimate: names are capitalised, and
+URLs, paths, code and glossary terms are excluded explicitly. Such a word is
+a `retry_only` finding of kind 'word'.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, Optional, Sequence, Tuple
+from typing import Dict, FrozenSet, Iterable, Optional, Sequence, Tuple
 
 
 # Unicode ranges per script. Only letters matter: digits and punctuation are
@@ -129,9 +137,25 @@ MAX_RESIDUE_RATIO = 0.3
 # and one-word lines are often the same in both languages.
 MIN_ECHO_LETTERS = 20
 
+# A leftover lowercase word needs at least this many letters: single letters
+# are math variables, list markers or initials far more often than residue.
+MIN_LOWERCASE_WORD_LETTERS = 2
+
 # Tag placeholders ([id0], see PLACEHOLDER_PATTERN in src/config.py, plus the
 # legacy [[0]] form still accepted by older checkpoints).
 _PLACEHOLDER_RE = re.compile(r"\[id\d+\]|\[\[\d+\]\]")
+
+
+_LATIN_CLASS = "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi in _SCRIPT_RANGES["latin"])
+# A Latin word, apostrophes and hyphens included ("don't", "well-known").
+_LATIN_WORD_RE = re.compile(rf"[{_LATIN_CLASS}]+(?:['’-][{_LATIN_CLASS}]+)*")
+# Characters that mark a token as a URL, an email, a path, a file name or code
+# rather than prose: if the whitespace-delimited token holding a Latin word
+# contains one of them (after trimming surrounding punctuation), the word is
+# not residue.
+_CODE_LIKE_RE = re.compile(r"[0-9_/\\@.:=<>{}\[\]#`$%&|~^*+]")
+# Punctuation that may wrap a prose word and is trimmed before the code check.
+_WRAPPING_PUNCTUATION = "\"'«»„“”‘’()[]{}.,;:!?…—–-"
 
 
 @dataclass(frozen=True)
@@ -140,7 +164,8 @@ class ResidueReport:
 
     Attributes:
         kind: 'echo' when the output repeats the input, 'script' when it keeps
-            long runs of a script only the source language uses.
+            long runs of a script only the source language uses, 'word' when
+            it keeps lowercase source words inside target-script text.
         sample: A short excerpt of the leftover text, for the log.
         residue_units: Characters (or words) of source script left in the
             output. Lower is better when comparing attempts.
@@ -254,11 +279,59 @@ def _letter_count(text: str) -> int:
     return sum(1 for ch in text if ch.isalpha())
 
 
+def _allowed_words(allowed_terms: Optional[Iterable[str]]) -> FrozenSet[str]:
+    """Casefolded Latin words of the terms that may legitimately stay as is."""
+    words = set()
+    for term in allowed_terms or ():
+        words.update(w.casefold() for w in _LATIN_WORD_RE.findall(term or ""))
+    return frozenset(words)
+
+
+def _is_prose_lowercase_word(word: str, token: str) -> bool:
+    """True when `word`, found in whitespace token `token`, reads as a plain
+    lowercase prose word: no capital (names, acronyms, camelCase brands) and
+    no URL, email, path or code around it."""
+    if sum(1 for ch in word if ch.isalpha()) < MIN_LOWERCASE_WORD_LETTERS:
+        return False
+    if any(ch.isupper() for ch in word):
+        return False
+    core = token.strip(_WRAPPING_PUNCTUATION)
+    return not _CODE_LIKE_RE.search(core)
+
+
+def _lowercase_word_residue(
+    source_clean: str,
+    output_clean: str,
+    target_scripts: FrozenSet[str],
+    allowed_terms: Optional[Iterable[str]],
+) -> Optional[ResidueReport]:
+    """Lowercase source words left inside target-script lines (issue #353)."""
+    source_words = {w.casefold() for w in _LATIN_WORD_RE.findall(source_clean)}
+    if not source_words:
+        return None
+    allowed = _allowed_words(allowed_terms)
+    found = []
+    for line in output_clean.splitlines():
+        if not any(_script_of(ch) in target_scripts for ch in line):
+            continue
+        for token in line.split():
+            for word in _LATIN_WORD_RE.findall(token):
+                folded = word.casefold()
+                if (folded in source_words and folded not in allowed
+                        and _is_prose_lowercase_word(word, token)):
+                    found.append(word)
+    if not found:
+        return None
+    unique = list(dict.fromkeys(found))
+    return ResidueReport("word", _excerpt(", ".join(unique)), len(found), retry_only=True)
+
+
 def detect_source_residue(
     source_text: str,
     translated_text: str,
     source_language: str,
     target_language: str,
+    allowed_terms: Optional[Iterable[str]] = None,
 ) -> Optional[ResidueReport]:
     """Return a report when `translated_text` still holds source text, else None.
 
@@ -267,6 +340,9 @@ def detect_source_residue(
         translated_text: The LLM's answer (placeholders allowed).
         source_language: Source language name or code.
         target_language: Target language name or code.
+        allowed_terms: Terms that may legitimately stay in the source form
+            (the active glossary's source and target terms). Only the
+            lowercase-word check uses them.
 
     Returns:
         A ResidueReport, or None when the translation looks complete or when
@@ -304,6 +380,10 @@ def detect_source_residue(
         return ResidueReport("echo", _excerpt(source_clean.strip()),
                              _letter_count(source_clean), retry_only=True)
 
+    if "latin" in scripts:
+        return _lowercase_word_residue(source_clean, output_clean,
+                                       language_scripts(target_language), allowed_terms)
+
     return None
 
 
@@ -336,6 +416,8 @@ def residue_log_message(report: ResidueReport, source_language: str) -> str:
     """One log line describing a report, shared by every pipeline."""
     if report.kind == "echo":
         return f"the model returned the {source_language} text unchanged: \"{report.sample}\""
+    if report.kind == "word":
+        return f"{source_language} words left inside the translation: \"{report.sample}\""
     return f"{source_language} text left untranslated: \"{report.sample}\""
 
 

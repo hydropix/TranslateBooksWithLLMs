@@ -508,7 +508,7 @@ async def _retry_on_source_residue(
     retry that lost or invented a placeholder never replaces an answer that
     kept them all, since the caller would then throw away a usable chunk.
     Every finding earns this retry, including the retry-only ones (echo,
-    leftover Latin text); callers then run `detect_blocking_residue` on what
+    leftover Latin text, single lowercase source words); callers then run `detect_blocking_residue` on what
     comes back and record the chunk as untranslated only for a blocking
     finding.
 
@@ -518,7 +518,12 @@ async def _retry_on_source_residue(
     """
     if (prompt_options or {}).get('source_residue_retry'):
         return translated_text, False
-    report = detect_source_residue(main_content, translated_text, source_language, target_language)
+    # Glossary terms may legitimately stay in their source form (spells,
+    # coined words): never treat them as leftover lowercase words (#353).
+    glossary_terms = (prompt_options or {}).get('glossary_terms') or {}
+    allowed_terms = [*glossary_terms.keys(), *glossary_terms.values()]
+    report = detect_source_residue(main_content, translated_text, source_language,
+                                   target_language, allowed_terms=allowed_terms)
     if report is None:
         return translated_text, False
 
@@ -566,7 +571,8 @@ async def _retry_on_source_residue(
         if retry_ok and not first_ok:
             return _accept_retry()
 
-    retry_report = detect_source_residue(main_content, retried, source_language, target_language)
+    retry_report = detect_source_residue(main_content, retried, source_language,
+                                         target_language, allowed_terms=allowed_terms)
     if residue_score(retry_report) < residue_score(report):
         if log_callback and retry_report is None:
             log_callback("source_residue_recovered", "✓ Retry translated the leftover text")

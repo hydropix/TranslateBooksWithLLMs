@@ -6,18 +6,15 @@ The translation pipelines are sequential by design: a chunk's checkpoint pointer
 `current_chunk_index + 1`. Naive fan-out with out-of-order completion would let
 a late-finishing early chunk be skipped on resume.
 
-The "ordered window" pattern preserves that invariant while still issuing several
-LLM requests at once: chunks are processed in consecutive windows of `window_size`.
-All requests in a window run concurrently; the next window only starts once the
-current one has fully settled. Within a window, results are handed back in input
-order so the caller can persist them (and advance the checkpoint pointer)
-exactly as it would sequentially.
+The ordered-concurrent pattern preserves that invariant while still issuing
+several LLM requests at once: up to `workers` requests are in flight, and
+results are handed back strictly in input order so the caller can persist them
+(and advance the checkpoint pointer) exactly as it would sequentially.
 
-When `window_size == 1` this degrades to plain sequential iteration, byte-for-byte
+With one worker this degrades to plain sequential iteration, byte-for-byte
 identical to the legacy loops.
 """
 import asyncio
-from typing import Any, Awaitable, Callable, List, Sequence
 
 try:  # Python >= 3.10
     from contextlib import aclosing
@@ -33,51 +30,11 @@ except ImportError:  # pragma: no cover - Python 3.8/3.9 fallback
             await thing.aclose()
 
 
-async def gather_window(
-    items: Sequence[Any],
-    worker: Callable[[Any], Awaitable[Any]],
-) -> List[Any]:
-    """Run `worker(item)` for every item concurrently, results in input order.
-
-    Exceptions are returned in place (never raised) so the caller can decide,
-    per item and in order, whether to persist, skip, or abort. This mirrors
-    `asyncio.gather(..., return_exceptions=True)` but reads intentionally at the
-    call site.
-    """
-    return await asyncio.gather(
-        *(worker(item) for item in items),
-        return_exceptions=True,
-    )
-
-
-async def iter_ordered_windows(
-    items: Sequence[Any],
-    window_size: int,
-    worker: Callable[[Any], Awaitable[Any]],
-):
-    """Yield settled windows of `(item, result_or_exception)` pairs, in order.
-
-    Each yielded window is a list aligned with the source order. The next window
-    is not dispatched until the caller resumes iteration, so the caller can run
-    interruption checks and persist state between windows.
-
-    Args:
-        items: ordered work items (e.g. chunk indices).
-        window_size: how many items run concurrently per window (>= 1).
-        worker: coroutine factory called once per item.
-    """
-    step = max(1, int(window_size))
-    for start in range(0, len(items), step):
-        batch = list(items[start:start + step])
-        results = await gather_window(batch, worker)
-        yield list(zip(batch, results))
-
-
 async def iter_ordered_concurrent(items, workers, worker, should_interrupt=None):
     """Yield ``(item, result_or_exception)`` in input order while keeping up to
     ``workers`` ``worker(item)`` coroutines in flight at all times.
 
-    Unlike :func:`iter_ordered_windows`, there is no per-window barrier: the
+    The
     moment one request finishes, the next is launched, so the pool stays full
     and throughput approaches ``workers`` x even when per-item latency varies
     (the common case for cloud LLMs). Results are still surfaced strictly in

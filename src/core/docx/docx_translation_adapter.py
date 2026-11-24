@@ -1,5 +1,5 @@
 """
-Adaptateur DOCX pour l'orchestrateur générique.
+DOCX adapter for the generic orchestrator.
 
 Pipeline:
 - Document → HTML (mammoth)
@@ -33,10 +33,10 @@ class _DocxChunkPlan:
 
 class DocxTranslationAdapter:
     """
-    Adaptateur pour traduire des documents DOCX.
+    Adapter for translating DOCX documents.
 
-    Note: Utilise le chemin du fichier DOCX (str) comme SourceT plutôt que
-    Document directement car la conversion mammoth nécessite un chemin de fichier.
+    Note: Uses the DOCX file path (str) as SourceT rather than
+    the Document directly, because the mammoth conversion needs a file path.
     """
 
     def __init__(self):
@@ -52,16 +52,16 @@ class DocxTranslationAdapter:
         log_callback: Optional[Callable]
     ) -> Tuple[str, Dict[str, Any]]:
         """
-        Extrait le contenu HTML depuis le fichier DOCX.
+        Extract the HTML content from the DOCX file.
 
         Args:
-            source: Chemin vers le fichier DOCX
-            log_callback: Callback de logging
+            source: Path to the DOCX file
+            log_callback: Logging callback
 
         Returns:
             (html_content, context)
             - html_content: HTML extrait via mammoth
-            - context: Dict avec metadata DOCX et tag preserver
+            - context: Dict with DOCX metadata and the tag preserver
         """
         # Convert DOCX → HTML
         html_content, metadata = self.converter.to_html(source)
@@ -83,14 +83,14 @@ class DocxTranslationAdapter:
         log_callback: Optional[Callable]
     ) -> Tuple[str, Dict[str, str], Tuple[str, str]]:
         """
-        Préserve les tags HTML via placeholders.
+        Preserve HTML tags via placeholders.
 
-        Réutilise TagPreserver d'EPUB.
+        Reuses the EPUB TagPreserver.
 
         Args:
             content: HTML content
-            context: Context dict avec preserver
-            log_callback: Callback de logging
+            context: Context dict with the preserver
+            log_callback: Logging callback
 
         Returns:
             (text_with_placeholders, tag_map, placeholder_format)
@@ -115,15 +115,15 @@ class DocxTranslationAdapter:
         log_callback: Optional[Callable]
     ) -> List[Dict]:
         """
-        Découpe via HtmlChunker.
+        Split into chunks via HtmlChunker.
 
-        Réutilise HtmlChunker d'EPUB.
+        Reuses the EPUB HtmlChunker.
 
         Args:
             text: Text with placeholders
             structure_map: Map of placeholders
             max_tokens: Max tokens per chunk
-            log_callback: Callback de logging
+            log_callback: Logging callback
 
         Returns:
             List of chunks
@@ -146,14 +146,14 @@ class DocxTranslationAdapter:
         context: Dict[str, Any]
     ) -> str:
         """
-        Reconstruit le HTML depuis les chunks traduits.
+        Rebuild the HTML from the translated chunks.
 
-        Réutilise TagPreserver d'EPUB.
+        Reuses the EPUB TagPreserver.
 
         Args:
             translated_chunks: Translated chunks
             structure_map: Map of placeholders
-            context: Context dict avec preserver
+            context: Context dict with the preserver
 
         Returns:
             Reconstructed HTML
@@ -171,13 +171,13 @@ class DocxTranslationAdapter:
         log_callback: Optional[Callable]
     ) -> bytes:
         """
-        Reconstruit DOCX depuis HTML traduit.
+        Rebuild the DOCX from the translated HTML.
 
         Args:
             reconstructed_content: Reconstructed HTML content
             source: Source DOCX path (headers and footers are copied from it)
-            context: Context dict avec metadata
-            log_callback: Callback de logging
+            context: Context dict with metadata
+            log_callback: Logging callback
 
         Returns:
             DOCX file as bytes

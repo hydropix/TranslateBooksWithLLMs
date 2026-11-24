@@ -36,7 +36,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from .config import OP_REFINE, OP_TERM_FIX, JobConfig
+from .config import OP_REFINE, OP_TERM_FIX, OP_TRANSLATE, JobConfig
 from .context import JobContext
 from .prepare import apply_auto_prep, snapshot_custom_instructions, snapshot_glossary
 from .result import JobResult, JobStatus
@@ -442,6 +442,10 @@ class JobRunner:
         elapsed = time.time() - self._started_at
         self.sinks.record_elapsed(elapsed)
         stats = {**dict(result.stats or {}), **self.sinks.current_stats()}
+        # Before any branch below prunes the checkpoint it reads from.
+        report_path = self._write_failure_report(result, stats)
+        if report_path:
+            result = result.with_changes(output_paths=result.output_paths + (report_path,))
 
         if result.status is JobStatus.INTERRUPTED:
             self.sinks.log("summary_interrupted",
@@ -508,6 +512,27 @@ class JobRunner:
 
         self.sinks.job_finished(job, result, elapsed)
         return result
+
+    def _write_failure_report(self, result: JobResult, stats: Dict[str, Any]) -> Optional[str]:
+        """Write the opt-in untranslated-chunk report (issue #232).
+
+        Translation jobs only, and only next to an output file that exists.
+        A failure to write it is logged and never changes the job's outcome.
+        """
+        from .failure_report import write_failure_report
+        job = self.job
+        output_path = result.output_path or job.output_path
+        if (not job.failure_report or job.operation != OP_TRANSLATE
+                or not output_path or not os.path.exists(output_path)):
+            return None
+        try:
+            path = write_failure_report(job, result.status.value, output_path, stats,
+                                        self.checkpoint_manager, self.translation_id)
+        except Exception as e:
+            self.sinks.log("failure_report_error", f"⚠️ Could not write the failure report: {e}")
+            return None
+        self.sinks.log("failure_report_written", f"📝 Failure report written: {path}")
+        return path
 
     # -- rate limit --------------------------------------------------------
 

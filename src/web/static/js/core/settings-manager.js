@@ -186,6 +186,7 @@ export const SettingsManager = {
             { id: 'poeApiKey', event: 'input' },
             { id: 'nimApiKey', event: 'input' },
             { id: 'disableAutoPause', event: 'change' },
+            { id: 'failureReport', event: 'change' },
             { id: 'parallelWorkers', event: 'input' },
             { id: 'maxTokensPerChunk', event: 'input' }
         ];
@@ -660,6 +661,10 @@ export const SettingsManager = {
             // Save disable auto-pause flag (runtime behavior default)
             const disableAutoPauseCheckbox = DomHelpers.getElement('disableAutoPause');
             envSettings['DISABLE_AUTO_PAUSE'] = (disableAutoPauseCheckbox && disableAutoPauseCheckbox.checked) ? 'true' : 'false';
+
+            // Save failure report flag (issue #232)
+            const failureReportCheckbox = DomHelpers.getElement('failureReport');
+            envSettings['WRITE_FAILURE_REPORT'] = (failureReportCheckbox && failureReportCheckbox.checked) ? 'true' : 'false';
 
             // Save parallel-requests default (the per-job request still overrides
             // this; it only seeds the input on next load). Backend clamps it.

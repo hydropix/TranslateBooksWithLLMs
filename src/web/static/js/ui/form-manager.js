@@ -333,6 +333,14 @@ export const FormManager = {
                 }
             }
 
+            // Failure report default (issue #232)
+            if (typeof config.write_failure_report === 'boolean') {
+                const failureReportCheckbox = DomHelpers.getElement('failureReport');
+                if (failureReportCheckbox) {
+                    failureReportCheckbox.checked = config.write_failure_report;
+                }
+            }
+
             // Parallel requests default (seeds the input; per-job request overrides it)
             if (config.parallel_translations) {
                 const parallelWorkersInput = DomHelpers.getElement('parallelWorkers');

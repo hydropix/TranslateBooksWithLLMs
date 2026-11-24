@@ -77,6 +77,8 @@ _RELOADABLE_ENV_SETTINGS = (
     ('LITELLM_MODEL',       'LITELLM_MODEL',       ''),
     ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
+    # Write `<output>.report.txt` listing untranslated chunks (issue #232).
+    ('WRITE_FAILURE_REPORT', 'WRITE_FAILURE_REPORT', 'false'),
     # Webhook notifications — kept here so the web UI can change them at runtime
     # via /api/settings without a server restart. notifier.py reads these via
     # `import src.config as cfg; cfg.NOTIFY_*` so reload_config() takes effect.

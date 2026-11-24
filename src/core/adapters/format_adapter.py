@@ -7,7 +7,7 @@ format-specific translation logic while maintaining a unified API.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from .translation_unit import TranslationUnit
 
@@ -103,6 +103,16 @@ class FormatAdapter(ABC):
             Instruction text, or an empty string when none are needed
         """
         return ""
+
+    @property
+    def placeholder_format(self) -> Optional[Tuple[str, str]]:
+        """``(prefix, suffix)`` of the placeholders the units carry, or None.
+
+        Adapters that replace protected spans with ``[idN]`` placeholders
+        (e.g. Markdown inline code and URLs) return the format, and their
+        requests then use the existing placeholder prompt mode.
+        """
+        return None
 
     def get_validation_retry_instructions(self, feedback: str) -> str:
         """

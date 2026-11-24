@@ -77,6 +77,8 @@ def create_security_blueprint(output_dir):
                 file_type = "docx"
             elif original_filename.endswith('.pdf'):
                 file_type = "pdf"
+            elif original_filename.endswith(('.md', '.markdown')):
+                file_type = "md"
             else:
                 file_type = "txt"
 

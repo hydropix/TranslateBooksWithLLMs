@@ -12,7 +12,7 @@
   "custom_target_lang_placeholder": "Benutzerdefinierte Zielsprache eingeben",
 
   "drop_files_title": "Dateien zum Übersetzen hier ablegen",
-  "drop_files_support": "Unterstützung für TXT, EPUB, SRT, PGN, DOCX und PDF",
+  "drop_files_support": "Unterstützung für TXT, Markdown, EPUB, SRT, PGN, DOCX und PDF",
   "drop_files_post_title": "Bereits übersetzte Dateien ablegen",
   "post_mode_label": "Was mit der Datei geschehen soll",
   "post_mode_refine": "Überarbeiten",

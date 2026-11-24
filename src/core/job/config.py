@@ -653,6 +653,7 @@ class JobConfig:
         ext = os.path.splitext(input_path)[1]
         file_type = {
             '.epub': 'epub', '.srt': 'srt', '.pgn': 'pgn', '.docx': 'docx', '.pdf': 'pdf',
+            '.md': 'md', '.markdown': 'md',
         }.get(ext.lower(), 'txt')
 
         model = args.model
@@ -702,8 +703,8 @@ class JobConfig:
                                      "Set LITELLM_MODEL in .env or pass -m, e.g. "
                                      "-m anthropic/claude-sonnet-4-6")
 
-        if file_type in ('pdf', 'pgn'):
-            label = file_type.upper()
+        if file_type in ('pdf', 'pgn', 'md'):
+            label = {'md': 'Markdown'}.get(file_type, file_type.upper())
             if refine_only:
                 raise JobConfigError(f"--refine-only does not support {label} input yet.")
             if refine:

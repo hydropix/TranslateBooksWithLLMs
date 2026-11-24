@@ -17,7 +17,7 @@ echo "[1/7] Checking Python installation..."
 if ! command -v python3 &> /dev/null; then
     echo "[ERROR] Python 3 is not installed or not in PATH"
     echo ""
-    echo "Please install Python 3.8+ using one of these methods:"
+    echo "Please install Python 3.11-3.14 using one of these methods:"
     echo "  - Homebrew: brew install python3"
     echo "  - Download from https://www.python.org/"
     exit 1

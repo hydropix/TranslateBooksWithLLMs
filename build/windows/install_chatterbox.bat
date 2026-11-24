@@ -13,7 +13,7 @@ REM Vérifier si Python est installé
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERREUR] Python n'est pas installe ou n'est pas dans le PATH.
-    echo Veuillez installer Python 3.8+ depuis https://www.python.org/downloads/
+    echo Veuillez installer Python 3.11-3.14 depuis https://www.python.org/downloads/
     echo N'oubliez pas de cocher "Add Python to PATH" lors de l'installation.
     echo.
     pause

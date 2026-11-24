@@ -18,7 +18,7 @@ is regenerated automatically.
 
 ## 1. Run the benchmark locally (translations only)
 
-Prereq: a working Python 3.11+ env with this repo installed
+Prereq: a working Python 3.11-3.14 env with this repo installed
 (`pip install -r requirements.txt`).
 
 Run the CLI with `--no-evaluate` — under v2, **scoring is centralized**:

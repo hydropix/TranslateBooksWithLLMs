@@ -120,31 +120,31 @@ export const UpdateChecker = {
             // button as a "Download" link that opens the GitHub release page.
             const kind = data.install_kind || (data.git_repo === false ? 'source' : 'git');
             const isFrozen = typeof kind === 'string' && (kind.startsWith('frozen') || kind === 'source');
+            installBtn.disabled = false;
             if (isFrozen) {
-                installBtn.disabled = false;
+                installBtn.setAttribute('data-i18n-attr', 'title:common:update_download_title');
                 installBtn.title = t('common:update_download_title');
-                this._setInstallBtnText(installBtn, t('common:update_download'));
+                this._setInstallBtnLabel(installBtn, 'common:update_download');
             } else {
-                installBtn.disabled = false;
+                installBtn.removeAttribute('data-i18n-attr');
                 installBtn.title = '';
-                this._setInstallBtnText(installBtn, t('common:update_now'));
+                this._setInstallBtnLabel(installBtn, 'common:update_now');
             }
         }
 
         banner.classList.remove('hidden');
     },
 
-    _setInstallBtnText(btn, text) {
-        // Replace the trailing text node (after the <span> icon) without
-        // touching the icon itself.
-        for (let i = btn.childNodes.length - 1; i >= 0; i--) {
-            const node = btn.childNodes[i];
-            if (node.nodeType === Node.TEXT_NODE) {
-                node.textContent = ` ${text}`;
-                return;
-            }
+    _setInstallBtnLabel(btn, key) {
+        // The label lives in the <span data-i18n> next to the icon. Switching
+        // its key (not just its text) keeps it correct on a language change.
+        let label = btn.querySelector('span[data-i18n]');
+        if (!label) {
+            label = document.createElement('span');
+            btn.appendChild(label);
         }
-        btn.appendChild(document.createTextNode(` ${text}`));
+        label.setAttribute('data-i18n', key);
+        label.textContent = t(key);
     },
 
     dismissBanner() {

@@ -50,7 +50,9 @@ NEVER_SENT = [
 
 
 def _source() -> str:
-    return FIXTURE.read_bytes().decode("utf-8")
+    # LF-normalized, whatever line endings the checkout gave the fixture
+    # (CRLF is covered by its own tests).
+    return FIXTURE.read_bytes().decode("utf-8").replace("\r\n", "\n")
 
 
 def _fake_translate(content: str) -> str:
@@ -317,7 +319,7 @@ async def test_end_to_end_uses_placeholder_mode_without_extra_instructions(tmp_p
     monkeypatch.setattr(translator_module, "generate_translation_request", fake_request)
 
     src = tmp_path / "in.md"
-    src.write_bytes(FIXTURE.read_bytes())
+    src.write_bytes(_source().encode("utf-8"))
     adapter = MarkdownAdapter(str(src), str(tmp_path / "out.md"), {'max_tokens_per_chunk': 80})
     translator = GenericTranslator(adapter=adapter, checkpoint_manager=cm, translation_id="job")
     success = await translator.translate(

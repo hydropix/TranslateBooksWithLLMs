@@ -144,7 +144,7 @@ _LEGACY_ROW = {
     'successful_first_try': 30, 'successful_after_retry': 4, 'retry_attempts': 9,
     'quality_warning_fired': True, 'fallback_warning_fired': True,
     'paragraph_count_mismatches': 1, 'paragraph_retry_recovered': 1,
-    'paragraph_repair_failed': 0, 'correction_attempts': 6, 'correction_success': 2,
+    'paragraph_repair_failed': 0,
     'total_tokens_processed': 1000, 'total_tokens_generated': 900,
     'refinement_chunks_completed': 0,
 }

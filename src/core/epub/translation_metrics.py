@@ -30,8 +30,6 @@ ACCUMULATED_COUNTERS = (
     'paragraph_count_mismatches',
     'paragraph_retry_recovered',
     'paragraph_repair_failed',
-    'correction_attempts',
-    'correction_success',
     'total_tokens_processed',
     'total_tokens_generated',
     'refinement_chunks_completed',
@@ -108,10 +106,6 @@ class TranslationMetrics:
     # === Phase 2: Token Alignment Fallback ===
     token_alignment_used: int = 0  # Phase 2: Token alignment fallback used
     token_alignment_success: int = 0  # Phase 2: Token alignment succeeded
-
-    # === LLM Correction (legacy, kept for compatibility) ===
-    correction_attempts: int = 0  # Total LLM correction attempts made
-    correction_success: int = 0  # Successful LLM corrections
 
     # === Timing ===
     total_time_seconds: float = 0.0
@@ -413,8 +407,6 @@ class TranslationMetrics:
             "paragraph_count_mismatches": self.paragraph_count_mismatches,
             "paragraph_retry_recovered": self.paragraph_retry_recovered,
             "paragraph_repair_failed": self.paragraph_repair_failed,
-            "correction_attempts": self.correction_attempts,
-            "correction_success": self.correction_success,
             "total_time_seconds": self.total_time_seconds,
             "start_time": self.start_time,
             "end_time": self.end_time,
@@ -475,10 +467,6 @@ class TranslationMetrics:
         metrics.paragraph_count_mismatches = data.get("paragraph_count_mismatches", 0)
         metrics.paragraph_retry_recovered = data.get("paragraph_retry_recovered", 0)
         metrics.paragraph_repair_failed = data.get("paragraph_repair_failed", 0)
-
-        # LLM correction
-        metrics.correction_attempts = data.get("correction_attempts", 0)
-        metrics.correction_success = data.get("correction_success", 0)
 
         # Timing
         metrics.total_time_seconds = data.get("total_time_seconds", 0.0)
@@ -550,8 +538,6 @@ class TranslationMetrics:
                 "=== Placeholder Issues ===",
                 f"Placeholder validation errors: {self.placeholder_errors}",
             ])
-            if self.correction_attempts > 0:
-                summary_lines.append(f"LLM correction attempts: {self.correction_attempts} (success: {self.correction_success})")
 
         # Timing info (if finalized)
         if self.total_time_seconds > 0:
@@ -668,8 +654,6 @@ class TranslationMetrics:
         self.paragraph_count_mismatches += other.paragraph_count_mismatches
         self.paragraph_retry_recovered += other.paragraph_retry_recovered
         self.paragraph_repair_failed += other.paragraph_repair_failed
-        self.correction_attempts += other.correction_attempts
-        self.correction_success += other.correction_success
         self.total_tokens_processed += other.total_tokens_processed
         self.total_tokens_generated += other.total_tokens_generated
         self.total_chunk_size += other.total_chunk_size

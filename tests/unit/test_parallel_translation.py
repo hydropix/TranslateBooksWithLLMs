@@ -3,7 +3,7 @@ Unit tests for parallel chunk translation.
 
 Covers:
 - resolve_parallel_workers() provider gating and clamping
-- the ordered-window helper (gather_window / iter_ordered_windows)
+- the continuous-concurrency ordered scheduler (iter_ordered_concurrent)
 - translate_paragraphs_plain() in sequential vs parallel mode: identical
   ordered output, real concurrency, context chaining only when sequential,
   and graceful failure handling.
@@ -15,8 +15,6 @@ import pytest
 from src.config import resolve_parallel_workers, MAX_PARALLEL_TRANSLATIONS
 from src.core.common.parallel import (
     aclosing,
-    gather_window,
-    iter_ordered_windows,
     iter_ordered_concurrent,
 )
 import src.core.common.plain_text_pipeline as plain_pipeline
@@ -44,47 +42,6 @@ class TestResolveParallelWorkers:
 
     def test_malformed_value(self):
         assert resolve_parallel_workers("openrouter", "abc") == 1
-
-
-# ---------------------------------------------------------------------------
-# Ordered-window helper
-# ---------------------------------------------------------------------------
-class TestOrderedWindow:
-    @pytest.mark.asyncio
-    async def test_gather_window_preserves_order_and_captures_exceptions(self):
-        async def worker(x):
-            await asyncio.sleep(0)
-            if x == 2:
-                raise ValueError("boom")
-            return x * 10
-
-        results = await gather_window([0, 1, 2, 3], worker)
-        assert results[0] == 0
-        assert results[1] == 10
-        assert isinstance(results[2], ValueError)
-        assert results[3] == 30
-
-    @pytest.mark.asyncio
-    async def test_iter_ordered_windows_batches(self):
-        async def worker(x):
-            return x
-
-        seen = []
-        async for window in iter_ordered_windows(list(range(5)), 2, worker):
-            seen.append([idx for idx, _ in window])
-        assert seen == [[0, 1], [2, 3], [4]]
-
-    @pytest.mark.asyncio
-    async def test_window_size_one_is_sequential(self):
-        order = []
-
-        async def worker(x):
-            order.append(x)
-            return x
-
-        async for _ in iter_ordered_windows([0, 1, 2], 1, worker):
-            pass
-        assert order == [0, 1, 2]
 
 
 # ---------------------------------------------------------------------------
@@ -142,29 +99,6 @@ class TestOrderedConcurrent:
             ("start", 1), ("yield", 1),
             ("start", 2), ("yield", 2),
         ]
-
-    @pytest.mark.asyncio
-    async def test_continuous_beats_windowed_with_variable_latency(self):
-        import time
-        delays = [0.04 if i % 4 == 0 else 0.005 for i in range(16)]
-
-        async def worker(x):
-            await asyncio.sleep(delays[x])
-            return x
-
-        t0 = time.perf_counter()
-        async for _ in iter_ordered_concurrent(list(range(16)), 4, worker):
-            pass
-        continuous = time.perf_counter() - t0
-
-        t0 = time.perf_counter()
-        async for _win in iter_ordered_windows(list(range(16)), 4, worker):
-            pass
-        windowed = time.perf_counter() - t0
-
-        # Continuous should not be slower than windowed; with this latency
-        # profile it is meaningfully faster.
-        assert continuous <= windowed + 0.01
 
     @staticmethod
     def _cancel_tracking_worker(cancelled):

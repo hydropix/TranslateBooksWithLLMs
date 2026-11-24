@@ -45,6 +45,8 @@
 
   "disable_auto_pause_title": "Ne pas mettre en pause automatiquement sur limite de débit (HTTP 429)",
   "disable_auto_pause_description": "Par défaut, la traduction est mise en pause après une limite de débit du fournisseur et vous demande de reprendre manuellement. Activez cette option pour garder la traduction en cours : elle attendra <code>Retry-After</code> secondes (ou 60 s par défaut) et reprendra automatiquement depuis le dernier point de reprise. Utile pour les romans longs sur les API gratuites. Cliquez sur « Interrompre » à tout moment pour annuler la reprise automatique.",
+  "failure_report_title": "Écrire un rapport d'échecs à côté du fichier traduit",
+  "failure_report_description": "À la fin d'une traduction, écrit un fichier texte nommé d'après le fichier de sortie (par exemple « Livre (French).report.txt ») qui liste, fichier par fichier, les passages restés dans la langue source ou traduits avec une mise en forme approximative, pour les retrouver facilement dans Calibre.",
 
   "parallel_workers_label": "Requêtes parallèles",
   "parallel_workers_input_title": "Nombre de segments traduits en même temps",

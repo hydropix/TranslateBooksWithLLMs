@@ -194,6 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--nim_api_endpoint", default=NIM_API_ENDPOINT, help="Endpoint used by the nim provider when --api_endpoint is not given (default: NIM_API_ENDPOINT from .env).")
     parser.add_argument("--parallel", type=int, default=PARALLEL_TRANSLATIONS, metavar="N", help=f"Number of chunks translated concurrently (default: {PARALLEL_TRANSLATIONS}). Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context chaining.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output.")
+    parser.add_argument("--failure-report", action="store_true", dest="failure_report", help="When the job finishes, write '<output name>.report.txt' next to the output listing the chunks left untranslated or with approximate tag placement, per file (default: WRITE_FAILURE_REPORT from .env, false).")
 
     prompt_group = parser.add_argument_group('Prompt Options', 'Optional instructions to include in the translation prompt')
     prompt_group.add_argument("--text-cleanup", action="store_true", help="Enable OCR/typographic cleanup (fix broken lines, spacing, punctuation).")

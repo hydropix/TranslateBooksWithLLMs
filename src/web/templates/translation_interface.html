@@ -1157,6 +1157,19 @@
                         </label>
                     </div>
 
+                    <!-- Failure report next to the output (issue #232) -->
+                    <div class="option-item">
+                        <label class="option-item__label">
+                            <input type="checkbox" id="failureReport">
+                            <div>
+                                <span class="option-item__title" data-i18n="settings:failure_report_title">Write a failure report next to the output</span>
+                                <p class="option-item__description" data-i18n="settings:failure_report_description">
+                                    When a translation finishes, write a text file named after the output (for example "Book (French).report.txt") that lists, file by file, the chunks left in the source language or translated with approximate formatting, so you can jump to them in Calibre.
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+
                     <!-- Parallel translation (cloud providers only) -->
                     <div class="form-group" id="parallelWorkersGroup" style="margin-bottom: 15px; display: none;">
                         <label data-i18n="settings:parallel_workers_label" for="parallelWorkers">Parallel requests</label>

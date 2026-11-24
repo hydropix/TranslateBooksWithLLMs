@@ -45,6 +45,8 @@
 
   "disable_auto_pause_title": "Don't auto-pause on rate limit (HTTP 429)",
   "disable_auto_pause_description": "By default, the translation pauses after the provider rate-limits and asks you to resume manually. Enable this to keep the translation running: it will wait for <code>Retry-After</code> seconds (or 60s default) and auto-resume from the last checkpoint. Useful for long novels on free-tier APIs. Click \"Interrupt\" anytime to cancel the auto-resume.",
+  "failure_report_title": "Write a failure report next to the output",
+  "failure_report_description": "When a translation finishes, write a text file named after the output (for example \"Book (French).report.txt\") that lists, file by file, the chunks left in the source language or translated with approximate formatting, so you can jump to them in Calibre.",
 
   "parallel_workers_label": "Parallel requests",
   "parallel_workers_input_title": "Number of chunks translated at the same time",

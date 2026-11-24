@@ -45,6 +45,8 @@
 
   "disable_auto_pause_title": "속도 제한 (HTTP 429) 시 자동 일시 중지 안 함",
   "disable_auto_pause_description": "기본적으로 제공자가 속도 제한을 가하면 번역이 일시 중지되고 수동으로 재개하도록 요청합니다. 이 옵션을 활성화하면 번역이 계속 실행됩니다: <code>Retry-After</code> 초 (또는 기본 60초) 동안 대기한 다음 마지막 체크포인트에서 자동으로 재개됩니다. 무료 등급 API에서 긴 소설을 번역할 때 유용합니다. 자동 재개를 취소하려면 언제든지 \"중단\"을 클릭하세요.",
+  "failure_report_title": "출력 파일 옆에 실패 보고서 작성",
+  "failure_report_description": "번역이 끝나면 출력 파일 이름을 딴 텍스트 파일(예: \"Book (French).report.txt\")을 작성하여, 원문 그대로 남았거나 서식이 대략적으로만 복원된 청크를 파일별로 나열합니다. Calibre에서 해당 위치로 바로 이동할 수 있습니다.",
 
   "parallel_workers_label": "병렬 요청",
   "parallel_workers_input_title": "동시에 번역하는 청크 수",

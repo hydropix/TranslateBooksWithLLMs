@@ -59,6 +59,7 @@ _OWNED_KEYS = frozenset({
     'bilingual_output', 'refine_only', 'refine_after', 'term_fix', 'tts_enabled',
     'tts_config', 'file_type', 'file_path', 'text', 'input_filename',
     'auto_adjust_context', 'min_chunk_size', 'max_tokens_per_chunk', 'retry_token_aligned',
+    'failure_report',
     'origin', 'output_dir', 'refine_model', 'refine_llm_provider', 'refine_llm_api_endpoint',
     # Runtime-only markers older handlers wrote into the in-memory config.
     'is_resume', 'resume_from_index', '_auto_resume_last_index', '_auto_resume_stuck_count',
@@ -86,6 +87,11 @@ def _cfg():
     """``src.config`` read at call time, so ``reload_config()`` is honoured."""
     import src.config as config
     return config
+
+
+def failure_report_default() -> bool:
+    """The ``WRITE_FAILURE_REPORT`` setting (issue #232), read at call time."""
+    return str(getattr(_cfg(), 'WRITE_FAILURE_REPORT', 'false')).strip().lower() == 'true'
 
 
 def _as_int(value, default, *, name=None):
@@ -186,6 +192,8 @@ class JobConfig:
         tts: ``TTSConfig.to_dict()`` when audio generation follows the job.
         auto_pause_on_rate_limit: Pause on a rate limit (False = auto-resume).
         retry_token_aligned: EPUB explicit retry of approximately-tagged chunks.
+        failure_report: Write ``<output stem>.report.txt`` listing the chunks
+            left untranslated or approximately tagged (issue #232).
         origin: ``web`` or ``cli``; decides output naming.
         extras: Persisted keys owned by other layers, kept verbatim.
         notices: Warnings produced while building (CLI), never persisted.
@@ -216,6 +224,7 @@ class JobConfig:
     tts: Optional[Mapping[str, Any]] = None
     auto_pause_on_rate_limit: bool = True
     retry_token_aligned: bool = False
+    failure_report: bool = False
     origin: str = 'cli'
     extras: Mapping[str, Any] = field(default_factory=dict)
     notices: Tuple[str, ...] = field(default=(), compare=False)
@@ -334,6 +343,7 @@ class JobConfig:
             'min_chunk_size': self.min_chunk_size,
             'max_tokens_per_chunk': self.max_tokens_per_chunk,
             'retry_token_aligned': self.retry_token_aligned,
+            'failure_report': self.failure_report,
             'origin': self.origin,
         })
         if self.origin == 'cli':
@@ -433,6 +443,7 @@ class JobConfig:
             tts=(stored.get('tts_config') or None) if stored.get('tts_enabled') else None,
             auto_pause_on_rate_limit=stored.get('auto_pause_on_rate_limit', True),
             retry_token_aligned=bool(stored.get('retry_token_aligned')),
+            failure_report=bool(stored.get('failure_report')),
             origin=stored.get('origin') or 'web',
             extras=extras,
         )
@@ -474,6 +485,12 @@ class JobConfig:
             # itself); never reload here, that would clobber keys set in the
             # real environment.
             auto_pause = not (str(_cfg().DISABLE_AUTO_PAUSE).strip().lower() == 'true')
+
+        if overrides.get('failure_report') is not None:
+            failure_report = bool(overrides['failure_report'])
+        else:
+            # Turning the setting on after the job started still gets a report.
+            failure_report = job.failure_report or failure_report_default()
 
         provider = job.provider
         context_window = job.context_window
@@ -522,6 +539,7 @@ class JobConfig:
             context_window=context_window,
             retry_token_aligned=bool(retry_token_aligned),
             auto_pause_on_rate_limit=auto_pause,
+            failure_report=failure_report,
         )
 
     # -- builders ----------------------------------------------------------
@@ -631,6 +649,7 @@ class JobConfig:
             tts=tts,
             auto_pause_on_rate_limit=bool(data.get('auto_pause_on_rate_limit',
                                                    cfg.AUTO_PAUSE_ON_RATE_LIMIT)),
+            failure_report=bool(data.get('failure_report', failure_report_default())),
             origin='web',
         )
 
@@ -801,6 +820,7 @@ class JobConfig:
             tts=tts,
             # A rate limit pauses the job; `translate.py --resume <id>` continues it.
             auto_pause_on_rate_limit=True,
+            failure_report=bool(getattr(args, 'failure_report', False)) or failure_report_default(),
             origin='cli',
             notices=tuple(notices),
         )

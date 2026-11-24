@@ -109,6 +109,7 @@ function getTranslationConfig(file) {
             : null,
         refine_after: refineAfter,
         auto_pause_on_rate_limit: !(DomHelpers.getElement('disableAutoPause')?.checked || false),
+        failure_report: DomHelpers.getElement('failureReport')?.checked || false,
         // Parallel chunk translation; only honored for cloud providers (the
         // backend forces local providers back to 1).
         parallel_workers: provider === 'ollama'

@@ -45,6 +45,8 @@
 
   "disable_auto_pause_title": "No pausar automáticamente al alcanzar el límite de tasa (HTTP 429)",
   "disable_auto_pause_description": "Por defecto, la traducción se pausa cuando el proveedor aplica un límite de tasa y te pide reanudarla manualmente. Activa esta opción para mantener la traducción en marcha: esperará <code>Retry-After</code> segundos (o 60s por defecto) y se reanudará automáticamente desde el último punto de control. Útil para novelas largas con APIs de nivel gratuito. Pulsa «Interrumpir» en cualquier momento para cancelar la reanudación automática.",
+  "failure_report_title": "Escribir un informe de fallos junto al archivo traducido",
+  "failure_report_description": "Al terminar una traducción, escribe un archivo de texto con el nombre del archivo de salida (por ejemplo \"Libro (French).report.txt\") que enumera, archivo por archivo, los fragmentos que quedaron en el idioma original o se tradujeron con un formato aproximado, para localizarlos en Calibre.",
 
   "parallel_workers_label": "Solicitudes paralelas",
   "parallel_workers_input_title": "Número de fragmentos traducidos al mismo tiempo",

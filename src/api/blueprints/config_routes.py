@@ -360,6 +360,7 @@ def create_config_blueprint(server_session_id=None):
             "parallel_translations": int(_config.PARALLEL_TRANSLATIONS),
             "max_parallel_translations": int(_config.MAX_PARALLEL_TRANSLATIONS),
             "disable_auto_pause": str(_config.DISABLE_AUTO_PAUSE).strip().lower() == 'true',
+            "write_failure_report": str(_config.WRITE_FAILURE_REPORT).strip().lower() == 'true',
             # Webhook notifications: secrets in the URL and header values are
             # masked (see webhook_secrets). save_settings() restores the stored
             # value when the masked text comes back unchanged.
@@ -1056,6 +1057,7 @@ def create_config_blueprint(server_session_id=None):
             'MAX_TOKENS_PER_CHUNK',
             'PARALLEL_TRANSLATIONS',
             'DISABLE_AUTO_PAUSE',
+            'WRITE_FAILURE_REPORT',
             'NOTIFY_WEBHOOK_URL',
             'NOTIFY_WEBHOOK_METHOD',
             'NOTIFY_WEBHOOK_HEADERS',

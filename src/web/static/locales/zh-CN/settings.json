@@ -45,6 +45,8 @@
 
   "disable_auto_pause_title": "速率限制（HTTP 429）时不自动暂停",
   "disable_auto_pause_description": "默认情况下，当服务商触发速率限制时翻译会暂停，并要求您手动恢复。启用此选项以让翻译持续运行：它会等待 <code>Retry-After</code> 秒（或默认 60 秒），然后从最后的检查点自动恢复。适合在免费层 API 上跑长篇小说。随时点击\"中断\"可取消自动恢复。",
+  "failure_report_title": "在输出文件旁生成失败报告",
+  "failure_report_description": "翻译完成后，生成一个以输出文件命名的文本文件（例如 “Book (French).report.txt”），按文件列出仍保留原文或格式仅近似还原的片段，方便在 Calibre 中快速定位。",
 
   "parallel_workers_label": "并行请求",
   "parallel_workers_input_title": "同时翻译的文本块数量",

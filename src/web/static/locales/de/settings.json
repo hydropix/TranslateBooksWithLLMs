@@ -45,6 +45,8 @@
 
   "disable_auto_pause_title": "Bei Ratenbegrenzung (HTTP 429) nicht automatisch pausieren",
   "disable_auto_pause_description": "Standardmäßig wird die Übersetzung pausiert, sobald der Anbieter eine Ratenbegrenzung anwendet, und Sie werden um manuelles Fortsetzen gebeten. Aktivieren Sie diese Option, damit die Übersetzung weiterläuft: Sie wartet <code>Retry-After</code> Sekunden (oder standardmäßig 60 s) und setzt automatisch ab dem letzten Checkpoint fort. Nützlich für lange Romane mit Free-Tier-APIs. Klicken Sie jederzeit auf „Abbrechen“, um die automatische Fortsetzung zu beenden.",
+  "failure_report_title": "Fehlerbericht neben der Ausgabedatei schreiben",
+  "failure_report_description": "Nach Abschluss einer Übersetzung wird eine Textdatei mit dem Namen der Ausgabedatei geschrieben (zum Beispiel „Buch (French).report.txt“), die Datei für Datei die Abschnitte auflistet, die in der Ausgangssprache geblieben sind oder mit ungefährer Formatierung übersetzt wurden, damit Sie sie in Calibre schnell finden.",
 
   "parallel_workers_label": "Parallele Anfragen",
   "parallel_workers_input_title": "Anzahl der gleichzeitig übersetzten Abschnitte",

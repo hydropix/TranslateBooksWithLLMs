@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Optional
 
 from ..job import JobConfig, JobContext
 from .document import (
-    Fb2Error, apply_translations, build_translation_html, is_block_boundary,
+    Fb2Error, apply_translations, build_translation_html,
     parse_fb2, serialize_fb2, set_document_language, split_translated_html,
 )
 
@@ -170,7 +170,6 @@ async def _translate_fb2(job: JobConfig, ctx: JobContext, llm_client, context_ma
             file_path=job.input_path,
             global_total_chunks=len(chunks),
             global_completed_chunks=len(translated_chunks),
-            block_boundary=is_block_boundary,
         )
         translated_chunks, stats, interrupted = await translate_chunks(
             chunks, settings, placeholder_format,

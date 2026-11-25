@@ -3,6 +3,7 @@
 This module provides utilities for classifying HTML tags by type and
 determining split priorities for HTML-aware chunking.
 """
+import re
 
 
 class TagClassifier:
@@ -101,3 +102,28 @@ class TagClassifier:
         """
         tag_lower = tag.lower()
         return any(f'</{ht}>' in tag_lower for ht in self.CHAPTER_HEADINGS)
+
+
+#: Elements whose start or end separates two runs of text that must never
+#: exchange words: the chunking split points (``TagClassifier.BLOCK_TAGS``)
+#: plus the other HTML block elements met in EPUB XHTML and mammoth's DOCX
+#: HTML (definition lists, captions, preformatted text, list and table
+#: containers, sectioning elements). Inline markup (em, span, a, br, FB2
+#: emphasis...) is deliberately absent: text may move across it within a block.
+BLOCK_BOUNDARY_TAGS = frozenset(TagClassifier.BLOCK_TAGS | {
+    'address', 'aside', 'body', 'caption', 'dd', 'details', 'dl', 'dt',
+    'figcaption', 'figure', 'footer', 'header', 'hr', 'main', 'nav', 'ol',
+    'pre', 'summary', 'table', 'tbody', 'tfoot', 'thead', 'ul',
+})
+
+_TAG_NAME_RE = re.compile(r'<\s*/?\s*(?:[A-Za-z][\w.-]*:)?([A-Za-z][\w.-]*)')
+
+
+def is_block_boundary_markup(markup: str) -> bool:
+    """True when ``markup`` (a placeholder's tags) opens or closes a block.
+
+    The fallback ladder never lets text cross such a placeholder (see
+    ``chunk_fallback``). Namespace prefixes (``<html:p>``) are ignored.
+    """
+    return any(name.lower() in BLOCK_BOUNDARY_TAGS
+               for name in _TAG_NAME_RE.findall(markup))

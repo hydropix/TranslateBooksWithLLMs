@@ -4,7 +4,7 @@ Fix a term in a book that is already translated, without translating it again. Y
 
 Typical case: the glossary missed a recurring name or concept, so the translation renders it in two or three different ways across a series. Re-translating five books to fix two words is not an option.
 
-> Available in the Web UI (third drop zone) and the CLI (`--fix-terms`). Formats: TXT, SRT, EPUB, DOCX.
+> Available in the Web UI (third drop zone) and the CLI (`--fix-terms`). Formats: TXT, Markdown, SRT, EPUB, DOCX.
 
 ---
 

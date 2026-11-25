@@ -86,7 +86,7 @@ Without it, the `openai` and `nim` providers use their own endpoint below, read 
 
 | Option | Description |
 |--------|-------------|
-| `--fix-terms RULES` | Correct a term in an already-translated file (TXT, SRT, EPUB, DOCX) without retranslating it. `RULES` is a `.txt` file with one `wrong\|other -> correct` rule per line (or a `.json` file). Only the sentences holding a match change; a `.term-fix.md` report listing every change is written next to the output. `-tl` names the language the file is written in. See [TERM_FIX.md](TERM_FIX.md). |
+| `--fix-terms RULES` | Correct a term in an already-translated file (TXT, Markdown, SRT, EPUB, DOCX) without retranslating it. `RULES` is a `.txt` file with one `wrong\|other -> correct` rule per line (or a `.json` file). Only the sentences holding a match change; a `.term-fix.md` report listing every change is written next to the output. `-tl` names the language the file is written in. See [TERM_FIX.md](TERM_FIX.md). |
 | `--fix-terms-mode` | `smart` (default): the LLM rewrites only the sentences holding a match, so the correct term is inflected and agreement fixed. `literal`: case-preserving replacement with no LLM call; `*` wildcards are refused. |
 | `--fix-terms-scan` | With `--fix-terms`: count the matches per rule and print sample sentences, without writing anything or calling the LLM. A trailing `*` on a form (e.g. `Drakbrand*`) matches every word starting with it. |
 

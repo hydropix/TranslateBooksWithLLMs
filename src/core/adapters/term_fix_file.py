@@ -4,7 +4,8 @@ Applies correction rules to an already-translated file: only the occurrences
 of the wrong renderings change, every other byte is written back as read.
 
 Each format exposes its editable text as a list of units:
-- TXT and SRT: the whole file (cue numbers and timings cannot match a term);
+- TXT, Markdown and SRT: the whole file, read as raw text (cue numbers and
+  timings cannot match a term);
 - EPUB: every text segment of every XHTML/NCX file, edited in the raw markup;
   zip entries without a change are copied as they are;
 - DOCX: every paragraph, edited run by run so formatting stays in place.
@@ -46,7 +47,7 @@ from src.core.term_fix.formats import (
 )
 from src.utils.file_detector import detect_file_type, detect_file_type_by_content
 
-SUPPORTED_TYPES = ("txt", "srt", "epub", "docx")
+SUPPORTED_TYPES = ("txt", "md", "srt", "epub", "docx")
 
 _EPUB_MARKUP_EXTENSIONS = (".xhtml", ".html", ".htm")
 _EPUB_NCX_EXTENSION = ".ncx"
@@ -67,7 +68,7 @@ def _resolve_type(input_filepath: str) -> str:
 
 
 class _TextDocument:
-    """TXT / SRT: one unit, the whole file."""
+    """TXT / Markdown / SRT: one unit, the whole file."""
 
     def __init__(self, path: str):
         # newline='' keeps CRLF/LF exactly as in the file.

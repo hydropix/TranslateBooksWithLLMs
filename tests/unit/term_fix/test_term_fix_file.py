@@ -1,5 +1,5 @@
 """
-Tests for the term_fix_file / scan_file entry points: TXT, SRT, EPUB, DOCX,
+Tests for the term_fix_file / scan_file entry points: TXT, Markdown, SRT, EPUB, DOCX,
 literal and smart (fake LLM) modes.
 """
 import re
@@ -107,6 +107,17 @@ async def test_srt_keeps_timings(tmp_path):
     out = tmp_path / "out.srt"
     await _fix(str(src), str(out), parse_rules_text("Ashe -> Askan"))
     assert out.read_text(encoding="utf-8") == raw.replace("Ashe", "Askan")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ext", ["md", "markdown"])
+async def test_markdown_is_fixed_as_raw_text(tmp_path, ext):
+    src = tmp_path / f"book.{ext}"
+    raw = "# Ashe\r\n\n- *Ashe* runs.\n\n| Ashe | x |\n|---|---|\n"
+    src.write_bytes(raw.encode("utf-8"))
+    out = tmp_path / f"out.{ext}"
+    await _fix(str(src), str(out), parse_rules_text("Ashe -> Askan"))
+    assert out.read_bytes() == raw.replace("Ashe", "Askan").encode("utf-8")
 
 
 def _make_epub(path: Path, chapters: dict) -> None:

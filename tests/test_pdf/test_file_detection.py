@@ -61,7 +61,7 @@ class TestPdfDetection:
     def test_unsupported_error_message_lists_pdf(self, tmp_path):
         path = tmp_path / "blob.bin"
         path.write_bytes(bytes(range(256)) * 4)
-        with pytest.raises(ValueError, match=r"\.docx, \.pdf, or plain text"):
+        with pytest.raises(ValueError, match=r"\.docx, \.pdf, \.fb2, or plain text"):
             detect_file_type(str(path))
 
 

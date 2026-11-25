@@ -14,6 +14,7 @@ import pytest
 
 import src.core.llm.factory as llm_factory_module
 import src.core.translator as translator_module
+from src.api.blueprints import sample_routes
 from src.core.adapters import MarkdownAdapter
 from src.core.adapters.generic_translator import GenericTranslator
 from src.core.adapters.translate_file import get_file_type_from_path
@@ -274,6 +275,16 @@ class TestAdapter:
 
 
 class TestRouting:
+    def test_sample_routes_load_markdown_as_raw_text(self):
+        assert FIXTURE.is_file(), f"Missing Markdown fixture: {FIXTURE}"
+        file_type = detect_file_type(str(FIXTURE))
+        assert file_type == "md"
+
+        units = sample_routes._load_source_units(str(FIXTURE), file_type)
+
+        assert units
+        assert "Welcome to the garden." in units[0]["main_content"]
+
     @pytest.mark.parametrize("name", ["notes.md", "README.MARKDOWN"])
     def test_markdown_extensions_are_detected(self, name):
         assert detect_file_type(name) == "md"

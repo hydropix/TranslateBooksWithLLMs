@@ -90,11 +90,13 @@ def sample_xhtml_doc():
         paragraphs.append(f'<p>This is paragraph number {i+1}. It contains enough text to help generate multiple chunks when combined with other paragraphs. The quick brown fox jumps over the lazy dog.</p>')
 
     body_content = '\n            '.join(paragraphs)
+    # The heading is long enough for the fixed mock reply to pass the runaway
+    # guard (4x the source) once a failed chunk is translated block by block.
     xhtml = f'''<?xml version="1.0" encoding="utf-8"?>
     <html xmlns="http://www.w3.org/1999/xhtml">
         <head><title>Test</title></head>
         <body>
-            <h1>Chapter 1</h1>
+            <h1>Chapter 1: The Keeper of the Northern Lighthouse</h1>
             {body_content}
         </body>
     </html>
@@ -270,9 +272,14 @@ class TestChunkLevelInterruption:
         mock_llm_client.generate = track_chunks
         mock_llm_client.extract_translation = lambda response: response
 
-        # First interruption at chunk 2
+        # A chunk whose placeholders are lost is retried block by block, so one
+        # chunk can issue several LLM requests. Each pass therefore interrupts
+        # once it has made progress (any request since the pass started)
+        # instead of at an absolute request count.
+        base_1 = len(total_chunks_processed)
+
         def interrupt_at_2():
-            return len(total_chunks_processed) >= 2
+            return len(total_chunks_processed) > base_1
 
         success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,
@@ -293,9 +300,10 @@ class TestChunkLevelInterruption:
         # Chunk index should be at least 1 (0-indexed means at least 1 chunk processed)
         assert state1.current_chunk_index >= 1, f"Expected chunk index >= 1, got {state1.current_chunk_index}"
 
-        # Second interruption at chunk 4
+        base_2 = len(total_chunks_processed)
+
         def interrupt_at_4():
-            return len(total_chunks_processed) >= 4
+            return len(total_chunks_processed) > base_2
 
         success, _ = await translate_xhtml(
             doc_root=sample_xhtml_doc,

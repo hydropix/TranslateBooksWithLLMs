@@ -2,10 +2,10 @@
 Unified file translation function using the adapter pattern.
 
 This module provides a single entry point for translating files of any supported
-format (TXT, Markdown, SRT, EPUB, DOCX, PDF) using format-specific adapters.
+format (TXT, Markdown, SRT, EPUB, DOCX, PDF, FB2) using format-specific adapters.
 
 File type detection supports:
-1. Known extensions (.txt, .md, .epub, .srt, .docx, .pdf)
+1. Known extensions (.txt, .md, .epub, .srt, .docx, .pdf, .fb2)
 2. Content-based detection for unknown extensions (e.g., .log, .text -> txt)
 3. Automatic routing to appropriate processors
 """
@@ -159,7 +159,7 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
     # The EPUB/DOCX/PDF pipelines save checkpoint chunks without ever creating
     # the parent job row, which only worked because the web handler creates
     # it beforehand. Make the invariant hold on every entry point.
-    if detected_type in ('epub', 'docx', 'pdf'):
+    if detected_type in ('epub', 'docx', 'pdf', 'fb2'):
         _ensure_checkpoint_job(
             checkpoint_manager=ctx.checkpoint_manager,
             translation_id=ctx.translation_id,
@@ -188,6 +188,13 @@ async def translate_file(job: JobConfig, ctx: JobContext) -> JobResult:
         from src.core.docx.translator import translate_docx_file
         result = await translate_docx_file(job, ctx, max_retries=1,
                                            parallel_workers=parallel_workers)
+        return _dict_result(result, seen_stats, job, ctx)
+
+    # FB2 reuses the EPUB-style pipeline on its text blocks (XML kept as-is).
+    if detected_type == 'fb2':
+        from src.core.fb2.translator import translate_fb2_file
+        result = await translate_fb2_file(job, ctx, max_retries=1,
+                                          parallel_workers=parallel_workers)
         return _dict_result(result, seen_stats, job, ctx)
 
     # PDF: extractor + plain-text pipeline + reflowed PDF builder.
@@ -248,6 +255,7 @@ FILE_TYPE_BY_EXTENSION = {
     '.epub': 'epub',
     '.docx': 'docx',
     '.pdf': 'pdf',
+    '.fb2': 'fb2',
 }
 
 
@@ -259,7 +267,8 @@ def get_file_type_from_path(filepath: str) -> str:
         filepath: Path to the file
 
     Returns:
-        File type string: 'txt', 'md', 'srt', 'pgn', 'epub', 'docx', 'pdf', or 'unknown'
+        File type string: 'txt', 'md', 'srt', 'pgn', 'epub', 'docx', 'pdf', 'fb2',
+        or 'unknown'
     """
     _, ext = os.path.splitext(filepath.lower())
     return FILE_TYPE_BY_EXTENSION.get(ext, 'unknown')

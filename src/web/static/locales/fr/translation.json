@@ -12,7 +12,7 @@
   "custom_target_lang_placeholder": "Saisissez une langue cible personnalisée",
 
   "drop_files_title": "Déposez les fichiers à traduire",
-  "drop_files_support": "Prise en charge de TXT, Markdown, EPUB, SRT, PGN, DOCX et PDF",
+  "drop_files_support": "Prise en charge de TXT, Markdown, EPUB, SRT, PGN, DOCX, PDF et FB2",
   "drop_files_post_title": "Déposez des fichiers déjà traduits",
   "post_mode_label": "Que faire du fichier",
   "post_mode_refine": "Raffiner",

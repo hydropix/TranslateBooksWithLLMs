@@ -12,7 +12,7 @@
   "custom_target_lang_placeholder": "사용자 지정 대상 언어 입력",
 
   "drop_files_title": "번역할 파일을 여기에 놓으세요",
-  "drop_files_support": "TXT, Markdown, EPUB, SRT, PGN, DOCX, PDF 지원",
+  "drop_files_support": "TXT, Markdown, EPUB, SRT, PGN, DOCX, PDF, FB2 지원",
   "drop_files_post_title": "이미 번역된 파일을 놓으세요",
   "post_mode_label": "파일 처리 방법",
   "post_mode_refine": "다듬기",

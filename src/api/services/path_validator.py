@@ -35,7 +35,7 @@ class PathValidator:
     # any other extension gets '.txt' appended, so a job can never drop an
     # executable ('.bat', '.exe', '.hta', ...) into the output directory.
     OUTPUT_EXTENSIONS = frozenset({
-        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf',
+        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf', '.fb2',
         '.text', '.log', '.md', '.markdown', '.rst', '.asc',
         '.csv', '.json', '.xml', '.html', '.htm', '.yaml', '.yml',
     })
@@ -46,7 +46,7 @@ class PathValidator:
     # formulas in a spreadsheet, ...) are excluded on purpose.
     OPENABLE_EXTENSIONS = frozenset({
         '.txt', '.text', '.md', '.markdown', '.rst', '.log', '.asc',
-        '.srt', '.pgn', '.epub', '.docx', '.pdf',
+        '.srt', '.pgn', '.epub', '.docx', '.pdf', '.fb2',
         '.opus', '.mp3', '.wav', '.ogg',
     })
 

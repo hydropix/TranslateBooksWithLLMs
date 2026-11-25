@@ -14,7 +14,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 def test_extension_map_covers_every_supported_format():
     assert set(FILE_TYPE_BY_EXTENSION) == {'.txt', '.md', '.markdown', '.srt', '.pgn',
-                                           '.epub', '.docx', '.pdf'}
+                                           '.epub', '.docx', '.pdf', '.fb2'}
     for ext, file_type in FILE_TYPE_BY_EXTENSION.items():
         assert get_file_type_from_path(f"book{ext.upper()}") == file_type
 

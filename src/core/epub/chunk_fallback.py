@@ -8,17 +8,17 @@ A chunk goes down three phases until one produces text:
    reinsert them proportionally (``EPUB_TOKEN_ALIGNMENT_ENABLED``).
 3. Phase 3 - keep the source text.
 
-With ``settings.block_boundary`` set, a chunk that fails Phase 1 and spans
-several blocks is split at its block boundaries first, and each block goes
-down the three phases on its own: Phase 2 then never moves text from one
-block into another.
+A chunk that fails Phase 1 and spans several blocks (paragraphs, headings,
+list items, table cells, FB2 lines...; see ``is_block_boundary_markup``) is
+split at its block boundaries first, and each block goes down the three
+phases on its own: Phase 2 then never moves text from one block into
+another. A single-block chunk goes down the ladder as a whole.
 
 Whatever the phase, the chunk's terminal outcome is recorded in
 ``stats.chunk_outcomes`` (CHUNK_TRANSLATED / CHUNK_TOKEN_ALIGNED /
 CHUNK_UNTRANSLATED) and the result comes back with global placeholders.
 """
 
-import dataclasses
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -29,6 +29,7 @@ from .chunk_settings import ChunkLoopSettings
 from .engine_log import report_error
 from .placeholder_renumberer import globalize_placeholders, localize_placeholders
 from .placeholder_validator import PlaceholderValidator
+from .tag_classifier import is_block_boundary_markup
 from .tag_preservation import _is_block_boundary_tag
 from .text_survival import text_survival_problem
 from .translation_metrics import TranslationMetrics
@@ -267,7 +268,7 @@ async def _translate_ladder(chunk_text: str, local_tag_map: Dict[str, str],
 
     result, residue_kept = await _phase1_translate(
         chunk_text, local_tag_map, settings, stats, placeholder_format)
-    if result is None and settings.block_boundary is not None:
+    if result is None:
         split = await _translate_blocks_apart(
             chunk_text, local_tag_map, settings, stats, placeholder_format)
         if split is not None:
@@ -296,8 +297,8 @@ async def _translate_blocks_apart(chunk_text: str, local_tag_map: Dict[str, str]
                                   ) -> Optional[Tuple[str, str]]:
     """Translate each block of the chunk on its own; None for a single block.
 
-    The chunk is cut around its ``settings.block_boundary`` placeholders,
-    which are kept verbatim. Each block keeps only its own inline
+    The chunk is cut around its block-boundary placeholders
+    (``is_block_boundary_markup``), which are kept verbatim. Each block keeps only its own inline
     placeholders, renumbered 0, 1, 2... for the request, so Phase 2 can only
     reposition a lost placeholder inside the block it belongs to. The
     outcome is the worst outcome of the blocks.
@@ -306,7 +307,7 @@ async def _translate_blocks_apart(chunk_text: str, local_tag_map: Dict[str, str]
         fmt = PlaceholderFormat.from_config()
         placeholder_format = (fmt.prefix, fmt.suffix)
     prefix, suffix = placeholder_format
-    boundaries = [ph for ph, markup in local_tag_map.items() if settings.block_boundary(markup)]
+    boundaries = [ph for ph, markup in local_tag_map.items() if is_block_boundary_markup(markup)]
     if not boundaries:
         return None
     # Even positions: text between boundaries; odd positions: the boundaries.
@@ -320,15 +321,15 @@ async def _translate_blocks_apart(chunk_text: str, local_tag_map: Dict[str, str]
     settings.log("blocks_apart",
                  f"🧩 Placeholders lost in a chunk of {len(blocks)} blocks - "
                  "translating each block on its own")
-    piece_settings = dataclasses.replace(settings, block_boundary=None)
     outcome = CHUNK_TRANSLATED
     for i in blocks:
         own = [int(n) for n in placeholder_re.findall(parts[i])]
         piece = localize_placeholders(parts[i], own, placeholder_format)
         piece_map = {f"{prefix}{j}{suffix}": local_tag_map[f"{prefix}{n}{suffix}"]
                      for j, n in enumerate(own)}
+        # A block holds no boundary placeholder, so it is never split again.
         translated, piece_outcome = await _translate_ladder(
-            piece, piece_map, piece_settings, stats, placeholder_format)
+            piece, piece_map, settings, stats, placeholder_format)
         parts[i] = globalize_placeholders(translated, own, placeholder_format)
         if _OUTCOME_RANK[piece_outcome] > _OUTCOME_RANK[outcome]:
             outcome = piece_outcome

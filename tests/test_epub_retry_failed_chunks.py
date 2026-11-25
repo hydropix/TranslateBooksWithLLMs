@@ -109,7 +109,10 @@ def _build_epub(path):
         '</container>\n'
     )
     sabotaged = list(PARAGRAPHS)
-    sabotaged[1] = SENTINEL + ", and the assistant never asked twice."
+    # The inline <em> keeps a placeholder inside the sabotaged block once a
+    # failed multi-block chunk is split into blocks, so the `degrade` scenario
+    # still has placeholders to lose (and a Phase 2 to reach) at block level.
+    sabotaged[1] = SENTINEL + ", and the <em>assistant</em> never asked twice."
 
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("mimetype", "application/epub+zip", zipfile.ZIP_STORED)
@@ -331,8 +334,11 @@ async def test_resume_retries_only_the_unfinished_chunk(epub_job, monkeypatch):
     assert manager.list_xhtml_partial_states(translation_id) == ['chapter2.xhtml']
     # The file pointer still says "all three files done".
     assert manager.load_checkpoint(translation_id)['resume_from_index'] == 3
-    assert TRANSLATED_MARKER not in _chapter_text(epub_job['output'],
-                                                  "chapter2.xhtml")
+    # The failed chunk is split into blocks: its healthy blocks are translated
+    # and only the sabotaged paragraph stays in the source language.
+    chapter2 = _chapter_text(epub_job['output'], "chapter2.xhtml")
+    assert "<p>" + SENTINEL in chapter2
+    assert "%s %s" % (TRANSLATED_MARKER, PARAGRAPHS[0]) in chapter2
 
     # === PASS 2: resume with the starvation lifted ===
     resume_from_index = manager.load_checkpoint(translation_id)['resume_from_index']
@@ -449,10 +455,13 @@ async def test_resume_retry_that_fails_again_keeps_the_ticket(epub_job, monkeypa
     stats2, requests2, kinds2 = await _run_pass(
         epub_job, monkeypatch, resume_from_index=resume_from_index, starve=True)
 
-    # The sabotaged chunk walked the same ladder exactly once (Phase 1 with the
-    # placeholders, Phase 2 without), and no other chunk was touched.
-    assert requests2 == _sentinel_requests(requests1)
+    # The sabotaged chunk walked the same ladder exactly once (the whole chunk,
+    # then its blocks one by one), and no other chunk was touched: every
+    # request belongs to chapter 2 (PARAGRAPHS[1] only exists in chapters 1/3).
+    assert _sentinel_requests(requests2) == _sentinel_requests(requests1)
     assert len(requests2) >= 1
+    assert not any("Chapter 1" in r or "Chapter 3" in r or PARAGRAPHS[1] in r
+                   for r in requests2)
     assert 'epub_retry_file' in kinds2
 
     # This pass retried one chunk and it fell back again: 1 of 1, not 3 of 5.
@@ -475,8 +484,8 @@ async def test_resume_retry_that_fails_again_keeps_the_ticket(epub_job, monkeypa
     assert state.validate() is True
     assert SENTINEL in state.translated_chunks[0]
     assert manager.load_checkpoint(translation_id)['resume_from_index'] == 3
-    assert TRANSLATED_MARKER not in _chapter_text(epub_job['output'],
-                                                 "chapter2.xhtml")
+    # Still only the sabotaged paragraph is in the source language.
+    assert "<p>" + SENTINEL in _chapter_text(epub_job['output'], "chapter2.xhtml")
 
 
 # ---------------------------------------------------------------------------

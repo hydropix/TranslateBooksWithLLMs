@@ -20,7 +20,7 @@ assertions describe production behaviour:
 
   * The placeholder path (the default) PRESERVES the attribute, both when the
     model echoes the placeholders and when it emits literal HTML tags instead
-    and the token-alignment fallback has to repair the chunk. Those two are
+    and the fallback ladder has to repair the chunk. Those two are
     passing controls, and they pin any future loss to Plain Text Mode rather
     than to `TagPreserver`, `PlaceholderRenumberer`, `TokenAlignmentFallback`
     or the entity-escaping step of `_reconstruct_html`.
@@ -184,17 +184,19 @@ async def test_placeholder_path_preserves_heading_class_when_model_emits_literal
     """Control: literal-tag output does not lose the attribute either.
 
     When the model answers with `<h3>Chapitre 1</h3>` instead of the
-    placeholders, strict validation fails and the token-alignment fallback
-    reinserts `[id0]`/`[id1]`/`[id2]` into the clean translation. The heading
-    tag still comes from the tag map, so `class="head"` survives — which rules
-    out "a recovery path accepts the model's literal tags" as the cause of F3.
+    placeholders, strict validation fails. The chunk spans two blocks, so
+    each block is then translated on its own and put back between the
+    original placeholders. The heading tag still comes from the tag map, so
+    `class="head"` survives — which rules out "a recovery path accepts the
+    model's literal tags" as the cause of F3.
     """
-    # This test IS the token-alignment path, so it must not inherit the flag
-    # from the developer's .env: with EPUB_TOKEN_ALIGNMENT_ENABLED=false the
-    # chunk drops straight to Phase 3 and only one prompt is ever sent.
     monkeypatch.setattr('src.config.EPUB_TOKEN_ALIGNMENT_ENABLED', True)
     doc_root = _parse_doc()
-    client = StubLLMClient([LITERAL_TAGS_RESPONSE])
+    client = StubLLMClient([
+        LITERAL_TAGS_RESPONSE,
+        '<TRANSLATION>Chapitre 1</TRANSLATION>',
+        '<TRANSLATION>Guixu, la vallée sans fond au milieu de la mer.</TRANSLATION>',
+    ])
 
     success, _stats = await translate_xhtml(
         doc_root=doc_root,
@@ -206,8 +208,12 @@ async def test_placeholder_path_preserves_heading_class_when_model_emits_literal
     )
 
     assert success is True
-    # Two calls: the placeholder attempt, then the placeholder-free fallback.
-    assert len(client.prompts) == 2
+    # The placeholder attempt, then one request per block.
+    assert len(client.prompts) == 3
+    ns = {'x': 'http://www.w3.org/1999/xhtml'}
+    assert doc_root.xpath('string(//x:h3)', namespaces=ns) == 'Chapitre 1'
+    assert doc_root.xpath('string(//x:p)', namespaces=ns) == (
+        'Guixu, la vallée sans fond au milieu de la mer.')
     assert _heading_open_tags(doc_root) == ['<h3 class="head">']
 
 

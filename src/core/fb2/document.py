@@ -44,7 +44,6 @@ _UTF8_BOM = b'\xef\xbb\xbf'
 _DECLARATION_RE = re.compile(r'^\s*<\?xml[^>]*\?>', re.S)
 _ENCODING_RE = re.compile(rb'<\?xml[^>]*?encoding\s*=\s*["\']([A-Za-z0-9._:-]+)["\']')
 _LINE_RE = re.compile(r'<p data-b="(\d+)">(.*?)</p>', re.S)
-_BOUNDARY_RE = re.compile(r'<p data-b="\d+">|</p>')
 _BARE_AMPERSAND_RE = re.compile(r'&(?!#\d+;|#x[0-9A-Fa-f]+;|[A-Za-z][\w.-]*;)')
 
 
@@ -215,12 +214,6 @@ def _serialize_block(element: etree._Element) -> Fb2Block:
 def build_translation_html(blocks: List[Fb2Block]) -> str:
     """The HTML-like string the placeholder pipeline translates."""
     return '\n'.join(f'<p data-b="{i}">{block.inner}</p>' for i, block in enumerate(blocks))
-
-
-def is_block_boundary(markup: str) -> bool:
-    """Whether a placeholder's markup separates two blocks of
-    :func:`build_translation_html` (text must never cross it)."""
-    return bool(_BOUNDARY_RE.search(markup))
 
 
 def split_translated_html(html: str) -> Dict[int, str]:

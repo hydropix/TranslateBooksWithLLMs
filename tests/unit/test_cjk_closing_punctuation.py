@@ -141,16 +141,40 @@ def _doc():
 
 
 @pytest.mark.asyncio
-async def test_xhtml_phase2_japanese_keeps_punctuation_in_its_paragraph(monkeypatch):
+async def test_xhtml_phase2_japanese_keeps_punctuation_before_line_break(monkeypatch):
+    """Phase 2 on a single block: the mark stays before the <br/>."""
     async def drops_placeholders(main_content, *args, **kwargs):
         return "こんにちは。お元気ですか？"
+
+    monkeypatch.setattr(chunk_fallback, "generate_translation_request", drops_placeholders)
+    doc = etree.fromstring(
+        f'<html xmlns="{XHTML_NS}"><head><title>t</title></head>'
+        "<body><p>Hello there.<br/>How are you?</p></body></html>".encode("utf-8"))
+    success, stats = await translate_xhtml(doc, "English", "Japanese", "fake",
+                                           llm_client=object(), max_retries=1)
+    assert success is True
+    assert stats.token_alignment_used == 1
+    br = next(doc.iter(f"{{{XHTML_NS}}}br"))
+    assert br.getparent().text == "こんにちは。"
+    assert br.tail == "お元気ですか？"
+
+
+@pytest.mark.asyncio
+async def test_xhtml_lost_placeholders_keep_punctuation_in_its_paragraph(monkeypatch):
+    """Two paragraphs whose placeholders are dropped are translated apart."""
+    replies = {"Hello there.": "こんにちは。", "How are you?": "お元気ですか？"}
+
+    async def drops_placeholders(main_content, *args, **kwargs):
+        if "[id" in main_content:
+            return "こんにちは。お元気ですか？"
+        return replies[main_content.strip()]
 
     monkeypatch.setattr(chunk_fallback, "generate_translation_request", drops_placeholders)
     doc = _doc()
     success, stats = await translate_xhtml(doc, "English", "Japanese", "fake",
                                            llm_client=object(), max_retries=1)
     assert success is True
-    assert stats.token_alignment_used == 1
+    assert stats.token_alignment_used == 0
     assert _paragraph_texts(doc) == ["こんにちは。", "お元気ですか？"]
 
 

@@ -43,12 +43,6 @@ class ChunkLoopSettings:
             (``file_href`` when None).
         global_total_chunks: Chunks of the whole book (EPUB), or None.
         global_completed_chunks: Chunks finished in earlier files, or None.
-        block_boundary: Markup -> True when that placeholder separates two
-            blocks that must never exchange text. When set, a chunk that
-            fails Phase 1 is split at these placeholders and each block goes
-            down the ladder on its own, instead of Phase 2 repositioning tags
-            proportionally across the whole chunk (FB2). None keeps the
-            whole-chunk ladder.
     """
 
     source_language: str
@@ -71,7 +65,6 @@ class ChunkLoopSettings:
     file_path: Optional[str] = None
     global_total_chunks: Optional[int] = None
     global_completed_chunks: Optional[int] = None
-    block_boundary: Optional[Callable[[str], bool]] = None
 
     @property
     def can_checkpoint(self) -> bool:

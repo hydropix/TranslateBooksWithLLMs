@@ -285,6 +285,48 @@ async def test_failed_chunks_keep_the_checkpoint_for_a_retry(tmp_path, cm, monke
     assert cm.load_xhtml_partial_state("job", "in.fb2") is None
 
 
+BLOCK_XPATH = ("//fb:body//fb:p | //fb:body//fb:v | //fb:body//fb:subtitle"
+               " | //fb:body//fb:text-author | //fb:body//fb:th | //fb:body//fb:td")
+
+
+@pytest.mark.asyncio
+async def test_lost_placeholders_never_move_text_across_blocks(tmp_path, monkeypatch):
+    """A model that drops every placeholder of a multi-block chunk must not
+    smear text from one FB2 block into its neighbours (proportional token
+    alignment over the whole chunk did): each block is retried on its own."""
+    placeholder = re.compile(r'\[id\d+\]')
+    # No single block is longer than this: a longer request spans blocks.
+    longest = max(len(''.join(b.element.itertext())) for b in parse_fb2(_source_bytes()).blocks)
+    calls = {"multi_block": 0}
+
+    async def careless_request(text, **kwargs):
+        clean = placeholder.sub('', text)
+        if len(clean) <= longest:
+            return _fake_translate(text)
+        calls["multi_block"] += 1
+        # Every placeholder dropped, and a reply whose length no longer
+        # matches the source, so proportional reinsertion lands mid-word.
+        return "NOTE DU TRADUCTEUR, TRÈS LONGUE: " + _fake_translate(clean)
+
+    monkeypatch.setattr(llm_factory_module, "create_llm_provider",
+                        lambda *args, **kwargs: FakeLLMClient())
+    monkeypatch.setattr(chunk_fallback_module, "generate_translation_request",
+                        careless_request)
+    result, out = await _run(tmp_path, _source_bytes(), max_tokens_per_chunk=300)
+
+    assert calls["multi_block"] > 0, "the fixture must yield multi-block chunks"
+    source = _tree(_source_bytes())
+    output = _tree(out.read_bytes())
+    kept = {"[1]", "[2]", "[3]", "ring_bell(times=3)"}  # note refs and code
+    pairs = list(zip(source.xpath(BLOCK_XPATH, namespaces=NS),
+                     output.xpath(BLOCK_XPATH, namespaces=NS)))
+    assert len(pairs) == len(source.xpath(BLOCK_XPATH, namespaces=NS))
+    for src_el, out_el in pairs:
+        expected = ''.join(t if t in kept else t.upper() for t in src_el.itertext())
+        assert ''.join(out_el.itertext()) == expected
+    assert "TRADUCTEUR" not in out.read_bytes().decode("utf-8")
+
+
 class TestRouting:
     @pytest.mark.parametrize("name", ["book.fb2", "BOOK.FB2"])
     def test_fb2_extension_is_detected(self, name):

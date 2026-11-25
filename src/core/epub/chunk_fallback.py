@@ -8,11 +8,17 @@ A chunk goes down three phases until one produces text:
    reinsert them proportionally (``EPUB_TOKEN_ALIGNMENT_ENABLED``).
 3. Phase 3 - keep the source text.
 
+With ``settings.block_boundary`` set, a chunk that fails Phase 1 and spans
+several blocks is split at its block boundaries first, and each block goes
+down the three phases on its own: Phase 2 then never moves text from one
+block into another.
+
 Whatever the phase, the chunk's terminal outcome is recorded in
 ``stats.chunk_outcomes`` (CHUNK_TRANSLATED / CHUNK_TOKEN_ALIGNED /
 CHUNK_UNTRANSLATED) and the result comes back with global placeholders.
 """
 
+import dataclasses
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -21,7 +27,7 @@ from src.common.placeholder_format import PlaceholderFormat
 
 from .chunk_settings import ChunkLoopSettings
 from .engine_log import report_error
-from .placeholder_renumberer import globalize_placeholders
+from .placeholder_renumberer import globalize_placeholders, localize_placeholders
 from .placeholder_validator import PlaceholderValidator
 from .tag_preservation import _is_block_boundary_tag
 from .text_survival import text_survival_problem
@@ -246,6 +252,89 @@ async def _phase2_token_alignment(chunk_text: str, local_tag_map: Dict[str, str]
     return None
 
 
+_OUTCOME_RANK = {CHUNK_TRANSLATED: 0, CHUNK_TOKEN_ALIGNED: 1, CHUNK_UNTRANSLATED: 2}
+
+
+async def _translate_ladder(chunk_text: str, local_tag_map: Dict[str, str],
+                            settings: ChunkLoopSettings, stats: TranslationMetrics,
+                            placeholder_format: Optional[Tuple[str, str]]
+                            ) -> Tuple[str, str]:
+    """Phases 1 to 3 on one piece of text with local placeholders.
+
+    Returns ``(text, outcome)``; the text is the source when every phase failed.
+    """
+    from src.config import EPUB_TOKEN_ALIGNMENT_ENABLED
+
+    result, residue_kept = await _phase1_translate(
+        chunk_text, local_tag_map, settings, stats, placeholder_format)
+    if result is None and settings.block_boundary is not None:
+        split = await _translate_blocks_apart(
+            chunk_text, local_tag_map, settings, stats, placeholder_format)
+        if split is not None:
+            return split
+    outcome = CHUNK_TRANSLATED
+    if result is None and EPUB_TOKEN_ALIGNMENT_ENABLED:
+        result = await _phase2_token_alignment(chunk_text, local_tag_map, settings, stats)
+        outcome = CHUNK_TOKEN_ALIGNED
+        if result is not None and _has_source_residue(chunk_text, result, settings):
+            stats.fallback_used += 1
+            residue_kept = True
+    if result is None:
+        _phase3_keep_source(settings, stats)
+        return chunk_text, CHUNK_UNTRANSLATED
+    result = reattach_block_closing_punctuation(chunk_text, result, local_tag_map)
+    if residue_kept:
+        # Kept as the most translated text, but recorded as untranslated
+        # so a resume or a repair pass retries it (issue #270).
+        outcome = CHUNK_UNTRANSLATED
+    return result, outcome
+
+
+async def _translate_blocks_apart(chunk_text: str, local_tag_map: Dict[str, str],
+                                  settings: ChunkLoopSettings, stats: TranslationMetrics,
+                                  placeholder_format: Optional[Tuple[str, str]]
+                                  ) -> Optional[Tuple[str, str]]:
+    """Translate each block of the chunk on its own; None for a single block.
+
+    The chunk is cut around its ``settings.block_boundary`` placeholders,
+    which are kept verbatim. Each block keeps only its own inline
+    placeholders, renumbered 0, 1, 2... for the request, so Phase 2 can only
+    reposition a lost placeholder inside the block it belongs to. The
+    outcome is the worst outcome of the blocks.
+    """
+    if placeholder_format is None:
+        fmt = PlaceholderFormat.from_config()
+        placeholder_format = (fmt.prefix, fmt.suffix)
+    prefix, suffix = placeholder_format
+    boundaries = [ph for ph, markup in local_tag_map.items() if settings.block_boundary(markup)]
+    if not boundaries:
+        return None
+    # Even positions: text between boundaries; odd positions: the boundaries.
+    parts = re.split("(" + "|".join(re.escape(ph) for ph in boundaries) + ")", chunk_text)
+    placeholder_re = re.compile(rf"{re.escape(prefix)}(\d+){re.escape(suffix)}")
+    blocks = [i for i in range(0, len(parts), 2)
+              if placeholder_re.sub("", parts[i]).strip()]
+    if len(blocks) < 2:
+        return None
+
+    settings.log("blocks_apart",
+                 f"🧩 Placeholders lost in a chunk of {len(blocks)} blocks - "
+                 "translating each block on its own")
+    piece_settings = dataclasses.replace(settings, block_boundary=None)
+    outcome = CHUNK_TRANSLATED
+    for i in blocks:
+        own = [int(n) for n in placeholder_re.findall(parts[i])]
+        piece = localize_placeholders(parts[i], own, placeholder_format)
+        piece_map = {f"{prefix}{j}{suffix}": local_tag_map[f"{prefix}{n}{suffix}"]
+                     for j, n in enumerate(own)}
+        translated, piece_outcome = await _translate_ladder(
+            piece, piece_map, piece_settings, stats, placeholder_format)
+        parts[i] = globalize_placeholders(translated, own, placeholder_format)
+        if _OUTCOME_RANK[piece_outcome] > _OUTCOME_RANK[outcome]:
+            outcome = piece_outcome
+    return "".join(parts), outcome
+
+
 def _phase3_keep_source(settings: ChunkLoopSettings, stats: TranslationMetrics) -> None:
     """Count and log the untranslated fallback."""
     stats.fallback_used += 1
@@ -281,28 +370,8 @@ async def translate_chunk_with_fallback(
     Returns:
         The translated (or source) text with global placeholders.
     """
-    from src.config import EPUB_TOKEN_ALIGNMENT_ENABLED
-
-    result, residue_kept = await _phase1_translate(
+    result, outcome = await _translate_ladder(
         chunk_text, local_tag_map, settings, stats, placeholder_format)
-    outcome = CHUNK_TRANSLATED
-    if result is None and EPUB_TOKEN_ALIGNMENT_ENABLED:
-        result = await _phase2_token_alignment(chunk_text, local_tag_map, settings, stats)
-        outcome = CHUNK_TOKEN_ALIGNED
-        if result is not None and _has_source_residue(chunk_text, result, settings):
-            stats.fallback_used += 1
-            residue_kept = True
-    if result is None:
-        outcome = CHUNK_UNTRANSLATED
-        result = chunk_text
-        _phase3_keep_source(settings, stats)
-    else:
-        result = reattach_block_closing_punctuation(chunk_text, result, local_tag_map)
-        if residue_kept:
-            # Kept as the most translated text, but recorded as untranslated
-            # so a resume or a repair pass retries it (issue #270).
-            outcome = CHUNK_UNTRANSLATED
-
     stats.record_chunk_outcome(chunk_index, outcome)
     restored = globalize_placeholders(result, global_indices)
     stats.record_processed()  # the chunk is fully processed, even on failure

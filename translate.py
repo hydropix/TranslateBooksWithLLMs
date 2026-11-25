@@ -170,12 +170,12 @@ def run_cli_job(job: JobConfig, logger, *, translation_id=None, checkpoint_manag
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Translate a text, Markdown, EPUB, SRT, PGN, DOCX or PDF file using an LLM.",
+        description="Translate a text, Markdown, EPUB, SRT, PGN, DOCX, PDF or FB2 file using an LLM.",
         epilog="Tip: any --*_api_key flag also accepts comma-separated keys "
                "(e.g. --gemini_api_key key1,key2,key3) for automatic rotation "
                "on HTTP 429 — useful to chain free-tier accounts.",
     )
-    parser.add_argument("-i", "--input", default=None, help="Path to the input file (text, Markdown, EPUB, SRT, PGN, DOCX or PDF). Required unless --resume is given.")
+    parser.add_argument("-i", "--input", default=None, help="Path to the input file (text, Markdown, EPUB, SRT, PGN, DOCX, PDF or FB2). Required unless --resume is given.")
     parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
     parser.add_argument("--resume", default=None, metavar="JOB_ID", help="Resume an interrupted, rate-limited or partial CLI job from its checkpoint (the id is printed when the job stops).")
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")

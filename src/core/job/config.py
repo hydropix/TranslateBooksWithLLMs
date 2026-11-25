@@ -168,7 +168,7 @@ class JobConfig:
 
     Attributes:
         operation: ``translate``, ``refine`` (refine-only) or ``term_fix``.
-        file_type: Detected/declared format (txt, srt, epub, docx, pdf, pgn).
+        file_type: Detected/declared format (txt, md, srt, epub, docx, pdf, pgn, fb2).
         input_path: File to read. None for an inline-text web job (``text``).
         text: Inline text of a web TXT job without an upload.
         output_path: File the job writes. The web builder sets the requested
@@ -672,7 +672,7 @@ class JobConfig:
         ext = os.path.splitext(input_path)[1]
         file_type = {
             '.epub': 'epub', '.srt': 'srt', '.pgn': 'pgn', '.docx': 'docx', '.pdf': 'pdf',
-            '.md': 'md', '.markdown': 'md',
+            '.md': 'md', '.markdown': 'md', '.fb2': 'fb2',
         }.get(ext.lower(), 'txt')
 
         model = args.model
@@ -722,7 +722,7 @@ class JobConfig:
                                      "Set LITELLM_MODEL in .env or pass -m, e.g. "
                                      "-m anthropic/claude-sonnet-4-6")
 
-        if file_type in ('pdf', 'pgn', 'md'):
+        if file_type in ('pdf', 'pgn', 'md', 'fb2'):
             label = {'md': 'Markdown'}.get(file_type, file_type.upper())
             if refine_only:
                 raise JobConfigError(f"--refine-only does not support {label} input yet.")

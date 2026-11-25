@@ -159,7 +159,7 @@ class SecureFileHandler:
     # The system will detect the actual content type for unknown extensions
     ALLOWED_EXTENSIONS: Set[str] = {
         # Primary supported formats (with dedicated processors)
-        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf',
+        '.txt', '.epub', '.srt', '.pgn', '.docx', '.pdf', '.fb2',
         # Common text file extensions (will be processed as plain text)
         '.text', '.log', '.md', '.markdown', '.rst', '.asc',
         # Configuration/data files (text-based, can be translated)
@@ -407,6 +407,7 @@ class SecureFileHandler:
                 '.pgn': self._validate_text_file,
                 '.docx': self._validate_docx_file,
                 '.pdf': self._validate_pdf_file,
+                '.fb2': self._validate_fb2_file,
             }
 
             # Check if we have a dedicated validator for this extension
@@ -695,6 +696,25 @@ class SecureFileHandler:
                 is_valid=False,
                 error_message=f"DOCX validation failed: {str(e)}"
             )
+
+    def _validate_fb2_file(self, file_path: Path) -> FileValidationResult:
+        """Validate an FB2 file: well-formed XML whose root is <FictionBook>.
+
+        Parsed with entity expansion and network access disabled (the same
+        parser the translator uses).
+        """
+        try:
+            from src.core.fb2.document import Fb2Error, parse_fb2
+            with open(file_path, 'rb') as f:
+                data = f.read()
+            parse_fb2(data)
+            return FileValidationResult(is_valid=True, file_path=file_path)
+        except Fb2Error as e:
+            return FileValidationResult(is_valid=False,
+                                        error_message=f"FB2 validation failed: {e}")
+        except Exception as e:
+            return FileValidationResult(is_valid=False,
+                                        error_message=f"FB2 validation failed: {str(e)}")
 
     def _validate_pdf_file(self, file_path: Path) -> FileValidationResult:
         """

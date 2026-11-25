@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Synthetic FictionBook 2.x fixture for FB2 translation tests.
+  Original text written for this repository; no third-party content.
+  It deliberately exercises every structure an FB2 translator must handle:
+  translatable metadata, cover image, nested sections, titles/subtitles,
+  epigraphs, poems, citations, tables, inline markup, footnote links into a
+  second notes body, empty lines, and embedded base64 binaries.
+-->
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+  <description>
+    <title-info>
+      <genre>sf_fantasy</genre>
+      <genre>adventure</genre>
+      <author>
+        <first-name>Marta</first-name>
+        <middle-name>L.</middle-name>
+        <last-name>Fixture</last-name>
+      </author>
+      <book-title>The Lighthouse Keeper's Ledger</book-title>
+      <annotation>
+        <p>A keeper on a remote island finds that the <emphasis>ledger</emphasis> of passing ships records vessels that have not sailed yet.</p>
+        <p>A short test book with <strong>every</strong> FB2 structure in it.</p>
+      </annotation>
+      <keywords>lighthouse, island, ledger, test</keywords>
+      <date value="2026-11-25">2026</date>
+      <coverpage>
+        <image l:href="#cover.png"/>
+      </coverpage>
+      <lang>en</lang>
+      <src-lang>en</src-lang>
+      <sequence name="Island Tales" number="1"/>
+    </title-info>
+    <document-info>
+      <author>
+        <nickname>translatebook-tests</nickname>
+      </author>
+      <program-used>Hand-written</program-used>
+      <date value="2026-11-25">25 November 2026</date>
+      <id>00000000-0000-4000-8000-000000000fb2</id>
+      <version>1.0</version>
+    </document-info>
+    <publish-info>
+      <book-name>The Lighthouse Keeper's Ledger</book-name>
+      <publisher>Fixture Press</publisher>
+      <city>Nowhere</city>
+      <year>2026</year>
+    </publish-info>
+  </description>
+  <body>
+    <title>
+      <p>Marta L. Fixture</p>
+      <p>The Lighthouse Keeper's Ledger</p>
+    </title>
+    <epigraph>
+      <p>Every light is a promise made to someone you will never meet.</p>
+      <text-author>Old harbour saying</text-author>
+    </epigraph>
+    <section id="part1">
+      <title>
+        <p>Part One</p>
+        <p>The Island</p>
+      </title>
+      <section id="ch1">
+        <title>
+          <p>Chapter 1. Arrival</p>
+        </title>
+        <epigraph>
+          <poem>
+            <stanza>
+              <v>The tide comes in, the tide goes out,</v>
+              <v>and nobody asks it why.</v>
+            </stanza>
+          </poem>
+          <text-author>From a sailor's notebook</text-author>
+        </epigraph>
+        <p>Anna stepped off the supply boat at noon, carrying a single suitcase and a letter of appointment that she had read <emphasis>eleven</emphasis> times on the crossing.</p>
+        <p>The previous keeper, Mr. Hale, met her on the jetty. "You'll want to see the ledger first," he said, "before the lamp, before the stores, before anything."<a l:href="#n1" type="note">[1]</a></p>
+        <p>She noticed that he said the word <strong>ledger</strong> the way other people say <strong><emphasis>church</emphasis></strong>.</p>
+        <image l:href="#map.png"/>
+        <p>The island was barely a mile across: a rock, a tower, a cottage, and a garden of stubborn cabbages.</p>
+        <empty-line/>
+        <p>That night the wind rose to force 8<a l:href="#n2" type="note">[2]</a>, and the lamp turned 2<sup>nd</sup> order lenses that had been polished, Hale said, every morning since 1871.</p>
+      </section>
+      <section id="ch2">
+        <title>
+          <p>Chapter 2. The Ledger</p>
+        </title>
+        <subtitle>* * *</subtitle>
+        <p>The ledger was bound in green cloth. Each line held a date, a ship's name, a flag and a course, written in a neat hand that changed every few decades.</p>
+        <cite>
+          <p>14 March. <emphasis>Morning Star</emphasis>, Norwegian flag, bearing north-north-east. Passed safely.</p>
+          <text-author>Ledger entry, page 212</text-author>
+        </cite>
+        <p>The date at the top of the page was <strikethrough>last year</strikethrough> next year.</p>
+        <p>Hale tapped the margin, where someone had written the formula H<sub>2</sub>O and, beside it, the command <code>ring_bell(times=3)</code>.</p>
+        <table>
+          <tr>
+            <th>Date</th>
+            <th>Ship</th>
+            <th>Status</th>
+          </tr>
+          <tr>
+            <td>14 March</td>
+            <td>Morning Star</td>
+            <td align="center">Passed safely</td>
+          </tr>
+          <tr>
+            <td>2 April</td>
+            <td>Grey Heron</td>
+            <td align="center">Not yet sailed</td>
+          </tr>
+        </table>
+        <p>See also <a l:href="#ch3">Chapter 3</a> and the keeper's <a l:href="https://example.org/lighthouses">reference list</a>.</p>
+      </section>
+    </section>
+    <section id="part2">
+      <title>
+        <p>Part Two</p>
+      </title>
+      <section id="ch3">
+        <title>
+          <p>Chapter 3. The Song of the Lamp</p>
+        </title>
+        <p>On her first solitary night, Anna found a poem pinned inside the lamp room door.</p>
+        <poem>
+          <title>
+            <p>Lamp Room</p>
+          </title>
+          <epigraph>
+            <p>For whoever comes after.</p>
+          </epigraph>
+          <stanza>
+            <title>
+              <p>I</p>
+            </title>
+            <v>I wind the clock, I trim the wick,</v>
+            <v>I count the ships that pass;</v>
+            <v>the sea writes faster than I can,</v>
+            <v>its ink is wind and glass.</v>
+          </stanza>
+          <stanza>
+            <title>
+              <p>II</p>
+            </title>
+            <v>And if you read tomorrow's names</v>
+            <v>before tomorrow came,</v>
+            <v>do not be <emphasis>afraid</emphasis> of them:</v>
+            <v>just keep the lamp the same.</v>
+          </stanza>
+          <text-author>E. Hale</text-author>
+          <date>1952</date>
+        </poem>
+        <p>She read it twice, then opened the ledger and wrote the first line in her own hand.<a l:href="#n3" type="note">[3]</a></p>
+      </section>
+    </section>
+  </body>
+  <body name="notes">
+    <title>
+      <p>Notes</p>
+    </title>
+    <section id="n1">
+      <title>
+        <p>1</p>
+      </title>
+      <p>Keepers traditionally handed over the log book before the keys.</p>
+    </section>
+    <section id="n2">
+      <title>
+        <p>2</p>
+      </title>
+      <p>On the Beaufort scale, force 8 is a <emphasis>gale</emphasis>: 34 to 40 knots.</p>
+    </section>
+    <section id="n3">
+      <title>
+        <p>3</p>
+      </title>
+      <p>The entry reads: "25 November. All quiet. The light is kept."</p>
+      <p>A second paragraph inside the same note, to test multi-paragraph notes.</p>
+    </section>
+  </body>
+  <binary id="cover.png" content-type="image/png">iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==</binary>
+  <binary id="map.png" content-type="image/png">iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==</binary>
+</FictionBook>

@@ -225,6 +225,54 @@ class TestHandleRateLimit:
         assert exc_info.value.provider == "prov"
 
 
+class TestRateLimitSleepRounding:
+    """The sleep is the remaining cooldown rounded up to whole seconds, never
+    one second more than Retry-After because of float error."""
+
+    @staticmethod
+    def _freeze_clock(monkeypatch, readings):
+        """Serve successive monotonic() readings to the pool and the handler."""
+        import types
+
+        import src.core.llm.key_pool as kp_mod
+        import src.core.llm.rate_limit_handler as rl_mod
+
+        it = iter(readings)
+        fake_time = types.SimpleNamespace(monotonic=lambda: next(it), time=time.time)
+        monkeypatch.setattr(kp_mod, "time", fake_time)
+        monkeypatch.setattr(rl_mod, "time", fake_time)
+
+        sleeps = []
+
+        async def _record(delay):
+            sleeps.append(delay)
+        monkeypatch.setattr(rl_mod.asyncio, "sleep", _record)
+        return sleeps
+
+    @pytest.mark.asyncio
+    async def test_unticked_clock_does_not_add_a_second(self, monkeypatch):
+        # (121.00004 + 7) - 121.00004 == 7.000000000000014 in floats. A coarse
+        # clock (Windows, ~15 ms ticks) returns the same reading for both
+        # calls, which made a bare ceil() sleep 8 s for a 7 s Retry-After.
+        t = 121.00004
+        assert (t + 7) - t > 7  # the float error this test relies on
+        sleeps = self._freeze_clock(monkeypatch, [t, t])
+        pool = KeyPool(["only"], provider_name="prov")
+        await handle_rate_limit(pool, "only", {"Retry-After": "7"},
+                                rate_limit_events=1, max_attempts=2)
+        assert sleeps == [7]
+
+    @pytest.mark.asyncio
+    async def test_elapsed_time_still_rounds_up(self, monkeypatch):
+        # 10 ms passed between marking and measuring: 6.99 s left, sleep 7 s
+        # rather than retrying before the server allows it.
+        sleeps = self._freeze_clock(monkeypatch, [100.0, 100.01])
+        pool = KeyPool(["only"], provider_name="prov")
+        await handle_rate_limit(pool, "only", {"Retry-After": "7"},
+                                rate_limit_events=1, max_attempts=2)
+        assert sleeps == [7]
+
+
 # ---------------------------------------------------------------------------
 # Provider retry loop x key rotation (issue #217)
 # ---------------------------------------------------------------------------

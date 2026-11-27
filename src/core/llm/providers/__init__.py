@@ -10,6 +10,7 @@ Providers:
     - gemini: Google Gemini API
     - mistral: Mistral AI API
     - deepseek: DeepSeek API (cost-effective Chinese LLM)
+    - llmtr: LLMTR prepaid OpenAI-compatible gateway
 """
 
 __all__ = []

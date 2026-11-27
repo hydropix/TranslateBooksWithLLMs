@@ -37,6 +37,7 @@ PROVIDER_KEY_SETTINGS = {
     'deepseek': 'DEEPSEEK_API_KEY',
     'poe': 'POE_API_KEY',
     'nim': 'NIM_API_KEY',
+    'llmtr': 'LLMTR_API_KEY',
 }
 
 #: Providers that hold a key in ``PROVIDER_KEY_SETTINGS``, in display order.
@@ -45,7 +46,7 @@ KEY_PROVIDERS = tuple(PROVIDER_KEY_SETTINGS)
 #: Providers that cannot work without an API key. ``openai`` is absent on
 #: purpose: OpenAI-compatible local servers (llama.cpp, LM Studio, vLLM) need
 #: none; see :func:`key_required`.
-KEY_REQUIRED_PROVIDERS = frozenset({'gemini', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim'})
+KEY_REQUIRED_PROVIDERS = frozenset({'gemini', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'llmtr'})
 
 
 def normalize_provider(provider: Optional[str]) -> str:

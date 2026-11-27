@@ -33,10 +33,11 @@ export const PROVIDER_META = {
     openai: { name: 'OpenAI', descriptionKey: 'settings:provider_desc_compatible' },
     openrouter: { name: 'OpenRouter', descriptionKey: 'settings:provider_desc_many_models' },
     nim: { name: 'NVIDIA NIM', descriptionKey: 'settings:provider_desc_cloud_api' },
+    llmtr: { name: 'LLMTR', descriptionKey: 'settings:provider_desc_cloud_api' },
 };
 
 // Canonical A-Z order used everywhere a provider dropdown is built.
-export const PROVIDER_ORDER = ['deepseek', 'gemini', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
+export const PROVIDER_ORDER = ['deepseek', 'gemini', 'llmtr', 'mistral', 'nim', 'ollama', 'openai', 'openrouter', 'poe'];
 
 /**
  * Replace the dropdown content with a single placeholder option whose text
@@ -209,7 +210,7 @@ export function populateModelSelectInto(selectEl, models, defaultModel = null, p
             if (modelId === defaultModel) { opt.selected = true; defaultFound = true; }
             (optgroup || selectEl).appendChild(opt);
         });
-    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim') {
+    } else if (provider === 'mistral' || provider === 'deepseek' || provider === 'nim' || provider === 'llmtr') {
         list.forEach((m) => {
             // Same dual-shape tolerance as the openai branch: Settings sends
             // `{value, label}`, the Sample tab forwards the raw `{id, name}`.

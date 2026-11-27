@@ -689,7 +689,7 @@ class JobConfig:
         model = args.model
         if model == cfg.DEFAULT_MODEL:
             provider_default = {
-                'nim': cfg.NIM_MODEL, 'litellm': cfg.LITELLM_MODEL, 'mistral': cfg.MISTRAL_MODEL,
+                'nim': cfg.NIM_MODEL, 'llmtr': cfg.LLMTR_MODEL, 'litellm': cfg.LITELLM_MODEL, 'mistral': cfg.MISTRAL_MODEL,
                 'deepseek': cfg.DEEPSEEK_MODEL, 'poe': cfg.POE_MODEL,
                 'openrouter': cfg.OPENROUTER_MODEL, 'gemini': cfg.GEMINI_MODEL,
             }.get(provider_name)
@@ -725,7 +725,8 @@ class JobConfig:
             if provider_name in KEY_PROVIDERS and key_required(provider_name, endpoint) \
                     and not api_key:
                 hint = {'poe': " Get your key at https://poe.com/api_key",
-                        'nim': " Get your key at https://build.nvidia.com/"}.get(provider_name, '')
+                        'nim': " Get your key at https://build.nvidia.com/",
+                        'llmtr': " Get your key at https://llmtr.com/dashboard/keys"}.get(provider_name, '')
                 raise JobConfigError(f"--{provider_name}_api_key is required when using "
                                      f"{provider_name} provider.{hint}")
             if provider_name == 'litellm' and model == cfg.DEFAULT_MODEL:

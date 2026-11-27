@@ -194,6 +194,7 @@ export const SettingsManager = {
             { id: 'deepseekApiKey', event: 'input' },
             { id: 'poeApiKey', event: 'input' },
             { id: 'nimApiKey', event: 'input' },
+            { id: 'llmtrApiKey', event: 'input' },
             { id: 'disableAutoPause', event: 'change' },
             { id: 'failureReport', event: 'change' },
             { id: 'parallelWorkers', event: 'input' },
@@ -683,6 +684,9 @@ export const SettingsManager = {
             } else if (provider === 'nim') {
                 const key = DomHelpers.getValue('nimApiKey');
                 if (key) envSettings['NIM_API_KEY'] = key;
+            } else if (provider === 'llmtr') {
+                const key = DomHelpers.getValue('llmtrApiKey');
+                if (key) envSettings['LLMTR_API_KEY'] = key;
             }
 
             // Save endpoints to .env
@@ -763,6 +767,8 @@ export const SettingsManager = {
                     envSettings['POE_MODEL'] = model;
                 } else if (provider === 'nim') {
                     envSettings['NIM_MODEL'] = model;
+                } else if (provider === 'llmtr') {
+                    envSettings['LLMTR_MODEL'] = model;
                 } else {
                     // Ollama and OpenAI use DEFAULT_MODEL
                     envSettings['DEFAULT_MODEL'] = model;

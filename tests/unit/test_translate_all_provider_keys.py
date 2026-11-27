@@ -63,7 +63,7 @@ def _assert_no_key_persisted(config):
     assert not [k for k in config if k == 'api_key' or k.endswith('_api_key')]
 
 
-CLOUD_PROVIDERS = ['mistral', 'deepseek', 'poe', 'nim', 'gemini', 'openrouter']
+CLOUD_PROVIDERS = ['mistral', 'deepseek', 'poe', 'nim', 'llmtr', 'gemini', 'openrouter']
 
 
 @pytest.mark.parametrize('provider', CLOUD_PROVIDERS)

@@ -178,6 +178,7 @@ def test_unresolvable_host_is_rejected_without_raising():
     OPENAI_ALT_ENDPOINT,  # subdomain rule
     'https://openrouter.ai/api/v1/chat/completions',
     'https://integrate.api.nvidia.com/v1/chat/completions',
+    'https://llmtr.com/v1/chat/completions',
 ])
 def test_known_provider_hosts_are_allowed(endpoint):
     assert EndpointValidator.validate(endpoint) == (True, None)

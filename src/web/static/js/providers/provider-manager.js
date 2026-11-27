@@ -15,7 +15,8 @@ import { ApiKeyUtils } from '../utils/api-key-utils.js';
 import { StatusManager } from '../utils/status-manager.js';
 import { SearchableSelectFactory } from '../ui/searchable-select.js';
 import { t } from '../i18n/i18n.js';
-import {
+import {
+
     populateModelSelectInto,
     setPlaceholderOption as setPlaceholderOptionShared,
     renderProviderOption,
@@ -120,6 +121,13 @@ const POE_FALLBACK_MODELS = [
     { value: 'assistant', label: 'Assistant (Router)', group: 'Poe Bots' },
     { value: 'exa-answer', label: 'Exa Answer (Web Search)', group: 'Poe Bots' },
     { value: 'exa-search', label: 'Exa Search', group: 'Poe Bots' }
+];
+
+/**
+ * Fallback LLMTR models list (used when API fetch fails)
+ */
+const LLMTR_FALLBACK_MODELS = [
+    { value: 'qwen/qwen3.8-27b-free', label: 'qwen/qwen3.8-27b-free' }
 ];
 
 /**
@@ -490,6 +498,25 @@ const MODEL_LOADERS = {
         },
     },
 
+    llmtr: {
+        loadingKey: 'settings:search_models_loading_llmtr',
+        apiKeyInput: 'llmtrApiKey',
+        missingKeyMessage: 'settings:llmtr_key_required',
+        requestOptions: (ctx, apiKey) => ({ apiKey }),
+        formatModels: toValueLabelWithContext,
+        availableModels: (models) => models.map(m => m.value),
+        successLogKey: 'settings:llmtr_models_loaded_log',
+        emptyDefaultKey: 'settings:llmtr_default_error',
+        fallback: {
+            models: LLMTR_FALLBACK_MODELS,
+            defaultModel: 'qwen/qwen3.8-27b-free',
+            emptyMessageKey: 'settings:deepseek_fallback_msg',
+            emptyLogKey: 'settings:llmtr_fallback_log',
+            errorMessageKey: 'settings:deepseek_error_fallback_msg',
+            errorLogKey: 'settings:llmtr_error_fallback_log',
+        },
+    },
+
     poe: {
         loadingKey: 'settings:search_models_loading_poe',
         apiKeyInput: 'poeApiKey',
@@ -536,7 +563,7 @@ function populateModelSelect(models, defaultModel = null, provider = 'ollama') {
     if (!modelSelect) return false;
 
     // All per-provider rendering (Gemini token labels, OpenRouter / Poe
-    // pricing labels, Poe optgroups, Mistral / DeepSeek / NIM tooltips,
+    // pricing labels, Poe optgroups, Mistral / DeepSeek / NIM / LLMTR tooltips,
     // Ollama plain strings) lives in the shared helper; this wrapper just
     // targets the Settings dropdown and fires the legacy `modelChanged`
     // CustomEvent the cost estimator listens to.
@@ -710,102 +737,42 @@ export const ProviderManager = {
         const openaiEndpointRow = DomHelpers.getElement('openaiEndpointRow');
         const openrouterSettings = DomHelpers.getElement('openrouterSettings');
 
-        // Get mistral, deepseek, poe and nim settings elements once
         const mistralSettings = DomHelpers.getElement('mistralSettings');
         const deepseekSettings = DomHelpers.getElement('deepseekSettings');
         const poeSettings = DomHelpers.getElement('poeSettings');
         const nimSettings = DomHelpers.getElement('nimSettings');
+        const llmtrSettings = DomHelpers.getElement('llmtrSettings');
 
         // Show/hide provider-specific settings (use inline style for elements with inline display:none)
+        const panels = [
+            ollamaSettings, geminiSettings, openaiApiKeyGroup, openaiEndpointRow,
+            openrouterSettings, mistralSettings, deepseekSettings, poeSettings,
+            nimSettings, llmtrSettings,
+        ];
+        for (const el of panels) {
+            if (el) el.style.display = 'none';
+        }
         if (provider === 'ollama') {
             DomHelpers.show('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('ollama');
-        } else if (provider === 'poe') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'block';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('poe');
-        } else if (provider === 'gemini') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'block';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('gemini');
         } else if (provider === 'openai') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
             if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'block';
             if (openaiEndpointRow) openaiEndpointRow.style.display = 'block';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('openai');
-        } else if (provider === 'openrouter') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'block';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('openrouter');
-        } else if (provider === 'mistral') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'block';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('mistral');
-        } else if (provider === 'deepseek') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'block';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'none';
-            if (loadModels) this.loadModels('deepseek');
-        } else if (provider === 'nim') {
-            DomHelpers.hide('ollamaSettings');
-            if (geminiSettings) geminiSettings.style.display = 'none';
-            if (openaiApiKeyGroup) openaiApiKeyGroup.style.display = 'none';
-            if (openaiEndpointRow) openaiEndpointRow.style.display = 'none';
-            if (openrouterSettings) openrouterSettings.style.display = 'none';
-            if (mistralSettings) mistralSettings.style.display = 'none';
-            if (deepseekSettings) deepseekSettings.style.display = 'none';
-            if (poeSettings) poeSettings.style.display = 'none';
-            if (nimSettings) nimSettings.style.display = 'block';
-            if (loadModels) this.loadModels('nim');
+        } else if (provider === 'gemini' && geminiSettings) {
+            geminiSettings.style.display = 'block';
+        } else if (provider === 'openrouter' && openrouterSettings) {
+            openrouterSettings.style.display = 'block';
+        } else if (provider === 'mistral' && mistralSettings) {
+            mistralSettings.style.display = 'block';
+        } else if (provider === 'deepseek' && deepseekSettings) {
+            deepseekSettings.style.display = 'block';
+        } else if (provider === 'poe' && poeSettings) {
+            poeSettings.style.display = 'block';
+        } else if (provider === 'nim' && nimSettings) {
+            nimSettings.style.display = 'block';
+        } else if (provider === 'llmtr' && llmtrSettings) {
+            llmtrSettings.style.display = 'block';
         }
+        if (loadModels) this.loadModels(provider);
 
         // Parallel translation is only useful for cloud providers; a single
         // local Ollama instance serializes requests anyway (mirrors the backend

@@ -45,6 +45,7 @@ def _ollama_body(text):
 def _build(name):
     from src.core.llm.providers.deepseek import DeepSeekProvider
     from src.core.llm.providers.gemini import GeminiProvider
+    from src.core.llm.providers.llmtr import LlmtrProvider
     from src.core.llm.providers.mistral import MistralProvider
     from src.core.llm.providers.ollama import OllamaProvider
     from src.core.llm.providers.openai import OpenAICompatibleProvider
@@ -58,6 +59,8 @@ def _build(name):
     if name == "nim":
         return OpenAICompatibleProvider("https://integrate.api.example.test/v1", "nim-x",
                                         api_key=FAKE_KEY, provider_name="nim", **common)
+    if name == "llmtr":
+        return LlmtrProvider(api_key=FAKE_KEY, model="qwen/qwen3.8-27b-free", **common)
     if name == "mistral":
         return MistralProvider(api_key=FAKE_KEY, model="mistral-small", **common)
     if name == "deepseek":
@@ -76,7 +79,7 @@ def _build(name):
     return provider
 
 
-PROVIDERS = ["openai", "nim", "mistral", "deepseek", "poe", "openrouter", "gemini", "ollama"]
+PROVIDERS = ["openai", "nim", "llmtr", "mistral", "deepseek", "poe", "openrouter", "gemini", "ollama"]
 # Ollama keeps the Modelfile sampling (documented in src/config.py).
 SENDS_TEMPERATURE = {name: name != "ollama" for name in PROVIDERS}
 

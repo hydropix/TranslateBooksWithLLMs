@@ -25,6 +25,7 @@ class TestProviderEnvVar:
         assert provider_env_var('gemini') == 'GEMINI_API_KEY'
         assert provider_env_var('openai') == 'OPENAI_API_KEY'
         assert provider_env_var('nim') == 'NIM_API_KEY'
+        assert provider_env_var('llmtr') == 'LLMTR_API_KEY'
 
     def test_case_insensitive(self):
         assert provider_env_var('Gemini') == 'GEMINI_API_KEY'

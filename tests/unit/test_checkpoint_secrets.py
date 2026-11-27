@@ -29,6 +29,7 @@ SECRET_CONFIG = {
     'deepseek_api_key': 'ds-secret',
     'poe_api_key': 'poe-secret',
     'nim_api_key': 'nim-secret',
+    'llmtr_api_key': 'llmtr-secret',
     'prompt_options': {'glossary_id': 3},
 }
 

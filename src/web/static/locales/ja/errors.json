@@ -22,6 +22,7 @@
   "api_key_required_deepseek": "DeepSeek プロバイダーを使用するには DeepSeek API キーが必要です。",
   "api_key_required_poe": "Poe API キーが必要です。poe.com/api_key でキーを取得してください",
   "api_key_required_nim": "NIM プロバイダーを使用するには NVIDIA NIM API キーが必要です。",
+  "api_key_required_llmtr": "LLMTR プロバイダーを使用するには LLMTR API キーが必要です。",
   "request_too_large": "ファイルがサーバーの上限を超えています。上限は MAX_REQUEST_SIZE_MB で設定されます（既定値 200 MB）。",
   "endpoint_rejected": "サーバーがこのエンドポイントを拒否しました: {{detail}}",
   "endpoint_override_needs_key": "カスタムエンドポイントには専用の API キーが必要です。サーバーに保存されたキーは、選択したエンドポイントには送信されません。キーを入力するか、既定のエンドポイントに戻してください。",

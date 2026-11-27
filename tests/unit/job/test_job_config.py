@@ -24,7 +24,7 @@ def dirs(tmp_path):
 def _no_env_keys(monkeypatch):
     import src.config as cfg
     for name in ("GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY",
-                 "DEEPSEEK_API_KEY", "POE_API_KEY", "NIM_API_KEY"):
+                 "DEEPSEEK_API_KEY", "POE_API_KEY", "NIM_API_KEY", "LLMTR_API_KEY"):
         monkeypatch.delenv(name, raising=False)
         monkeypatch.setattr(cfg, name, "", raising=False)
 
@@ -147,7 +147,7 @@ def _cli_args(tmp_path, **extra):
         input=str(tmp_path / "book.txt"), output=None, source_lang="English",
         target_lang="French", model="qwen3:14b", api_endpoint="http://localhost:11434/api/generate",
         provider="ollama", gemini_api_key="", openai_api_key="", openrouter_api_key="",
-        mistral_api_key="", deepseek_api_key="", poe_api_key="", nim_api_key="",
+        mistral_api_key="", deepseek_api_key="", poe_api_key="", nim_api_key="", llmtr_api_key="",
         parallel=1, text_cleanup=False, refine=False, refine_only=False, glossary=None,
         auto_glossary=False, auto_style=False, fix_terms=None, fix_terms_mode="smart",
         fix_terms_scan=False, tts=False)

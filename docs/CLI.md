@@ -57,6 +57,7 @@ python translate.py -i input_file -o output_file
 | `--deepseek_api_key` | DeepSeek API key |
 | `--poe_api_key` | Poe API key — get one at [poe.com/api_key](https://poe.com/api_key) |
 | `--nim_api_key` | NVIDIA NIM API key — get one at [build.nvidia.com](https://build.nvidia.com/) |
+| `--llmtr_api_key` | LLMTR API key — get one at [llmtr.com/dashboard/keys](https://llmtr.com/dashboard/keys) |
 
 ### API Endpoints
 

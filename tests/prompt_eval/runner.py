@@ -18,7 +18,7 @@ ARMS = ("baseline", "candidate")
 
 # Provider names accepted by src.core.llm.factory.create_llm_provider.
 KNOWN_PROVIDERS = frozenset({
-    "ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm",
+    "ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "llmtr", "litellm",
 })
 
 

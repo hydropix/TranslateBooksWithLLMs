@@ -47,6 +47,7 @@ from .providers.mistral import MistralProvider
 from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
 from .providers.litellm import LiteLLMProvider
+from .providers.llmtr import LlmtrProvider
 
 # Factory
 from .factory import create_llm_provider
@@ -85,6 +86,7 @@ __all__ = [
     'OpenAICompatibleProvider',
     'OpenAIChatProvider',
     'LiteLLMProvider',
+    'LlmtrProvider',
     'OpenRouterProvider',
     'GeminiProvider',
     'MistralProvider',

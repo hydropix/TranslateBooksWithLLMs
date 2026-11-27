@@ -20,6 +20,7 @@ from src.core.llm.provider_config import (
 from src.core.llm.providers.deepseek import DeepSeekProvider
 from src.core.llm.providers.gemini import GeminiProvider
 from src.core.llm.providers.litellm import LiteLLMProvider
+from src.core.llm.providers.llmtr import LlmtrProvider
 from src.core.llm.providers.mistral import MistralProvider
 from src.core.llm.providers.ollama import OllamaProvider
 from src.core.llm.providers.openai import OpenAICompatibleProvider
@@ -30,7 +31,7 @@ FAKE_KEY = "YOUR_API_KEY_HERE"
 ENDPOINT = "http://localhost:11434/api/generate"
 
 KEY_ENV_VARS = ("GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY",
-                "DEEPSEEK_API_KEY", "POE_API_KEY", "NIM_API_KEY")
+                "DEEPSEEK_API_KEY", "POE_API_KEY", "NIM_API_KEY", "LLMTR_API_KEY")
 
 
 @pytest.fixture
@@ -59,6 +60,7 @@ EXPECTED_PROVIDER_CLASS = {
     "deepseek": DeepSeekProvider,
     "poe": PoeProvider,
     "nim": OpenAICompatibleProvider,
+    "llmtr": LlmtrProvider,
     "litellm": LiteLLMProvider,
 }
 
@@ -127,7 +129,7 @@ def test_legacy_kwargs_keep_empty_keys_empty(monkeypatch, no_env_keys):
     assert built.api_key == FAKE_KEY
 
 
-@pytest.mark.parametrize("provider", ["gemini", "openrouter", "mistral", "deepseek", "poe", "nim"])
+@pytest.mark.parametrize("provider", ["gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "llmtr"])
 def test_missing_key_raises(no_env_keys, provider):
     with pytest.raises(LLMClientConfigError, match=provider):
         _build(provider, api_key="")

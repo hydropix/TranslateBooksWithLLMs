@@ -9,7 +9,7 @@ from flask import Flask
 import src.config as config
 from src.core.llm.credentials import PROVIDER_KEY_SETTINGS
 
-PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim')
+PROVIDERS = ('gemini', 'openai', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'llmtr')
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def client(monkeypatch):
     return app.test_client()
 
 
-def test_table_covers_the_seven_providers():
+def test_table_covers_the_key_providers():
     assert tuple(PROVIDER_KEY_SETTINGS) == PROVIDERS
 
 

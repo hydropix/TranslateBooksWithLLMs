@@ -269,6 +269,7 @@
   "summary_no_auto_pause": "Keine Auto-Pause",
   "summary_bilingual": "Zweisprachig",
   "summary_plain_text_mode": "Klartextmodus",
+  "summary_plain_text_keep_emphasis": "Kursiv beibehalten",
   "summary_ocr_cleanup": "OCR-Bereinigung",
   "summary_glossary": "Glossar: {{name}}",
   "summary_instructions": "Anweisungen: {{name}}",

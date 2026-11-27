@@ -11,6 +11,11 @@ is split into sentence pieces that all collapse back into its single slot
 oversized block).
 
 Used by the EPUB and DOCX adapters when prompt_options['plain_text_mode'] is True.
+
+keep_emphasis (EPUB only, issue #352): the paragraphs carry literal <i>/<em>
+markers (src/core/common/emphasis_markers.py). The post-processing below lets
+those markers through; whether they are well formed is decided per paragraph
+at rebuild time, not here.
 """
 import math
 import re
@@ -19,6 +24,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from src.common.cjk_punctuation import PARAGRAPH_BREAK_PATTERN, reattach_closing_punctuation
 from src.core.chunking.token_chunker import TokenChunker
 from src.core.translator import generate_translation_request, previous_context_tail
+from src.core.common.emphasis_markers import is_bare_marker, remove_markers, strip_markers
 from src.core.common.source_residue import detect_blocking_residue, residue_log_message
 from src.core.post_processor import clean_translated_text
 from src.core.epub.translation_metrics import TranslationMetrics
@@ -45,9 +51,11 @@ _MARKUP_TAG_REGEX = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*?)?/?>")
 # followed by a non-space keeps "#1 bestseller", "#MeToo" and a lone "#" out
 # of it, and keeps the paragraph count of the segment unchanged.
 _MARKDOWN_HEADING_MARKER_REGEX = re.compile(r"(\A|\n{2,})[ \t]*#{1,6}[ \t]+(?=\S)")
+# Closing emphasis markers at the start of a sentence piece (keep_emphasis).
+_LEADING_CLOSERS_REGEX = re.compile(r"\A((?:</(?:i|em)>)+)\s*", re.IGNORECASE)
 
 
-def strip_hallucinated_markup(translated: str, source: str) -> str:
+def strip_hallucinated_markup(translated: str, source: str, keep_emphasis: bool = False) -> str:
     """Remove HTML-like tags the model invented in Plain Text Mode.
 
     Plain Text Mode never sends markup to the LLM, so a tag in the output is
@@ -55,10 +63,19 @@ def strip_hallucinated_markup(translated: str, source: str) -> str:
     <sup>...</sup>). Only the tags are dropped; their inner text is kept.
     Chunks whose source legitimately contains '<' (code samples inside <pre>
     blocks) are left untouched to avoid damaging real content.
+
+    With keep_emphasis the source carries <i>/<em> markers on purpose: they do
+    not count as a '<' of the source, and bare markers in the translation are
+    kept (validated per paragraph at rebuild); every other tag still goes.
     """
-    if "<" not in translated or "<" in source:
+    if not keep_emphasis:
+        if "<" not in translated or "<" in source:
+            return translated
+        return _MARKUP_TAG_REGEX.sub("", translated)
+    if "<" not in translated or "<" in strip_markers(source):
         return translated
-    return _MARKUP_TAG_REGEX.sub("", translated)
+    return _MARKUP_TAG_REGEX.sub(
+        lambda m: m.group(0) if is_bare_marker(m.group(0)) else "", translated)
 
 
 def strip_hallucinated_markdown_markers(translated: str, source: str) -> str:
@@ -146,6 +163,7 @@ async def _retry_segment_with_paragraph_count(
     translate_segment: Callable[[str, Dict[str, Any]], Awaitable[Optional[str]]],
     prompt_options: Optional[Dict[str, Any]] = None,
     target_language: str = "",
+    keep_emphasis: bool = False,
 ) -> Optional[str]:
     """Re-translate a mismatched segment once, as one call, with the count stated.
 
@@ -173,7 +191,7 @@ async def _retry_segment_with_paragraph_count(
         return None
 
     cleaned = clean_translated_text(answer, target_language=target_language)
-    cleaned = strip_hallucinated_markup(cleaned, main_content)
+    cleaned = strip_hallucinated_markup(cleaned, main_content, keep_emphasis)
     cleaned = strip_hallucinated_markdown_markers(cleaned, main_content)
     cleaned = reattach_paragraph_closing_punctuation(cleaned, main_content)
     if not cleaned.strip():
@@ -193,6 +211,7 @@ async def _repair_segment_by_paragraph(
     context_before: str = "",
     context_after: str = "",
     target_language: str = "",
+    keep_emphasis: bool = False,
 ) -> Tuple[str, int]:
     """Re-translate each paragraph of a segment individually.
 
@@ -224,7 +243,7 @@ async def _repair_segment_by_paragraph(
         cleaned = ""
         if translated:
             cleaned = clean_translated_text(translated, target_language=target_language)
-            cleaned = strip_hallucinated_markup(cleaned, text)
+            cleaned = strip_hallucinated_markup(cleaned, text, keep_emphasis)
             cleaned = strip_hallucinated_markdown_markers(cleaned, text)
             cleaned = reattach_paragraph_closing_punctuation(cleaned, text)
             # One paragraph in, one paragraph out, always: a model that split
@@ -276,6 +295,7 @@ async def _repair_segment_by_bisection(
     context_before: str = "",
     context_after: str = "",
     target_language: str = "",
+    keep_emphasis: bool = False,
 ) -> Tuple[str, int, int]:
     """Repair a mismatched segment by locating the divergence (issue #259).
 
@@ -337,6 +357,7 @@ async def _repair_segment_by_bisection(
             context_before=before,
             context_after=after,
             target_language=target_language,
+            keep_emphasis=keep_emphasis,
         )
         failed += range_failed
         return joined.split(PARAGRAPH_SEPARATOR)
@@ -359,6 +380,7 @@ async def _repair_segment_by_bisection(
             translate_segment=_translate_segment,
             prompt_options=prompt_options,
             target_language=target_language,
+            keep_emphasis=keep_emphasis,
         )
         if answer is None:
             return None
@@ -403,9 +425,30 @@ async def _repair_segment_by_bisection(
     return PARAGRAPH_SEPARATOR.join(repaired), failed, calls
 
 
+def _reattach_leading_closers(sentences: List[str]) -> List[str]:
+    """Move closing emphasis markers that open a sentence onto the one before.
+
+    The sentence splitter cuts right after the terminator, so
+    "<i>Hello.</i> Next" becomes "<i>Hello." + "</i> Next"; rejoined with a
+    space that puts the space inside the span. The closer belongs to the
+    sentence it closes.
+    """
+    out: List[str] = []
+    for sentence in sentences:
+        match = _LEADING_CLOSERS_REGEX.match(sentence)
+        if match and out:
+            out[-1] += match.group(1)
+            sentence = sentence[match.end():]
+            if not sentence:
+                continue
+        out.append(sentence)
+    return out
+
+
 def build_plain_segments(
     paragraphs: List[str],
     max_tokens_per_chunk: int,
+    keep_emphasis: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Group source paragraphs into translation segments that track their indices.
@@ -418,6 +461,11 @@ def build_plain_segments(
 
     Empty/whitespace-only paragraphs are skipped here and restored by index at
     reassembly time.
+
+    keep_emphasis: the paragraphs carry emphasis markers; an oversized one is
+    split so that a closing marker stays with the sentence it closes. A span
+    can still straddle two pieces; the joined paragraph is validated at
+    rebuild time.
     """
     chunker = TokenChunker(max_tokens=max_tokens_per_chunk)
     sep_tokens = chunker.count_tokens(PARAGRAPH_SEPARATOR)
@@ -457,6 +505,8 @@ def build_plain_segments(
         if tokens > chunker.max_tokens:
             flush()
             sentences = chunker.split_paragraph_into_sentences(text)
+            if keep_emphasis:
+                sentences = _reattach_leading_closers(sentences)
             if len(sentences) > 1:
                 # _chunk_units returns {"text", "join_before"} records; this
                 # pipeline tracks paragraph identity itself and only needs the text.
@@ -533,6 +583,7 @@ async def translate_paragraphs_plain(
     checkpoint_hook: Optional[Callable[..., None]] = None,
     checkpoint_every: int = 5,
     count_failures_as_fallback: bool = False,
+    keep_emphasis: bool = False,
 ) -> Tuple[List[str], TranslationMetrics, bool]:
     """
     Translate a list of plain-text paragraphs without placeholder preservation.
@@ -586,6 +637,10 @@ async def translate_paragraphs_plain(
             be able to clear once the retry succeeds - which a `failed_chunks`
             count restored across passes never does. DOCX keeps the historical
             counter.
+        keep_emphasis: the paragraphs carry literal <i>/<em> markers (EPUB
+            Plain Text Mode with plain_text_keep_emphasis, issue #352). The
+            markers are let through the post-processing; every other tag the
+            model adds is still stripped. Only the EPUB adapter passes it.
 
     Returns:
         (translated_paragraphs, stats, was_interrupted)
@@ -605,7 +660,7 @@ async def translate_paragraphs_plain(
     prefix: List[str] = list(resume_translated or [])
     segments = (
         list(resume_segments) if resume_segments is not None
-        else build_plain_segments(source, max_tokens_per_chunk)
+        else build_plain_segments(source, max_tokens_per_chunk, keep_emphasis=keep_emphasis)
     )
     if prefix and (resume_segments is None or len(prefix) > len(segments)):
         # More translated segments than segments to translate means the source
@@ -616,7 +671,7 @@ async def translate_paragraphs_plain(
                 "⚠️ Plain-text checkpoint does not match the source, restarting this file"
             )
         prefix = []
-        segments = build_plain_segments(source, max_tokens_per_chunk)
+        segments = build_plain_segments(source, max_tokens_per_chunk, keep_emphasis=keep_emphasis)
 
     # Per-segment statuses: what decides which segments this pass sends. The
     # restored prefix is translated unless the checkpoint says a segment fell
@@ -883,7 +938,7 @@ async def translate_paragraphs_plain(
                         else:
                             cleaned = clean_translated_text(value, target_language=target_language)
                         cleaned = strip_hallucinated_markup(
-                            cleaned, chunks[i].get('main_content', ''))
+                            cleaned, chunks[i].get('main_content', ''), keep_emphasis)
                         cleaned = strip_hallucinated_markdown_markers(
                             cleaned, chunks[i].get('main_content', ''))
                         cleaned = reattach_paragraph_closing_punctuation(
@@ -951,6 +1006,7 @@ async def translate_paragraphs_plain(
                                             ),
                                             prompt_options=prompt_options,
                                             target_language=target_language,
+                                            keep_emphasis=keep_emphasis,
                                         )
                                     if retried is not None:
                                         # The common tail below picks `cleaned` up
@@ -992,6 +1048,7 @@ async def translate_paragraphs_plain(
                                             context_before=chunks[i].get('context_before', ''),
                                             context_after=chunks[i].get('context_after', ''),
                                             target_language=target_language,
+                                            keep_emphasis=keep_emphasis,
                                         )
                                         repair_calls_total += repair_calls
                                         if log_callback:
@@ -1027,8 +1084,14 @@ async def translate_paragraphs_plain(
                         # translated answer but record the segment as
                         # untranslated, which is what makes a resume or a
                         # repair pass retry it.
+                        # Emphasis markers are latin "words" on both sides,
+                        # not leftover source text.
+                        residue_source, residue_output = main_content, translated_parts[i]
+                        if keep_emphasis:
+                            residue_source = remove_markers(residue_source)
+                            residue_output = remove_markers(residue_output)
                         residue = detect_blocking_residue(
-                            main_content, translated_parts[i], source_language, target_language)
+                            residue_source, residue_output, source_language, target_language)
                         if residue is not None:
                             if log_callback:
                                 log_callback(

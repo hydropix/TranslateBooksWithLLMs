@@ -177,3 +177,39 @@ def test_length_uses_case_ratio_when_set():
 ])
 def test_default_length_ratio(src, tgt, expected):
     assert default_length_ratio(src, tgt) == expected
+
+
+# emphasis ---------------------------------------------------------------------
+
+EMPH = replace(
+    BASE,
+    text="He is <em>nicer</em> now, but that does not mean he is <em>nice</em>.\n\n"
+         "She had read <i>The Long Road</i> twice.",
+)
+EMPH_FR = ("Il est <em>plus gentil</em> maintenant, mais il n'est pas <em>gentil</em> pour autant.\n\n"
+           "Elle avait lu <i>La Longue Route</i> deux fois.")
+
+
+def test_emphasis_pass_when_spans_survive():
+    assert run(EMPH, EMPH_FR)["emphasis"] == PASS
+
+
+@pytest.mark.parametrize("bad", [
+    EMPH_FR.replace("<em>gentil</em>", "gentil"),                  # span lost
+    EMPH_FR.replace("</i>", ""),                                   # unclosed
+    EMPH_FR.replace("<em>plus gentil</em>", "<em><i>plus</i> gentil</em>"),  # nested
+    EMPH_FR.replace("<i>La Longue Route</i>", "<em>La Longue Route</em>"),   # tag name changed
+    EMPH_FR + " <b>fin</b>",                                       # invented tag
+])
+def test_emphasis_fail(bad):
+    assert run(EMPH, bad)["emphasis"] == FAIL
+
+
+def test_emphasis_option_without_markers_forbids_invented_tags():
+    case = replace(BASE, prompt_options={"plain_text_keep_emphasis": True})
+    assert run(case, GOOD_FR)["emphasis"] == PASS
+    assert run(case, GOOD_FR.replace("même", "<i>même</i>", 1))["emphasis"] == FAIL
+
+
+def test_emphasis_na_without_markers_or_option():
+    assert run(BASE, GOOD_FR)["emphasis"] == NA

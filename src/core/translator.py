@@ -11,7 +11,10 @@ from src.config import (
     PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX,
 )
 from src.core.common.source_residue import detect_source_residue, residue_log_message, residue_score
-from src.prompts.prompts import generate_translation_prompt, generate_refinement_prompt
+from src.prompts.prompts import (
+    PLAIN_TEXT_KEEP_EMPHASIS_OPTION, generate_translation_prompt, generate_refinement_prompt,
+)
+from src.core.common.emphasis_markers import remove_markers
 from .llm import RateLimitError, LLMResponse
 from .request_core import (
     ChunkStatus,
@@ -92,6 +95,10 @@ def _build_chunk_glossary_block(
     terms = prompt_options.get("glossary_terms")
     if not terms:
         return ""
+    if prompt_options.get(PLAIN_TEXT_KEEP_EMPHASIS_OPTION) is True:
+        # EPUB Plain Text Mode with emphasis markers (issue #352): a marker
+        # inside a term ("Lord <i>Kar</i>") must not hide it from matching.
+        chunk_content = remove_markers(chunk_content)
     try:
         from src.core.glossary import (
             build_cast_block,
@@ -522,7 +529,15 @@ async def _retry_on_source_residue(
     # coined words): never treat them as leftover lowercase words (#353).
     glossary_terms = (prompt_options or {}).get('glossary_terms') or {}
     allowed_terms = [*glossary_terms.keys(), *glossary_terms.values()]
-    report = detect_source_residue(main_content, translated_text, source_language,
+    # Emphasis markers (EPUB Plain Text Mode, issue #352) are latin "words" on
+    # both sides, not leftover source text: scan without them.
+    keep_emphasis = (prompt_options or {}).get(PLAIN_TEXT_KEEP_EMPHASIS_OPTION) is True
+    scan_source = remove_markers(main_content) if keep_emphasis else main_content
+
+    def _scan(text: str) -> str:
+        return remove_markers(text) if keep_emphasis else text
+
+    report = detect_source_residue(scan_source, _scan(translated_text), source_language,
                                    target_language, allowed_terms=allowed_terms)
     if report is None:
         return translated_text, False
@@ -571,7 +586,7 @@ async def _retry_on_source_residue(
         if retry_ok and not first_ok:
             return _accept_retry()
 
-    retry_report = detect_source_residue(main_content, retried, source_language,
+    retry_report = detect_source_residue(scan_source, _scan(retried), source_language,
                                          target_language, allowed_terms=allowed_terms)
     if residue_score(retry_report) < residue_score(report):
         if log_callback and retry_report is None:

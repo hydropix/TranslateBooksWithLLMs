@@ -36,6 +36,7 @@ const SYNCED_PREF_KEYS = [
     'textCleanup',
     'bilingualMode',
     'plainTextMode',
+    'plainTextKeepEmphasis',
     'customInstructionFile'
 ];
 
@@ -87,6 +88,13 @@ export const SettingsManager = {
         // Pull the server-synced subset (fire and forget: a slow or unreachable
         // server must never block UI initialization).
         this._syncPreferencesFromServer();
+
+        // "Keep italics" is a sub-option of Plain Text Mode: only usable while it is on
+        const plainTextModeCheckbox = DomHelpers.getElement('plainTextMode');
+        if (plainTextModeCheckbox) {
+            plainTextModeCheckbox.addEventListener('change', () => this.updatePlainTextSubOptions());
+        }
+        this.updatePlainTextSubOptions();
 
         // Listen for custom instructions loaded event
         window.addEventListener('customInstructionsLoaded', () => {
@@ -160,6 +168,7 @@ export const SettingsManager = {
             { id: 'textCleanup', event: 'change' },
             { id: 'bilingualMode', event: 'change' },
             { id: 'plainTextMode', event: 'change' },
+            { id: 'plainTextKeepEmphasis', event: 'change' },
             { id: 'customInstructionSelect', event: 'change' }
         ];
 
@@ -387,6 +396,13 @@ export const SettingsManager = {
                 plainTextCheckbox.checked = prefs.plainTextMode;
             }
         }
+        if (prefs.plainTextKeepEmphasis !== undefined) {
+            const keepEmphasisCheckbox = DomHelpers.getElement('plainTextKeepEmphasis');
+            if (keepEmphasisCheckbox) {
+                keepEmphasisCheckbox.checked = prefs.plainTextKeepEmphasis;
+            }
+        }
+        this.updatePlainTextSubOptions();
         // Note: disableAutoPause is now loaded from .env via /api/config in FormManager,
         // not from localStorage.
 
@@ -496,6 +512,13 @@ export const SettingsManager = {
                     plainTextCheckbox.checked = prefs.plainTextMode;
                 }
             }
+            if (prefs.plainTextKeepEmphasis !== undefined) {
+                const keepEmphasisCheckbox = DomHelpers.getElement('plainTextKeepEmphasis');
+                if (keepEmphasisCheckbox) {
+                    keepEmphasisCheckbox.checked = prefs.plainTextKeepEmphasis;
+                }
+            }
+            this.updatePlainTextSubOptions();
 
             if (prefs.customInstructionFile) {
                 // Stays pending until the instruction list has loaded; the
@@ -556,6 +579,24 @@ export const SettingsManager = {
     },
 
     /**
+     * Enable the "Keep italics" sub-option only while Plain Text Mode is checked.
+     * Its own checked state is kept so the choice survives toggling the parent;
+     * the batch controller ignores it while the parent is off.
+     */
+    updatePlainTextSubOptions() {
+        const plainTextCheckbox = DomHelpers.getElement('plainTextMode');
+        const keepEmphasisCheckbox = DomHelpers.getElement('plainTextKeepEmphasis');
+        if (!keepEmphasisCheckbox) return;
+
+        const enabled = !!(plainTextCheckbox && plainTextCheckbox.checked);
+        keepEmphasisCheckbox.disabled = !enabled;
+        const item = DomHelpers.getElement('plainTextKeepEmphasisItem');
+        if (item) {
+            item.classList.toggle('option-item--disabled', !enabled);
+        }
+    },
+
+    /**
      * Save current form state to local preferences
      * @param {Object} [options] - Options
      * @param {boolean} [options.remote=true] - Also mirror the synced subset to
@@ -566,6 +607,7 @@ export const SettingsManager = {
         const textCleanupCheckbox = DomHelpers.getElement('textCleanup');
         const bilingualModeCheckbox = DomHelpers.getElement('bilingualMode');
         const plainTextModeCheckbox = DomHelpers.getElement('plainTextMode');
+        const keepEmphasisCheckbox = DomHelpers.getElement('plainTextKeepEmphasis');
 
         const prefs = {
             lastProvider: DomHelpers.getValue('llmProvider'),
@@ -579,6 +621,7 @@ export const SettingsManager = {
             textCleanup: textCleanupCheckbox ? textCleanupCheckbox.checked : false,
             bilingualMode: bilingualModeCheckbox ? bilingualModeCheckbox.checked : false,
             plainTextMode: plainTextModeCheckbox ? plainTextModeCheckbox.checked : false,
+            plainTextKeepEmphasis: keepEmphasisCheckbox ? keepEmphasisCheckbox.checked : false,
             // While the saved preset waits for the list to load, the select still
             // shows a default option: keep the pending value so it is not synced away.
             customInstructionFile: window.__pendingCustomInstructionSelection

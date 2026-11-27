@@ -69,6 +69,11 @@ function getTranslationConfig(file) {
         text_cleanup: DomHelpers.getElement('textCleanup')?.checked || false,
         refine: refineAfter,
         plain_text_mode: DomHelpers.getElement('plainTextMode')?.checked || false,
+        // Sub-option of Plain Text Mode: ignored while the parent is off
+        plain_text_keep_emphasis: Boolean(
+            DomHelpers.getElement('plainTextMode')?.checked
+            && DomHelpers.getElement('plainTextKeepEmphasis')?.checked
+        ),
         custom_instruction_file: ciValue === '__auto__' ? '' : ciValue
     };
     if (ciValue === '__auto__') promptOptions.style_auto = true;

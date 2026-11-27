@@ -43,6 +43,8 @@ class ChunkLoopSettings:
             (``file_href`` when None).
         global_total_chunks: Chunks of the whole book (EPUB), or None.
         global_completed_chunks: Chunks finished in earlier files, or None.
+        emphasis_totals: Book-level Plain Text Mode italics counters (issue
+            #352), added to in place by each document, or None.
     """
 
     source_language: str
@@ -65,6 +67,7 @@ class ChunkLoopSettings:
     file_path: Optional[str] = None
     global_total_chunks: Optional[int] = None
     global_completed_chunks: Optional[int] = None
+    emphasis_totals: Optional[Dict[str, int]] = None
 
     @property
     def can_checkpoint(self) -> bool:
@@ -81,6 +84,13 @@ class ChunkLoopSettings:
     @property
     def plain_text_mode(self) -> bool:
         return bool((self.prompt_options or {}).get('plain_text_mode'))
+
+    @property
+    def plain_text_keep_emphasis(self) -> bool:
+        """Keep <i>/<em> as literal markers in Plain Text Mode (issue #352)."""
+        from src.prompts.prompts import PLAIN_TEXT_KEEP_EMPHASIS_OPTION
+        return self.plain_text_mode and (
+            (self.prompt_options or {}).get(PLAIN_TEXT_KEEP_EMPHASIS_OPTION) is True)
 
     def log(self, event_name: str, message: str) -> None:
         if self.log_callback:

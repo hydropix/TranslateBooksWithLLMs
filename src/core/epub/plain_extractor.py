@@ -21,11 +21,25 @@ are re-emitted as a bare element at the same position, without ever reaching
 the LLM. The one case where the body is left alone is a page that yielded no
 block at all (everything inside a DROP_TAGS subtree, e.g. an SVG-wrapped
 cover): its source markup is kept verbatim.
+
+Opt-in emphasis (keep_emphasis, issue #352): <i>/<em> spans travel to the LLM
+as literal markers (`<i>word</i>`) inside the paragraph text and are rebuilt as
+real elements once the translated markers pass validation (see
+src/core/common/emphasis_markers.py). With the option off, nothing changes.
 """
+import re
 from typing import Dict, List, Optional, Tuple
 
 from lxml import etree
 
+from src.core.common.emphasis_markers import (
+    EMPHASIS_TAGS,
+    append_marked_text,
+    count_spans,
+    has_literal_markers,
+    remove_markers,
+    sanitize,
+)
 from .ruby_annotations import fold_ruby_annotations
 
 
@@ -70,6 +84,41 @@ EPUB_TYPE_ATTR = "{http://www.idpf.org/2007/ops}type"
 #     <html>, and a reading system would hand a French paragraph to an English
 #     speech engine. Dropping them lets the block inherit the correct root lang.
 CARRIED_ATTRIBUTES = ("class", "id", "style", "dir", "title", EPUB_TYPE_ATTR)
+# Private entries of a paragraph's attrib dict, set only with keep_emphasis.
+# Neither ever reaches the output as an attribute, because _set_attributes
+# only copies the CARRIED_ATTRIBUTES whitelist above.
+#   * WRAP: the whole paragraph was one <i>/<em> span (value "i" or "em"), so
+#     its text goes to the LLM without markers and the rebuilt block is
+#     wrapped in that element.
+#   * MARKED: the extractor put emphasis markers into this paragraph's text.
+#     Only such a paragraph has its text parsed for markers at rebuild; every
+#     other one (a <pre>, a paragraph whose book text contains a literal "<i>",
+#     a paragraph without emphasis) is rebuilt as plain text, verbatim.
+PLAIN_EMPHASIS_WRAP_KEY = "__plain_emphasis_wrap__"
+PLAIN_EMPHASIS_MARKED_KEY = "__plain_emphasis_marked__"
+# Second element of _extract_run_text's result for a paragraph carrying markers.
+_MARKED = "marked"
+
+# Emphasis markers are first emitted as control-character sentinels, which an
+# XML text node can never contain, so they cannot collide with book text and
+# whitespace normalization can move them around safely. One opener and one
+# closer per tag in EMPHASIS_TAGS.
+_SENTINEL_OPEN = {tag: chr(1 + 2 * k) for k, tag in enumerate(EMPHASIS_TAGS)}
+_SENTINEL_CLOSE = {tag: chr(2 + 2 * k) for k, tag in enumerate(EMPHASIS_TAGS)}
+_SENTINEL_TO_MARKER = {
+    **{s: f"<{tag}>" for tag, s in _SENTINEL_OPEN.items()},
+    **{s: f"</{tag}>" for tag, s in _SENTINEL_CLOSE.items()},
+}
+_SENTINEL_CLASS = "[" + "".join(_SENTINEL_TO_MARKER) + "]"
+_SENTINEL_RE = re.compile(_SENTINEL_CLASS)
+_OPEN_CLASS = "[" + "".join(_SENTINEL_OPEN.values()) + "]"
+_CLOSE_CLASS = "[" + "".join(_SENTINEL_CLOSE.values()) + "]"
+_SPACE_AFTER_OPEN_RE = re.compile(f"({_OPEN_CLASS}) ")
+_SPACE_BEFORE_CLOSE_RE = re.compile(f" ({_CLOSE_CLASS})")
+_EMPTY_SPAN_RE = re.compile(
+    "|".join(_SENTINEL_OPEN[tag] + _SENTINEL_CLOSE[tag] for tag in EMPHASIS_TAGS)
+)
+_WHOLE_SPAN_RE = re.compile(r"<(i|em)>(.*)</\1>", re.DOTALL)
 
 
 def local_name(elem: etree._Element) -> str:
@@ -80,19 +129,57 @@ def local_name(elem: etree._Element) -> str:
     return tag.lower() if isinstance(tag, str) else ""
 
 
-def _extract_text_keep_inline(elem: etree._Element, image_sink: List[etree._Element]) -> str:
+def _extract_text_keep_inline(
+    elem: etree._Element,
+    image_sink: List[etree._Element],
+    keep_emphasis: bool = False,
+) -> Tuple[str, Optional[str]]:
     """
     Flatten an element's textual content, ignoring inline tags.
 
     Adds any <img> encountered to image_sink (preserves DOM order).
-    Returns whitespace-normalized text.
+    Returns (whitespace-normalized text, emphasis); see _extract_run_text.
     """
-    return _extract_run_text(elem.text, list(elem), image_sink)
+    return _extract_run_text(elem.text, list(elem), image_sink, keep_emphasis)
+
+
+def _finalize_marked_text(text: str) -> str:
+    """Normalize whitespace around sentinels and turn them into literal markers.
+
+    A space just inside a span moves outside it (`<i> word</i>` becomes
+    ` <i>word</i>`) and a span left empty is dropped, so stripping the markers
+    from the result gives exactly the text the extractor produces without them.
+    """
+    previous = None
+    while text != previous:
+        previous = text
+        text = " ".join(text.split())
+        text = _SPACE_AFTER_OPEN_RE.sub(r" \1", text)
+        text = _SPACE_BEFORE_CLOSE_RE.sub(r"\1 ", text)
+        text = _EMPTY_SPAN_RE.sub("", text)
+    return _SENTINEL_RE.sub(lambda m: _SENTINEL_TO_MARKER[m.group(0)], text)
+
+
+def _split_whole_span(text: str) -> Tuple[str, Optional[str]]:
+    """Unwrap a paragraph that is exactly one emphasis span.
+
+    Returns (inner text, tag) for `<i>whole paragraph</i>`, (text, None) for
+    anything else. Sending such a paragraph without markers spares the LLM a
+    span it could only drop or misplace; the rebuild wraps the block instead.
+    """
+    match = _WHOLE_SPAN_RE.fullmatch(text)
+    if match and count_spans(text) == 1:
+        return match.group(2), match.group(1)
+    return text, None
 
 
 def _extract_run_text(
-    lead_text: str, nodes: List[etree._Element], image_sink: List[etree._Element]
-) -> str:
+    lead_text: str,
+    nodes: List[etree._Element],
+    image_sink: List[etree._Element],
+    keep_emphasis: bool = False,
+    include_tails: bool = True,
+) -> Tuple[str, Optional[str]]:
     """
     Flatten a run of sibling nodes, preceded by lead_text, into one string.
 
@@ -100,8 +187,19 @@ def _extract_run_text(
     _extract_text_keep_inline, split out so a container can flatten a slice of
     its children (a run of inline content between two blocks) and not only an
     element as a whole.
+
+    Returns (text, emphasis). emphasis is always None unless keep_emphasis is
+    True. With keep_emphasis, the outermost <i>/<em> elements are kept as
+    literal markers in the text (never nested, never inside <pre>) and
+    emphasis is _MARKED, unless the flattened text already contains
+    marker-like strings of its own, in which case the paragraph is returned
+    plain (emphasis None). A paragraph that is one span from end to end is
+    returned unwrapped, with its tag ("i" / "em") as emphasis.
     """
     out: List[str] = []
+    # Depth of the enclosing elements that suppress markers: an emphasis
+    # element already being marked (so markers never nest) or a <pre>.
+    suppress = [0]
 
     def walk(node: etree._Element, include_tail: bool):
         if not isinstance(node.tag, str):
@@ -127,10 +225,20 @@ def _extract_run_text(
             if include_tail and node.tail:
                 out.append(node.tail)
             return
+        marked = keep_emphasis and name in EMPHASIS_TAGS and not suppress[0]
+        suppressing = keep_emphasis and (name in EMPHASIS_TAGS or name == "pre")
+        if marked:
+            out.append(_SENTINEL_OPEN[name])
+        if suppressing:
+            suppress[0] += 1
         if node.text:
             out.append(node.text)
         for child in node:
             walk(child, include_tail=True)
+        if suppressing:
+            suppress[0] -= 1
+        if marked:
+            out.append(_SENTINEL_CLOSE[name])
         if name in SPACED_TAGS:
             out.append(" ")
         if include_tail and node.tail:
@@ -139,10 +247,20 @@ def _extract_run_text(
     if lead_text:
         out.append(lead_text)
     for node in nodes:
-        walk(node, include_tail=True)
+        walk(node, include_tail=include_tails)
 
     text = "".join(out)
-    return " ".join(text.split())
+    if not keep_emphasis:
+        return " ".join(text.split()), None
+    plain = " ".join(_SENTINEL_RE.sub("", text).split())
+    if _SENTINEL_RE.search(text) is None or has_literal_markers(plain):
+        # No emphasis at all, or the book text itself contains marker-like
+        # strings that the rebuild could not tell apart from real markers.
+        return plain, None
+    text, wrap = _split_whole_span(_finalize_marked_text(text))
+    if wrap:
+        return text, wrap
+    return text, (_MARKED if count_spans(text) else None)
 
 
 def _clone_img(img: etree._Element) -> etree._Element:
@@ -188,12 +306,33 @@ def _enclosing_table(elem: etree._Element) -> etree._Element:
     return None
 
 
+def _block_attrib(source_attrib, emphasis: Optional[str], keep_emphasis: bool) -> Dict[str, str]:
+    """Copy a source block's attributes into its paragraph's attrib dict.
+
+    With keep_emphasis, the private keys record what _extract_run_text found
+    (emphasis): PLAIN_EMPHASIS_MARKED_KEY for a paragraph carrying markers,
+    PLAIN_EMPHASIS_WRAP_KEY for a whole-paragraph span. A source attribute
+    that happens to bear either name is dropped, so it can never be mistaken
+    for one. Without keep_emphasis, this is dict(source_attrib).
+    """
+    attrib = dict(source_attrib)
+    if keep_emphasis:
+        attrib.pop(PLAIN_EMPHASIS_WRAP_KEY, None)
+        attrib.pop(PLAIN_EMPHASIS_MARKED_KEY, None)
+        if emphasis == _MARKED:
+            attrib[PLAIN_EMPHASIS_MARKED_KEY] = "1"
+        elif emphasis:
+            attrib[PLAIN_EMPHASIS_WRAP_KEY] = emphasis
+    return attrib
+
+
 def _collect_table_blocks(
     table: etree._Element,
     paragraphs_text: List[str],
     paragraphs_tag: List[str],
     paragraphs_attrib: List[Dict[str, str]],
     images_by_paragraph: Dict[int, List[etree._Element]],
+    keep_emphasis: bool = False,
 ) -> None:
     """
     Emit each cell (td/th) and the caption of a table as its own <p> block.
@@ -209,12 +348,12 @@ def _collect_table_blocks(
             continue
 
         images: List[etree._Element] = []
-        text = _extract_text_keep_inline(elem, images)
+        text, wrap = _extract_text_keep_inline(elem, images, keep_emphasis)
         if text.strip() or images:
             idx = len(paragraphs_text)
             paragraphs_text.append(text)
             paragraphs_tag.append("p")
-            paragraphs_attrib.append(dict(elem.attrib))
+            paragraphs_attrib.append(_block_attrib(elem.attrib, wrap, keep_emphasis))
             if images:
                 images_by_paragraph[idx] = images
 
@@ -243,6 +382,7 @@ def _collect_blocks(
     paragraphs_attrib: List[Dict[str, str]],
     images_by_paragraph: Dict[int, List[etree._Element]],
     is_container: bool = False,
+    keep_emphasis: bool = False,
 ) -> None:
     """
     DOM-walk a container, emitting one entry per block-level element found.
@@ -279,7 +419,8 @@ def _collect_blocks(
     for segment in segments:
         if segment[0] == "block":
             _collect_block(
-                segment[1], paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
+                segment[1], paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph,
+                keep_emphasis=keep_emphasis,
             )
             continue
 
@@ -287,20 +428,21 @@ def _collect_blocks(
         if not _has_loose_text(lead_text, nodes):
             for node in nodes:
                 _collect_block(
-                    node, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
+                    node, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph,
+                    keep_emphasis=keep_emphasis,
                 )
             continue
 
         images: List[etree._Element] = []
-        text = _extract_run_text(lead_text, nodes, images)
+        text, wrap = _extract_run_text(lead_text, nodes, images, keep_emphasis)
         idx = len(paragraphs_text)
         paragraphs_text.append(text)
         if only_inline and is_container:
             paragraphs_tag.append(local_name(root))
-            paragraphs_attrib.append(dict(root.attrib))
+            paragraphs_attrib.append(_block_attrib(root.attrib, wrap, keep_emphasis))
         else:
             paragraphs_tag.append("p")
-            paragraphs_attrib.append({})
+            paragraphs_attrib.append(_block_attrib({}, wrap, keep_emphasis))
         if images:
             images_by_paragraph[idx] = images
 
@@ -349,6 +491,7 @@ def _collect_block(
     paragraphs_tag: List[str],
     paragraphs_attrib: List[Dict[str, str]],
     images_by_paragraph: Dict[int, List[etree._Element]],
+    keep_emphasis: bool = False,
 ) -> None:
     """Emit the entries for one child of a container (see _collect_blocks)."""
     if not isinstance(child.tag, str):
@@ -366,25 +509,27 @@ def _collect_block(
         return
 
     if name == "table":
-        _collect_table_blocks(child, *lists)
+        _collect_table_blocks(child, *lists, keep_emphasis=keep_emphasis)
         return
 
     if name in LIST_WRAPPER_TAGS:
-        _collect_blocks(child, *lists)
+        _collect_blocks(child, *lists, keep_emphasis=keep_emphasis)
         return
 
     if name in CONTAINER_TAGS:
-        _collect_blocks(child, *lists, is_container=True)
+        _collect_blocks(child, *lists, is_container=True, keep_emphasis=keep_emphasis)
         return
 
     if name in BLOCK_TAGS:
         images: List[etree._Element] = []
+        wrap = None
         if name == "pre":
             # Preserve code/pre verbatim — but skip <img> inside (rare)
             text = "".join(child.itertext())
         else:
-            text = _extract_text_keep_inline(child, images)
-        _append_paragraph(*lists, text, name, dict(child.attrib), images)
+            text, wrap = _extract_text_keep_inline(child, images, keep_emphasis)
+        _append_paragraph(
+            *lists, text, name, _block_attrib(child.attrib, wrap, keep_emphasis), images)
         return
 
     if name == "img":
@@ -395,19 +540,32 @@ def _collect_block(
 
     # Anything else: try to extract textual content as a generic paragraph
     images: List[etree._Element] = []
-    text = _extract_text_keep_inline(child, images)
+    if keep_emphasis and name in EMPHASIS_TAGS:
+        # An <i>/<em> standing alone in a container is a paragraph of its
+        # own: walk the element itself (not just its children) so its
+        # emphasis is seen, which makes it a whole-paragraph wrap. Its tail
+        # belongs to the container and is whitespace here anyway.
+        text, wrap = _extract_run_text(None, [child], images, keep_emphasis, include_tails=False)
+    else:
+        text, wrap = _extract_text_keep_inline(child, images, keep_emphasis)
     if text.strip() or images:
-        _append_paragraph(*lists, text, "p", dict(child.attrib), images)
+        _append_paragraph(
+            *lists, text, "p", _block_attrib(child.attrib, wrap, keep_emphasis), images)
 
 
 def extract_plain_paragraphs(
     body_element: etree._Element,
+    keep_emphasis: bool = False,
 ) -> Tuple[List[str], List[str], Dict[int, List[etree._Element]], List[Dict[str, str]]]:
     """
     Extract the body as a flat list of (text, tag) pairs plus an image anchor map.
 
     Args:
         body_element: <body> element from a parsed XHTML doc.
+        keep_emphasis: keep <i>/<em> spans as literal markers in the text
+                   (issue #352). A paragraph that is one span from end to end
+                   is sent without markers and flagged in its attrib dict
+                   under PLAIN_EMPHASIS_WRAP_KEY instead.
 
     Returns:
         paragraphs_text:        list of plain-text strings, one per block
@@ -428,7 +586,8 @@ def extract_plain_paragraphs(
     fold_ruby_annotations(body_element)
 
     _collect_blocks(
-        body_element, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph
+        body_element, paragraphs_text, paragraphs_tag, paragraphs_attrib, images_by_paragraph,
+        keep_emphasis=keep_emphasis,
     )
     return paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib
 
@@ -478,6 +637,22 @@ def _target_emission(
     return emit_target, untranslated
 
 
+def _write_emphasis_text(
+    block: etree._Element, text: str, marked: bool, wrap: Optional[str]
+) -> None:
+    """keep_emphasis rebuild of one emphasis paragraph's text.
+
+    wrap puts the whole text inside one <i>/<em> child; marked parses the
+    text's markers into children. A paragraph with neither never gets here.
+    """
+    if wrap and text:
+        block = etree.SubElement(block, wrap)
+    if marked:
+        append_marked_text(block, text)
+    else:
+        block.text = text
+
+
 def _emit_target_block(
     body_element: etree._Element,
     tag: str,
@@ -487,8 +662,16 @@ def _emit_target_block(
     source_emitted: bool,
     untranslated: bool,
     bilingual: bool,
-) -> None:
-    """Append the translated (or source-fallback) block with its marker class."""
+    marked: bool = False,
+    wrap: Optional[str] = None,
+) -> Tuple[int, bool]:
+    """Append the translated (or source-fallback) block with its marker class.
+
+    marked / wrap: the paragraph's emphasis flags (keep_emphasis only, see
+    PLAIN_EMPHASIS_MARKED_KEY). Returns (spans kept, markers rejected) for the
+    keep_emphasis stats; (0, False) for a paragraph with neither flag, which
+    is written exactly as without keep_emphasis.
+    """
     block = etree.SubElement(body_element, tag)
     # The bilingual source twin, when there is one, already claimed the
     # source id: it comes first in reading order, so an anchor aimed at
@@ -501,7 +684,31 @@ def _emit_target_block(
         _add_class(block, "plain-text-untranslated")
     elif bilingual:
         _add_class(block, "plain-text-target")
-    block.text = text or source_text
+    if not (marked or wrap):
+        block.text = text or source_text
+        return 0, False
+
+    rejected = False
+    if not text:
+        # Source markers are well formed by construction.
+        out_text = source_text
+        kept = count_spans(source_text) if marked else 0
+    elif marked:
+        # The LLM's markers are only trusted once they pass validation;
+        # anything else is rebuilt as plain text rather than as broken
+        # markup. Only the markers go: the rest of the text stays as is.
+        out_text, kept = sanitize(text, source_text)
+        if kept == 0:
+            rejected = has_literal_markers(text)
+            out_text = remove_markers(text)
+    else:
+        # A wrapped paragraph was sent without markers: any the LLM added
+        # would nest inside the wrap.
+        out_text, kept = remove_markers(text), 0
+    _write_emphasis_text(block, out_text, marked, wrap)
+    if wrap and out_text:
+        kept += 1
+    return kept, rejected
 
 
 def _emit_paragraph(
@@ -513,8 +720,15 @@ def _emit_paragraph(
     bilingual: bool,
     source_paragraphs: Optional[List[str]],
     paragraphs_attrib: Optional[List[Dict[str, str]]],
+    emphasis_stats: Optional[Dict[str, int]] = None,
 ) -> None:
-    """Append everything paragraph `i` contributes to the rebuilt body."""
+    """Append everything paragraph `i` contributes to the rebuilt body.
+
+    emphasis_stats is the keep_emphasis switch: None rebuilds every block as
+    plain text, a dict rebuilds the emphasis of the paragraphs the extractor
+    flagged and is updated in place.
+    """
+    keep_emphasis = emphasis_stats is not None
     text = (translated_paragraphs[i] or "").strip()
     source_text = ""
     if source_paragraphs and i < len(source_paragraphs):
@@ -529,21 +743,44 @@ def _emit_paragraph(
         _set_attributes(block, attrib)
         return
 
+    # Only the paragraphs the extractor flagged go through the emphasis
+    # rebuild. Every other one (a <pre>, book text holding a literal "<i>",
+    # a paragraph without emphasis) keeps the plain path, verbatim.
+    marked = keep_emphasis and bool((attrib or {}).get(PLAIN_EMPHASIS_MARKED_KEY))
+    wrap = (attrib or {}).get(PLAIN_EMPHASIS_WRAP_KEY) if keep_emphasis else None
+    if wrap not in EMPHASIS_TAGS:
+        wrap = None
+    if (marked or wrap) and text and not remove_markers(text).strip():
+        # An answer made only of markers says nothing: it is handled as an
+        # empty translation (source fallback, or no target in bilingual).
+        text = ""
+
     # Bilingual: emit source first when we have it
     source_emitted = False
     if bilingual and source_text:
         src_block = etree.SubElement(body_element, tag)
         _set_attributes(src_block, attrib)
         _add_class(src_block, "plain-text-source")
-        src_block.text = source_text
+        if marked or wrap:
+            _write_emphasis_text(src_block, source_text, marked, wrap)
+        else:
+            src_block.text = source_text
         source_emitted = True
 
     emit_target, untranslated = _target_emission(
         text, source_text, source_emitted, bool(images_by_paragraph.get(i)))
 
+    kept, rejected = 0, False
     if emit_target:
-        _emit_target_block(body_element, tag, attrib, text, source_text,
-                           source_emitted, untranslated, bilingual)
+        kept, rejected = _emit_target_block(
+            body_element, tag, attrib, text, source_text, source_emitted,
+            untranslated, bilingual, marked=marked, wrap=wrap)
+
+    if keep_emphasis:
+        emphasis_stats["source_spans"] += (count_spans(source_text) if marked else 0) + (
+            1 if wrap and source_text else 0)
+        emphasis_stats["kept_spans"] += kept
+        emphasis_stats["rejected_paragraphs"] += int(rejected)
 
     # Emit anchored images right after
     if i in images_by_paragraph and images_by_paragraph[i]:
@@ -561,7 +798,8 @@ def replace_body_with_paragraphs(
     bilingual: bool = False,
     source_paragraphs: List[str] = None,
     paragraphs_attrib: List[Dict[str, str]] = None,
-) -> None:
+    keep_emphasis: bool = False,
+) -> Optional[Dict[str, int]]:
     """
     Wipe body_element and refill it from the translated paragraphs.
 
@@ -583,7 +821,26 @@ def replace_body_with_paragraphs(
                    flattened (CARRIED_ATTRIBUTES); marker classes are appended
                    to, never replacing, a source class, and `id` is emitted once
                    per source block even in bilingual mode.
+        keep_emphasis: the paragraphs were extracted with keep_emphasis=True.
+                   Emphasis markers are rebuilt as real <i>/<em> children: a
+                   translation's markers only when emphasis_markers.sanitize
+                   accepts them (plain text otherwise), the source text's
+                   always (bilingual twin, untranslated fallback). Only the
+                   paragraphs flagged PLAIN_EMPHASIS_MARKED_KEY are parsed for
+                   markers; one flagged PLAIN_EMPHASIS_WRAP_KEY is wrapped
+                   whole; every other paragraph is written verbatim.
+
+    Returns:
+        None without keep_emphasis. With it, a stats dict:
+        source_spans (spans in the source, whole-paragraph wraps included),
+        kept_spans (spans rebuilt in the target blocks, wraps included) and
+        rejected_paragraphs (translations whose markers failed validation and
+        were rebuilt as plain text).
     """
+    stats = (
+        {"source_spans": 0, "kept_spans": 0, "rejected_paragraphs": 0}
+        if keep_emphasis else None
+    )
     count = len(translated_paragraphs)
 
     # Never replace a populated body with nothing. Every iteration below emits
@@ -596,7 +853,7 @@ def replace_body_with_paragraphs(
     # is exactly right; deleting it never is. This is only a backstop: the
     # empty-translation fallback below is what keeps individual blocks alive.
     if count == 0 and (len(body_element) or (body_element.text or "").strip()):
-        return
+        return stats
 
     # Clear body
     body_element.text = None
@@ -606,4 +863,5 @@ def replace_body_with_paragraphs(
     for i in range(count):
         _emit_paragraph(body_element, i, translated_paragraphs, paragraphs_tag,
                         images_by_paragraph, bilingual, source_paragraphs,
-                        paragraphs_attrib)
+                        paragraphs_attrib, emphasis_stats=stats)
+    return stats

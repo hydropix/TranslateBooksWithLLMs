@@ -68,6 +68,8 @@
   "option_bilingual_description": "在译文旁同时输出原文。每个分段先显示源文本，再显示其译文，非常适合语言学习或并排对照。",
   "option_plain_text_title": "纯文本模式（EPUB / DOCX）",
   "option_plain_text_description": "在将内容发送给 LLM 之前大幅简化格式，以使翻译更快、更可靠 —— 这不是一种质量较低的模式。非常适合简单小说和纯文本散文，结构不如阅读译文重要。仅段落文本会发送给 LLM，内联样式和复杂标记会被丢弃。标题、列表和引述会保留；图片仍保留在输出中，并重组到其原段落末尾。在难以处理 <code>[id0]</code> 占位符的小型或本地 LLM 上特别有用。不太适合技术书籍、插图指南或任何版式承载意义的内容。仅适用于 EPUB 和 DOCX 文件。",
+  "option_plain_text_keep_emphasis_title": "保留斜体",
+  "option_plain_text_keep_emphasis_description": "保留 EPUB 文件中的斜体（<code>&lt;i&gt;</code>, <code>&lt;em&gt;</code>）。LLM 以标记形式接收斜体；若某段落返回的标记已损坏，该段落将照旧以无斜体形式写出。目前仅支持 EPUB。",
   "option_text_cleanup_title": "文本清理（OCR 校正）",
   "option_text_cleanup_description": "适用于排版较差或 OCR 扫描的文本。指示 LLM 修复：错断的换行、多余空格、标点错误，并合并被错误拆分的段落。",
 

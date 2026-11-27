@@ -7,10 +7,13 @@ generate_translation_prompt. These tests guard the has_placeholders gate so a
 future change cannot leak the paragraph-structure rules onto the placeholder
 (EPUB HTML) path, or vice versa.
 """
+import re
+
 import pytest
 
 from src.prompts.prompts import (
     PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION,
+    PLAIN_TEXT_KEEP_EMPHASIS_OPTION,
     generate_translation_prompt,
 )
 
@@ -96,6 +99,62 @@ def test_a_non_positive_int_count_is_ignored(value):
     ).system
     assert "Output EXACTLY the same number of paragraphs" in system
     assert "RETRY:" not in system
+
+
+_EMPHASIS_RULE_START = "11. Keep each <i>...</i> or <em>...</em> pair"
+_PLAIN_RULE_11 = "output plain translated text only"
+
+
+@pytest.mark.parametrize("has_placeholders", [False, True])
+@pytest.mark.parametrize("extra", [{}, {"text_cleanup": True}, {PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION: 4}])
+@pytest.mark.parametrize("off_value", [False, None, 1, "true"])
+def test_keep_emphasis_off_is_byte_identical(has_placeholders, extra, off_value):
+    """Anything but True leaves both prompts exactly as without the key (#352)."""
+    without_key = _prompt(has_placeholders, dict(extra))
+    with_off = _prompt(has_placeholders, {**extra, PLAIN_TEXT_KEEP_EMPHASIS_OPTION: off_value})
+    assert with_off.system == without_key.system
+    assert with_off.user == without_key.user
+
+
+def test_keep_emphasis_rewords_rule_11_only():
+    """The option swaps rule 11 in place: same numbering, nothing else changes."""
+    off = _prompt(False, {}).system
+    on = _prompt(False, {PLAIN_TEXT_KEEP_EMPHASIS_OPTION: True}).system
+    assert _PLAIN_RULE_11 in off and _PLAIN_RULE_11 not in on
+    assert _EMPHASIS_RULE_START in on
+    assert "add no other tag" in on
+    assert "\n12. " not in on
+    # Only the rule-11 line differs.
+    diff = [(a, b) for a, b in zip(off.splitlines(), on.splitlines()) if a != b]
+    assert len(off.splitlines()) == len(on.splitlines())
+    assert len(diff) == 1 and diff[0][0].startswith("11. ") and diff[0][1].startswith("11. ")
+
+
+def test_keep_emphasis_keeps_retry_rules_numbered_12_to_14():
+    system = _prompt(False, {
+        PLAIN_TEXT_KEEP_EMPHASIS_OPTION: True,
+        PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION: 3,
+    }).system
+    assert _EMPHASIS_RULE_START in system
+    assert _PLAIN_RULE_11 not in system
+    numbers = [m.group(1) for m in re.finditer(r"^(\d+)\. ", system, re.MULTILINE)
+               if int(m.group(1)) >= 6]
+    assert numbers == ["6", "7", "8", "9", "10", "11", "12", "13", "14"]
+    assert "12. RETRY:" in system
+    assert "EXACTLY 3 paragraph(s)" in system
+
+
+def test_keep_emphasis_never_reaches_the_placeholder_path():
+    on = _prompt(True, {PLAIN_TEXT_KEEP_EMPHASIS_OPTION: True})
+    off = _prompt(True, {})
+    assert on == off
+    assert "<em>...</em>" not in on.system
+
+
+def test_keep_emphasis_leaves_the_user_prompt_alone():
+    on = _prompt(False, {PLAIN_TEXT_KEEP_EMPHASIS_OPTION: True})
+    off = _prompt(False, {})
+    assert on.user == off.user
 
 
 def test_other_sections_and_their_order_are_unchanged():

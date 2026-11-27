@@ -39,6 +39,7 @@ METRIC_NAMES = (
     "must_contain",
     "must_not_contain",
     "length",
+    "emphasis",
 )
 
 CHATTER_MAX_CHARS = 20
@@ -46,6 +47,10 @@ MIN_DETECT_LETTERS = 40
 CJK_CODES = frozenset({"zh", "ja", "ko"})
 
 _PLACEHOLDER_RE = re.compile(r"\[id\d+\]")
+# Plain Text Mode "keep italics" markers (issue #352) and any other HTML-like tag.
+_EMPHASIS_TAG_RE = re.compile(r"</?(i|em)>")
+_ANY_TAG_RE = re.compile(r"</?[A-Za-z][^<>]*>")
+EMPHASIS_OPTION = "plain_text_keep_emphasis"
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _LEADING_UNCLOSED_THINK_RE = re.compile(r"^.*?</think>", re.DOTALL | re.IGNORECASE)
 
@@ -79,6 +84,32 @@ def chatter_chars(raw: str, extracted: Optional[str]) -> int:
     elif extracted and extracted in text:
         text = text.replace(extracted, "", 1)
     return sum(1 for ch in text if not ch.isspace())
+
+
+def emphasis_spans(text: str) -> Optional[Counter]:
+    """Count <i>/<em> spans per tag name, or None when they are not well-formed.
+
+    Well-formed means every marker is closed by the same name before the next
+    one opens (no nesting, no attributes) and no other tag appears.
+    """
+    if len(_ANY_TAG_RE.findall(text)) != len(_EMPHASIS_TAG_RE.findall(text)):
+        return None
+    spans: Counter = Counter()
+    open_name = None
+    for match in _EMPHASIS_TAG_RE.finditer(text):
+        closing, name = match.group(0).startswith("</"), match.group(1)
+        if not closing and open_name is None:
+            open_name = name
+        elif closing and open_name == name:
+            spans[name] += 1
+            open_name = None
+        else:
+            return None
+    return spans if open_name is None else None
+
+
+def _emphasis_applies(case: Case) -> bool:
+    return bool(case.prompt_options.get(EMPHASIS_OPTION)) or bool(_EMPHASIS_TAG_RE.search(case.text))
 
 
 def default_length_ratio(source_language: str, target_language: str) -> Optional[tuple[float, float]]:
@@ -132,6 +163,7 @@ def score(case: Case, raw: Optional[str], extracted: Optional[str]) -> dict[str,
         "must_contain": bool(case.must_contain_any),
         "must_not_contain": bool(case.must_not_contain),
         "length": ratio is not None,
+        "emphasis": _emphasis_applies(case),
     }
 
     result = {"format": _verdict(bool(extracted and extracted.strip())),
@@ -176,4 +208,9 @@ def score(case: Case, raw: Optional[str], extracted: Optional[str]) -> dict[str,
         result["length"] = _verdict(source_len > 0 and lo <= len(_strip_placeholders(out)) / source_len <= hi)
     else:
         result["length"] = NA
+    # Markers survive: well-formed, no other tag, same span count per tag name.
+    result["emphasis"] = (
+        _verdict(emphasis_spans(out) == emphasis_spans(case.text))
+        if applies["emphasis"] else NA
+    )
     return result

@@ -579,6 +579,20 @@
                             </label>
                         </div>
 
+                        <!-- Keep italics: sub-option of Plain Text Mode, enabled only while
+                             it is checked (settings-manager.js toggles disabled + dimming). -->
+                        <div class="option-item option-item--sub option-item--disabled" id="plainTextKeepEmphasisItem">
+                            <label class="option-item__label">
+                                <input type="checkbox" id="plainTextKeepEmphasis" disabled>
+                                <div>
+                                    <span class="option-item__title" data-i18n="settings:option_plain_text_keep_emphasis_title">Keep italics</span>
+                                    <p class="option-item__description" data-i18n-html="settings:option_plain_text_keep_emphasis_description">
+                                        Keeps italics (<code>&lt;i&gt;</code>, <code>&lt;em&gt;</code>) from EPUB files. The LLM receives them as markers; any paragraph where they come back broken is written without italics, as before. EPUB only for now.
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+
                         <!-- Text Cleanup (OCR Correction) -->
                         <div class="option-item">
                             <label class="option-item__label">

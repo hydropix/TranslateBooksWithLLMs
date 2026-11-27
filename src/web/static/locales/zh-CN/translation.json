@@ -269,6 +269,7 @@
   "summary_no_auto_pause": "不自动暂停",
   "summary_bilingual": "双语",
   "summary_plain_text_mode": "纯文本模式",
+  "summary_plain_text_keep_emphasis": "保留斜体",
   "summary_ocr_cleanup": "OCR 清理",
   "summary_glossary": "词汇表：{{name}}",
   "summary_instructions": "指令：{{name}}",

@@ -68,6 +68,8 @@
   "option_bilingual_description": "Include original text alongside the translation. Each chunk displays the source text followed by its translation, ideal for language learning or side-by-side comparison.",
   "option_plain_text_title": "Plain Text Mode (EPUB / DOCX)",
   "option_plain_text_description": "Strips most formatting before sending content to the LLM to make translation faster and more reliable — not a lower-quality mode. Very well suited to simple novels and plain prose where structure matters less than reading the translated text. Only paragraph text is sent to the LLM, inline styles and complex markup are dropped. Headings, lists and blockquotes are kept; images stay in the output and are regrouped at the end of their original paragraph. Especially helpful on small or local LLMs that struggle with <code>[id0]</code> placeholders. Less ideal for technical books, illustrated guides or anything where layout carries meaning. Only applies to EPUB and DOCX files.",
+  "option_plain_text_keep_emphasis_title": "Keep italics",
+  "option_plain_text_keep_emphasis_description": "Keeps italics (<code>&lt;i&gt;</code>, <code>&lt;em&gt;</code>) from EPUB files. The LLM receives them as markers; any paragraph where they come back broken is written without italics, as before. EPUB only for now.",
   "option_text_cleanup_title": "Text Cleanup (OCR Correction)",
   "option_text_cleanup_description": "For poorly formatted or OCR-scanned texts. Instructs the LLM to fix: broken line breaks, double spaces, punctuation errors, and merge incorrectly split paragraphs.",
 

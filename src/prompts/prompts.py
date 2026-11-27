@@ -90,6 +90,18 @@ _PLAIN_TEXT_FORMAT_RULES = (
     "markdown formatting symbols to your output - output plain translated text only"
 )
 
+# Rule 11 as emitted when the "keep italics" option is on (issue #352): the input
+# then carries literal <i>/<em> markers, which "plain translated text only" would
+# tell the model to drop. Same number, so the retry rules keep 12-14. Code
+# downstream validates the markers and strips any other tag, so one sentence is
+# enough here.
+_PLAIN_TEXT_RULE_11 = _PLAIN_TEXT_FORMAT_RULES[_PLAIN_TEXT_FORMAT_RULES.index("\n11. "):]
+_PLAIN_TEXT_RULE_11_KEEP_EMPHASIS = (
+    "\n11. Keep each <i>...</i> or <em>...</em> pair around the translated words that "
+    "carry the same emphasis, and add no other tag, markdown heading marker (#, ##, etc.) "
+    "or markdown formatting symbol"
+)
+
 def _glossary_section(glossary_block: str) -> str:
     """Return the per-chunk glossary block for the user prompt, or "".
 
@@ -128,6 +140,11 @@ def _additional_refinement_section(additional_instructions: str) -> str:
 # paragraph-count mismatch, and never on a first attempt (issue #253).
 PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION = 'plain_text_expected_paragraphs'
 
+# prompt_options key for the opt-in "keep italics" setting of Plain Text Mode
+# (issue #352). When True, <i>/<em> spans reach the LLM as literal <i>...</i> /
+# <em>...</em> markers and are rebuilt as real elements after validation.
+PLAIN_TEXT_KEEP_EMPHASIS_OPTION = 'plain_text_keep_emphasis'
+
 
 def _plain_text_format_rules(prompt_options: Optional[Dict[str, Any]] = None) -> str:
     """Return the Plain Text Mode paragraph contract, hardened on a retry.
@@ -138,11 +155,18 @@ def _plain_text_format_rules(prompt_options: Optional[Dict[str, Any]] = None) ->
     the number it must produce and spells out the failure observed in practice:
     disclaimers, author's notes and headings folded away as if they were
     metadata (issue #253). Numbering continues from the base rules.
+
+    When PLAIN_TEXT_KEEP_EMPHASIS_OPTION is True, rule 11 is reworded to keep
+    the <i>/<em> markers instead of asking for plain text only (issue #352).
     """
-    expected = (prompt_options or {}).get(PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION)
+    options = prompt_options or {}
+    base_rules = _PLAIN_TEXT_FORMAT_RULES
+    if options.get(PLAIN_TEXT_KEEP_EMPHASIS_OPTION) is True:
+        base_rules = base_rules.replace(_PLAIN_TEXT_RULE_11, _PLAIN_TEXT_RULE_11_KEEP_EMPHASIS)
+    expected = options.get(PLAIN_TEXT_EXPECTED_PARAGRAPHS_OPTION)
     if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
-        return _PLAIN_TEXT_FORMAT_RULES
-    return _PLAIN_TEXT_FORMAT_RULES + (
+        return base_rules
+    return base_rules + (
         "\n12. RETRY: your previous answer for this exact text had the WRONG number of paragraphs"
         f"\n13. This input contains EXACTLY {expected} paragraph(s); your output MUST contain "
         f"EXACTLY {expected} paragraph(s), separated by ONE BLANK LINE"

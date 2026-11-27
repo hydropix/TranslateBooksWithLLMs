@@ -62,7 +62,7 @@ cases:
     has_placeholders: false
     expect_paragraphs: true
     notes: Eight short dialogue paragraphs. Models tend to merge consecutive short lines into one paragraph.
-    text: |-
+    text: &t04_text |-
       "Are you coming?" Clara called from the hallway.
 
       "In a minute," said Paul, without looking up.
@@ -208,3 +208,116 @@ cases:
       quaient de lui, mais ils venaient tou-
       jours le chercher quand la mer devenait mauvaise et que leurs moteurs refusaient de démar-
       rer au petit matin.
+
+  # Plain Text Mode with the opt-in "keep italics" setting (issue #352): the
+  # paragraphs carry literal <i>...</i> / <em>...</em> markers that must come back
+  # well-formed, with the same span count (metric "emphasis").
+
+  - id: T14_emphasis_stressed_word_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    notes: Issue #352. Dialogue lines with one stressed word each; the stress must stay on the matching French word.
+    text: |-
+      "He's <em>nicer</em> now, yes, but that doesn't mean he's <em>nice</em>," Ada said, stirring her coffee.
+
+      "I never said he was a saint. I said he <em>apologised</em>."
+
+      "To you, maybe. He has not said a word to his brother in three years, and the whole village knows why."
+
+      Tom shrugged and looked out at the rain. "People change," he said, though he did not sound as if he <em>believed</em> it.
+
+  - id: T15_emphasis_many_spans_one_paragraph_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    notes: Issue #352. Four spans in a single paragraph; none may be dropped, merged or nested.
+    text: |-
+      The rules of the boarding house were posted by the door, and Mrs Pell read them aloud to every new lodger. Breakfast was served at <i>seven</i>, not a minute later. Boots were to be left <i>outside</i>, never on the stairs. Visitors were permitted on Sundays, but <i>only</i> in the parlour, and <i>only</i> until the clock struck five.
+
+      The new lodger nodded at each rule, picked up his bag and climbed the stairs in his boots.
+
+  - id: T16_emphasis_inner_thought_en_de
+    builder: translate
+    source_language: English
+    target_language: German
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    notes: Issue #352. Whole-sentence inner thoughts in <i>, the classic fiction convention.
+    text: |-
+      Lena stood at the edge of the platform and counted the carriages as they slid past. <i>He said the fourth one. He definitely said the fourth one.</i> The doors opened with a sigh, and a crowd of commuters spilled out around her.
+
+      She scanned every face. A man with a grey scarf, a woman carrying a cello, two schoolboys arguing about football. <i>Maybe he missed it. Maybe he never meant to come at all.</i>
+
+      Then someone touched her elbow, and she turned.
+
+  - id: T17_emphasis_book_title_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    must_keep:
+      - Harwick
+    notes: Issue #352. Titles of invented books and a ship name in <i>; the italics must wrap the translated or kept title.
+    text: |-
+      My grandfather owned exactly three books. The first was <i>A Practical Guide to Knots</i>, its spine held together with tape. The second was a dictionary missing every page after the letter S. The third, which he never let anyone touch, was <i>The Last Voyage of the Harwick</i>.
+
+      He had sailed on the <i>Harwick</i> as a boy, he said, and the book got everything wrong. He kept it anyway, on the shelf above his bed, so that he could be angry at it every morning.
+
+  - id: T18_emphasis_mixed_i_em_en_es
+    builder: translate
+    source_language: English
+    target_language: Spanish
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    notes: Issue #352. <i> and <em> in the same paragraphs; each span must keep its own tag name.
+    text: |-
+      The sign on the bakery door said <i>Fermé</i>, which Jonah could not read, but the meaning was clear enough. He pressed his nose to the glass anyway. The bread was <em>right there</em>, golden and untouched, on the other side of a pane of glass.
+
+      "We could knock," said his sister. "It is <em>our</em> bakery, after all. Papa will not mind." She lifted her fist and paused, because the word on the sign suddenly seemed much larger than before.
+
+  - id: T19_emphasis_some_paragraphs_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    notes: Issue #352. Five paragraphs, markers in only two of them; the plain paragraphs must not gain any tag.
+    text: |-
+      The storm reached the coast a little after midnight. Shutters banged along the whole street, and somewhere a dog barked without stopping.
+
+      Rosa lay awake listening to it. <em>Not tonight</em>, she thought. Not on the one night the boats were still out.
+
+      At two o'clock she got up, put on her father's coat and went down to the harbour.
+
+      The lamps on the pier were swinging wildly. She counted the boats tied up along the wall, then counted them again, and the second time she was <i>certain</i>: one was missing.
+
+      She did not run. She walked, very fast, to the harbourmaster's door and knocked until the light came on.
+
+  - id: T20_emphasis_option_no_markers_en_fr
+    builder: translate
+    source_language: English
+    target_language: French
+    has_placeholders: false
+    expect_paragraphs: true
+    prompt_options:
+      plain_text_keep_emphasis: true
+    notes: Issue #352. Same text as T04 with the option on but no marker in the text; the model must not invent tags or lose paragraphs.
+    text: *t04_text

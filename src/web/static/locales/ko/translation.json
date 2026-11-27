@@ -269,6 +269,7 @@
   "summary_no_auto_pause": "자동 일시정지 없음",
   "summary_bilingual": "이중 언어",
   "summary_plain_text_mode": "일반 텍스트 모드",
+  "summary_plain_text_keep_emphasis": "기울임꼴 유지",
   "summary_ocr_cleanup": "OCR 정리",
   "summary_glossary": "용어집: {{name}}",
   "summary_instructions": "지침: {{name}}",

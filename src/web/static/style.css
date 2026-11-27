@@ -667,6 +667,21 @@ html.dark .neu-inset-light {
     font-size: inherit;
 }
 
+/* Dependent option nested under its parent (e.g. Keep italics under Plain
+   Text Mode). Dimmed and not clickable while the parent is off. */
+.option-item--sub {
+    margin-top: calc(-8px * var(--ui-density-y));
+    margin-left: 26px;
+}
+
+.option-item--disabled {
+    opacity: 0.5;
+}
+
+.option-item--disabled .option-item__label {
+    cursor: not-allowed;
+}
+
 .form-control {
     width: 100%;
     box-sizing: border-box;

@@ -68,6 +68,8 @@
   "option_bilingual_description": "翻訳と並べて原文を含めます。各チャンクは原文の後に翻訳が表示されるため、語学学習や対訳比較に最適です。",
   "option_plain_text_title": "プレーンテキストモード (EPUB / DOCX)",
   "option_plain_text_description": "LLM に送信する前に書式を大幅に簡略化し、翻訳をより高速かつ信頼性の高いものにします — 品質が低いモードではありません。構造よりも翻訳テキストを読むことが重要な、シンプルな小説や平易な散文に非常に適しています。段落テキストのみが LLM に送信され、インラインスタイルや複雑なマークアップは破棄されます。見出し、リスト、引用ブロックは保持され、画像は出力に残り元の段落の末尾にまとめられます。<code>[id0]</code> プレースホルダーが苦手な小規模またはローカル LLM で特に有用です。技術書、図解ガイド、レイアウトに意味があるドキュメントには不向きです。EPUB と DOCX ファイルにのみ適用されます。",
+  "option_plain_text_keep_emphasis_title": "斜体を保持",
+  "option_plain_text_keep_emphasis_description": "EPUB ファイルの斜体（<code>&lt;i&gt;</code>, <code>&lt;em&gt;</code>）を保持します。LLM には斜体がマーカーとして渡されます。マーカーが崩れて返ってきた段落は、従来どおり斜体なしで書き出されます。現在は EPUB のみ対応です。",
   "option_text_cleanup_title": "テキストクリーンアップ (OCR 補正)",
   "option_text_cleanup_description": "整形が不十分なテキストや OCR でスキャンされたテキスト向けです。改行の崩れ、二重スペース、句読点のエラーを修正し、誤って分割された段落を結合するよう LLM に指示します。",
 

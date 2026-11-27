@@ -36,6 +36,11 @@ from .key_pool import KeyPool
 
 logger = logging.getLogger("llm.rate_limit")
 
+# Slack subtracted before rounding a remaining cooldown up to whole seconds
+# (see handle_rate_limit). Far above float error, far below anything a server
+# would notice.
+_CEIL_TOLERANCE_S = 1e-6
+
 
 def is_retryable_http_status(status_code: int) -> bool:
     """Whether an HTTP status is worth retrying with the same request.
@@ -165,8 +170,11 @@ async def handle_rate_limit(
     remaining = await pool.time_until_next_available()
     # Round up: the cooldown is measured from a monotonic timestamp, so a
     # 7 s Retry-After reads as 6.99... a moment later. Truncating would retry
-    # up to a second before the server allows it.
-    sleep_for = max(math.ceil(remaining) if remaining > 0 else wait_time, 1)
+    # up to a second before the server allows it. The tolerance absorbs float
+    # error: when the clock has not ticked since mark_throttled() (Windows
+    # ticks every ~15 ms), (now + 7) - now can come out as 7.00000000000001,
+    # which a bare ceil() turns into an 8 s sleep.
+    sleep_for = max(math.ceil(remaining - _CEIL_TOLERANCE_S) if remaining > 0 else wait_time, 1)
     _log(
         log_callback,
         "llm_rate_limit",

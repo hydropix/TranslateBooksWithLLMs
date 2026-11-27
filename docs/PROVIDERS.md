@@ -83,7 +83,7 @@ python translate.py -i book.txt -o book_fr.txt \
     --api_endpoint http://localhost:1234/v1/chat/completions \
     -m your-model-name
 
-# Rapid-MLX (Apple Silicon), e.g. after `rapid-mlx serve qwen3.5-4b-4bit`
+# Rapid-MLX (Apple Silicon), e.g. after `rapid-mlx serve qwen3.5-4b-4bit --port 8000`
 python translate.py -i book.txt -o book_fr.txt \
     --provider openai \
     --api_endpoint http://localhost:8000/v1/chat/completions \

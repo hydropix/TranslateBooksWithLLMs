@@ -305,6 +305,8 @@ def create_config_blueprint(server_session_id=None):
             return _get_poe_models(api_key)
         elif provider == 'nim':
             return _get_nim_models(api_key)
+        elif provider == 'llmtr':
+            return _get_llmtr_models(api_key)
         elif provider == 'openai':
             # Get endpoint from request for LM Studio support
             if request.method == 'POST':
@@ -535,6 +537,25 @@ def create_config_blueprint(server_session_id=None):
             status_prefix="poe",
             display_name="Poe",
             api_key_missing_message="Poe API key is required. Get your key at https://poe.com/api_key",
+        )
+
+
+    def _get_llmtr_models(provided_api_key=None):
+        """Get available models from the LLMTR catalog."""
+        from src.core.llm import LlmtrProvider
+        return _fetch_provider_models(
+            provided_api_key=provided_api_key,
+            env_var='LLMTR_API_KEY',
+            config_api_key=_config.LLMTR_API_KEY,
+            config_default_model=_config.LLMTR_MODEL,
+            provider_class=LlmtrProvider,
+            fallback_model="qwen/qwen3.8-27b-free",
+            status_prefix="llmtr",
+            display_name="LLMTR",
+            api_key_missing_message=(
+                "LLMTR API key is required. Get your key at "
+                "https://llmtr.com/dashboard/keys"
+            ),
         )
 
     def _get_nim_models(provided_api_key=None):

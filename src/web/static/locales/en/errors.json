@@ -22,6 +22,7 @@
   "api_key_required_deepseek": "DeepSeek API key is required when using DeepSeek provider.",
   "api_key_required_poe": "Poe API key is required. Get your key at poe.com/api_key",
   "api_key_required_nim": "NVIDIA NIM API key is required when using NIM provider.",
+  "api_key_required_llmtr": "LLMTR API key is required when using LLMTR provider.",
   "request_too_large": "The file is too large for the server. The limit is set by MAX_REQUEST_SIZE_MB (200 MB by default).",
   "endpoint_rejected": "The server refused this endpoint: {{detail}}",
   "endpoint_override_needs_key": "A custom endpoint needs its own API key: the server's stored key is never sent to an endpoint you chose. Enter the key, or restore the default endpoint.",

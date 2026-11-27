@@ -309,6 +309,29 @@ rather than just hidden reasoning. Those two bots keep reasoning.
 
 ---
 
+
+## LLMTR (Cloud)
+
+Prepaid OpenAI-compatible gateway — Chat Completions at `https://llmtr.com/v1`, with a public model catalog.
+
+### Setup
+
+1. Get API key at [llmtr.com/dashboard/keys](https://llmtr.com/dashboard/keys)
+2. In TBL: Select "LLMTR", enter your key
+3. Choose a model from the list (IDs use the `vendor/model` form, for example `qwen/qwen3.8-27b-free`)
+
+### CLI Example
+
+```bash
+python translate.py -i book.txt -o book_fr.txt \
+    --provider llmtr \
+    --llmtr_api_key your-key \
+    -m qwen/qwen3.8-27b-free
+```
+
+Browse models: [llmtr.com](https://llmtr.com)
+
+---
 ## NVIDIA NIM (Cloud)
 
 Hosted models via NVIDIA's inference platform — OpenAI-compatible API, generous free tier.
@@ -335,7 +358,7 @@ Browse models: [build.nvidia.com](https://build.nvidia.com/)
 
 The web API lets a request choose the endpoint the server calls, so the server checks that endpoint against an allowlist before using it. Accepted out of the box:
 
-- the known provider hosts (`api.openai.com`, `generativelanguage.googleapis.com`, `openrouter.ai`, `api.mistral.ai`, `api.deepseek.com`, `api.poe.com`, `integrate.api.nvidia.com`);
+- the known provider hosts (`api.openai.com`, `generativelanguage.googleapis.com`, `openrouter.ai`, `api.mistral.ai`, `api.deepseek.com`, `api.poe.com`, `integrate.api.nvidia.com`, `llmtr.com`);
 - every `*_API_ENDPOINT` configured in your `.env`;
 - anything on your own network, so self-hosted Ollama, LM Studio, llama.cpp and vLLM keep working: loopback and LAN addresses (including `100.64.0.0/10`, the range Tailscale uses), `localhost`, `host.docker.internal`, a single-label hostname such as `http://ollama:11434` (a Docker service or LXC name), and any host under `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, `.intranet`, `.corp`, `.private` or `.ts.net`;
 - any other hostname that **resolves entirely to your local network**, so a LAN machine named under a domain you own (`ai-server.example.com` answering `192.168.1.50` from your internal DNS) works without any configuration. The lookup only happens for a host none of the rules above accepted, and the verdict is cached for a minute.
@@ -376,6 +399,7 @@ MISTRAL_API_KEY=...
 DEEPSEEK_API_KEY=...
 POE_API_KEY=...
 NIM_API_KEY=...
+LLMTR_API_KEY=...
 
 # Ollama settings
 API_ENDPOINT=http://localhost:11434/api/generate

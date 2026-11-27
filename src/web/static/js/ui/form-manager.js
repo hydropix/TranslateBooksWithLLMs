@@ -399,6 +399,7 @@ export const FormManager = {
             ApiKeyUtils.setupField('deepseekApiKey', config.deepseek_api_key_configured, config.deepseek_api_key, config.deepseek_api_key_count);
             ApiKeyUtils.setupField('poeApiKey', config.poe_api_key_configured, config.poe_api_key, config.poe_api_key_count);
             ApiKeyUtils.setupField('nimApiKey', config.nim_api_key_configured, config.nim_api_key, config.nim_api_key_count);
+            ApiKeyUtils.setupField('llmtrApiKey', config.llmtr_api_key_configured, config.llmtr_api_key, config.llmtr_api_key_count);
 
             // After loading defaults, dispatch event to notify other modules
             console.log('[FormManager] Default config loaded, dispatching event');

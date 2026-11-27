@@ -22,6 +22,7 @@
   "api_key_required_deepseek": "Se requiere la clave de API de DeepSeek al usar el proveedor DeepSeek.",
   "api_key_required_poe": "Se requiere la clave de API de Poe. Obtén tu clave en poe.com/api_key",
   "api_key_required_nim": "Se requiere la clave de API de NVIDIA NIM al usar el proveedor NIM.",
+  "api_key_required_llmtr": "Se requiere la clave de API de LLMTR al usar el proveedor LLMTR.",
   "request_too_large": "El archivo es demasiado grande para el servidor. El límite lo fija MAX_REQUEST_SIZE_MB (200 MB por defecto).",
   "endpoint_rejected": "El servidor rechazó este endpoint: {{detail}}",
   "endpoint_override_needs_key": "Un endpoint personalizado necesita su propia clave API: la clave guardada en el servidor nunca se envía a un endpoint elegido por usted. Introduzca la clave o restaure el endpoint predeterminado.",

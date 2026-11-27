@@ -28,6 +28,7 @@ from .provider_config import (
 from .providers.deepseek import DeepSeekProvider
 from .providers.gemini import GeminiProvider
 from .providers.litellm import LiteLLMProvider
+from .providers.llmtr import LlmtrProvider
 from .providers.mistral import MistralProvider
 from .providers.ollama import OllamaProvider
 from .providers.openai import OpenAICompatibleProvider
@@ -41,11 +42,12 @@ _KEY_HINTS = {
     "deepseek": "Set DEEPSEEK_API_KEY in .env or pass an API key.",
     "poe": "Get your key at https://poe.com/api_key",
     "nim": "Get your key at https://build.nvidia.com/",
+    "llmtr": "Get your key at https://llmtr.com/dashboard/keys",
 }
 
 _PROVIDER_LABELS = {
     "gemini": "Gemini", "openrouter": "OpenRouter", "mistral": "Mistral",
-    "deepseek": "DeepSeek", "poe": "Poe", "nim": "NVIDIA NIM",
+    "deepseek": "DeepSeek", "poe": "Poe", "nim": "NVIDIA NIM", "llmtr": "LLMTR",
 }
 
 
@@ -101,7 +103,7 @@ def create_llm_provider(
     Args:
         provider: A ``ProviderConfig`` (preferred), or a provider type
             ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek",
-            "poe", "nim", "litellm") followed by keyword arguments: ``model``,
+            "poe", "nim", "llmtr", "litellm") followed by keyword arguments: ``model``,
             ``api_endpoint``/``endpoint``, ``api_key``,
             ``context_window``, ``log_callback``, ``retry_policy``,
             ``temperature``, ``<provider>_disable_thinking``,
@@ -215,6 +217,14 @@ def create_llm_provider(
             api_endpoint=_config.POE_API_ENDPOINT,
             disable_thinking=opts.get("disable_thinking", _config.POE_DISABLE_THINKING),
             disable_web_search=opts.get("disable_web_search", _config.POE_DISABLE_WEB_SEARCH),
+            log_callback=cfg.log_callback,
+            **common,
+        )
+    if cfg.provider == "llmtr":
+        return LlmtrProvider(
+            api_key=cfg.api_key,
+            model=cfg.model or _config.LLMTR_MODEL,
+            api_endpoint=_config.LLMTR_API_ENDPOINT,
             log_callback=cfg.log_callback,
             **common,
         )

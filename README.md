@@ -64,6 +64,7 @@ That's it (就这么简单 · これだけ · 이게 다예요). On first launch
 |----------|------|-------------|
 | **DeepSeek** | Cloud | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
 | **Gemini** | Cloud | [Google AI Studio](https://aistudio.google.com/apikey) |
+| **LLMTR** | Cloud | [llmtr.com/dashboard/keys](https://llmtr.com/dashboard/keys) |
 | **Mistral** | Cloud | [console.mistral.ai](https://console.mistral.ai/api-keys) |
 | **NVIDIA NIM** | Cloud | [build.nvidia.com](https://build.nvidia.com/) |
 | **Ollama** | Local | [ollama.com](https://ollama.com/) |
@@ -145,6 +146,10 @@ python translate.py -i book.txt --provider poe \
 python translate.py -i book.txt --provider nim \
     --nim_api_key YOUR_KEY -m meta/llama-3.1-8b-instruct -tl French
 
+# With LLMTR
+python translate.py -i book.txt --provider llmtr \
+    --llmtr_api_key YOUR_KEY -m qwen/qwen3.8-27b-free -tl French
+
 # With local OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
 python translate.py -i book.txt --provider openai \
     --api_endpoint http://localhost:9931/v1/chat/completions -m your-model -tl French
@@ -190,6 +195,7 @@ MISTRAL_API_KEY=...
 DEEPSEEK_API_KEY=...
 POE_API_KEY=...
 NIM_API_KEY=...
+LLMTR_API_KEY=...
 
 # Performance
 REQUEST_TIMEOUT=900

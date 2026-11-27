@@ -275,7 +275,7 @@ def test_failure_report_option_round_trips_and_defaults(tmp_path, monkeypatch):
         input=str(tmp_path / "book.txt"), output=None, source_lang="English",
         target_lang="French", model="qwen3:14b", api_endpoint="http://localhost:11434/api/generate",
         provider="ollama", gemini_api_key="", openai_api_key="", openrouter_api_key="",
-        mistral_api_key="", deepseek_api_key="", poe_api_key="", nim_api_key="",
+        mistral_api_key="", deepseek_api_key="", poe_api_key="", nim_api_key="", llmtr_api_key="",
         parallel=1, text_cleanup=False, refine=False, refine_only=False, glossary=None,
         auto_glossary=False, auto_style=False, fix_terms=None, fix_terms_mode="smart",
         fix_terms_scan=False, tts=False)

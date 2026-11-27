@@ -71,6 +71,8 @@ _RELOADABLE_ENV_SETTINGS = (
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
+    ('LLMTR_API_KEY',       'LLMTR_API_KEY',       ''),
+    ('LLMTR_MODEL',         'LLMTR_MODEL',         'qwen/qwen3.8-27b-free'),
     # LiteLLM gateway (CLI-only). Provider-prefixed model name, e.g.
     # "anthropic/claude-sonnet-4-6". Keys are read from each provider's native
     # env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), not from a single key.
@@ -383,7 +385,7 @@ MIN_CHUNK_SIZE_TOKENS = 50
 
 # LLM Provider configuration
 # LLM_PROVIDER, GEMINI_*, OPENAI_*, OPENROUTER_API_KEY/MODEL, MISTRAL_API_KEY/MODEL,
-# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL are loaded via
+# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL, LLMTR_API_KEY/MODEL are loaded via
 # _apply_reloadable_env_settings() so reload_config() can refresh them at runtime.
 OPENROUTER_API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 # Many OpenRouter models reason by default (DeepSeek V4.x, Qwen 3.x), and the
@@ -409,6 +411,7 @@ POE_DISABLE_THINKING = os.getenv('POE_DISABLE_THINKING', 'true').lower() == 'tru
 # needs. Set to 'false' to allow retrieval.
 POE_DISABLE_WEB_SEARCH = os.getenv('POE_DISABLE_WEB_SEARCH', 'true').lower() == 'true'
 NIM_API_ENDPOINT = os.getenv('NIM_API_ENDPOINT', 'https://integrate.api.nvidia.com/v1/chat/completions')
+LLMTR_API_ENDPOINT = os.getenv('LLMTR_API_ENDPOINT', 'https://llmtr.com/v1/chat/completions')
 
 # SRT-specific configuration
 # Single knob for both translate and refine: every SRT block sent to the

@@ -43,6 +43,7 @@ DEFAULT_ALLOWED_HOSTS = frozenset({
     'api.deepseek.com',
     'api.poe.com',
     'integrate.api.nvidia.com',
+    'llmtr.com',
 })
 
 # Server defaults read from src.config. A user who points one of these at their
@@ -56,6 +57,7 @@ _CONFIGURED_ENDPOINT_ATTRS = (
     'DEEPSEEK_API_ENDPOINT',
     'POE_API_ENDPOINT',
     'NIM_API_ENDPOINT',
+    'LLMTR_API_ENDPOINT',
 )
 
 # Non-IP hostnames that always denote the machine the server runs on.

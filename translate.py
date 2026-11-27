@@ -20,7 +20,7 @@ ensure_utf8_stdio()
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, OPENAI_API_ENDPOINT, NIM_API_ENDPOINT, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
+from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, OPENAI_API_ENDPOINT, NIM_API_ENDPOINT, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, LLMTR_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.tts.tts_config import TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -182,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--api_endpoint", default=None, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.). Overrides --openai_api_endpoint / --nim_api_endpoint when given (default: {API_ENDPOINT} for Ollama).")
-    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
+    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "llmtr", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
     parser.add_argument("--openrouter_api_key", default=OPENROUTER_API_KEY, help="OpenRouter API key (required if using openrouter provider).")
@@ -190,6 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deepseek_api_key", default=DEEPSEEK_API_KEY, help="DeepSeek API key (required if using deepseek provider).")
     parser.add_argument("--poe_api_key", default=POE_API_KEY, help="Poe API key (required if using poe provider). Get your key at https://poe.com/api_key")
     parser.add_argument("--nim_api_key", default=NIM_API_KEY, help="NVIDIA NIM API key (required if using nim provider). Get your key at https://build.nvidia.com/")
+    parser.add_argument("--llmtr_api_key", default=LLMTR_API_KEY, help="LLMTR API key (required if using llmtr provider). Get your key at https://llmtr.com/dashboard/keys")
     parser.add_argument("--openai_api_endpoint", default=OPENAI_API_ENDPOINT, help="Endpoint used by the openai provider when --api_endpoint is not given (default: OPENAI_API_ENDPOINT from .env).")
     parser.add_argument("--nim_api_endpoint", default=NIM_API_ENDPOINT, help="Endpoint used by the nim provider when --api_endpoint is not given (default: NIM_API_ENDPOINT from .env).")
     parser.add_argument("--parallel", type=int, default=PARALLEL_TRANSLATIONS, metavar="N", help=f"Number of chunks translated concurrently (default: {PARALLEL_TRANSLATIONS}). Only cloud providers benefit; local providers (Ollama) are forced to 1. Values > 1 drop cross-chunk context chaining.")

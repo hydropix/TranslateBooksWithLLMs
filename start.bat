@@ -72,7 +72,7 @@ REM ========================================
 :run_server
 echo Launching server...
 echo.
-echo Web interface:  http://localhost:5000
+echo The web interface URL is shown in the server log below.
 echo Press Ctrl+C to stop the server
 echo.
 

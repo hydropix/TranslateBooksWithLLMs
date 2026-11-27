@@ -37,6 +37,7 @@ from src.core.common.emphasis_markers import (
     append_marked_text,
     count_spans,
     has_literal_markers,
+    recover_markdown_emphasis,
     remove_markers,
     sanitize,
 )
@@ -668,9 +669,10 @@ def _emit_target_block(
     """Append the translated (or source-fallback) block with its marker class.
 
     marked / wrap: the paragraph's emphasis flags (keep_emphasis only, see
-    PLAIN_EMPHASIS_MARKED_KEY). Returns (spans kept, markers rejected) for the
-    keep_emphasis stats; (0, False) for a paragraph with neither flag, which
-    is written exactly as without keep_emphasis.
+    PLAIN_EMPHASIS_MARKED_KEY). Returns (spans kept, spans recovered from
+    Markdown, markers rejected) for the keep_emphasis stats; (0, 0, False)
+    for a paragraph with neither flag, which is written exactly as without
+    keep_emphasis. Recovered spans are part of the kept ones.
     """
     block = etree.SubElement(body_element, tag)
     # The bilingual source twin, when there is one, already claimed the
@@ -686,9 +688,10 @@ def _emit_target_block(
         _add_class(block, "plain-text-target")
     if not (marked or wrap):
         block.text = text or source_text
-        return 0, False
+        return 0, 0, False
 
     rejected = False
+    recovered = 0
     if not text:
         # Source markers are well formed by construction.
         out_text = source_text
@@ -697,10 +700,14 @@ def _emit_target_block(
         # The LLM's markers are only trusted once they pass validation;
         # anything else is rebuilt as plain text rather than as broken
         # markup. Only the markers go: the rest of the text stays as is.
+        # Markdown *pairs* the model wrote instead of markers are recovered
+        # first, so they neither go missing nor land as literal asterisks.
+        text, recovered = recover_markdown_emphasis(text, source_text)
         out_text, kept = sanitize(text, source_text)
         if kept == 0:
             rejected = has_literal_markers(text)
             out_text = remove_markers(text)
+            recovered = 0
     else:
         # A wrapped paragraph was sent without markers: any the LLM added
         # would nest inside the wrap.
@@ -708,7 +715,7 @@ def _emit_target_block(
     _write_emphasis_text(block, out_text, marked, wrap)
     if wrap and out_text:
         kept += 1
-    return kept, rejected
+    return kept, recovered, rejected
 
 
 def _emit_paragraph(
@@ -770,9 +777,9 @@ def _emit_paragraph(
     emit_target, untranslated = _target_emission(
         text, source_text, source_emitted, bool(images_by_paragraph.get(i)))
 
-    kept, rejected = 0, False
+    kept, recovered, rejected = 0, 0, False
     if emit_target:
-        kept, rejected = _emit_target_block(
+        kept, recovered, rejected = _emit_target_block(
             body_element, tag, attrib, text, source_text, source_emitted,
             untranslated, bilingual, marked=marked, wrap=wrap)
 
@@ -780,6 +787,7 @@ def _emit_paragraph(
         emphasis_stats["source_spans"] += (count_spans(source_text) if marked else 0) + (
             1 if wrap and source_text else 0)
         emphasis_stats["kept_spans"] += kept
+        emphasis_stats["recovered_spans"] += recovered
         emphasis_stats["rejected_paragraphs"] += int(rejected)
 
     # Emit anchored images right after
@@ -833,12 +841,14 @@ def replace_body_with_paragraphs(
     Returns:
         None without keep_emphasis. With it, a stats dict:
         source_spans (spans in the source, whole-paragraph wraps included),
-        kept_spans (spans rebuilt in the target blocks, wraps included) and
-        rejected_paragraphs (translations whose markers failed validation and
-        were rebuilt as plain text).
+        kept_spans (spans rebuilt in the target blocks, wraps included),
+        recovered_spans (the kept spans the LLM had written as Markdown
+        *pairs*) and rejected_paragraphs (translations whose markers failed
+        validation and were rebuilt as plain text).
     """
     stats = (
-        {"source_spans": 0, "kept_spans": 0, "rejected_paragraphs": 0}
+        {"source_spans": 0, "kept_spans": 0, "recovered_spans": 0,
+         "rejected_paragraphs": 0}
         if keep_emphasis else None
     )
     count = len(translated_paragraphs)

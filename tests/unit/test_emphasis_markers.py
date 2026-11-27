@@ -8,6 +8,7 @@ from src.core.common.emphasis_markers import (
     count_spans,
     has_literal_markers,
     is_well_formed,
+    recover_markdown_emphasis,
     sanitize,
     strip_markers,
 )
@@ -148,3 +149,42 @@ def test_append_marked_text_escapes_text():
     p = etree.Element("p")
     append_marked_text(p, "a &amp; <i>b < c</i>")
     assert _serialize(p) == "<p>a &amp;amp; <i>b &lt; c</i></p>"
+
+
+# ---------------------------------------------------------------------------
+# Markdown emphasis the LLM wrote instead of a marker
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("translated,source,expected", [
+    # The missing span comes back as a marker of the source's tag.
+    ("Я *могу* быть объективным.", "I <i>can</i> be objective.",
+     ("Я <i>могу</i> быть объективным.", 1)),
+    ("— *Алохомора*.", "<em>Alohomora</em>.", ("— <em>Алохомора</em>.", 1)),
+    ("Это _важно_.", "That is <i>important</i>.", ("Это <i>важно</i>.", 1)),
+    # Only as many as are missing, in reading order; the rest lose their stars.
+    ("<i>a</i> *b* *c*", "<i>x</i> <i>y</i>", ("<i>a</i> <i>b</i> c", 1)),
+    ("*a* *b*", "<i>x</i> y", ("<i>a</i> b", 1)),
+    # Nothing missing: the invented pair is stripped, never left in the book.
+    ("<i>a</i> and *b*", "<i>x</i> and y", ("<i>a</i> and b", 0)),
+    # A pair inside an existing span is stripped, not nested.
+    ("<i>a *b* c</i>", "<i>x</i> <i>y</i>", ("<i>a b c</i>", 0)),
+    # Broken markers: strip the pairs, leave the markers to sanitize.
+    ("<i>a *b*", "<i>x</i> y", ("<i>a b", 0)),
+    # The source uses the delimiter itself: leave it alone.
+    ("*a* <i>b</i>", "*x* <i>y</i> <i>z</i>", ("*a* <i>b</i>", 0)),
+    # Not a pair: lone stars, bold, word-internal underscores, spaced stars.
+    ("2 * 3 = 6", "<i>x</i>", ("2 * 3 = 6", 0)),
+    ("**bold**", "<i>x</i>", ("**bold**", 0)),
+    ("snake_case_name", "<i>x</i>", ("snake_case_name", 0)),
+    ("a * b * c", "<i>x</i>", ("a * b * c", 0)),
+    ("", "<i>x</i>", ("", 0)),
+])
+def test_recover_markdown_emphasis(translated, source, expected):
+    assert recover_markdown_emphasis(translated, source) == expected
+
+
+def test_recovered_text_passes_sanitize():
+    text, recovered = recover_markdown_emphasis(
+        "*Один*, <em>два</em> и *три*.", "<em>One</em>, <em>two</em> and <em>three</em>.")
+    assert recovered == 2
+    assert sanitize(text, "<em>One</em>, <em>two</em> and <em>three</em>.") == (
+        "<em>Один</em>, <em>два</em> и <em>три</em>.", 3)

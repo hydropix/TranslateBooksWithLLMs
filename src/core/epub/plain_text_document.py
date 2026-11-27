@@ -120,10 +120,12 @@ def _report_emphasis(emphasis: Optional[Dict[str, int]], settings: ChunkLoopSett
     """Log one document's italics counters and add them to the book totals."""
     if not emphasis or not emphasis.get("source_spans"):
         return
+    recovered = emphasis.get("recovered_spans", 0)
     settings.log(
         "plain_text_emphasis",
         f"Italics: {emphasis['kept_spans']}/{emphasis['source_spans']} spans kept, "
-        f"{emphasis['rejected_paragraphs']} paragraph(s) fell back to plain"
+        + (f"{recovered} recovered from Markdown *...*, " if recovered else "")
+        + f"{emphasis['rejected_paragraphs']} paragraph(s) fell back to plain"
     )
     if settings.emphasis_totals is not None:
         for key, value in emphasis.items():

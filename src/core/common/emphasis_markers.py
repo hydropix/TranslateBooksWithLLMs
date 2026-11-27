@@ -110,6 +110,72 @@ def sanitize(translated: str, source: str) -> Tuple[str, int]:
     return strip_markers(translated), 0
 
 
+# A Markdown emphasis pair (`*word*`, `_word_`) some models write instead of
+# the marker they were given. The delimiters must hug the text inside, and are
+# not part of `**`, a word_with_underscores or a lone "a * b".
+_MARKDOWN_PAIR_RES = {
+    "*": re.compile(r"(?<![*\w])\*(?![\s*])([^*\n<>]*?[^\s*<>])\*(?![*\w])"),
+    "_": re.compile(r"(?<![_\w])_(?![\s_])([^_\n<>]*?[^\s_<>])_(?![_\w])"),
+}
+
+
+def _source_tag(source: str) -> str:
+    """The marker tag the source uses most (ties and no span: "i")."""
+    names = [m.group(2).lower() for m in _MARKER_RE.finditer(source) if not m.group(1)]
+    return "em" if names.count("em") > names.count("i") else "i"
+
+
+def recover_markdown_emphasis(translated: str, source: str) -> Tuple[str, int]:
+    """Turn Markdown emphasis the LLM invented back into markers.
+
+    Some models answer a marked paragraph with `*word*` where the source had
+    `<i>word</i>`. Such pairs pass marker validation (they are not markers)
+    and would land in the book as literal asterisks. A pair counts as invented
+    only when its delimiter never appears in the source text. While the
+    translation has fewer spans than the source, each invented pair outside an
+    existing span becomes a marker of the source's tag, in reading order; any
+    other invented pair (beyond the missing count, or inside a span, or in
+    text whose markers are not well formed) just loses its delimiters.
+
+    Returns (text, number of spans recovered). Never raises.
+    """
+    translated = translated or ""
+    plain_source = remove_markers(source or "")
+    delims = [d for d in _MARKDOWN_PAIR_RES if d in translated and d not in plain_source]
+    if not delims:
+        return translated, 0
+
+    def strip_pairs(text: str) -> str:
+        for d in delims:
+            text = _MARKDOWN_PAIR_RES[d].sub(r"\1", text)
+        return text
+
+    pieces = _parse(translated)
+    if pieces is None:
+        return strip_pairs(translated), 0
+
+    tag = _source_tag(source or "")
+    missing = count_spans(source or "") - count_spans(translated)
+    recovered = 0
+
+    def convert(m: "re.Match") -> str:
+        nonlocal recovered
+        if recovered >= missing:
+            return m.group(1)
+        recovered += 1
+        return f"<{tag}>{m.group(1)}</{tag}>"
+
+    out = []
+    for segment, span_tag in pieces:
+        if span_tag is not None:
+            out.append(f"<{span_tag}>{strip_pairs(segment)}</{span_tag}>")
+            continue
+        for d in delims:
+            segment = _MARKDOWN_PAIR_RES[d].sub(convert, segment)
+        out.append(segment)
+    return "".join(out), recovered
+
+
 def append_marked_text(elem: etree._Element, text: str) -> None:
     """Write marked text into an empty element as text plus <i>/<em> children.
 

@@ -159,7 +159,7 @@ def test_rebuild_valid_markers_become_real_elements():
     assert [_local(c.tag) for c in p] == ["em", "i"]
     assert p[0].text == "grosse" and p[0].tail == " affaire, "
     assert p[1].text == "ciao" and p[1].tail == "."
-    assert stats == {"source_spans": 2, "kept_spans": 2, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 2, "kept_spans": 2, "recovered_spans": 0, "rejected_paragraphs": 0}
 
 
 def test_rebuild_invalid_markers_fall_back_to_plain_text():
@@ -167,12 +167,12 @@ def test_rebuild_invalid_markers_fall_back_to_plain_text():
     p = body[0]
     assert len(p) == 0
     assert p.text == "Une grosse affaire."
-    assert stats == {"source_spans": 1, "kept_spans": 0, "rejected_paragraphs": 1}
+    assert stats == {"source_spans": 1, "kept_spans": 0, "recovered_spans": 0, "rejected_paragraphs": 1}
 
 
 def test_rebuild_dropped_markers_are_not_counted_as_rejected():
     _, stats = _rebuild("<p>A <em>big</em> deal.</p>", ["Une grosse affaire."])
-    assert stats == {"source_spans": 1, "kept_spans": 0, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 1, "kept_spans": 0, "recovered_spans": 0, "rejected_paragraphs": 0}
 
 
 def test_rebuild_bilingual_source_twin_keeps_emphasis():
@@ -189,7 +189,7 @@ def test_rebuild_empty_translation_falls_back_to_marked_source():
     p = body[0]
     assert "plain-text-untranslated" in p.get("class")
     assert p.text == "A " and _local(p[0].tag) == "em" and p[0].text == "big"
-    assert stats == {"source_spans": 1, "kept_spans": 1, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 1, "kept_spans": 1, "recovered_spans": 0, "rejected_paragraphs": 0}
 
 
 def test_rebuild_whole_paragraph_wrap():
@@ -197,7 +197,7 @@ def test_rebuild_whole_paragraph_wrap():
     h2 = body[0]
     assert h2.text is None
     assert len(h2) == 1 and _local(h2[0].tag) == "i" and h2[0].text == "Première partie"
-    assert stats == {"source_spans": 1, "kept_spans": 1, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 1, "kept_spans": 1, "recovered_spans": 0, "rejected_paragraphs": 0}
 
 
 def test_rebuild_whole_paragraph_wrap_strips_llm_markers():
@@ -243,7 +243,7 @@ def test_pre_layout_kept_with_option_on(bilingual):
     body, stats = _rebuild(f"<pre>{PRE_TEXT}</pre>", lambda texts: list(texts), bilingual=bilingual)
     assert [b.text for b in body] == [PRE_TEXT] * (2 if bilingual else 1)
     assert all(len(b) == 0 for b in body)
-    assert stats == {"source_spans": 0, "kept_spans": 0, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 0, "kept_spans": 0, "recovered_spans": 0, "rejected_paragraphs": 0}
 
 
 def test_pre_layout_kept_with_option_on_when_translated():
@@ -284,7 +284,7 @@ def test_markers_only_answer_falls_back_to_source():
     p = body[0]
     assert "plain-text-untranslated" in p.get("class")
     assert p.text == "Some " and _local(p[0].tag) == "i" and p[0].text == "source"
-    assert stats == {"source_spans": 1, "kept_spans": 1, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 1, "kept_spans": 1, "recovered_spans": 0, "rejected_paragraphs": 0}
 
 
 def test_markers_only_answer_skips_target_in_bilingual():
@@ -331,7 +331,7 @@ def test_rebuild_empty_page_backstop_returns_stats():
     texts, tags, images, attrib = extract_plain_paragraphs(body, keep_emphasis=True)
     stats = replace_body_with_paragraphs(body, [], tags, images, source_paragraphs=texts,
                                          paragraphs_attrib=attrib, keep_emphasis=True)
-    assert stats == {"source_spans": 0, "kept_spans": 0, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 0, "kept_spans": 0, "recovered_spans": 0, "rejected_paragraphs": 0}
     assert len(body) == 1
 
 
@@ -341,4 +341,23 @@ def test_round_trip_identity_translation_preserves_markup():
     xml = etree.tostring(body, encoding="unicode")
     assert "<em>did</em>" in xml
     assert "<i>Title</i>" in xml
-    assert stats == {"source_spans": 2, "kept_spans": 2, "rejected_paragraphs": 0}
+    assert stats == {"source_spans": 2, "kept_spans": 2, "recovered_spans": 0, "rejected_paragraphs": 0}
+
+
+def test_rebuild_recovers_markdown_italics():
+    body, stats = _rebuild("<p>I <i>can</i> be <i>objective</i>.</p>",
+                           ["Я *могу* быть <i>объективным</i>."])
+    p = _children_xml(body)[0]
+    assert p.text == "Я " and [_local(c.tag) for c in p] == ["i", "i"]
+    assert p[0].text == "могу" and p[1].text == "объективным"
+    assert "*" not in etree.tostring(p, encoding="unicode")
+    assert stats == {"source_spans": 2, "kept_spans": 2, "recovered_spans": 1,
+                     "rejected_paragraphs": 0}
+
+
+def test_rebuild_strips_markdown_italics_from_rejected_paragraph():
+    body, stats = _rebuild("<p>A <em>big</em> deal.</p>", ["Une <em>*grosse* affaire."])
+    p = body[0]
+    assert len(p) == 0 and p.text == "Une grosse affaire."
+    assert stats == {"source_spans": 1, "kept_spans": 0, "recovered_spans": 0,
+                     "rejected_paragraphs": 1}

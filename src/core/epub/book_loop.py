@@ -59,6 +59,7 @@ async def precount_chunks(
     log_callback: Optional[Callable] = None,
     plain_text_mode: bool = False,
     keep_prepared_from: Optional[int] = None,
+    keep_emphasis: bool = False,
 ) -> ChunkPrecount:
     """Count chunks across all XHTML files for accurate progress tracking.
 
@@ -71,7 +72,9 @@ async def precount_chunks(
 
     When plain_text_mode is True, counts chunks using the plain-text pipeline
     (paragraphs joined by \\n\\n then chunked by TokenChunker) instead of the
-    HTML-aware chunker, and keeps nothing.
+    HTML-aware chunker, and keeps nothing. ``keep_emphasis`` (Plain Text
+    Mode only) extracts the paragraphs with their emphasis markers, exactly
+    as plain_text_document sends them, so the counts match what is sent.
     """
     chunks_per_file: List[int] = []
     prepared: Dict[int, PreparedDocument] = {}
@@ -83,7 +86,8 @@ async def precount_chunks(
 
     for idx, content_href in enumerate(content_files):
         file_path = resolve_content_path(opf_dir, content_href)
-        chunk_count, document = await _count_file(file_path, max_tokens_per_chunk, plain_text_mode)
+        chunk_count, document = await _count_file(
+            file_path, max_tokens_per_chunk, plain_text_mode, keep_emphasis)
         chunks_per_file.append(chunk_count)
         total_chunks += chunk_count
         if document is not None:
@@ -100,15 +104,15 @@ async def precount_chunks(
     return ChunkPrecount(total_chunks, chunks_per_file, prepared, text_free_chunks)
 
 
-async def _count_file(file_path: str, max_tokens_per_chunk: int,
-                      plain_text_mode: bool) -> Tuple[int, Optional[PreparedDocument]]:
+async def _count_file(file_path: str, max_tokens_per_chunk: int, plain_text_mode: bool,
+                      keep_emphasis: bool = False) -> Tuple[int, Optional[PreparedDocument]]:
     """One file's chunk count (0 on any failure) and, in placeholder mode, its chunks."""
     if not os.path.exists(file_path):
         return 0, None
     try:
         doc_root = parse_xhtml(await read_text(file_path))
         if plain_text_mode:
-            return _precount_chunks_plain_text(doc_root, max_tokens_per_chunk), None
+            return _precount_chunks_plain_text(doc_root, max_tokens_per_chunk, keep_emphasis), None
         document = prepare_document(doc_root, max_tokens_per_chunk)
         if document is None:
             return 0, None
@@ -117,7 +121,8 @@ async def _count_file(file_path: str, max_tokens_per_chunk: int,
         return 0, None
 
 
-def _precount_chunks_plain_text(doc_root, max_tokens_per_chunk: int) -> int:
+def _precount_chunks_plain_text(doc_root, max_tokens_per_chunk: int,
+                                keep_emphasis: bool = False) -> int:
     """Count chunks for one XHTML file using the plain-text-mode pipeline.
 
     Returns 0 on any failure (matches the normal-path behavior).
@@ -130,11 +135,12 @@ def _precount_chunks_plain_text(doc_root, max_tokens_per_chunk: int) -> int:
         if body is None:
             return 0
 
-        paragraphs, _, _, _ = extract_plain_paragraphs(body)
+        paragraphs, _, _, _ = extract_plain_paragraphs(body, keep_emphasis=keep_emphasis)
         if not paragraphs:
             return 0
 
-        return len(build_plain_segments(paragraphs, max_tokens_per_chunk))
+        return len(build_plain_segments(paragraphs, max_tokens_per_chunk,
+                                        keep_emphasis=keep_emphasis))
     except Exception:
         return 0
 
@@ -201,7 +207,18 @@ async def process_content_files(run: EpubRun, book: BookRunState) -> BookRunStat
 
         await _process_file(run, book, file_idx, content_href, retry_indices)
 
+    _log_emphasis_summary(run)
     return book
+
+
+def _log_emphasis_summary(run: EpubRun) -> None:
+    """One book-level line for Plain Text Mode italics (issue #352)."""
+    totals = run.emphasis_totals
+    if not (run.plain_text_keep_emphasis and totals.get("source_spans")):
+        return
+    run.log("plain_text_emphasis_summary",
+            f"Italics kept: {totals.get('kept_spans', 0)}/{totals['source_spans']} spans "
+            f"({totals.get('rejected_paragraphs', 0)} paragraphs fell back to plain)")
 
 
 async def _process_file(run: EpubRun, book: BookRunState, file_idx: int,

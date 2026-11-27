@@ -10,7 +10,7 @@ chunking it, computed once per file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.config import DEFAULT_MODEL, MAX_TRANSLATION_ATTEMPTS
@@ -33,6 +33,8 @@ class EpubRun:
         parallel_workers: Concurrent chunk requests (already resolved
             against the provider).
         max_retries: Phase 1 attempts per chunk.
+        emphasis_totals: Plain Text Mode italics counters summed over the
+            files of this pass (issue #352); filled by the documents.
     """
 
     job: JobConfig
@@ -43,6 +45,7 @@ class EpubRun:
     prompt_options: Optional[Dict[str, Any]] = None
     parallel_workers: int = 1
     max_retries: int = MAX_TRANSLATION_ATTEMPTS
+    emphasis_totals: Dict[str, int] = field(default_factory=dict)
 
     @property
     def source_language(self) -> str:
@@ -63,6 +66,13 @@ class EpubRun:
     @property
     def plain_text_mode(self) -> bool:
         return bool((self.prompt_options or {}).get('plain_text_mode'))
+
+    @property
+    def plain_text_keep_emphasis(self) -> bool:
+        """Keep <i>/<em> as literal markers in Plain Text Mode (issue #352)."""
+        from src.prompts.prompts import PLAIN_TEXT_KEEP_EMPHASIS_OPTION
+        return self.plain_text_mode and (
+            (self.prompt_options or {}).get(PLAIN_TEXT_KEEP_EMPHASIS_OPTION) is True)
 
     @property
     def retry_token_aligned(self) -> bool:

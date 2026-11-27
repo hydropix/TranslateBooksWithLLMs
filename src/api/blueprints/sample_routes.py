@@ -32,7 +32,8 @@ from src.core.sampling import cap_chunk_text, select_sample_indices
 from src.api.services.credential_guard import guard_request_credentials
 from src.core.text_processor import split_text_into_chunks
 from src.prompts.prompts import (
-    generate_refinement_prompt, generate_translation_prompt,
+    PLAIN_TEXT_KEEP_EMPHASIS_OPTION, generate_refinement_prompt,
+    generate_translation_prompt,
 )
 from src.utils.custom_instructions import is_safe_filename, load_custom_instructions
 from src.utils.file_detector import detect_file_type
@@ -968,7 +969,10 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
 
         if mode == "refine":
             target_language = source_language
-        prompt_options = data.get("prompt_options") or {}
+        prompt_options = dict(data.get("prompt_options") or {})
+        # Samples are extracted without emphasis markers, so the keep-italics
+        # prompt rule (EPUB Plain Text Mode only, issue #352) never applies here.
+        prompt_options.pop(PLAIN_TEXT_KEEP_EMPHASIS_OPTION, None)
 
         # `defer_dispatch=true` lets the client read the items first, compute
         # which cells are already cached, then call /dispatch with skip_cells.

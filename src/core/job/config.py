@@ -295,8 +295,19 @@ class JobConfig:
         })
 
     def engine_prompt_options(self) -> Dict[str, Any]:
-        """A private, mutable copy of the prompt options for one engine call."""
-        return copy.deepcopy(dict(self.prompt_options or {}))
+        """A private, mutable copy of the prompt options for one engine call.
+
+        Every format engine (EPUB, DOCX, PDF, TXT, SRT, ...) and refiner reads
+        its options here, so this is where format-scoped options are dropped.
+        The Plain Text Mode emphasis option (issue #352) only exists in the
+        EPUB plain path: any other engine never sees it, which keeps its
+        prompts byte-identical whatever the client sent.
+        """
+        options = copy.deepcopy(dict(self.prompt_options or {}))
+        if self.file_type != 'epub' or not options.get('plain_text_mode'):
+            from src.prompts.prompts import PLAIN_TEXT_KEEP_EMPHASIS_OPTION
+            options.pop(PLAIN_TEXT_KEEP_EMPHASIS_OPTION, None)
+        return options
 
     def provider_for(self, *, context_window: Optional[int] = None, log_callback=None,
                      refine: bool = False) -> ProviderConfig:

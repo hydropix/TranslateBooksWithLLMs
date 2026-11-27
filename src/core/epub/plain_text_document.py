@@ -13,9 +13,14 @@ that kept its source text (issue #285). The EPUB translator deletes the state
 once the file has been saved, unless a segment is still untranslated: then
 the state, which carries the source body, is what the next pass re-enters the
 file with.
+
+With the ``plain_text_keep_emphasis`` option (issue #352), <i>/<em> spans
+travel as literal markers in the paragraph text and are rebuilt as real
+elements when the translated markers pass validation; the rebuild's counters
+are logged per document and summed for the book.
 """
 
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from lxml import etree
 
@@ -62,8 +67,10 @@ async def _translate_paragraphs(paragraphs_text, original_body_html: str,
         resume_plain_segments,
     )
 
+    keep_emphasis = settings.plain_text_keep_emphasis
     resume_segments, resume_translated = resume_plain_segments(
-        resume_state, len(paragraphs_text), settings.log_callback
+        resume_state, len(paragraphs_text), settings.log_callback,
+        keep_emphasis=keep_emphasis,
     )
     checkpoint_hook = build_plain_checkpoint_hook(
         checkpoint_manager=settings.checkpoint_manager,
@@ -78,6 +85,7 @@ async def _translate_paragraphs(paragraphs_text, original_body_html: str,
         prompt_options=settings.prompt_options,
         bilingual=settings.bilingual,
         original_body_html=original_body_html,
+        keep_emphasis=keep_emphasis,
     )
 
     # The statuses and counters only mean something next to the prefix they
@@ -104,7 +112,22 @@ async def _translate_paragraphs(paragraphs_text, original_body_html: str,
         # A failed segment is persisted as CHUNK_UNTRANSLATED and retried by
         # the next pass, which makes it a fallback, not a terminal failure.
         count_failures_as_fallback=True,
+        keep_emphasis=keep_emphasis,
     )
+
+
+def _report_emphasis(emphasis: Optional[Dict[str, int]], settings: ChunkLoopSettings) -> None:
+    """Log one document's italics counters and add them to the book totals."""
+    if not emphasis or not emphasis.get("source_spans"):
+        return
+    settings.log(
+        "plain_text_emphasis",
+        f"Italics: {emphasis['kept_spans']}/{emphasis['source_spans']} spans kept, "
+        f"{emphasis['rejected_paragraphs']} paragraph(s) fell back to plain"
+    )
+    if settings.emphasis_totals is not None:
+        for key, value in emphasis.items():
+            settings.emphasis_totals[key] = settings.emphasis_totals.get(key, 0) + value
 
 
 async def translate_plain_text(
@@ -137,7 +160,9 @@ async def translate_plain_text(
     # Captured before extraction, which folds <ruby> in place.
     original_body_html = etree.tostring(body, encoding='unicode')
 
-    paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib = extract_plain_paragraphs(body)
+    keep_emphasis = settings.plain_text_keep_emphasis
+    paragraphs_text, paragraphs_tag, images_by_paragraph, paragraphs_attrib = extract_plain_paragraphs(
+        body, keep_emphasis=keep_emphasis)
     settings.log(
         "plain_text_extracted",
         f"📝 Plain Text Mode: {len(paragraphs_text)} paragraphs, "
@@ -158,7 +183,7 @@ async def translate_plain_text(
             body.getparent().replace(body, disk_body)
         return False, stats
 
-    replace_body_with_paragraphs(
+    emphasis = replace_body_with_paragraphs(
         body_element=body,
         translated_paragraphs=translated,
         paragraphs_tag=paragraphs_tag,
@@ -171,5 +196,7 @@ async def translate_plain_text(
         # Carry each source block's attributes (class, id, xml:lang, ...)
         # onto the rebuilt element instead of emitting a bare tag.
         paragraphs_attrib=paragraphs_attrib,
+        keep_emphasis=keep_emphasis,
     )
+    _report_emphasis(emphasis, settings)
     return True, stats

@@ -77,6 +77,7 @@ def settings_for_file(run: EpubRun, task: FileTask) -> ChunkLoopSettings:
         file_path=task.href,
         global_total_chunks=task.global_total_chunks,
         global_completed_chunks=task.global_completed_chunks,
+        emphasis_totals=run.emphasis_totals,
     )
 
 

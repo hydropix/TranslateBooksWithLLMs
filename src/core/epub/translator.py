@@ -281,6 +281,7 @@ async def _translate_book(run: EpubRun, temp_dir: str):
     precount = await precount_chunks(
         book.content_files, book.opf_dir, run.max_tokens_per_chunk, run.log_callback,
         plain_text_mode=run.plain_text_mode, keep_prepared_from=resume_from_index,
+        keep_emphasis=run.plain_text_keep_emphasis,
     )
     book.total_chunks, book.chunks_per_file, book.prepared = precount[:3]
     book.skipped_chunks = precount.text_free_chunks

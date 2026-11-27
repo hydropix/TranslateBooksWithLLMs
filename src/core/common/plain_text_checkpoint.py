@@ -11,12 +11,21 @@ The ``plain_text_mode`` marker written into ``doc_metadata`` is what keeps the
 two persistence users apart: a placeholder-mode state (whose chunks carry
 ``local_tag_map`` / ``global_indices`` and real placeholders) must never be
 replayed through the plain pipeline, and vice versa.
+
+``plain_text_keep_emphasis`` records whether the paragraphs carried emphasis
+markers (EPUB, issue #352). A state written with the other setting holds
+translations of differently extracted text and is not reused; a state that
+predates the key was written without markers.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.core.epub.xhtml_translation_state import XHTMLTranslationState
+
+
+# doc_metadata key of the emphasis-marker setting a state was written with.
+KEEP_EMPHASIS_METADATA_KEY = 'plain_text_keep_emphasis'
 
 
 def _utc_now_iso() -> str:
@@ -56,6 +65,7 @@ def resume_plain_segments(
     resume_state: Optional[Any],
     paragraph_count: int,
     log_callback: Optional[Callable] = None,
+    keep_emphasis: bool = False,
 ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[List[str]]]:
     """Validate a partial state for a plain-text resume.
 
@@ -67,6 +77,8 @@ def resume_plain_segments(
         resume_state: XHTMLTranslationState loaded from the checkpoint, or None.
         paragraph_count: number of source paragraphs extracted for this run.
         log_callback: optional (key, message) logger.
+        keep_emphasis: whether this run extracts emphasis markers; a state
+            written with the other setting is not reused.
     """
     if resume_state is None:
         return None, None
@@ -89,6 +101,16 @@ def resume_plain_segments(
             )
         return None, None
 
+    stored_emphasis = resume_state.doc_metadata.get(KEEP_EMPHASIS_METADATA_KEY) is True
+    if stored_emphasis != bool(keep_emphasis):
+        if log_callback:
+            log_callback(
+                "plain_text_resume_ignored",
+                "⚠️ Checkpoint was written with the italics option "
+                f"{'on' if stored_emphasis else 'off'}, restarting this file"
+            )
+        return None, None
+
     return list(resume_state.chunks or []), list(resume_state.translated_chunks or [])
 
 
@@ -106,6 +128,7 @@ def build_plain_checkpoint_hook(
     prompt_options: Optional[Dict[str, Any]] = None,
     bilingual: bool = False,
     original_body_html: str = "",
+    keep_emphasis: bool = False,
 ) -> Optional[Callable[..., None]]:
     """Build the ``checkpoint_hook`` for ``translate_paragraphs_plain``.
 
@@ -154,6 +177,7 @@ def build_plain_checkpoint_hook(
             doc_metadata={
                 'plain_text_mode': True,
                 'paragraph_count': paragraph_count,
+                KEEP_EMPHASIS_METADATA_KEY: bool(keep_emphasis),
             },
             stats=stats_dict,
             created_at=now,

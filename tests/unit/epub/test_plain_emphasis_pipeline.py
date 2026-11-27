@@ -259,7 +259,7 @@ async def test_end_to_end_markers_kept(monkeypatch):
     assert inner[1] == "Elle a relu <em>Dune</em>."
     assert inner[2] == "<i>Toute la ligne est en italique.</i>"
     assert inner[3] == "Ligne simple sans emphase."
-    assert totals == {"source_spans": 3, "kept_spans": 3, "rejected_paragraphs": 0}
+    assert totals == {"source_spans": 3, "kept_spans": 3, "recovered_spans": 0, "rejected_paragraphs": 0}
     assert ("plain_text_emphasis",
             "Italics: 3/3 spans kept, 0 paragraph(s) fell back to plain") in logs
 
@@ -272,7 +272,7 @@ async def test_end_to_end_broken_markers_fall_back_to_plain(monkeypatch):
 
     assert _inner(paragraphs[0]) == "Il était très fatigué."
     assert _inner(paragraphs[1]) == "Elle a relu <em>Dune</em>."
-    assert totals == {"source_spans": 3, "kept_spans": 2, "rejected_paragraphs": 1}
+    assert totals == {"source_spans": 3, "kept_spans": 2, "recovered_spans": 0, "rejected_paragraphs": 1}
 
 
 @pytest.mark.asyncio
@@ -372,6 +372,8 @@ async def test_markers_do_not_trigger_a_residue_retry(monkeypatch):
 @pytest.mark.parametrize("keep, totals, expected", [
     (True, {"source_spans": 7, "kept_spans": 5, "rejected_paragraphs": 1},
      "Italics kept: 5/7 spans (1 paragraphs fell back to plain)"),
+    (True, {"source_spans": 7, "kept_spans": 6, "recovered_spans": 2, "rejected_paragraphs": 0},
+     "Italics kept: 6/7 spans (2 recovered from Markdown *...*, 0 paragraphs fell back to plain)"),
     (True, {}, None),
     (False, {"source_spans": 7, "kept_spans": 5, "rejected_paragraphs": 1}, None),
 ])

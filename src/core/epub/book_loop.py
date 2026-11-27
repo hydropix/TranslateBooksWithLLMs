@@ -216,9 +216,12 @@ def _log_emphasis_summary(run: EpubRun) -> None:
     totals = run.emphasis_totals
     if not (run.plain_text_keep_emphasis and totals.get("source_spans")):
         return
+    recovered = totals.get("recovered_spans", 0)
+    recovered_note = f"{recovered} recovered from Markdown *...*, " if recovered else ""
     run.log("plain_text_emphasis_summary",
             f"Italics kept: {totals.get('kept_spans', 0)}/{totals['source_spans']} spans "
-            f"({totals.get('rejected_paragraphs', 0)} paragraphs fell back to plain)")
+            f"({recovered_note}{totals.get('rejected_paragraphs', 0)} paragraphs "
+            f"fell back to plain)")
 
 
 async def _process_file(run: EpubRun, book: BookRunState, file_idx: int,

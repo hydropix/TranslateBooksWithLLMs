@@ -81,13 +81,13 @@ def _extract_plain_text(file_path: str, file_type: str) -> str:
     """
     Extract the textual content of a file for chunking + sampling.
 
-    For TXT we read directly. For EPUB/DOCX we reuse the plain extractors used
-    by Plain Text Mode in the main translate flow, and for PDF the shared
-    text-layer extractor. SRT is handled by the
+    For TXT and Markdown we read directly. For EPUB/DOCX we reuse the plain
+    extractors used by Plain Text Mode in the main translate flow, and for PDF
+    the shared text-layer extractor. SRT is handled by the
     caller (sampled at the cue-group level, not via this helper).
     """
     ft = file_type.lower()
-    if ft in ("txt", "pgn"):
+    if ft in ("txt", "md", "pgn"):
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
     if ft == "epub":

@@ -39,6 +39,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 
 # Force UTF-8 stdio so emoji log lines don't crash on Windows cp1252 consoles.
 from src.utils.console import ensure_utf8_stdio
+from src.utils.port_finder import find_available_port
 ensure_utf8_stdio()
 
 from src.config import (
@@ -327,9 +328,19 @@ def start_server():
         if provider == 'ollama':
             test_ollama_connection()
 
+        port = find_available_port(HOST, PORT)
+        if port is None:
+            raise RuntimeError(
+                f"No free port found between {PORT} and {PORT + 19} on {HOST}. "
+                f"Close the program using port {PORT} or set PORT in .env."
+            )
+        if port != PORT:
+            logger.warning(f"⚠️ Port {PORT} is already in use by another program, using port {port} instead")
+            logger.warning(f"   Set PORT in .env to choose a fixed port")
+
         logger.info("")
         logger.info("=" * 50)
-        logger.info(f"  🌐 Web Interface: http://127.0.0.1:{PORT}")
+        logger.info(f"  🌐 Web Interface: http://127.0.0.1:{port}")
         logger.info("=" * 50)
         logger.info("")
         logger.info("  Press Ctrl+C to stop the server")
@@ -342,9 +353,9 @@ def start_server():
             logger.info("")
 
         # Auto-open browser (especially useful for portable executable)
-        open_browser(HOST, PORT)
+        open_browser(HOST, port)
 
-        socketio.run(app, debug=False, host=HOST, port=PORT, allow_unsafe_werkzeug=True)
+        socketio.run(app, debug=False, host=HOST, port=port, allow_unsafe_werkzeug=True)
     except Exception as e:
         logger.error("="*60)
         logger.error("❌ FATAL ERROR")

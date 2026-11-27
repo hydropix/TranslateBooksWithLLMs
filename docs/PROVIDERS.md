@@ -44,6 +44,7 @@ TBL supports local and hosted endpoints that implement the OpenAI Chat Completio
 - **llama.cpp** (`llama-server`) - Lightweight, direct model serving
 - **LM Studio** - Desktop app with GUI
 - **vLLM** - High-performance serving
+- **Rapid-MLX** - MLX inference server for Apple Silicon Macs
 - **LocalAI** - Drop-in OpenAI replacement
 - **Text Generation Inference** - HuggingFace's serving solution
 
@@ -64,6 +65,7 @@ TBL supports local and hosted endpoints that implement the OpenAI Chat Completio
 | llama.cpp (`llama-server`) | `http://localhost:9931/v1/chat/completions` (older builds used `8080`) |
 | LM Studio | `http://localhost:1234/v1/chat/completions` |
 | vLLM | `http://localhost:8000/v1/chat/completions` |
+| Rapid-MLX (`rapid-mlx serve`) | `http://localhost:8000/v1/chat/completions` |
 | LocalAI | `http://localhost:8080/v1/chat/completions` |
 
 ### CLI Examples
@@ -80,6 +82,12 @@ python translate.py -i book.txt -o book_fr.txt \
     --provider openai \
     --api_endpoint http://localhost:1234/v1/chat/completions \
     -m your-model-name
+
+# Rapid-MLX (Apple Silicon), e.g. after `rapid-mlx serve qwen3.5-4b-4bit`
+python translate.py -i book.txt -o book_fr.txt \
+    --provider openai \
+    --api_endpoint http://localhost:8000/v1/chat/completions \
+    -m mlx-community/Qwen3.5-4B-MLX-4bit
 ```
 
 ---
